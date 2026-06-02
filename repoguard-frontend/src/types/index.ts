@@ -45,3 +45,23 @@ export interface TimelineItem {
   time: string;
   status: "done" | "current";
 }
+
+export interface IntegrationField {
+  label: string;
+  value: string;
+  type: "text" | "password" | "select";
+  placeholder?: string;
+  options?: string[];
+}
+
+export interface IntegrationConfig {
+  id: string;
+  name: string;
+  description: string;
+  status: IntegrationStatus;
+  statusText: string;
+  message: string;
+  metaLabel: string;
+  metaValue: string;
+  fields: IntegrationField[];
+}
