@@ -294,6 +294,11 @@ a {
   background: #ffedd5;
 }
 
+.metric-icon--purple {
+  color: #7c3aed;
+  background: #ede9fe;
+}
+
 .trend {
   display: inline-block;
   margin-top: 12px;
@@ -528,6 +533,223 @@ a {
   border-top: 1px solid #e5eaf3;
 }
 
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.detail-title-row h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.detail-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 12px 0 0;
+  color: #475569;
+}
+
+.detail-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.detail-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.detail-kpi {
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 24px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.detail-kpi p,
+.detail-kpi span {
+  margin: 0;
+  color: #64748b;
+}
+
+.detail-kpi strong {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-size: 20px;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+}
+
+.detail-main,
+.detail-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.summary-card p {
+  margin: 0 0 16px;
+  color: #334155;
+  line-height: 1.8;
+}
+
+.summary-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.summary-stat {
+  min-height: 60px;
+  padding: 14px 18px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+}
+
+.summary-stat span,
+.summary-stat strong {
+  display: block;
+}
+
+.summary-stat strong {
+  margin-top: 6px;
+  font-size: 22px;
+}
+
+.summary-stat.high {
+  border-color: #fecaca;
+  color: #ef4444;
+  background: #fff7f7;
+}
+
+.summary-stat.medium {
+  border-color: #fed7aa;
+  color: #f97316;
+  background: #fffaf2;
+}
+
+.summary-stat.low {
+  border-color: #bfdbfe;
+  color: #1268ff;
+  background: #f8fbff;
+}
+
+.summary-stat.info {
+  color: #475569;
+  background: #f8fafc;
+}
+
+.file-type {
+  display: inline-flex;
+  min-width: 24px;
+  justify-content: center;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #475569;
+  font-weight: 700;
+}
+
+.additions {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.deletions {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 28px;
+  color: #334155;
+}
+
+.timeline li::before {
+  position: absolute;
+  left: 7px;
+  top: 19px;
+  bottom: -9px;
+  width: 2px;
+  background: #dbeafe;
+  content: "";
+}
+
+.timeline li:last-child::before {
+  display: none;
+}
+
+.timeline span {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #1268ff;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.timeline li:last-child span {
+  border-color: #16a34a;
+  background: #16a34a;
+}
+
+.timeline em {
+  color: #64748b;
+  font-style: normal;
+}
+
+.side-card dl {
+  display: grid;
+  grid-template-columns: 92px 1fr;
+  gap: 10px 12px;
+  margin: 0 0 14px;
+  color: #334155;
+  font-size: 14px;
+}
+
+.side-card dt {
+  color: #64748b;
+}
+
 @media (max-width: 1280px) {
   .metric-grid,
   .dashboard-grid,
@@ -537,6 +759,15 @@ a {
 
   .filter-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-kpi-grid,
+  .detail-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .detail-side {
+    grid-column: span 2;
   }
 
   .health-card {
@@ -567,6 +798,22 @@ a {
   .table-footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .detail-header,
+  .detail-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .detail-kpi-grid,
+  .detail-layout,
+  .summary-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-side {
+    grid-column: auto;
   }
 }
 

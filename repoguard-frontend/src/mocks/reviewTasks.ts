@@ -1,4 +1,4 @@
-import type { ReviewTask } from "@/types";
+import type { ChangedFile, MissingTest, ReviewFinding, ReviewTask, TimelineItem } from "@/types";
 
 export const reviewTasks: ReviewTask[] = [
   {
@@ -129,3 +129,75 @@ export const taskMetrics = [
   { label: "失败任务", value: "7", trend: "12.5%", trendType: "down", color: "orange" },
   { label: "平均耗时", value: "3 分 48 秒", trend: "8.3%", trendType: "down", color: "green" }
 ];
+
+export const reviewFindings: ReviewFinding[] = [
+  {
+    severity: "high",
+    file: "src/main/java/com/demo/controller/ExportController.java",
+    line: 45,
+    message: "硬编码的 AccessKey 可能导致密钥泄露",
+    recommendation: "将 AccessKey 和 SecretKey 提取到配置文件或使用 AK/SK 管理服务"
+  },
+  {
+    severity: "high",
+    file: "src/main/java/com/demo/service/ExportService.java",
+    line: 78,
+    message: "直接打印敏感信息到日志",
+    recommendation: "使用脱敏处理或避免打印敏感信息"
+  },
+  {
+    severity: "medium",
+    file: "src/main/java/com/demo/controller/ExportController.java",
+    line: 61,
+    message: "缺少权限校验",
+    recommendation: "建议在接口中增加权限校验逻辑"
+  },
+  {
+    severity: "medium",
+    file: "src/main/java/com/demo/service/ExportService.java",
+    line: 132,
+    message: "捕获泛型异常 Exception",
+    recommendation: "捕获更具体的异常类型并做针对性处理"
+  },
+  {
+    severity: "low",
+    file: "src/main/java/com/demo/util/ExportUtil.java",
+    line: 22,
+    message: "使用了 System.out.println",
+    recommendation: "使用日志框架替代 System.out"
+  }
+];
+
+export const missingTests: MissingTest[] = [
+  {
+    file: "src/main/java/com/demo/controller/ExportController.java",
+    method: "ExportController#export",
+    type: "单元测试",
+    suggestion: "为接口方法添加单元测试，覆盖正常和异常场景"
+  },
+  {
+    file: "src/main/java/com/demo/service/ExportService.java",
+    method: "ExportService#exportUsers",
+    type: "单元测试",
+    suggestion: "建议对核心业务逻辑进行单元测试覆盖"
+  }
+];
+
+export const changedFiles: ChangedFile[] = [
+  { path: "src/main/java/com/demo/controller/ExportController.java", changeType: "M", additions: 32, deletions: 6 },
+  { path: "src/main/java/com/demo/service/ExportService.java", changeType: "M", additions: 87, deletions: 12 },
+  { path: "src/main/java/com/demo/util/ExportUtil.java", changeType: "A", additions: 45, deletions: 0 },
+  { path: "src/main/resources/application.yml", changeType: "M", additions: 4, deletions: 1 }
+];
+
+export const reviewTimeline: TimelineItem[] = [
+  { label: "待处理", time: "14:32:22", status: "done" },
+  { label: "已入队", time: "14:32:23", status: "done" },
+  { label: "拉取 Diff", time: "14:32:28", status: "done" },
+  { label: "规则分析", time: "14:32:45", status: "done" },
+  { label: "LLM 审查", time: "14:33:32", status: "done" },
+  { label: "评论回写", time: "14:34:58", status: "done" },
+  { label: "已完成", time: "14:35:10", status: "done" }
+];
+
+export const selectedTask = reviewTasks[0];

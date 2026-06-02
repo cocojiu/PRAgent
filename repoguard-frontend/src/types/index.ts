@@ -18,3 +18,30 @@ export interface ReviewTask {
   duration: string;
 }
 
+export interface ReviewFinding {
+  severity: RiskLevel;
+  file: string;
+  line: number;
+  message: string;
+  recommendation: string;
+}
+
+export interface MissingTest {
+  file: string;
+  method: string;
+  type: string;
+  suggestion: string;
+}
+
+export interface ChangedFile {
+  path: string;
+  changeType: "A" | "M" | "D";
+  additions: number;
+  deletions: number;
+}
+
+export interface TimelineItem {
+  label: string;
+  time: string;
+  status: "done" | "current";
+}
