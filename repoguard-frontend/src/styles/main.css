@@ -41,6 +41,36 @@ a {
   width: 72px;
 }
 
+.rg-sidebar.collapsed .brand {
+  justify-content: center;
+  padding: 0;
+}
+
+.rg-sidebar.collapsed .nav-list {
+  align-items: center;
+  padding: 28px 12px;
+}
+
+.rg-sidebar.collapsed .nav-item {
+  width: 48px;
+  justify-content: center;
+  padding: 0;
+}
+
+.rg-sidebar.collapsed .nav-item svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.rg-sidebar.collapsed .collapse-btn {
+  width: 48px;
+  justify-content: center;
+  margin-right: auto;
+  margin-left: auto;
+  padding: 0;
+}
+
 .brand {
   height: 68px;
   display: flex;
@@ -1048,6 +1078,36 @@ a {
   .rg-sidebar .collapse-btn span,
   .rg-sidebar .version {
     display: none;
+  }
+
+  .rg-sidebar .brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rg-sidebar .nav-list {
+    align-items: center;
+    padding: 28px 12px;
+  }
+
+  .rg-sidebar .nav-item {
+    width: 48px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .rg-sidebar .nav-item svg {
+    flex: 0 0 auto;
+    width: 20px;
+    height: 20px;
+  }
+
+  .rg-sidebar .collapse-btn {
+    width: 48px;
+    justify-content: center;
+    margin-right: auto;
+    margin-left: auto;
+    padding: 0;
   }
 
   .rg-content {
