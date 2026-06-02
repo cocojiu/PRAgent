@@ -101,13 +101,14 @@
       </el-table>
 
       <div class="table-footer">
-        <span>共 128 条</span>
+        <span>共 {{ filteredTasks.length }} 条</span>
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           layout="sizes, prev, pager, next, jumper"
-          :page-sizes="[8, 10, 20]"
-          :total="128"
+          :page-sizes="[5, 8, 10, 20]"
+          :total="filteredTasks.length"
+          @size-change="handlePageSizeChange"
         />
       </div>
     </section>
@@ -115,7 +116,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import { reviewTasks, taskMetrics } from "@/mocks/reviewTasks";
@@ -127,7 +128,7 @@ const statusFilter = ref("");
 const riskFilter = ref("");
 const keyword = ref("");
 const currentPage = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(8);
 
 const metricIconMap = {
   blue: ListTodo,
@@ -149,13 +150,29 @@ const filteredTasks = computed(() => {
     const matchesKeyword =
       !query ||
       task.title.toLowerCase().includes(query) ||
+      task.repository.toLowerCase().includes(query) ||
+      task.organization.toLowerCase().includes(query) ||
       task.commit.toLowerCase().includes(query) ||
       String(task.prNumber).includes(query);
     return matchesRepo && matchesStatus && matchesRisk && matchesKeyword;
   });
 });
 
-const pagedTasks = computed(() => filteredTasks.value.slice(0, pageSize.value));
+const pagedTasks = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value;
+  return filteredTasks.value.slice(start, start + pageSize.value);
+});
+
+watch([repoFilter, statusFilter, riskFilter, keyword], () => {
+  currentPage.value = 1;
+});
+
+watch(filteredTasks, () => {
+  const maxPage = Math.max(1, Math.ceil(filteredTasks.value.length / pageSize.value));
+  if (currentPage.value > maxPage) {
+    currentPage.value = maxPage;
+  }
+});
 
 const riskText = (risk: RiskLevel) => ({ high: "高风险", medium: "中风险", low: "低风险", critical: "严重", info: "提示" })[risk];
 const statusText = (status: ReviewStatus) => ({ completed: "已完成", reviewing: "审查中", failed: "失败", queued: "已入队" })[status];
@@ -163,6 +180,9 @@ const statusClass = (status: ReviewStatus) => ({ completed: "success", reviewing
 
 const goDetail = (id: number) => router.push(`/repoguard/tasks/${id}`);
 const refreshTasks = () => {
+  currentPage.value = 1;
+};
+const handlePageSizeChange = () => {
   currentPage.value = 1;
 };
 </script>

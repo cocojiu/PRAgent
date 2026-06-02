@@ -59,11 +59,11 @@
           </el-table-column>
           <el-table-column label="操作" width="90">
             <template #default>
-              <a class="table-link">查看</a>
+              <RouterLink class="table-link" to="/repoguard/tasks">查看</RouterLink>
             </template>
           </el-table-column>
         </el-table>
-        <div class="card-footer-link">查看更多 ›</div>
+        <RouterLink class="card-footer-link" to="/repoguard/tasks">查看更多 ›</RouterLink>
       </article>
 
       <article class="dashboard-card">
@@ -80,7 +80,7 @@
           </el-table-column>
           <el-table-column prop="percent" label="占比" width="80" />
         </el-table>
-        <div class="card-footer-link">查看更多 ›</div>
+        <RouterLink class="card-footer-link" to="/repoguard/tasks">查看更多 ›</RouterLink>
       </article>
 
       <article class="dashboard-card health-card">
@@ -93,7 +93,7 @@
         </div>
         <div class="health-footer">
           <span>最后检查：2025-05-30 10:30:45</span>
-          <a>刷新</a>
+          <a @click="refreshHealth">刷新</a>
         </div>
       </article>
     </section>
@@ -102,6 +102,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+import { RouterLink } from "vue-router";
+import { ElMessage } from "element-plus";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import type { EChartsOption } from "echarts";
 import EChartPanel from "@/components/EChartPanel.vue";
@@ -123,6 +125,10 @@ const metricIconMap = {
 } as const;
 
 const getMetricIcon = (color: string) => metricIconMap[color as keyof typeof metricIconMap] || FileText;
+
+const refreshHealth = () => {
+  ElMessage.success("系统健康状态已刷新");
+};
 
 const trendOption = computed<EChartsOption>(() => ({
   grid: { left: 36, right: 18, top: 42, bottom: 32 },
