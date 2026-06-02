@@ -213,6 +213,23 @@ a {
   gap: 24px;
 }
 
+.tasks-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.page-heading h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 30px;
+}
+
+.page-heading p {
+  margin: 8px 0 0;
+  color: #64748b;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -379,9 +396,29 @@ a {
   background: #fee2e2;
 }
 
+.risk-pill.medium {
+  color: #f97316;
+  background: #ffedd5;
+}
+
+.risk-pill.low {
+  color: #16a34a;
+  background: #dcfce7;
+}
+
 .status-pill.success {
   color: #16a34a;
   background: #dcfce7;
+}
+
+.status-pill.processing {
+  color: #1268ff;
+  background: #eaf2ff;
+}
+
+.status-pill.danger {
+  color: #dc2626;
+  background: #fee2e2;
 }
 
 .table-link,
@@ -426,10 +463,79 @@ a {
   font-size: 14px;
 }
 
+.task-panel {
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.filter-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr minmax(260px, 2.2fr) auto;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.search-input {
+  min-width: 0;
+}
+
+.task-table {
+  border-width: 0;
+  border-radius: 0;
+}
+
+.pr-cell,
+.repo-cell,
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pr-cell p,
+.repo-cell span {
+  margin: 4px 0 0;
+  color: #64748b;
+}
+
+.pr-link {
+  color: #1268ff;
+  font-weight: 800;
+}
+
+.repo-cell {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 0;
+}
+
+.copy-icon {
+  margin-left: 8px;
+  color: #64748b;
+  vertical-align: middle;
+}
+
+.table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-top: 1px solid #e5eaf3;
+}
+
 @media (max-width: 1280px) {
   .metric-grid,
   .dashboard-grid,
   .bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .filter-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -452,6 +558,15 @@ a {
 
   .metric-card {
     padding: 22px;
+  }
+
+  .filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .table-footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 
