@@ -554,6 +554,20 @@ a {
   gap: 14px;
 }
 
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1268ff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .detail-title-row h1 {
   margin: 0;
   font-size: 28px;

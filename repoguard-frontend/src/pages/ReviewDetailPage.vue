@@ -2,6 +2,10 @@
   <div class="detail-page">
     <div class="detail-header">
       <div>
+        <button class="back-link" type="button" @click="goBack">
+          <ArrowLeft :size="18" />
+          返回审查任务
+        </button>
         <div class="detail-title-row">
           <h1>PR #{{ selectedTask.prNumber }} - {{ selectedTask.title }}</h1>
           <span class="status-pill success">已完成</span>
@@ -153,9 +157,19 @@
 </template>
 
 <script setup lang="ts">
-import { Archive, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
+import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
+import { useRouter } from "vue-router";
 import { changedFiles, missingTests, reviewFindings, reviewTimeline, selectedTask } from "@/mocks/reviewTasks";
 import type { RiskLevel } from "@/types";
 
+const router = useRouter();
 const riskText = (risk: RiskLevel) => ({ high: "高风险", medium: "中风险", low: "低风险", critical: "严重", info: "提示" })[risk];
+
+const goBack = () => {
+  if (window.history.length > 1) {
+    router.back();
+    return;
+  }
+  router.push("/repoguard/tasks");
+};
 </script>
