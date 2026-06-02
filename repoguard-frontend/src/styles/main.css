@@ -180,6 +180,22 @@ a {
   color: #0f172a;
 }
 
+.top-action-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.top-action-button:hover {
+  background: #f1f5f9;
+}
+
 .bell-wrap {
   position: relative;
 }
@@ -203,6 +219,11 @@ a {
   display: flex;
   align-items: center;
   gap: 9px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  font: inherit;
+  cursor: pointer;
 }
 
 .avatar {
@@ -213,6 +234,98 @@ a {
   border-radius: 999px;
   background: #eaf2ff;
   color: #1268ff;
+  font-weight: 700;
+}
+
+.notification-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.notification-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.notification-head strong {
+  font-size: 16px;
+}
+
+.notification-head button {
+  border: 0;
+  background: transparent;
+  color: #1268ff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-item {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notification-item:hover {
+  background: #f8fafc;
+}
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 999px;
+}
+
+.notification-dot.danger {
+  background: #ef4444;
+}
+
+.notification-dot.warning {
+  background: #f59e0b;
+}
+
+.notification-dot.success {
+  background: #22c55e;
+}
+
+.notification-item b,
+.notification-item em,
+.notification-item small {
+  display: block;
+}
+
+.notification-item b {
+  color: #0f172a;
+}
+
+.notification-item em {
+  margin-top: 4px;
+  color: #475569;
+  font-style: normal;
+}
+
+.notification-item small {
+  margin-top: 4px;
+  color: #94a3b8;
+}
+
+.notification-more {
+  display: block;
+  padding-top: 8px;
+  border-top: 1px solid #e5eaf3;
+  color: #1268ff;
+  text-align: center;
   font-weight: 700;
 }
 
