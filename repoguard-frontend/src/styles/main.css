@@ -699,6 +699,17 @@ a {
   width: 100%;
 }
 
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-alert {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
 .switch-row {
   display: flex;
   align-items: center;
