@@ -94,7 +94,7 @@
           <template #default="{ row }">
             <div class="table-actions">
               <el-button type="primary" size="small" @click="goDetail(row.id)">查看</el-button>
-              <el-button size="small" :type="row.status === 'failed' ? 'primary' : 'default'">重试</el-button>
+              <el-button size="small" @click="retryTask(row.id)">重试</el-button>
             </div>
           </template>
         </el-table-column>
@@ -118,6 +118,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
 import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import { reviewTasks, taskMetrics } from "@/mocks/reviewTasks";
 import type { ReviewStatus, RiskLevel } from "@/types";
@@ -179,6 +180,9 @@ const statusText = (status: ReviewStatus) => ({ completed: "已完成", reviewin
 const statusClass = (status: ReviewStatus) => ({ completed: "success", reviewing: "processing", failed: "danger", queued: "processing" })[status];
 
 const goDetail = (id: number) => router.push(`/repoguard/tasks/${id}`);
+const retryTask = (id: number) => {
+  ElMessage.success(`任务 #${id} 已重新入队`);
+};
 const refreshTasks = () => {
   currentPage.value = 1;
 };
