@@ -6,16 +6,14 @@
     </div>
 
     <section class="metric-grid">
-      <div v-for="metric in taskMetrics" :key="metric.label" class="metric-card">
+      <div v-for="metric in taskSummaryMetrics" :key="metric.label" class="metric-card">
         <div class="metric-icon" :class="`metric-icon--${metric.color}`">
           <component :is="getMetricIcon(metric.color)" :size="30" />
         </div>
         <div>
           <p>{{ metric.label }}</p>
           <strong>{{ metric.value }}</strong>
-          <span :class="metric.trendType === 'up-danger' ? 'trend danger' : 'trend'">
-            较上周 {{ metric.trendType.includes("up") ? "↑" : "↓" }} {{ metric.trend }}
-          </span>
+          <span :class="metric.noteClass">{{ metric.note }}</span>
         </div>
       </div>
     </section>
@@ -120,7 +118,7 @@ import { computed, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
-import { reviewTasks, taskMetrics } from "@/mocks/reviewTasks";
+import { reviewTasks } from "@/mocks/reviewTasks";
 import type { ReviewStatus, RiskLevel } from "@/types";
 
 const router = useRouter();
@@ -157,6 +155,35 @@ const filteredTasks = computed(() => {
       String(task.prNumber).includes(query);
     return matchesRepo && matchesStatus && matchesRisk && matchesKeyword;
   });
+});
+
+const parseDurationSeconds = (duration: string) => {
+  const minuteMatch = duration.match(/(\d+)\s*分/);
+  const secondMatch = duration.match(/(\d+)\s*秒/);
+  return Number(minuteMatch?.[1] || 0) * 60 + Number(secondMatch?.[1] || 0);
+};
+
+const formatDuration = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60);
+  const restSeconds = seconds % 60;
+  return `${minutes} 分 ${restSeconds} 秒`;
+};
+
+const taskSummaryMetrics = computed(() => {
+  const tasks = filteredTasks.value;
+  const total = tasks.length;
+  const highRiskCount = tasks.filter((task) => task.riskLevel === "high" || task.riskLevel === "critical").length;
+  const failedCount = tasks.filter((task) => task.status === "failed").length;
+  const avgSeconds = total
+    ? Math.round(tasks.reduce((sum, task) => sum + parseDurationSeconds(task.duration), 0) / total)
+    : 0;
+
+  return [
+    { label: "本周审查", value: String(total), note: "当前筛选结果", noteClass: "trend", color: "blue" },
+    { label: "高风险 PR", value: String(highRiskCount), note: `${total ? Math.round((highRiskCount / total) * 100) : 0}% 占比`, noteClass: "trend danger", color: "red" },
+    { label: "失败任务", value: String(failedCount), note: `${total ? Math.round((failedCount / total) * 100) : 0}% 占比`, noteClass: "trend danger", color: "orange" },
+    { label: "平均耗时", value: formatDuration(avgSeconds), note: "按当前结果计算", noteClass: "trend", color: "green" }
+  ];
 });
 
 const pagedTasks = computed(() => {
