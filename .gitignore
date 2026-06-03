@@ -1,6 +1,12 @@
+# Ignore all .md files except README.md
+*.md
+!README.md
+
 node_modules/
 dist/
+target/
 .DS_Store
 *.local
 .npm-cache/
-
+BackendRules/
+repoguard-backend/src/main/resources/application-local.yml
