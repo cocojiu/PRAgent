@@ -8,6 +8,16 @@ export default defineConfig({
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url))
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          echarts: ["echarts"],
+          "element-plus": ["element-plus"],
+          vendor: ["vue", "vue-router", "pinia"]
+        }
+      }
+    }
   }
 });
-

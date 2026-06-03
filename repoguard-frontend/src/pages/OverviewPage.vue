@@ -1,19 +1,6 @@
 <template>
   <div class="overview-page">
-    <section class="metric-grid">
-      <div v-for="metric in overviewMetrics" :key="metric.label" class="metric-card">
-        <div class="metric-icon" :class="`metric-icon--${metric.color}`">
-          <component :is="getMetricIcon(metric.color)" :size="30" />
-        </div>
-        <div>
-          <p>{{ metric.label }}</p>
-          <strong>{{ metric.value }}</strong>
-          <span :class="metric.trendType === 'up-danger' ? 'trend danger' : 'trend'">
-            较上周 {{ metric.trendType.includes("up") ? "↑" : "↓" }} {{ metric.trend }}
-          </span>
-        </div>
-      </div>
-    </section>
+    <MetricGrid :metrics="overviewMetricItems" :resolve-icon="getMetricIcon" />
 
     <section class="dashboard-grid">
       <article class="dashboard-card chart-card chart-card--wide">
@@ -42,12 +29,12 @@
     <section class="bottom-grid">
       <article class="dashboard-card">
         <h2>近期高风险审查</h2>
-        <el-table :data="highRiskReviews" class="rg-table" size="large">
+        <el-table :data="highRiskReviews" class="rg-table" size="large" aria-label="近期高风险审查列表">
           <el-table-column prop="title" label="PR 标题" min-width="220" />
           <el-table-column prop="repository" label="仓库" width="150" />
           <el-table-column label="风险等级" width="110">
-            <template #default>
-              <span class="risk-pill high">高风险</span>
+            <template #default="{ row }">
+              <span :class="`risk-pill ${row.riskLevel}`">{{ riskText(row.riskLevel) }}</span>
             </template>
           </el-table-column>
           <el-table-column prop="ruleHits" label="规则命中" width="100" />
@@ -59,28 +46,28 @@
           </el-table-column>
           <el-table-column label="操作" width="90">
             <template #default>
-              <RouterLink class="table-link" to="/repoguard/tasks">查看</RouterLink>
+              <RouterLink class="table-link" :to="{ name: 'tasks' }">查看</RouterLink>
             </template>
           </el-table-column>
         </el-table>
-        <RouterLink class="card-footer-link" to="/repoguard/tasks">查看更多 ›</RouterLink>
+        <RouterLink class="card-footer-link" :to="{ name: 'tasks' }">查看更多</RouterLink>
       </article>
 
       <article class="dashboard-card">
         <h2>高频失败规则</h2>
-        <el-table :data="failedRules" class="rg-table" size="large">
+        <el-table :data="failedRules" class="rg-table" size="large" aria-label="高频失败规则列表">
           <el-table-column prop="name" label="规则名称" min-width="180" />
           <el-table-column prop="count" label="命中次数" width="100" />
           <el-table-column label="趋势" width="100">
             <template #default="{ row }">
               <span :class="row.direction === 'up' ? 'trend danger' : 'trend'">
-                {{ row.direction === "up" ? "↑" : "↓" }} {{ row.trend }}
+                {{ row.direction === "up" ? "上升" : "下降" }} {{ row.trend }}
               </span>
             </template>
           </el-table-column>
           <el-table-column prop="percent" label="占比" width="80" />
         </el-table>
-        <RouterLink class="card-footer-link" to="/repoguard/tasks">查看更多 ›</RouterLink>
+        <RouterLink class="card-footer-link" :to="{ name: 'rules' }">查看更多</RouterLink>
       </article>
 
       <article class="dashboard-card health-card">
@@ -92,8 +79,8 @@
           </div>
         </div>
         <div class="health-footer">
-          <span>最后检查：2025-05-30 10:30:45</span>
-          <a @click="refreshHealth">刷新</a>
+          <span>最后检查：{{ lastHealthCheckAt }}</span>
+          <button class="table-link" type="button" @click="refreshHealth">刷新</button>
         </div>
       </article>
     </section>
@@ -107,6 +94,9 @@ import { ElMessage } from "element-plus";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import type { EChartsOption } from "echarts";
 import EChartPanel from "@/components/EChartPanel.vue";
+import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
+import { useMetricIcon } from "@/composables/useMetricIcon";
+import { riskText } from "@/utils/risk";
 import {
   failedRules,
   highRiskReviews,
@@ -124,7 +114,20 @@ const metricIconMap = {
   orange: Clock
 } as const;
 
-const getMetricIcon = (color: string) => metricIconMap[color as keyof typeof metricIconMap] || FileText;
+const getMetricIcon = useMetricIcon(metricIconMap, FileText);
+const lastHealthCheckAt = "2025-05-30 10:30:45";
+
+const overviewMetricItems = computed<MetricGridItem[]>(() =>
+  overviewMetrics.map((metric) => ({
+    label: metric.label,
+    value: metric.value,
+    color: metric.color,
+    note: `较上周${metric.trendType.includes("up") ? "上升" : "下降"} ${metric.trend}`,
+    noteClass: metric.trendType === "up-danger" ? "trend danger" : "trend"
+  }))
+);
+
+const totalRuleHits = computed(() => ruleHits.reduce((total, item) => total + item.value, 0));
 
 const refreshHealth = () => {
   ElMessage.success("系统健康状态已刷新");
@@ -137,7 +140,7 @@ const trendOption = computed<EChartsOption>(() => ({
   yAxis: { type: "value", splitLine: { lineStyle: { color: "#e8eef6" } } },
   series: [
     {
-      name: "审查数量（次）",
+      name: "审查数量",
       type: "line",
       smooth: true,
       data: reviewTrend.map((item) => item.value),
@@ -181,7 +184,7 @@ const ruleOption = computed<EChartsOption>(() => ({
     type: "text",
     left: "center",
     top: "center",
-    style: { text: "总计\n236", textAlign: "center", fill: "#0f172a", fontSize: 18, fontWeight: 700 }
+    style: { text: `总计\n${totalRuleHits.value}`, textAlign: "center", fill: "#0f172a", fontSize: 18, fontWeight: 700 }
   }
 }));
 </script>

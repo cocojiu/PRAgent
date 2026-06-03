@@ -8,18 +8,7 @@
       <el-button type="primary" size="large" @click="createRule">新增规则</el-button>
     </div>
 
-    <section class="metric-grid">
-      <div v-for="metric in ruleMetrics" :key="metric.label" class="metric-card">
-        <div class="metric-icon" :class="`metric-icon--${metric.color}`">
-          <component :is="getMetricIcon(metric.color)" :size="30" />
-        </div>
-        <div>
-          <p>{{ metric.label }}</p>
-          <strong>{{ metric.value }}</strong>
-          <span class="trend">{{ metric.note }}</span>
-        </div>
-      </div>
-    </section>
+    <MetricGrid :metrics="ruleMetricItems" :resolve-icon="getMetricIcon" />
 
     <section class="rule-layout">
       <article class="rule-panel">
@@ -40,7 +29,7 @@
           </el-input>
         </div>
 
-        <el-table :data="filteredRules" class="rg-table task-table" size="large">
+        <el-table :data="filteredRules" class="rg-table task-table" size="large" aria-label="规则配置列表">
           <el-table-column prop="id" label="规则 ID" min-width="140" />
           <el-table-column prop="name" label="规则名称" min-width="190" />
           <el-table-column prop="scope" label="适用范围" min-width="190" />
@@ -67,7 +56,7 @@
 
       <aside class="dashboard-card rule-doc-card">
         <h2>规则说明</h2>
-        <div v-for="rule in reviewRules.slice(0, 4)" :key="rule.id" class="rule-doc-item">
+        <div v-for="rule in topRuleDocs" :key="rule.id" class="rule-doc-item">
           <strong>{{ rule.id }}</strong>
           <p>{{ rule.description }}</p>
         </div>
@@ -77,15 +66,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "lucide-vue-next";
+import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
+import { useMetricIcon } from "@/composables/useMetricIcon";
 import { reviewRules, ruleMetrics } from "@/mocks/rules";
-import type { RiskLevel } from "@/types";
+import { riskText } from "@/utils/risk";
 
 const severityFilter = ref("");
 const statusFilter = ref("");
 const keyword = ref("");
+const localRules = reactive(reviewRules.map((rule) => ({ ...rule })));
 
 const metricIconMap = {
   blue: ListChecks,
@@ -94,11 +86,20 @@ const metricIconMap = {
   green: Target
 } as const;
 
-const getMetricIcon = (color: string) => metricIconMap[color as keyof typeof metricIconMap] || CheckCircle;
+const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
+
+const ruleMetricItems = computed<MetricGridItem[]>(() =>
+  ruleMetrics.map((metric) => ({
+    label: metric.label,
+    value: metric.value,
+    note: metric.note,
+    color: metric.color
+  }))
+);
 
 const filteredRules = computed(() => {
   const query = keyword.value.trim().toLowerCase();
-  return reviewRules.filter((rule) => {
+  return localRules.filter((rule) => {
     const matchesSeverity = !severityFilter.value || rule.severity === severityFilter.value;
     const matchesStatus = !statusFilter.value || rule.status === statusFilter.value;
     const matchesKeyword =
@@ -107,9 +108,9 @@ const filteredRules = computed(() => {
   });
 });
 
-const riskText = (risk: RiskLevel) => ({ high: "高风险", medium: "中风险", low: "低风险", critical: "严重", info: "提示" })[risk];
+const topRuleDocs = computed(() => localRules.slice(0, 4));
+
 const toggleRule = (name: string) => ElMessage.success(`${name} 状态已更新`);
 const editRule = (name: string) => ElMessage.info(`编辑 ${name} 功能暂未接入后端`);
 const createRule = () => ElMessage.info("新增规则功能暂未接入后端");
 </script>
-

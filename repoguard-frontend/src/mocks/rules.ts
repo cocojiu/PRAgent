@@ -1,20 +1,6 @@
-import type { RiskLevel } from "@/types";
+import type { ReviewRuleConfig, SimpleMetric } from "@/types";
 
-export type RuleStatus = "enabled" | "disabled";
-
-export interface ReviewRuleConfig {
-  id: string;
-  name: string;
-  scope: string;
-  severity: RiskLevel;
-  status: RuleStatus;
-  hitCount: number;
-  confidence: string;
-  updatedAt: string;
-  description: string;
-}
-
-export const ruleMetrics = [
+export const ruleMetrics: SimpleMetric[] = [
   { label: "启用规则", value: "8", note: "覆盖 Java PR 审查", color: "blue" },
   { label: "高风险规则", value: "3", note: "阻断级质量护栏", color: "red" },
   { label: "今日命中", value: "236", note: "较昨日 ↑ 12.4%", color: "orange" },
@@ -89,4 +75,3 @@ export const reviewRules: ReviewRuleConfig[] = [
     description: "检测吞异常、仅 printStackTrace 或缺少上下文日志的问题。"
   }
 ];
-

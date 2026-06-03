@@ -14,7 +14,7 @@
 
     <el-alert
       v-if="!isEditing"
-      title="当前为查看模式，点击右上角“编辑设置”后可修改配置。"
+      title="当前为查看模式，点击右上角编辑设置后可修改配置。"
       type="info"
       :closable="false"
       show-icon
@@ -37,7 +37,7 @@
           <el-form-item label="时区">
             <el-input v-model="baseForm.timezone" :disabled="!isEditing" />
           </el-form-item>
-          <el-form-item label="数据保留（天）">
+          <el-form-item label="数据保留天数">
             <el-input-number v-model="baseForm.retentionDays" :disabled="!isEditing" :min="1" :max="365" />
           </el-form-item>
         </el-form>
@@ -126,7 +126,7 @@ security:
       </article>
       <article class="dashboard-card">
         <h2>操作日志</h2>
-        <el-table :data="settingLogs" class="rg-table" size="large">
+        <el-table :data="settingLogs" class="rg-table" size="large" aria-label="系统设置操作日志">
           <el-table-column prop="time" label="时间" width="180" />
           <el-table-column prop="operator" label="操作人" width="100" />
           <el-table-column prop="action" label="操作内容" min-width="260" />
@@ -144,6 +144,7 @@ security:
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import {
   baseSettings,
   notificationSettings,
@@ -157,35 +158,26 @@ const baseForm = reactive({ ...baseSettings });
 const policyForm = reactive({ ...reviewPolicySettings });
 const notificationForm = reactive({ ...notificationSettings });
 const securityForm = reactive({ ...securitySettings });
-
-let snapshot = JSON.stringify({
+const { captureSnapshot, restoreSnapshot } = useFormSnapshot({
   baseForm,
   policyForm,
   notificationForm,
   securityForm
 });
 
-const applySnapshot = (raw: string) => {
-  const parsed = JSON.parse(raw);
-  Object.assign(baseForm, parsed.baseForm);
-  Object.assign(policyForm, parsed.policyForm);
-  Object.assign(notificationForm, parsed.notificationForm);
-  Object.assign(securityForm, parsed.securityForm);
-};
-
 const startEdit = () => {
-  snapshot = JSON.stringify({ baseForm, policyForm, notificationForm, securityForm });
+  captureSnapshot();
   isEditing.value = true;
 };
 
 const cancelEdit = () => {
-  applySnapshot(snapshot);
+  restoreSnapshot();
   isEditing.value = false;
   ElMessage.info("已取消修改");
 };
 
 const saveSettings = () => {
-  snapshot = JSON.stringify({ baseForm, policyForm, notificationForm, securityForm });
+  captureSnapshot();
   isEditing.value = false;
   ElMessage.success("系统设置已保存");
 };

@@ -5,18 +5,7 @@
       <p>查看和管理所有代码审查任务</p>
     </div>
 
-    <section class="metric-grid">
-      <div v-for="metric in taskSummaryMetrics" :key="metric.label" class="metric-card">
-        <div class="metric-icon" :class="`metric-icon--${metric.color}`">
-          <component :is="getMetricIcon(metric.color)" :size="30" />
-        </div>
-        <div>
-          <p>{{ metric.label }}</p>
-          <strong>{{ metric.value }}</strong>
-          <span :class="metric.noteClass">{{ metric.note }}</span>
-        </div>
-      </div>
-    </section>
+    <MetricGrid :metrics="taskSummaryMetrics" :resolve-icon="getMetricIcon" />
 
     <section class="task-panel">
       <div class="filter-bar">
@@ -45,13 +34,15 @@
         </el-button>
       </div>
 
-      <el-table :data="pagedTasks" class="rg-table task-table" size="large">
+      <el-table :data="pagedTasks" class="rg-table task-table" size="large" aria-label="审查任务列表">
         <el-table-column label="PR" min-width="230">
           <template #default="{ row }">
             <div class="pr-cell">
               <Github :size="20" />
               <div>
-                <RouterLink class="pr-link" :to="`/repoguard/tasks/${row.id}`">#{{ row.prNumber }}</RouterLink>
+                <RouterLink class="pr-link" :to="{ name: 'task-detail', params: { id: row.id } }">
+                  #{{ row.prNumber }}
+                </RouterLink>
                 <p>{{ row.title }}</p>
               </div>
             </div>
@@ -106,7 +97,7 @@
           layout="sizes, prev, pager, next, jumper"
           :page-sizes="[5, 8, 10, 20]"
           :total="filteredTasks.length"
-          @size-change="handlePageSizeChange"
+          @size-change="resetPage"
         />
       </div>
     </section>
@@ -114,12 +105,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
+import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
+import { useFilterPagination } from "@/composables/useFilterPagination";
+import { useMetricIcon } from "@/composables/useMetricIcon";
 import { reviewTasks } from "@/mocks/reviewTasks";
-import type { ReviewStatus, RiskLevel } from "@/types";
+import { riskText } from "@/utils/risk";
+import { statusClass, statusText } from "@/utils/status";
 
 const router = useRouter();
 const repoFilter = ref("");
@@ -136,7 +131,7 @@ const metricIconMap = {
   green: Clock
 } as const;
 
-const getMetricIcon = (color: string) => metricIconMap[color as keyof typeof metricIconMap] || CheckCircle;
+const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
 
 const repositories = computed(() => Array.from(new Set(reviewTasks.map((task) => task.repository))));
 
@@ -158,9 +153,8 @@ const filteredTasks = computed(() => {
 });
 
 const parseDurationSeconds = (duration: string) => {
-  const minuteMatch = duration.match(/(\d+)\s*分/);
-  const secondMatch = duration.match(/(\d+)\s*秒/);
-  return Number(minuteMatch?.[1] || 0) * 60 + Number(secondMatch?.[1] || 0);
+  const [minutes = 0, seconds = 0] = duration.match(/\d+/g)?.map(Number) ?? [];
+  return minutes * 60 + seconds;
 };
 
 const formatDuration = (seconds: number) => {
@@ -169,7 +163,7 @@ const formatDuration = (seconds: number) => {
   return `${minutes} 分 ${restSeconds} 秒`;
 };
 
-const taskSummaryMetrics = computed(() => {
+const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
   const tasks = filteredTasks.value;
   const total = tasks.length;
   const highRiskCount = tasks.filter((task) => task.riskLevel === "high" || task.riskLevel === "critical").length;
@@ -180,40 +174,37 @@ const taskSummaryMetrics = computed(() => {
 
   return [
     { label: "本周审查", value: String(total), note: "当前筛选结果", noteClass: "trend", color: "blue" },
-    { label: "高风险 PR", value: String(highRiskCount), note: `${total ? Math.round((highRiskCount / total) * 100) : 0}% 占比`, noteClass: "trend danger", color: "red" },
-    { label: "失败任务", value: String(failedCount), note: `${total ? Math.round((failedCount / total) * 100) : 0}% 占比`, noteClass: "trend danger", color: "orange" },
+    {
+      label: "高风险 PR",
+      value: String(highRiskCount),
+      note: `${total ? Math.round((highRiskCount / total) * 100) : 0}% 占比`,
+      noteClass: "trend danger",
+      color: "red"
+    },
+    {
+      label: "失败任务",
+      value: String(failedCount),
+      note: `${total ? Math.round((failedCount / total) * 100) : 0}% 占比`,
+      noteClass: "trend danger",
+      color: "orange"
+    },
     { label: "平均耗时", value: formatDuration(avgSeconds), note: "按当前结果计算", noteClass: "trend", color: "green" }
   ];
 });
 
-const pagedTasks = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value;
-  return filteredTasks.value.slice(start, start + pageSize.value);
+const { pagedItems: pagedTasks, resetPage } = useFilterPagination({
+  source: filteredTasks,
+  filters: [repoFilter, statusFilter, riskFilter, keyword],
+  currentPage,
+  pageSize
 });
 
-watch([repoFilter, statusFilter, riskFilter, keyword], () => {
-  currentPage.value = 1;
-});
-
-watch(filteredTasks, () => {
-  const maxPage = Math.max(1, Math.ceil(filteredTasks.value.length / pageSize.value));
-  if (currentPage.value > maxPage) {
-    currentPage.value = maxPage;
-  }
-});
-
-const riskText = (risk: RiskLevel) => ({ high: "高风险", medium: "中风险", low: "低风险", critical: "严重", info: "提示" })[risk];
-const statusText = (status: ReviewStatus) => ({ completed: "已完成", reviewing: "审查中", failed: "失败", queued: "已入队" })[status];
-const statusClass = (status: ReviewStatus) => ({ completed: "success", reviewing: "processing", failed: "danger", queued: "processing" })[status];
-
-const goDetail = (id: number) => router.push(`/repoguard/tasks/${id}`);
+const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
 const retryTask = (id: number) => {
   ElMessage.success(`任务 #${id} 已重新入队`);
 };
 const refreshTasks = () => {
-  currentPage.value = 1;
-};
-const handlePageSizeChange = () => {
-  currentPage.value = 1;
+  resetPage();
+  ElMessage.success("任务列表已刷新");
 };
 </script>

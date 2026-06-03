@@ -200,4 +200,4 @@ export const reviewTimeline: TimelineItem[] = [
   { label: "已完成", time: "14:35:10", status: "done" }
 ];
 
-export const selectedTask = reviewTasks[0];
+export const selectedTask: ReviewTask = { ...reviewTasks[0] };

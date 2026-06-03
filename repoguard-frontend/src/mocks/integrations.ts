@@ -12,7 +12,7 @@ export const integrations: IntegrationConfig[] = [
     message: "Webhook 连接正常，最近一次事件接收时间：2025-05-31 15:28:11",
     fields: [
       { label: "Webhook 地址", value: "https://repoguard.example.com/api/webhook/github", type: "text" },
-      { label: "Secret Token", value: "repoguard-webhook-secret", type: "password" }
+      { label: "Secret Token", value: "********", type: "password" }
     ]
   },
   {
@@ -27,7 +27,7 @@ export const integrations: IntegrationConfig[] = [
     fields: [
       { label: "数据库地址", value: "mysql://127.0.0.1:3306/repoguard", type: "text" },
       { label: "用户名", value: "repoguard_user", type: "text" },
-      { label: "密码", value: "mysql-secret", type: "password" }
+      { label: "密码", value: "********", type: "password" }
     ]
   },
   {
@@ -42,7 +42,7 @@ export const integrations: IntegrationConfig[] = [
     fields: [
       { label: "连接地址", value: "amqp://127.0.0.1:5672", type: "text" },
       { label: "用户名", value: "repoguard", type: "text" },
-      { label: "密码", value: "rabbitmq-secret", type: "password" }
+      { label: "密码", value: "********", type: "password" }
     ]
   },
   {

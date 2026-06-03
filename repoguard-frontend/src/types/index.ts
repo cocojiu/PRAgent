@@ -1,6 +1,8 @@
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "info";
 export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued";
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
+export type RuleStatus = "enabled" | "disabled";
+export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
 
 export interface ReviewTask {
   id: number;
@@ -43,7 +45,104 @@ export interface ChangedFile {
 export interface TimelineItem {
   label: string;
   time: string;
-  status: "done" | "current";
+  status: "done" | "current" | "pending";
+}
+
+export interface DashboardMetric {
+  label: string;
+  value: string;
+  trend: string;
+  trendType: "up" | "up-danger" | "down";
+  color: MetricColor;
+}
+
+export interface SimpleMetric {
+  label: string;
+  value: string;
+  note: string;
+  color: MetricColor;
+}
+
+export interface ReviewTrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface ChartSlice {
+  name: string;
+  value: number;
+  color: string;
+  percent?: string;
+}
+
+export interface HighRiskReview {
+  title: string;
+  repository: string;
+  riskLevel: RiskLevel;
+  ruleHits: number;
+  reviewedAt: string;
+  status: string;
+}
+
+export interface FailedRuleStat {
+  name: string;
+  count: number;
+  trend: string;
+  direction: "up" | "down";
+  percent: string;
+}
+
+export interface SystemHealthItem {
+  name: string;
+  status: string;
+}
+
+export interface ReviewRuleConfig {
+  id: string;
+  name: string;
+  scope: string;
+  severity: RiskLevel;
+  status: RuleStatus;
+  hitCount: number;
+  confidence: string;
+  updatedAt: string;
+  description: string;
+}
+
+export interface BaseSettings {
+  systemName: string;
+  language: string;
+  timezone: string;
+  retentionDays: number;
+}
+
+export interface ReviewPolicySettings {
+  maxDiffLines: number;
+  llmTimeoutSeconds: number;
+  workerConcurrency: number;
+  autoComment: boolean;
+  autoRetry: boolean;
+}
+
+export interface NotificationSettings {
+  githubComment: boolean;
+  highRiskPr: boolean;
+  failedTask: boolean;
+  email: string;
+}
+
+export interface SecuritySettings {
+  webhookSignature: boolean;
+  secretMasking: boolean;
+  publicRepoAllowed: boolean;
+  tokenTtlDays: number;
+}
+
+export interface SettingLog {
+  time: string;
+  operator: string;
+  action: string;
+  status: string;
 }
 
 export interface IntegrationField {

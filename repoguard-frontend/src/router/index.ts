@@ -1,11 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
-import OverviewPage from "@/pages/OverviewPage.vue";
-import ReviewTasksPage from "@/pages/ReviewTasksPage.vue";
-import ReviewDetailPage from "@/pages/ReviewDetailPage.vue";
-import IntegrationsPage from "@/pages/IntegrationsPage.vue";
-import RuleConfigPage from "@/pages/RuleConfigPage.vue";
-import SystemSettingsPage from "@/pages/SystemSettingsPage.vue";
+import { routeNames } from "@/router/names";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -19,14 +14,53 @@ export const router = createRouter({
       component: RepoGuardLayout,
       redirect: "/repoguard/overview",
       children: [
-        { path: "overview", name: "overview", component: OverviewPage, meta: { title: "总览" } },
-        { path: "tasks", name: "tasks", component: ReviewTasksPage, meta: { title: "审查任务" } },
-        { path: "tasks/:id", name: "task-detail", component: ReviewDetailPage, meta: { title: "任务详情" } },
-        { path: "rules", name: "rules", component: RuleConfigPage, meta: { title: "规则配置" } },
-        { path: "integrations", name: "integrations", component: IntegrationsPage, meta: { title: "集成配置" } },
-        { path: "settings", name: "settings", component: SystemSettingsPage, meta: { title: "系统设置" } }
+        {
+          path: "overview",
+          name: routeNames.overview,
+          component: () => import("@/pages/OverviewPage.vue"),
+          meta: { title: "总览" }
+        },
+        {
+          path: "tasks",
+          name: routeNames.tasks,
+          component: () => import("@/pages/ReviewTasksPage.vue"),
+          meta: { title: "审查任务" }
+        },
+        {
+          path: "tasks/:id",
+          name: routeNames.taskDetail,
+          component: () => import("@/pages/ReviewDetailPage.vue"),
+          meta: { title: "任务详情" }
+        },
+        {
+          path: "rules",
+          name: routeNames.rules,
+          component: () => import("@/pages/RuleConfigPage.vue"),
+          meta: { title: "规则配置" }
+        },
+        {
+          path: "integrations",
+          name: routeNames.integrations,
+          component: () => import("@/pages/IntegrationsPage.vue"),
+          meta: { title: "集成配置" }
+        },
+        {
+          path: "settings",
+          name: routeNames.settings,
+          component: () => import("@/pages/SystemSettingsPage.vue"),
+          meta: { title: "系统设置" }
+        }
       ]
+    },
+    {
+      path: "/:pathMatch(.*)*",
+      name: routeNames.notFound,
+      redirect: "/repoguard/overview"
     }
   ]
 });
 
+router.beforeEach((to) => {
+  const title = typeof to.meta.title === "string" ? to.meta.title : "RepoGuard";
+  document.title = `${title} - RepoGuard`;
+});

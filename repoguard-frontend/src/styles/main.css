@@ -110,7 +110,7 @@ a {
   border-radius: 8px;
   color: #40516f;
   font-weight: 600;
-  transition: all 160ms ease;
+  transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease;
 }
 
 .nav-item:hover,
