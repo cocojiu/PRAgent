@@ -2,10 +2,13 @@ package com.repoguard.agent.controller;
 
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.repoguard.agent.dto.LlmStatusDto;
+import com.repoguard.agent.dto.ManualReviewRequest;
+import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -14,6 +17,7 @@ import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.service.ReviewService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -65,6 +69,11 @@ class ReviewControllerTest {
                 new RabbitMqStatusDto(1, 0, "confirmed")
             );
         }
+
+        @Override
+        public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
+            return new ManualReviewResponse(9001L, "queued", "Review task queued");
+        }
     };
 
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ReviewController(reviewService)).build();
@@ -90,5 +99,25 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.id").value(512))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
             .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"));
+    }
+
+    @Test
+    void triggerManualReviewReturnsQueuedTask() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/manual")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "organization": "repo-guard-demo",
+                      "repository": "spring-boot-demo",
+                      "prNumber": 512,
+                      "title": "Manual review smoke test",
+                      "commit": "a1b2c3d",
+                      "branch": "main"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.taskId").value(9001))
+            .andExpect(jsonPath("$.data.status").value("queued"));
     }
 }

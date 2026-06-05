@@ -6,6 +6,8 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.LlmStatusDto;
+import com.repoguard.agent.dto.ManualReviewRequest;
+import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
@@ -23,9 +25,11 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.service.ReviewService;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -99,6 +103,38 @@ public class ReviewServiceImpl implements ReviewService {
         ).stream().map(this::toTimelineItem).toList();
 
         return toDetail(task, findingDtos, missingTests, changedFiles, timeline);
+    }
+
+    @Override
+    @Transactional
+    public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
+        String organization = request.organization().trim();
+        String repository = request.repository().trim();
+        String commit = resolveCommit(request);
+        ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
+        if (existingTask != null) {
+            return new ManualReviewResponse(existingTask.getId(), lower(existingTask.getStatus()), "Review task already exists");
+        }
+
+        LocalDateTime createdAt = LocalDateTime.now();
+        ReviewTask task = new ReviewTask();
+        task.setPrNumber(request.prNumber());
+        task.setTitle(resolveTitle(request));
+        task.setRepository(repository);
+        task.setOrganization(organization);
+        task.setCommitSha(commit);
+        task.setBranchName(resolveBranch(request));
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setMqRetries(0);
+        task.setLlmStatus("PENDING");
+        task.setPrUrl(buildPrUrl(request));
+        task.setCreatedAt(createdAt);
+        task.setDurationSeconds(0);
+
+        reviewTaskMapper.insert(task);
+        insertInitialTimeline(task.getId(), createdAt);
+        return new ManualReviewResponse(task.getId(), "queued", "Review task queued");
     }
 
     private LambdaQueryWrapper<ReviewTask> buildListWrapper(ReviewQuery query) {
@@ -225,6 +261,60 @@ public class ReviewServiceImpl implements ReviewService {
                 default -> "pending";
             }
         );
+    }
+
+    private String resolveTitle(ManualReviewRequest request) {
+        if (StringUtils.hasText(request.title())) {
+            return request.title().trim();
+        }
+        return "Manual review for PR #" + request.prNumber();
+    }
+
+    private String resolveCommit(ManualReviewRequest request) {
+        if (StringUtils.hasText(request.commit())) {
+            return request.commit().trim();
+        }
+        return "pending";
+    }
+
+    private String resolveBranch(ManualReviewRequest request) {
+        if (StringUtils.hasText(request.branch())) {
+            return request.branch().trim();
+        }
+        return "unknown";
+    }
+
+    private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {
+        if (!StringUtils.hasText(commit) || "pending".equals(commit)) {
+            return null;
+        }
+        return reviewTaskMapper.selectOne(
+            new LambdaQueryWrapper<ReviewTask>()
+                .eq(ReviewTask::getOrganization, organization)
+                .eq(ReviewTask::getRepository, repository)
+                .eq(ReviewTask::getPrNumber, prNumber)
+                .eq(ReviewTask::getCommitSha, commit)
+                .last("limit 1")
+        );
+    }
+
+    private void insertInitialTimeline(Long taskId, LocalDateTime createdAt) {
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(taskId);
+        timeline.setLabel("Task queued");
+        timeline.setEventTime(createdAt);
+        timeline.setStatus("CURRENT");
+        timeline.setSortOrder(1);
+        reviewTimelineMapper.insert(timeline);
+    }
+
+    private String buildPrUrl(ManualReviewRequest request) {
+        return "https://github.com/"
+            + request.organization().trim()
+            + "/"
+            + request.repository().trim()
+            + "/pull/"
+            + request.prNumber();
     }
 
     private String lower(String value) {

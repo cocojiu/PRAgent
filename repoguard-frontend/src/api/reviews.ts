@@ -1,5 +1,12 @@
 import { request } from "@/api/client";
-import type { PageResponse, ReviewQuery, ReviewTask, ReviewTaskDetail } from "@/types";
+import type {
+  ManualReviewRequest,
+  ManualReviewResponse,
+  PageResponse,
+  ReviewQuery,
+  ReviewTask,
+  ReviewTaskDetail
+} from "@/types";
 
 /**
  * 查询评审任务列表，参数与后端只读 API 保持一致。
@@ -18,3 +25,9 @@ export const fetchReviews = (query: ReviewQuery) =>
  * 查询单个评审任务详情。
  */
 export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api/v1/reviews/${id}`);
+
+export const triggerManualReview = (payload: ManualReviewRequest) =>
+  request<ManualReviewResponse>("/api/v1/reviews/manual", undefined, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });

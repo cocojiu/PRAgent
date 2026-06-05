@@ -18,8 +18,20 @@ const buildUrl = (path: string, params?: Record<string, string | number | undefi
   return url.toString();
 };
 
-export const request = async <T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> => {
-  const response = await fetch(buildUrl(path, params));
+export const request = async <T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  options: RequestInit = {}
+): Promise<T> => {
+  const headers = new Headers(options.headers);
+  if (options.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(buildUrl(path, params), {
+    ...options,
+    headers
+  });
   if (!response.ok) {
     throw new Error(`请求失败：HTTP ${response.status}`);
   }

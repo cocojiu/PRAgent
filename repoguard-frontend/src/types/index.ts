@@ -84,6 +84,21 @@ export interface ReviewQuery {
   keyword?: string;
 }
 
+export interface ManualReviewRequest {
+  organization: string;
+  repository: string;
+  prNumber: number;
+  title?: string;
+  commit?: string;
+  branch?: string;
+}
+
+export interface ManualReviewResponse {
+  taskId: number;
+  status: ReviewStatus;
+  message: string;
+}
+
 export interface DashboardMetric {
   label: string;
   value: string;

@@ -1,5 +1,7 @@
 package com.repoguard.agent.service;
 
+import com.repoguard.agent.dto.ManualReviewRequest;
+import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskDetail;
@@ -16,4 +18,6 @@ public interface ReviewService {
      * 加载单个评审任务，以及前端详情页需要的所有只读区块。
      */
     ReviewTaskDetail getReviewDetail(Long id);
+
+    ManualReviewResponse triggerManualReview(ManualReviewRequest request);
 }

@@ -1,16 +1,21 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.dto.ManualReviewRequest;
+import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.service.ReviewService;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -50,5 +55,10 @@ public class ReviewController {
     @GetMapping("/{id}")
     public ApiResponse<ReviewTaskDetail> getReviewDetail(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.getReviewDetail(id));
+    }
+
+    @PostMapping("/manual")
+    public ApiResponse<ManualReviewResponse> triggerManualReview(@Valid @RequestBody ManualReviewRequest request) {
+        return ApiResponse.ok(reviewService.triggerManualReview(request));
     }
 }
