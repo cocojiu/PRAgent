@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  config:
+    import: optional:file:./src/main/resources/application-local.yml
   application:
     name: repoguard-backend
   datasource:

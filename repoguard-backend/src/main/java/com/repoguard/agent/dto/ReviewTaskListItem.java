@@ -1,4 +1,21 @@
 package com.repoguard.agent.dto;
 
-public record ReviewTaskListItem(Long id) {
+/**
+ * 评审任务列表接口返回的摘要行。
+ */
+public record ReviewTaskListItem(
+    Long id,
+    Integer prNumber,
+    String title,
+    String repository,
+    String organization,
+    String commit,
+    String branch,
+    String status,
+    String riskLevel,
+    Integer mqRetries,
+    String llmStatus,
+    String createdAt,
+    String duration
+) {
 }

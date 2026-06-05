@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.service.DashboardService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -16,8 +17,11 @@ public class DashboardController {
         this.dashboardService = dashboardService;
     }
 
-    @GetMapping("/ping")
-    public ApiResponse<String> ping() {
-        return ApiResponse.ok(dashboardService.ping());
+    /**
+     * 返回仪表盘概览需要的评审聚合指标。
+     */
+    @GetMapping("/overview")
+    public ApiResponse<DashboardOverviewResponse> getOverview() {
+        return ApiResponse.ok(dashboardService.getOverview());
     }
 }
