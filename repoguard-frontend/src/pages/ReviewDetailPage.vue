@@ -1,5 +1,7 @@
 <template>
   <div v-loading="loading" class="detail-page">
+    <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+
     <template v-if="selectedTask">
     <div class="detail-header">
       <div>
@@ -23,10 +25,14 @@
           在 GitHub 查看
           <ExternalLink :size="16" />
         </el-button>
-        <el-button type="primary" size="large">
-          <RefreshCw :size="16" />
-          重试
-        </el-button>
+        <el-tooltip content="执行链路接口尚未接入">
+          <span>
+            <el-button type="primary" size="large" disabled>
+              <RefreshCw :size="16" />
+              重试
+            </el-button>
+          </span>
+        </el-tooltip>
       </div>
     </div>
 
@@ -74,6 +80,9 @@
             <el-table-column prop="line" label="行号" width="80" />
             <el-table-column prop="message" label="问题说明" min-width="220" />
             <el-table-column prop="recommendation" label="修改建议" min-width="280" />
+            <template #empty>
+              <el-empty description="暂无审查问题" />
+            </template>
           </el-table>
         </article>
 
@@ -84,6 +93,9 @@
             <el-table-column prop="method" label="涉及类/方法" min-width="220" />
             <el-table-column prop="type" label="缺失测试类型" width="160" />
             <el-table-column prop="suggestion" label="建议" min-width="280" />
+            <template #empty>
+              <el-empty description="暂无缺失测试建议" />
+            </template>
           </el-table>
         </article>
 
@@ -102,6 +114,9 @@
                 <span class="deletions"> -{{ row.deletions }}</span>
               </template>
             </el-table-column>
+            <template #empty>
+              <el-empty description="暂无变更文件" />
+            </template>
           </el-table>
         </article>
       </main>
@@ -138,7 +153,10 @@
       </aside>
     </div>
     </template>
-    <el-empty v-else description="未找到审查任务" />
+    <el-empty v-else-if="!loading" :description="emptyDescription">
+      <el-button type="primary" plain @click="goBack">返回列表</el-button>
+      <el-button :loading="loading" @click="loadDetail">重新加载</el-button>
+    </el-empty>
   </div>
 </template>
 
@@ -155,12 +173,14 @@ import { statusClass, statusText } from "@/utils/status";
 const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
+const errorMessage = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
 const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
 const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
+const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
   reviewFindings.value.reduce(
@@ -180,11 +200,13 @@ const loadDetail = async () => {
   }
 
   loading.value = true;
+  errorMessage.value = "";
   try {
     selectedTask.value = await fetchReviewDetail(id);
   } catch (error) {
     selectedTask.value = null;
-    ElMessage.error(error instanceof Error ? error.message : "审查详情加载失败");
+    errorMessage.value = error instanceof Error ? error.message : "审查详情加载失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }

@@ -5,6 +5,8 @@
       <p>查看和管理所有代码审查任务</p>
     </div>
 
+    <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+
     <MetricGrid :metrics="taskSummaryMetrics" :resolve-icon="getMetricIcon" />
 
     <section class="task-panel">
@@ -28,7 +30,7 @@
         <el-input v-model="keyword" class="search-input" placeholder="搜索 PR 标题、作者或 Commit ID" clearable>
           <template #suffix><Search :size="18" /></template>
         </el-input>
-        <el-button type="primary" plain @click="refreshTasks">
+        <el-button type="primary" plain :loading="loading" @click="refreshTasks">
           <RefreshCw :size="16" />
           刷新
         </el-button>
@@ -83,10 +85,17 @@
           <template #default="{ row }">
             <div class="table-actions">
               <el-button type="primary" size="small" @click="goDetail(row.id)">查看</el-button>
-              <el-button size="small" @click="retryTask(row.id)">重试</el-button>
+              <el-tooltip content="执行链路接口尚未接入">
+                <span>
+                  <el-button size="small" disabled>重试</el-button>
+                </span>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty description="暂无符合条件的审查任务" />
+        </template>
       </el-table>
 
       <div class="table-footer">
@@ -97,7 +106,6 @@
           layout="sizes, prev, pager, next, jumper"
           :page-sizes="[5, 8, 10, 20]"
           :total="totalTasks"
-          @size-change="resetPage"
         />
       </div>
     </section>
@@ -118,6 +126,7 @@ import { statusClass, statusText } from "@/utils/status";
 
 const router = useRouter();
 const loading = ref(false);
+const errorMessage = ref("");
 const reviewTasks = ref<ReviewTask[]>([]);
 const allRepositories = ref<string[]>([]);
 const totalTasks = ref(0);
@@ -127,6 +136,8 @@ const riskFilter = ref<RiskLevel | "">("");
 const keyword = ref("");
 const currentPage = ref(1);
 const pageSize = ref(8);
+let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+let taskRequestSeq = 0;
 
 const metricIconMap = {
   blue: ListTodo,
@@ -180,7 +191,9 @@ const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
 });
 
 const loadTasks = async () => {
+  const requestSeq = ++taskRequestSeq;
   loading.value = true;
+  errorMessage.value = "";
   try {
     const page = await fetchReviews({
       page: currentPage.value,
@@ -190,12 +203,22 @@ const loadTasks = async () => {
       riskLevel: riskFilter.value,
       keyword: keyword.value.trim()
     });
+    if (requestSeq !== taskRequestSeq) {
+      return;
+    }
     reviewTasks.value = page.items;
     totalTasks.value = page.total;
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "审查任务加载失败");
+    if (requestSeq !== taskRequestSeq) {
+      return;
+    }
+    errorMessage.value = error instanceof Error ? error.message : "审查任务加载失败";
+    reviewTasks.value = [];
+    totalTasks.value = 0;
   } finally {
-    loading.value = false;
+    if (requestSeq === taskRequestSeq) {
+      loading.value = false;
+    }
   }
 };
 
@@ -212,10 +235,20 @@ const resetPage = () => {
   currentPage.value = 1;
 };
 
-watch([repoFilter, statusFilter, riskFilter, keyword], () => {
-  resetPage();
-  void loadTasks();
-});
+const scheduleFilterLoad = () => {
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer);
+  }
+  filterDebounceTimer = setTimeout(() => {
+    if (currentPage.value === 1) {
+      void loadTasks();
+    } else {
+      resetPage();
+    }
+  }, 350);
+};
+
+watch([repoFilter, statusFilter, riskFilter, keyword], scheduleFilterLoad);
 
 watch([currentPage, pageSize], () => {
   void loadTasks();
@@ -227,10 +260,10 @@ onMounted(() => {
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
-const retryTask = (id: number) => {
-  ElMessage.success(`任务 #${id} 已重新入队`);
-};
 const refreshTasks = () => {
+  if (filterDebounceTimer) {
+    clearTimeout(filterDebounceTimer);
+  }
   void loadTasks();
 };
 </script>

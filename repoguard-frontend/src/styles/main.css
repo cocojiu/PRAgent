@@ -362,6 +362,10 @@ a {
   gap: 22px;
 }
 
+.page-alert {
+  margin-bottom: 2px;
+}
+
 .rules-page,
 .settings-page {
   display: flex;

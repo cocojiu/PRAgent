@@ -1,19 +1,23 @@
 <template>
   <div v-loading="loading" class="overview-page">
+    <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
+
     <MetricGrid :metrics="overviewMetricItems" :resolve-icon="getMetricIcon" />
 
     <section class="dashboard-grid">
       <article class="dashboard-card chart-card chart-card--wide">
         <h2>审查趋势</h2>
-        <EChartPanel :option="trendOption" />
+        <EChartPanel v-if="reviewTrend.length" :option="trendOption" />
+        <el-empty v-else description="暂无审查趋势数据" />
       </article>
       <article class="dashboard-card chart-card">
         <h2>风险分布</h2>
-        <EChartPanel :option="riskOption" />
+        <EChartPanel v-if="riskDistribution.length" :option="riskOption" />
+        <el-empty v-else description="暂无风险分布数据" />
       </article>
       <article class="dashboard-card chart-card">
         <h2>规则命中</h2>
-        <div class="donut-layout">
+        <div v-if="ruleHits.length" class="donut-layout">
           <EChartPanel :option="ruleOption" />
           <ul class="rule-legend">
             <li v-for="rule in ruleHits" :key="rule.name">
@@ -23,6 +27,7 @@
             </li>
           </ul>
         </div>
+        <el-empty v-else description="暂无规则命中数据" />
       </article>
     </section>
 
@@ -49,6 +54,9 @@
               <RouterLink class="table-link" :to="{ name: 'tasks' }">查看</RouterLink>
             </template>
           </el-table-column>
+          <template #empty>
+            <el-empty description="暂无高风险审查" />
+          </template>
         </el-table>
         <RouterLink class="card-footer-link" :to="{ name: 'tasks' }">查看更多</RouterLink>
       </article>
@@ -66,21 +74,25 @@
             </template>
           </el-table-column>
           <el-table-column prop="percent" label="占比" width="80" />
+          <template #empty>
+            <el-empty description="暂无失败规则统计" />
+          </template>
         </el-table>
         <RouterLink class="card-footer-link" :to="{ name: 'rules' }">查看更多</RouterLink>
       </article>
 
       <article class="dashboard-card health-card">
         <h2>系统健康</h2>
-        <div class="health-list">
+        <div v-if="systemHealth.length" class="health-list">
           <div v-for="item in systemHealth" :key="item.name" class="health-item">
             <span>{{ item.name }}</span>
             <b>● {{ item.status }}</b>
           </div>
         </div>
+        <el-empty v-else description="暂无健康检查数据" />
         <div class="health-footer">
           <span>最后检查：{{ lastHealthCheckAt }}</span>
-          <button class="table-link" type="button" @click="loadOverview">刷新</button>
+          <button class="table-link" type="button" :disabled="loading" @click="loadOverview">刷新</button>
         </div>
       </article>
     </section>
@@ -109,6 +121,7 @@ const metricIconMap = {
 
 const getMetricIcon = useMetricIcon(metricIconMap, FileText);
 const loading = ref(false);
+const errorMessage = ref("");
 const lastHealthCheckAt = ref("-");
 const overview = ref<DashboardOverview>({
   overviewMetrics: [],
@@ -142,11 +155,13 @@ const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => tota
 
 const loadOverview = async () => {
   loading.value = true;
+  errorMessage.value = "";
   try {
     overview.value = await fetchDashboardOverview();
     lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "仪表盘数据加载失败");
+    errorMessage.value = error instanceof Error ? error.message : "仪表盘数据加载失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
