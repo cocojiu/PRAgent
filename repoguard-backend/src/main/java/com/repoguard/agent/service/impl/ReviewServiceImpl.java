@@ -24,6 +24,8 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.service.ReviewService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -42,17 +44,20 @@ public class ReviewServiceImpl implements ReviewService {
     private final ChangedFileMapper changedFileMapper;
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
+    private final ReviewTaskPublisher reviewTaskPublisher;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
+        this.reviewTaskPublisher = reviewTaskPublisher;
     }
 
     @Override
@@ -134,6 +139,14 @@ public class ReviewServiceImpl implements ReviewService {
 
         reviewTaskMapper.insert(task);
         insertInitialTimeline(task.getId(), createdAt);
+        reviewTaskPublisher.publish(new ReviewTaskMessage(
+            task.getId(),
+            organization,
+            repository,
+            request.prNumber(),
+            commit,
+            createdAt
+        ));
         return new ManualReviewResponse(task.getId(), "queued", "Review task queued");
     }
 
