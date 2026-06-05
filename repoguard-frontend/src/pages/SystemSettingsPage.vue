@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-page">
+  <div v-loading="loading" class="settings-page">
     <div class="page-heading page-heading-row">
       <div>
         <h1>系统设置</h1>
@@ -8,7 +8,7 @@
       <div class="settings-actions">
         <el-button v-if="isEditing" size="large" @click="cancelEdit">取消</el-button>
         <el-button v-if="!isEditing" type="primary" size="large" @click="startEdit">编辑设置</el-button>
-        <el-button v-else type="primary" size="large" @click="saveSettings">保存设置</el-button>
+        <el-button v-else type="primary" size="large" :loading="saving" @click="saveSettings">保存设置</el-button>
       </div>
     </div>
 
@@ -142,8 +142,9 @@ security:
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { fetchReviewPolicyConfig, updateReviewPolicyConfig } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import {
   baseSettings,
@@ -152,8 +153,12 @@ import {
   securitySettings,
   settingLogs
 } from "@/mocks/settings";
+import type { ReviewPolicyConfig } from "@/types";
 
 const isEditing = ref(false);
+const loading = ref(false);
+const saving = ref(false);
+const reviewPolicyConfig = ref<ReviewPolicyConfig>();
 const baseForm = reactive({ ...baseSettings });
 const policyForm = reactive({ ...reviewPolicySettings });
 const notificationForm = reactive({ ...notificationSettings });
@@ -177,8 +182,51 @@ const cancelEdit = () => {
 };
 
 const saveSettings = () => {
-  captureSnapshot();
-  isEditing.value = false;
-  ElMessage.success("系统设置已保存");
+  void persistSettings();
 };
+
+const loadReviewPolicy = async () => {
+  loading.value = true;
+  try {
+    const config = await fetchReviewPolicyConfig();
+    reviewPolicyConfig.value = config;
+    policyForm.llmTimeoutSeconds = config.timeoutSeconds;
+    policyForm.workerConcurrency = config.workerConcurrency;
+  } catch (error) {
+    ElMessage.warning(error instanceof Error ? error.message : "Review policy load failed, using local defaults");
+  } finally {
+    loading.value = false;
+  }
+};
+
+const persistSettings = async () => {
+  saving.value = true;
+  try {
+    const current = reviewPolicyConfig.value;
+    const saved = await updateReviewPolicyConfig({
+      llmEnabled: current?.llmEnabled ?? true,
+      llmProvider: current?.llmProvider ?? "dashscope",
+      modelName: current?.modelName ?? "qwen-plus",
+      baseUrl: current?.baseUrl,
+      apiKey: current?.apiKey,
+      timeoutSeconds: policyForm.llmTimeoutSeconds,
+      temperature: current?.temperature ?? 0.2,
+      maxTokens: current?.maxTokens ?? 4096,
+      fallbackToRules: current?.fallbackToRules ?? true,
+      workerConcurrency: policyForm.workerConcurrency
+    });
+    reviewPolicyConfig.value = saved;
+    captureSnapshot();
+    isEditing.value = false;
+    ElMessage.success("系统设置已保存");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "Review policy save failed");
+  } finally {
+    saving.value = false;
+  }
+};
+
+onMounted(() => {
+  void loadReviewPolicy();
+});
 </script>

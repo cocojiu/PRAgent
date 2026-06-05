@@ -225,3 +225,38 @@ export interface IntegrationConfig {
   metaValue: string;
   fields: IntegrationField[];
 }
+
+export interface GithubIntegrationConfig {
+  provider: string;
+  status: "configured" | "not_configured" | "failed";
+  baseUrl: string;
+  token?: string;
+  defaultOwner?: string;
+  defaultRepo?: string;
+  lastCheckedAt?: string;
+  lastError?: string;
+  updatedAt?: string;
+}
+
+export interface GithubIntegrationConfigRequest {
+  baseUrl: string;
+  token?: string;
+  defaultOwner?: string;
+  defaultRepo?: string;
+}
+
+export interface ReviewPolicyConfig {
+  llmEnabled: boolean;
+  llmProvider: string;
+  modelName: string;
+  baseUrl?: string;
+  apiKey?: string;
+  timeoutSeconds: number;
+  temperature: number;
+  maxTokens: number;
+  fallbackToRules: boolean;
+  workerConcurrency: number;
+  updatedAt?: string;
+}
+
+export type ReviewPolicyConfigRequest = ReviewPolicyConfig;
