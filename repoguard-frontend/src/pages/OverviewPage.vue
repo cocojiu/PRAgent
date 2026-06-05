@@ -1,5 +1,5 @@
 <template>
-  <div class="overview-page">
+  <div v-loading="loading" class="overview-page">
     <MetricGrid :metrics="overviewMetricItems" :resolve-icon="getMetricIcon" />
 
     <section class="dashboard-grid">
@@ -80,7 +80,7 @@
         </div>
         <div class="health-footer">
           <span>最后检查：{{ lastHealthCheckAt }}</span>
-          <button class="table-link" type="button" @click="refreshHealth">刷新</button>
+          <button class="table-link" type="button" @click="loadOverview">刷新</button>
         </div>
       </article>
     </section>
@@ -88,24 +88,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import type { EChartsOption } from "echarts";
 import EChartPanel from "@/components/EChartPanel.vue";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
+import { fetchDashboardOverview } from "@/api/dashboard";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { riskText } from "@/utils/risk";
-import {
-  failedRules,
-  highRiskReviews,
-  overviewMetrics,
-  reviewTrend,
-  riskDistribution,
-  ruleHits,
-  systemHealth
-} from "@/mocks/dashboard";
+import type { DashboardOverview } from "@/types";
 
 const metricIconMap = {
   blue: FileText,
@@ -115,10 +108,28 @@ const metricIconMap = {
 } as const;
 
 const getMetricIcon = useMetricIcon(metricIconMap, FileText);
-const lastHealthCheckAt = "2025-05-30 10:30:45";
+const loading = ref(false);
+const lastHealthCheckAt = ref("-");
+const overview = ref<DashboardOverview>({
+  overviewMetrics: [],
+  reviewTrend: [],
+  riskDistribution: [],
+  ruleHits: [],
+  highRiskReviews: [],
+  failedRules: [],
+  systemHealth: []
+});
+
+const overviewMetrics = computed(() => overview.value.overviewMetrics);
+const reviewTrend = computed(() => overview.value.reviewTrend);
+const riskDistribution = computed(() => overview.value.riskDistribution);
+const ruleHits = computed(() => overview.value.ruleHits);
+const highRiskReviews = computed(() => overview.value.highRiskReviews);
+const failedRules = computed(() => overview.value.failedRules);
+const systemHealth = computed(() => overview.value.systemHealth);
 
 const overviewMetricItems = computed<MetricGridItem[]>(() =>
-  overviewMetrics.map((metric) => ({
+  overviewMetrics.value.map((metric) => ({
     label: metric.label,
     value: metric.value,
     color: metric.color,
@@ -127,23 +138,33 @@ const overviewMetricItems = computed<MetricGridItem[]>(() =>
   }))
 );
 
-const totalRuleHits = computed(() => ruleHits.reduce((total, item) => total + item.value, 0));
+const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => total + item.value, 0));
 
-const refreshHealth = () => {
-  ElMessage.success("系统健康状态已刷新");
+const loadOverview = async () => {
+  loading.value = true;
+  try {
+    overview.value = await fetchDashboardOverview();
+    lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "仪表盘数据加载失败");
+  } finally {
+    loading.value = false;
+  }
 };
+
+onMounted(loadOverview);
 
 const trendOption = computed<EChartsOption>(() => ({
   grid: { left: 36, right: 18, top: 42, bottom: 32 },
   tooltip: { trigger: "axis" },
-  xAxis: { type: "category", data: reviewTrend.map((item) => item.date), boundaryGap: false },
+  xAxis: { type: "category", data: reviewTrend.value.map((item) => item.date), boundaryGap: false },
   yAxis: { type: "value", splitLine: { lineStyle: { color: "#e8eef6" } } },
   series: [
     {
       name: "审查数量",
       type: "line",
       smooth: true,
-      data: reviewTrend.map((item) => item.value),
+      data: reviewTrend.value.map((item) => item.value),
       symbolSize: 9,
       lineStyle: { color: "#1268ff", width: 3 },
       itemStyle: { color: "#1268ff" },
@@ -156,12 +177,12 @@ const trendOption = computed<EChartsOption>(() => ({
 const riskOption = computed<EChartsOption>(() => ({
   grid: { left: 38, right: 20, top: 36, bottom: 32 },
   tooltip: {},
-  xAxis: { type: "category", data: riskDistribution.map((item) => item.name) },
+  xAxis: { type: "category", data: riskDistribution.value.map((item) => item.name) },
   yAxis: { type: "value", splitLine: { lineStyle: { color: "#e8eef6" } } },
   series: [
     {
       type: "bar",
-      data: riskDistribution.map((item) => ({ value: item.value, itemStyle: { color: item.color } })),
+      data: riskDistribution.value.map((item) => ({ value: item.value, itemStyle: { color: item.color } })),
       barWidth: 36,
       label: { show: true, position: "top", color: "#0f172a" }
     }
@@ -175,7 +196,7 @@ const ruleOption = computed<EChartsOption>(() => ({
       type: "pie",
       radius: ["48%", "72%"],
       center: ["50%", "50%"],
-      data: ruleHits.map((item) => ({ name: item.name, value: item.value, itemStyle: { color: item.color } })),
+      data: ruleHits.value.map((item) => ({ name: item.name, value: item.value, itemStyle: { color: item.color } })),
       label: { show: false },
       labelLine: { show: false }
     }

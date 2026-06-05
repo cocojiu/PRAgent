@@ -13,3 +13,6 @@ target/
 .npm-cache/
 BackendRules/
 repoguard-backend/src/main/resources/application-local.yml
+config/application-local.yml
+repoguard-backend/config/application-local.yml
+repoguard-backend/config/application-dev-local.yml

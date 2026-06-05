@@ -20,6 +20,16 @@ export interface ReviewTask {
   duration: string;
 }
 
+export interface ReviewTaskDetail extends ReviewTask {
+  prUrl: string;
+  findings: ReviewFinding[];
+  missingTests: MissingTest[];
+  changedFiles: ChangedFile[];
+  timeline: TimelineItem[];
+  llm: LlmStatus;
+  rabbitMq: RabbitMqStatus;
+}
+
 export interface ReviewFinding {
   severity: RiskLevel;
   file: string;
@@ -46,6 +56,32 @@ export interface TimelineItem {
   label: string;
   time: string;
   status: "done" | "current" | "pending";
+}
+
+export interface LlmStatus {
+  status: ReviewStatus;
+  duration: string;
+  riskLevel: RiskLevel;
+}
+
+export interface RabbitMqStatus {
+  deliveryCount: number;
+  retryCount: number;
+  consumeStatus: string;
+}
+
+export interface PageResponse<T> {
+  items: T[];
+  total: number;
+}
+
+export interface ReviewQuery {
+  page: number;
+  pageSize: number;
+  repository?: string;
+  status?: ReviewStatus | "";
+  riskLevel?: RiskLevel | "";
+  keyword?: string;
 }
 
 export interface DashboardMetric {
@@ -95,6 +131,16 @@ export interface FailedRuleStat {
 export interface SystemHealthItem {
   name: string;
   status: string;
+}
+
+export interface DashboardOverview {
+  overviewMetrics: DashboardMetric[];
+  reviewTrend: ReviewTrendPoint[];
+  riskDistribution: ChartSlice[];
+  ruleHits: Required<ChartSlice>[];
+  highRiskReviews: HighRiskReview[];
+  failedRules: FailedRuleStat[];
+  systemHealth: SystemHealthItem[];
 }
 
 export interface ReviewRuleConfig {

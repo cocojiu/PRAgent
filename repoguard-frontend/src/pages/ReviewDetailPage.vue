@@ -1,5 +1,6 @@
 <template>
-  <div class="detail-page">
+  <div v-loading="loading" class="detail-page">
+    <template v-if="selectedTask">
     <div class="detail-header">
       <div>
         <button class="back-link" type="button" @click="goBack">
@@ -18,7 +19,7 @@
         </p>
       </div>
       <div class="detail-actions">
-        <el-button size="large">
+        <el-button size="large" @click="openPrUrl">
           在 GitHub 查看
           <ExternalLink :size="16" />
         </el-button>
@@ -120,38 +121,49 @@
         <article class="dashboard-card side-card">
           <h2>LLM 状态</h2>
           <dl>
-            <dt>任务状态</dt><dd><span :class="`status-pill ${statusClass(selectedTask.llmStatus)}`">{{ statusText(selectedTask.llmStatus) }}</span></dd>
-            <dt>耗时</dt><dd>{{ selectedTask.duration }}</dd>
-            <dt>风险等级</dt><dd>{{ riskText(selectedTask.riskLevel) }}</dd>
+            <dt>任务状态</dt><dd><span :class="`status-pill ${statusClass(selectedTask.llm.status)}`">{{ statusText(selectedTask.llm.status) }}</span></dd>
+            <dt>耗时</dt><dd>{{ selectedTask.llm.duration }}</dd>
+            <dt>风险等级</dt><dd>{{ riskText(selectedTask.llm.riskLevel) }}</dd>
           </dl>
         </article>
 
         <article class="dashboard-card side-card">
           <h2>RabbitMQ</h2>
           <dl>
-            <dt>投递次数</dt><dd>{{ selectedTask.mqRetries + 1 }}</dd>
-            <dt>重试次数</dt><dd>{{ selectedTask.mqRetries }}</dd>
-            <dt>消费状态</dt><dd><span class="status-pill success">已确认</span></dd>
+            <dt>投递次数</dt><dd>{{ selectedTask.rabbitMq.deliveryCount }}</dd>
+            <dt>重试次数</dt><dd>{{ selectedTask.rabbitMq.retryCount }}</dd>
+            <dt>消费状态</dt><dd><span class="status-pill success">{{ selectedTask.rabbitMq.consumeStatus }}</span></dd>
           </dl>
         </article>
       </aside>
     </div>
+    </template>
+    <el-empty v-else description="未找到审查任务" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { ElMessage } from "element-plus";
 import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
-import { useRouter } from "vue-router";
-import { changedFiles, missingTests, reviewFindings, reviewTimeline, selectedTask } from "@/mocks/reviewTasks";
-import type { RiskLevel } from "@/types";
+import { useRoute, useRouter } from "vue-router";
+import { fetchReviewDetail } from "@/api/reviews";
+import type { ReviewTaskDetail, RiskLevel } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 const router = useRouter();
+const route = useRoute();
+const loading = ref(false);
+const selectedTask = ref<ReviewTaskDetail | null>(null);
+
+const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
+const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
+const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
+const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
-  reviewFindings.reduce(
+  reviewFindings.value.reduce(
     (counts, finding) => {
       counts[finding.severity] += 1;
       return counts;
@@ -160,7 +172,33 @@ const findingCounts = computed<Record<RiskLevel, number>>(() =>
   )
 );
 
+const loadDetail = async () => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id)) {
+    ElMessage.error("审查任务 ID 无效");
+    return;
+  }
+
+  loading.value = true;
+  try {
+    selectedTask.value = await fetchReviewDetail(id);
+  } catch (error) {
+    selectedTask.value = null;
+    ElMessage.error(error instanceof Error ? error.message : "审查详情加载失败");
+  } finally {
+    loading.value = false;
+  }
+};
+
 const goBack = () => {
   router.push({ name: "tasks" });
 };
+
+const openPrUrl = () => {
+  if (selectedTask.value?.prUrl) {
+    window.open(selectedTask.value.prUrl, "_blank", "noopener,noreferrer");
+  }
+};
+
+onMounted(loadDetail);
 </script>

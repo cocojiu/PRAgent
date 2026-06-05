@@ -1,5 +1,5 @@
 <template>
-  <div class="tasks-page">
+  <div v-loading="loading" class="tasks-page">
     <div class="page-heading">
       <h1>审查任务</h1>
       <p>查看和管理所有代码审查任务</p>
@@ -34,7 +34,7 @@
         </el-button>
       </div>
 
-      <el-table :data="pagedTasks" class="rg-table task-table" size="large" aria-label="审查任务列表">
+      <el-table :data="reviewTasks" class="rg-table task-table" size="large" aria-label="审查任务列表">
         <el-table-column label="PR" min-width="230">
           <template #default="{ row }">
             <div class="pr-cell">
@@ -90,13 +90,13 @@
       </el-table>
 
       <div class="table-footer">
-        <span>共 {{ filteredTasks.length }} 条</span>
+        <span>共 {{ totalTasks }} 条</span>
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
           layout="sizes, prev, pager, next, jumper"
           :page-sizes="[5, 8, 10, 20]"
-          :total="filteredTasks.length"
+          :total="totalTasks"
           @size-change="resetPage"
         />
       </div>
@@ -105,21 +105,25 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
-import { useFilterPagination } from "@/composables/useFilterPagination";
+import { fetchReviews } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import { reviewTasks } from "@/mocks/reviewTasks";
+import type { ReviewStatus, ReviewTask, RiskLevel } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 const router = useRouter();
+const loading = ref(false);
+const reviewTasks = ref<ReviewTask[]>([]);
+const allRepositories = ref<string[]>([]);
+const totalTasks = ref(0);
 const repoFilter = ref("");
-const statusFilter = ref("");
-const riskFilter = ref("");
+const statusFilter = ref<ReviewStatus | "">("");
+const riskFilter = ref<RiskLevel | "">("");
 const keyword = ref("");
 const currentPage = ref(1);
 const pageSize = ref(8);
@@ -133,24 +137,7 @@ const metricIconMap = {
 
 const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
 
-const repositories = computed(() => Array.from(new Set(reviewTasks.map((task) => task.repository))));
-
-const filteredTasks = computed(() => {
-  const query = keyword.value.trim().toLowerCase();
-  return reviewTasks.filter((task) => {
-    const matchesRepo = !repoFilter.value || task.repository === repoFilter.value;
-    const matchesStatus = !statusFilter.value || task.status === statusFilter.value;
-    const matchesRisk = !riskFilter.value || task.riskLevel === riskFilter.value;
-    const matchesKeyword =
-      !query ||
-      task.title.toLowerCase().includes(query) ||
-      task.repository.toLowerCase().includes(query) ||
-      task.organization.toLowerCase().includes(query) ||
-      task.commit.toLowerCase().includes(query) ||
-      String(task.prNumber).includes(query);
-    return matchesRepo && matchesStatus && matchesRisk && matchesKeyword;
-  });
-});
+const repositories = computed(() => allRepositories.value);
 
 const parseDurationSeconds = (duration: string) => {
   const [minutes = 0, seconds = 0] = duration.match(/\d+/g)?.map(Number) ?? [];
@@ -164,7 +151,7 @@ const formatDuration = (seconds: number) => {
 };
 
 const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
-  const tasks = filteredTasks.value;
+  const tasks = reviewTasks.value;
   const total = tasks.length;
   const highRiskCount = tasks.filter((task) => task.riskLevel === "high" || task.riskLevel === "critical").length;
   const failedCount = tasks.filter((task) => task.status === "failed").length;
@@ -192,11 +179,51 @@ const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
   ];
 });
 
-const { pagedItems: pagedTasks, resetPage } = useFilterPagination({
-  source: filteredTasks,
-  filters: [repoFilter, statusFilter, riskFilter, keyword],
-  currentPage,
-  pageSize
+const loadTasks = async () => {
+  loading.value = true;
+  try {
+    const page = await fetchReviews({
+      page: currentPage.value,
+      pageSize: pageSize.value,
+      repository: repoFilter.value,
+      status: statusFilter.value,
+      riskLevel: riskFilter.value,
+      keyword: keyword.value.trim()
+    });
+    reviewTasks.value = page.items;
+    totalTasks.value = page.total;
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "审查任务加载失败");
+  } finally {
+    loading.value = false;
+  }
+};
+
+const loadRepositories = async () => {
+  try {
+    const page = await fetchReviews({ page: 1, pageSize: 100 });
+    allRepositories.value = Array.from(new Set(page.items.map((task) => task.repository))).sort();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "仓库筛选项加载失败");
+  }
+};
+
+const resetPage = () => {
+  currentPage.value = 1;
+};
+
+watch([repoFilter, statusFilter, riskFilter, keyword], () => {
+  resetPage();
+  void loadTasks();
+});
+
+watch([currentPage, pageSize], () => {
+  void loadTasks();
+});
+
+onMounted(() => {
+  void loadRepositories();
+  void loadTasks();
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
@@ -204,7 +231,6 @@ const retryTask = (id: number) => {
   ElMessage.success(`任务 #${id} 已重新入队`);
 };
 const refreshTasks = () => {
-  resetPage();
-  ElMessage.success("任务列表已刷新");
+  void loadTasks();
 };
 </script>
