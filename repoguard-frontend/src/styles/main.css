@@ -1128,6 +1128,12 @@ a {
   border: 1px solid #fed7aa;
 }
 
+.integration-status.failed {
+  color: #dc2626;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
 .integration-form {
   display: flex;
   flex-direction: column;
@@ -1172,6 +1178,12 @@ a {
 .connection-message.missing_secret {
   color: #b45309;
   background: #fff7ed;
+}
+
+.connection-message.failed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
 }
 
 .integration-side {

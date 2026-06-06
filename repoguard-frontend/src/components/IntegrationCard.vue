@@ -47,7 +47,7 @@
       <span :class="`integration-status ${item.status}`">{{ item.statusText }}</span>
       <p>{{ item.metaLabel }}</p>
       <strong>{{ item.metaValue }}</strong>
-      <el-button type="primary" plain @click="$emit('test-connection', item.name)">
+      <el-button type="primary" plain :loading="testing" @click="$emit('test-connection', item.id)">
         <RadioTower :size="17" />
         测试连接
       </el-button>
@@ -65,10 +65,11 @@ const props = defineProps<{
   icon: Component;
   formState: Record<string, string>;
   visibleSecrets: Record<string, boolean>;
+  testing?: boolean;
 }>();
 
 defineEmits<{
-  (event: "test-connection", name: string): void;
+  (event: "test-connection", id: string): void;
 }>();
 
 const secretKey = (label: string) => `${props.item.id}-${label}`;

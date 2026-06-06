@@ -1,6 +1,10 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
@@ -9,12 +13,23 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.SystemConfigService;
+import java.sql.Connection;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
+import javax.sql.DataSource;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class SystemConfigServiceImpl implements SystemConfigService {
@@ -24,13 +39,28 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final RestClient.Builder restClientBuilder;
+    private final ObjectMapper objectMapper;
+    private final DataSource dataSource;
+    private final RabbitTemplate rabbitTemplate;
+    private final SecretCryptoService secretCryptoService;
 
     public SystemConfigServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        DataSource dataSource,
+        RabbitTemplate rabbitTemplate,
+        SecretCryptoService secretCryptoService
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.restClientBuilder = restClientBuilder;
+        this.objectMapper = objectMapper;
+        this.dataSource = dataSource;
+        this.rabbitTemplate = rabbitTemplate;
+        this.secretCryptoService = secretCryptoService;
     }
 
     @Override
@@ -42,16 +72,27 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     @Transactional
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
+        String token = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.token());
         config.setBaseUrl(request.baseUrl().trim());
-        if (shouldReplaceSecret(request.token())) {
-            config.setTokenValue(request.token().trim());
-        }
+        config.setTokenValue(secretCryptoService.encrypt(token));
         config.setDefaultOwner(trimToNull(request.defaultOwner()));
         config.setDefaultRepo(trimToNull(request.defaultRepo()));
-        config.setStatus(StringUtils.hasText(config.getTokenValue()) ? "CONFIGURED" : "NOT_CONFIGURED");
+        config.setStatus(StringUtils.hasText(token) ? "CONFIGURED" : "NOT_CONFIGURED");
         config.setLastError(null);
         config.setUpdatedAt(LocalDateTime.now());
         integrationConfigMapper.updateById(config);
+        if (config.getTokenValue() == null) {
+            integrationConfigMapper.update(
+                new UpdateWrapper<IntegrationConfig>()
+                    .eq("id", config.getId())
+                    .set("token_value", null)
+            );
+        }
+        integrationConfigMapper.update(
+            new UpdateWrapper<IntegrationConfig>()
+                .eq("id", config.getId())
+                .set("last_error", null)
+        );
         return toGithubDto(config);
     }
 
@@ -64,13 +105,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     @Transactional
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
+        String apiKey = resolveSecretValue(secretCryptoService.decrypt(config.getApiKeyValue()), request.apiKey());
         config.setLlmEnabled(request.llmEnabled());
         config.setLlmProvider(request.llmProvider().trim());
         config.setModelName(request.modelName().trim());
         config.setBaseUrl(trimToNull(request.baseUrl()));
-        if (shouldReplaceSecret(request.apiKey())) {
-            config.setApiKeyValue(request.apiKey().trim());
-        }
+        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
         config.setTimeoutSeconds(request.timeoutSeconds());
         config.setTemperature(request.temperature());
         config.setMaxTokens(request.maxTokens());
@@ -78,13 +118,105 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         config.setWorkerConcurrency(request.workerConcurrency());
         config.setUpdatedAt(LocalDateTime.now());
         reviewPolicyConfigMapper.updateById(config);
+        if (config.getApiKeyValue() == null) {
+            reviewPolicyConfigMapper.update(
+                new UpdateWrapper<ReviewPolicyConfig>()
+                    .eq("id", config.getId())
+                    .set("api_key_value", null)
+            );
+        }
         return toReviewPolicyDto(config);
     }
 
+    @Override
+    @Transactional
+    public ConnectionTestResultDto testGithubIntegration() {
+        IntegrationConfig config = findGithubConfig();
+        if (config == null) {
+            return connectionResult(false, "failed", "GitHub integration is not configured");
+        }
+        try {
+            String url = buildGithubTestUrl(config);
+            String token = secretCryptoService.decrypt(config.getTokenValue());
+            RestClient.RequestHeadersSpec<?> request = restClientBuilder.build()
+                .get()
+                .uri(url)
+                .accept(MediaType.APPLICATION_JSON);
+            if (StringUtils.hasText(token)) {
+                request.header("Authorization", "Bearer " + token.trim());
+            }
+            request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
+            return connectionResult(true, "connected", "GitHub connection test succeeded");
+        } catch (RuntimeException ex) {
+            return connectionResult(false, "failed", conciseError(ex));
+        }
+    }
+
+    @Override
+    public ConnectionTestResultDto testReviewPolicy() {
+        ReviewPolicyConfig config = findReviewPolicy();
+        if (config == null) {
+            return connectionResult(false, "failed", "LLM config is not configured");
+        }
+        String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
+        if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
+            return connectionResult(false, "failed", "LLM base URL, model or API key is missing");
+        }
+        try {
+            RestClient restClient = restClientBuilder
+                .baseUrl(config.getBaseUrl().trim())
+                .requestFactory(requestFactory(config.getTimeoutSeconds()))
+                .build();
+            String response = restClient.post()
+                .uri("/chat/completions")
+                .header("Authorization", "Bearer " + apiKey.trim())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(Map.of(
+                    "model", config.getModelName(),
+                    "temperature", 0,
+                    "max_tokens", 32,
+                    "messages", List.of(Map.of("role", "user", "content", "Return only OK."))
+                ))
+                .retrieve()
+                .body(String.class);
+            JsonNode root = objectMapper.readTree(response == null ? "" : response);
+            String content = root.at("/choices/0/message/content").asText("");
+            if (!StringUtils.hasText(content)) {
+                return connectionResult(false, "failed", "LLM response did not include message content");
+            }
+            return connectionResult(true, "connected", "LLM connection test succeeded");
+        } catch (Exception ex) {
+            return connectionResult(false, "failed", conciseError(ex));
+        }
+    }
+
+    @Override
+    public ConnectionTestResultDto testMysqlConnection() {
+        try (Connection connection = dataSource.getConnection()) {
+            boolean valid = connection.isValid(2);
+            return valid
+                ? connectionResult(true, "connected", "MySQL connection test succeeded")
+                : connectionResult(false, "failed", "MySQL connection is not valid");
+        } catch (Exception ex) {
+            return connectionResult(false, "failed", conciseError(ex));
+        }
+    }
+
+    @Override
+    public ConnectionTestResultDto testRabbitMqConnection() {
+        try {
+            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
+            return Boolean.TRUE.equals(open)
+                ? connectionResult(true, "connected", "RabbitMQ connection test succeeded")
+                : connectionResult(false, "failed", "RabbitMQ channel is not open");
+        } catch (RuntimeException ex) {
+            return connectionResult(false, "failed", conciseError(ex));
+        }
+    }
+
     private IntegrationConfig loadGithubConfig() {
-        IntegrationConfig config = integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-        );
+        IntegrationConfig config = findGithubConfig();
         if (config != null) {
             return config;
         }
@@ -100,8 +232,14 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         return defaultConfig;
     }
 
+    private IntegrationConfig findGithubConfig() {
+        return integrationConfigMapper.selectOne(
+            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
+        );
+    }
+
     private ReviewPolicyConfig loadReviewPolicy() {
-        ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
+        ReviewPolicyConfig config = findReviewPolicy();
         if (config != null) {
             return config;
         }
@@ -124,12 +262,52 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         return defaultConfig;
     }
 
+    private ReviewPolicyConfig findReviewPolicy() {
+        return reviewPolicyConfigMapper.selectById(1L);
+    }
+
+    private String buildGithubTestUrl(IntegrationConfig config) {
+        String baseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl().trim() : "https://api.github.com";
+        if (StringUtils.hasText(config.getDefaultOwner()) && StringUtils.hasText(config.getDefaultRepo())) {
+            return UriComponentsBuilder
+                .fromUriString(baseUrl)
+                .path("/repos/{owner}/{repo}")
+                .build(config.getDefaultOwner().trim(), config.getDefaultRepo().trim())
+                .toString();
+        }
+        return UriComponentsBuilder.fromUriString(baseUrl).path("/rate_limit").toUriString();
+    }
+
+    private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds == null ? 60 : timeoutSeconds));
+        requestFactory.setConnectTimeout(timeout);
+        requestFactory.setReadTimeout(timeout);
+        return requestFactory;
+    }
+
+    private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
+        return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()));
+    }
+
+    private String conciseError(Exception ex) {
+        String message = ex.getMessage();
+        if (!StringUtils.hasText(message) && ex.getCause() != null) {
+            message = ex.getCause().getMessage();
+        }
+        if (!StringUtils.hasText(message)) {
+            return ex.getClass().getSimpleName();
+        }
+        String normalized = message.replaceAll("\\s+", " ").trim();
+        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
+    }
+
     private GithubIntegrationConfigDto toGithubDto(IntegrationConfig config) {
         return new GithubIntegrationConfigDto(
             config.getProvider(),
             lower(config.getStatus()),
             config.getBaseUrl(),
-            maskSecret(config.getTokenValue()),
+            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
             config.getDefaultOwner(),
             config.getDefaultRepo(),
             format(config.getLastCheckedAt()),
@@ -144,7 +322,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             config.getLlmProvider(),
             config.getModelName(),
             config.getBaseUrl(),
-            maskSecret(config.getApiKeyValue()),
+            maskSecret(secretCryptoService.decrypt(config.getApiKeyValue())),
             config.getTimeoutSeconds(),
             config.getTemperature(),
             config.getMaxTokens(),
@@ -154,8 +332,15 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         );
     }
 
-    private boolean shouldReplaceSecret(String value) {
-        return StringUtils.hasText(value) && !value.trim().startsWith("****");
+    private String resolveSecretValue(String currentValue, String submittedValue) {
+        if (submittedValue == null) {
+            return currentValue;
+        }
+        String trimmed = submittedValue.trim();
+        if (trimmed.startsWith("****")) {
+            return currentValue;
+        }
+        return StringUtils.hasText(trimmed) ? trimmed : null;
     }
 
     private String maskSecret(String value) {

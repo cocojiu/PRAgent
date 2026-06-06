@@ -26,6 +26,7 @@
         :icon="serviceIcons[item.id] ?? Hexagon"
         :form-state="formState[item.id]"
         :visible-secrets="visibleSecrets"
+        :testing="testingConnections[item.id]"
         @test-connection="testConnection"
       />
     </section>
@@ -40,12 +41,16 @@ import type { Component } from "vue";
 import {
   fetchGithubIntegrationConfig,
   fetchReviewPolicyConfig,
+  testGithubIntegrationConnection,
+  testMysqlConnection,
+  testRabbitMqConnection,
+  testReviewPolicyConnection,
   updateGithubIntegrationConfig,
   updateReviewPolicyConfig
 } from "@/api/config";
 import IntegrationCard from "@/components/IntegrationCard.vue";
 import { integrations } from "@/mocks/integrations";
-import type { GithubIntegrationConfig, IntegrationConfig, ReviewPolicyConfig } from "@/types";
+import type { ConnectionTestResult, GithubIntegrationConfig, IntegrationConfig, ReviewPolicyConfig } from "@/types";
 
 const serviceIcons: Record<string, Component> = {
   github: Github,
@@ -67,6 +72,7 @@ const formState = reactive<Record<string, Record<string, string>>>(
 );
 
 const visibleSecrets = reactive<Record<string, boolean>>({});
+const testingConnections = reactive<Record<string, boolean>>({});
 
 const providerMap: Record<string, string> = {
   dashscope: "DashScope",
@@ -78,8 +84,41 @@ const reverseProviderMap = computed(() =>
   Object.fromEntries(Object.entries(providerMap).map(([value, label]) => [label, value]))
 );
 
-const testConnection = (name: string) => {
-  ElMessage.success(`${name} test triggered`);
+const testActions: Record<string, () => Promise<ConnectionTestResult>> = {
+  github: testGithubIntegrationConnection,
+  mysql: testMysqlConnection,
+  rabbitmq: testRabbitMqConnection,
+  "spring-ai": testReviewPolicyConnection
+};
+
+const testConnection = async (id: string) => {
+  const action = testActions[id];
+  const item = integrationItems.value.find((integration) => integration.id === id);
+  if (!action || !item) {
+    ElMessage.warning("Connection test is not available");
+    return;
+  }
+  testingConnections[id] = true;
+  try {
+    const result = await action();
+    applyConnectionTestResult(id, result);
+    if (result.success) {
+      ElMessage.success(result.message);
+    } else {
+      ElMessage.error(result.message);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Connection test failed";
+    applyConnectionTestResult(id, {
+      success: false,
+      status: "failed",
+      message,
+      checkedAt: new Date().toLocaleString()
+    });
+    ElMessage.error(message);
+  } finally {
+    testingConnections[id] = false;
+  }
 };
 
 const loadConfig = async () => {
@@ -179,6 +218,18 @@ const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
     { label: "Base URL", value: config.baseUrl ?? "", type: "text" }
   ];
   formState["spring-ai"] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
+};
+
+const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => {
+  const item = integrationItems.value.find((integration) => integration.id === id);
+  if (!item) {
+    return;
+  }
+  item.status = result.success ? "connected" : "failed";
+  item.statusText = result.success ? "已连接" : "连接失败";
+  item.message = result.message;
+  item.metaLabel = "检测时间";
+  item.metaValue = result.checkedAt;
 };
 
 onMounted(() => {

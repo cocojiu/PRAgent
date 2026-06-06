@@ -1,10 +1,12 @@
 package com.repoguard.agent.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
@@ -37,6 +39,26 @@ class SystemConfigControllerTest {
         @Override
         public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
             return reviewPolicyDto();
+        }
+
+        @Override
+        public ConnectionTestResultDto testGithubIntegration() {
+            return connectionResult();
+        }
+
+        @Override
+        public ConnectionTestResultDto testReviewPolicy() {
+            return connectionResult();
+        }
+
+        @Override
+        public ConnectionTestResultDto testMysqlConnection() {
+            return connectionResult();
+        }
+
+        @Override
+        public ConnectionTestResultDto testRabbitMqConnection() {
+            return connectionResult();
         }
     };
 
@@ -74,6 +96,15 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.data.apiKey").value("****5678"));
     }
 
+    @Test
+    void testGithubIntegrationReturnsConnectionResult() throws Exception {
+        mockMvc.perform(post("/api/v1/config/integrations/github/test"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.success").value(true))
+            .andExpect(jsonPath("$.data.status").value("connected"));
+    }
+
     private GithubIntegrationConfigDto githubDto() {
         return new GithubIntegrationConfigDto(
             "GITHUB",
@@ -102,5 +133,9 @@ class SystemConfigControllerTest {
             1,
             "2026-06-06 01:30:00"
         );
+    }
+
+    private ConnectionTestResultDto connectionResult() {
+        return new ConnectionTestResultDto(true, "connected", "Connection test succeeded", "2026-06-06 15:30:00");
     }
 }

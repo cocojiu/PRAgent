@@ -1,5 +1,5 @@
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "info";
-export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued";
+export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued" | "fallback";
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
 export type RuleStatus = "enabled" | "disabled";
 export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
@@ -260,3 +260,10 @@ export interface ReviewPolicyConfig {
 }
 
 export type ReviewPolicyConfigRequest = ReviewPolicyConfig;
+
+export interface ConnectionTestResult {
+  success: boolean;
+  status: "connected" | "failed";
+  message: string;
+  checkedAt: string;
+}

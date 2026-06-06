@@ -4,14 +4,16 @@ const statusLabelMap: Record<ReviewStatus, string> = {
   completed: "已完成",
   reviewing: "审查中",
   failed: "失败",
-  queued: "已入队"
+  queued: "已入队",
+  fallback: "规则兜底"
 };
 
 const statusClassMap: Record<ReviewStatus, string> = {
   completed: "success",
   reviewing: "processing",
   failed: "danger",
-  queued: "processing"
+  queued: "processing",
+  fallback: "warning"
 };
 
 export const statusText = (status: ReviewStatus) => statusLabelMap[status] ?? status;
