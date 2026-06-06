@@ -1,13 +1,16 @@
 package com.repoguard.agent.github;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -68,6 +71,117 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         }
     }
 
+    @Override
+    public List<GithubReviewCommentResult> publishPullRequestComments(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
+        IntegrationConfig config = loadGithubConfig();
+        String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
+        String repository = choose(task.getRepository(), config == null ? null : config.getDefaultRepo());
+        if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
+            throw new IllegalStateException("GitHub owner or repository is not configured");
+        }
+        String token = config == null ? null : secretCryptoService.decrypt(config.getTokenValue());
+        if (!StringUtils.hasText(token)) {
+            throw new IllegalStateException("GitHub token is not configured");
+        }
+
+        String baseUrl = config != null && StringUtils.hasText(config.getBaseUrl())
+            ? config.getBaseUrl().trim()
+            : "https://api.github.com";
+        String lineCommentUrl = UriComponentsBuilder
+            .fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/pulls/{pullNumber}/comments")
+            .build(owner, repository, task.getPrNumber())
+            .toString();
+        String prCommentUrl = UriComponentsBuilder
+            .fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/issues/{pullNumber}/comments")
+            .build(owner, repository, task.getPrNumber())
+            .toString();
+
+        String commitSha = null;
+
+        List<GithubReviewCommentResult> results = new ArrayList<>();
+        for (GithubReviewCommentDraft draft : drafts) {
+            try {
+                GithubReviewCommentResponse response;
+                if ("pull_request".equals(draft.targetType())) {
+                    response = restClient.post()
+                        .uri(prCommentUrl)
+                        .headers(headers -> applyGithubHeaders(headers, config))
+                        .body(Map.of("body", draft.body()))
+                        .retrieve()
+                        .body(GithubReviewCommentResponse.class);
+                } else {
+                    if (!StringUtils.hasText(commitSha)) {
+                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, config);
+                    }
+                    response = restClient.post()
+                        .uri(lineCommentUrl)
+                        .headers(headers -> applyGithubHeaders(headers, config))
+                        .body(Map.of(
+                            "body", draft.body(),
+                            "commit_id", commitSha,
+                            "path", draft.path(),
+                            "line", draft.line(),
+                            "side", "RIGHT"
+                        ))
+                        .retrieve()
+                        .body(GithubReviewCommentResponse.class);
+                }
+                results.add(new GithubReviewCommentResult(
+                    draft.findingId(),
+                    draft.path(),
+                    draft.line(),
+                    true,
+                    "published",
+                    "GitHub comment published",
+                    response == null ? null : response.htmlUrl()
+                ));
+                markGithubChecked(config, null);
+            } catch (RuntimeException ex) {
+                String message = conciseError(ex);
+                results.add(new GithubReviewCommentResult(
+                    draft.findingId(),
+                    draft.path(),
+                    draft.line(),
+                    false,
+                    "failed",
+                    message,
+                    null
+                ));
+                markGithubChecked(config, message);
+            }
+        }
+        return results;
+    }
+
+    private String resolvePullRequestHeadSha(
+        String baseUrl,
+        String owner,
+        String repository,
+        ReviewTask task,
+        IntegrationConfig config
+    ) {
+        if (StringUtils.hasText(task.getCommitSha()) && task.getCommitSha().trim().matches("[a-fA-F0-9]{40}")) {
+            return task.getCommitSha().trim();
+        }
+        String url = UriComponentsBuilder
+            .fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/pulls/{pullNumber}")
+            .build(owner, repository, task.getPrNumber())
+            .toString();
+        GithubPullRequestResponse response = restClient.get()
+            .uri(url)
+            .headers(headers -> applyGithubHeaders(headers, config))
+            .retrieve()
+            .body(GithubPullRequestResponse.class);
+        String sha = response == null || response.head() == null ? null : response.head().sha();
+        if (!StringUtils.hasText(sha)) {
+            throw new IllegalStateException("GitHub pull request head SHA is unavailable");
+        }
+        return sha.trim();
+    }
+
     private void applyGithubHeaders(HttpHeaders headers, IntegrationConfig config) {
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.set("X-GitHub-Api-Version", "2022-11-28");
@@ -96,5 +210,30 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     private String choose(String primary, String fallback) {
         return StringUtils.hasText(primary) ? primary.trim() : fallback;
+    }
+
+    private String conciseError(RuntimeException ex) {
+        String message = ex.getMessage();
+        if (!StringUtils.hasText(message)) {
+            return ex.getClass().getSimpleName();
+        }
+        return message.length() > 300 ? message.substring(0, 300) : message;
+    }
+
+    private record GithubReviewCommentResponse(
+        Long id,
+        @JsonProperty("html_url")
+        String htmlUrl
+    ) {
+    }
+
+    private record GithubPullRequestResponse(
+        GithubPullRequestHead head
+    ) {
+    }
+
+    private record GithubPullRequestHead(
+        String sha
+    ) {
     }
 }

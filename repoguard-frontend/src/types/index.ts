@@ -1,5 +1,5 @@
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "info";
-export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued" | "fallback";
+export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued" | "fallback" | "pending";
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
 export type RuleStatus = "enabled" | "disabled";
 export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
@@ -30,6 +30,49 @@ export interface ReviewTaskDetail extends ReviewTask {
   rabbitMq: RabbitMqStatus;
 }
 
+export interface GithubCommentPreview {
+  taskId: number;
+  prNumber: number;
+  prUrl: string;
+  totalFindings: number;
+  commentableCount: number;
+  blockedCount: number;
+  items: GithubCommentPreviewItem[];
+}
+
+export interface GithubCommentPreviewItem {
+  findingId: number;
+  severity: RiskLevel;
+  file: string;
+  line?: number;
+  message: string;
+  recommendation: string;
+  commentBody: string;
+  commentable: boolean;
+  targetType: "line" | "pull_request" | string;
+  reason?: string;
+}
+
+export interface GithubCommentPublish {
+  taskId: number;
+  totalFindings: number;
+  attemptedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  items: GithubCommentPublishItem[];
+}
+
+export interface GithubCommentPublishItem {
+  findingId: number;
+  file: string;
+  line?: number;
+  success: boolean;
+  status: "published" | "failed" | "skipped" | string;
+  message: string;
+  url?: string;
+}
+
 export interface ReviewFinding {
   severity: RiskLevel;
   file: string;
@@ -47,7 +90,7 @@ export interface MissingTest {
 
 export interface ChangedFile {
   path: string;
-  changeType: "A" | "M" | "D";
+  changeType: "A" | "M" | "D" | "ADD" | "MODIFY" | "DELETE" | "RENAMED";
   additions: number;
   deletions: number;
 }

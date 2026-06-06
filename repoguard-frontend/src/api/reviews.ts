@@ -5,7 +5,9 @@ import type {
   PageResponse,
   ReviewQuery,
   ReviewTask,
-  ReviewTaskDetail
+  ReviewTaskDetail,
+  GithubCommentPreview,
+  GithubCommentPublish
 } from "@/types";
 
 /**
@@ -25,6 +27,14 @@ export const fetchReviews = (query: ReviewQuery) =>
  * 查询单个评审任务详情。
  */
 export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api/v1/reviews/${id}`);
+
+export const fetchGithubCommentPreview = (id: number) =>
+  request<GithubCommentPreview>(`/api/v1/reviews/${id}/github-comments/preview`);
+
+export const publishGithubComments = (id: number) =>
+  request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
+    method: "POST"
+  });
 
 export const triggerManualReview = (payload: ManualReviewRequest) =>
   request<ManualReviewResponse>("/api/v1/reviews/manual", undefined, {

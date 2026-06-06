@@ -5,6 +5,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.GithubCommentPreviewItem;
+import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublishItem;
+import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -20,6 +24,9 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
+import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.github.GithubReviewCommentDraft;
+import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -30,6 +37,10 @@ import com.repoguard.agent.service.ReviewService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,19 +56,22 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
+    private final GithubPullRequestClient githubPullRequestClient;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
         ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher
+        ReviewTaskPublisher reviewTaskPublisher,
+        GithubPullRequestClient githubPullRequestClient
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
+        this.githubPullRequestClient = githubPullRequestClient;
     }
 
     @Override
@@ -69,6 +83,49 @@ public class ReviewServiceImpl implements ReviewService {
         return new PageResponse<>(
             page.getRecords().stream().map(this::toListItem).toList(),
             page.getTotal()
+        );
+    }
+
+    @Override
+    public GithubCommentPublishResponse publishGithubComments(Long id) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+
+        GithubCommentPreviewResponse preview = getGithubCommentPreview(id);
+        List<GithubCommentPublishItem> skippedItems = preview.items().stream()
+            .filter(item -> !item.commentable())
+            .map(item -> new GithubCommentPublishItem(
+                item.findingId(),
+                item.file(),
+                item.line(),
+                false,
+                "skipped",
+                item.reason(),
+                null
+            ))
+            .toList();
+
+        List<GithubReviewCommentDraft> drafts = preview.items().stream()
+            .filter(GithubCommentPreviewItem::commentable)
+            .map(item -> new GithubReviewCommentDraft(item.findingId(), item.file(), item.line(), item.commentBody(), item.targetType()))
+            .toList();
+
+        List<GithubCommentPublishItem> publishedItems = publishDrafts(task, drafts);
+        List<GithubCommentPublishItem> items = new java.util.ArrayList<>(publishedItems);
+        items.addAll(skippedItems);
+
+        int succeededCount = (int) publishedItems.stream().filter(GithubCommentPublishItem::success).count();
+        int failedCount = publishedItems.size() - succeededCount;
+        return new GithubCommentPublishResponse(
+            task.getId(),
+            preview.totalFindings(),
+            drafts.size(),
+            succeededCount,
+            failedCount,
+            skippedItems.size(),
+            items
         );
     }
 
@@ -108,6 +165,44 @@ public class ReviewServiceImpl implements ReviewService {
         ).stream().map(this::toTimelineItem).toList();
 
         return toDetail(task, findingDtos, missingTests, changedFiles, timeline);
+    }
+
+    @Override
+    public GithubCommentPreviewResponse getGithubCommentPreview(Long id) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+
+        Map<String, ChangedFile> changedFileByPath = changedFileMapper.selectList(
+            new LambdaQueryWrapper<ChangedFile>()
+                .eq(ChangedFile::getTaskId, id)
+                .orderByAsc(ChangedFile::getId)
+        ).stream().collect(Collectors.toMap(
+            ChangedFile::getFilePath,
+            Function.identity(),
+            (first, ignored) -> first
+        ));
+
+        List<GithubCommentPreviewItem> items = reviewFindingMapper.selectList(
+            new LambdaQueryWrapper<ReviewFinding>()
+                .eq(ReviewFinding::getTaskId, id)
+                .eq(ReviewFinding::getCategory, "FINDING")
+                .orderByAsc(ReviewFinding::getId)
+        ).stream()
+            .map(finding -> toGithubCommentPreviewItem(finding, changedFileByPath.get(finding.getFilePath())))
+            .toList();
+
+        int commentableCount = (int) items.stream().filter(GithubCommentPreviewItem::commentable).count();
+        return new GithubCommentPreviewResponse(
+            task.getId(),
+            task.getPrNumber(),
+            task.getPrUrl(),
+            items.size(),
+            commentableCount,
+            items.size() - commentableCount,
+            items
+        );
     }
 
     @Override
@@ -223,6 +318,42 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
+    private List<GithubCommentPublishItem> publishDrafts(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
+        if (drafts.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return githubPullRequestClient.publishPullRequestComments(task, drafts).stream()
+                .map(this::toGithubCommentPublishItem)
+                .toList();
+        } catch (RuntimeException ex) {
+            String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
+            return drafts.stream()
+                .map(draft -> new GithubCommentPublishItem(
+                    draft.findingId(),
+                    draft.path(),
+                    draft.line(),
+                    false,
+                    "failed",
+                    message,
+                    null
+                ))
+                .toList();
+        }
+    }
+
+    private GithubCommentPublishItem toGithubCommentPublishItem(GithubReviewCommentResult result) {
+        return new GithubCommentPublishItem(
+            result.findingId(),
+            result.path(),
+            result.line(),
+            result.success(),
+            result.status(),
+            result.message(),
+            result.url()
+        );
+    }
+
     private ReviewTaskListItem toListItem(ReviewTask task) {
         return new ReviewTaskListItem(
             task.getId(),
@@ -262,6 +393,87 @@ public class ReviewServiceImpl implements ReviewService {
             finding.getTestType(),
             finding.getRecommendation()
         );
+    }
+
+    private GithubCommentPreviewItem toGithubCommentPreviewItem(ReviewFinding finding, ChangedFile changedFile) {
+        String targetType = resolveCommentTargetType(finding, changedFile);
+        String reason = resolveCommentReason(targetType, finding, changedFile);
+        return new GithubCommentPreviewItem(
+            finding.getId(),
+            lower(finding.getSeverity()),
+            finding.getFilePath(),
+            finding.getLineNumber(),
+            finding.getMessage(),
+            finding.getRecommendation(),
+            buildGithubCommentBody(finding),
+            true,
+            targetType,
+            reason
+        );
+    }
+
+    private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {
+        if (
+            StringUtils.hasText(finding.getFilePath())
+                && finding.getLineNumber() != null
+                && finding.getLineNumber() > 0
+                && changedFile != null
+                && !isDeletedChange(changedFile.getChangeType())
+        ) {
+            return "line";
+        }
+        return "pull_request";
+    }
+
+    private String resolveCommentReason(String targetType, ReviewFinding finding, ChangedFile changedFile) {
+        if ("line".equals(targetType)) {
+            return null;
+        }
+        if (!StringUtils.hasText(finding.getFilePath())) {
+            return "Finding is missing file path and will be posted as a PR comment";
+        }
+        if (finding.getLineNumber() == null || finding.getLineNumber() <= 0) {
+            return "Finding is missing a valid line number and will be posted as a PR comment";
+        }
+        if (changedFile == null) {
+            return "Finding file is not in the changed files list and will be posted as a PR comment";
+        }
+        if (isDeletedChange(changedFile.getChangeType())) {
+            return "Deleted files will be posted as PR comments";
+        }
+        return "Finding will be posted as a PR comment";
+    }
+
+    private boolean isDeletedChange(String changeType) {
+        if (!StringUtils.hasText(changeType)) {
+            return false;
+        }
+        return Set.of("D", "DELETE", "DELETED", "REMOVE", "REMOVED").contains(changeType.trim().toUpperCase());
+    }
+
+    private String buildGithubCommentBody(ReviewFinding finding) {
+        StringBuilder body = new StringBuilder();
+        body.append("**RepoGuard ");
+        if (StringUtils.hasText(finding.getSeverity())) {
+            body.append(finding.getSeverity().trim().toUpperCase());
+        } else {
+            body.append("INFO");
+        }
+        body.append(" finding**");
+
+        if (StringUtils.hasText(finding.getRuleId())) {
+            body.append(" · `").append(finding.getRuleId().trim()).append("`");
+        }
+
+        if (StringUtils.hasText(finding.getMessage())) {
+            body.append("\n\n").append(finding.getMessage().trim());
+        }
+
+        if (StringUtils.hasText(finding.getRecommendation())) {
+            body.append("\n\n**建议**：").append(finding.getRecommendation().trim());
+        }
+
+        return body.toString();
     }
 
     private ReviewTimelineItem toTimelineItem(ReviewTimeline timeline) {

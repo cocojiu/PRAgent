@@ -6,6 +6,8 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublishResponse;
 
 public interface ReviewService {
 
@@ -18,6 +20,10 @@ public interface ReviewService {
      * 加载单个评审任务，以及前端详情页需要的所有只读区块。
      */
     ReviewTaskDetail getReviewDetail(Long id);
+
+    GithubCommentPreviewResponse getGithubCommentPreview(Long id);
+
+    GithubCommentPublishResponse publishGithubComments(Long id);
 
     ManualReviewResponse triggerManualReview(ManualReviewRequest request);
 }

@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.dto.GithubCommentPreviewItem;
+import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublishItem;
+import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -71,6 +75,51 @@ class ReviewControllerTest {
         }
 
         @Override
+        public GithubCommentPreviewResponse getGithubCommentPreview(Long id) {
+            return new GithubCommentPreviewResponse(
+                id,
+                512,
+                "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
+                1,
+                1,
+                0,
+                List.of(new GithubCommentPreviewItem(
+                    1L,
+                    "low",
+                    "src/App.java",
+                    12,
+                    "Use logger",
+                    "Replace stdout with logger",
+                    "**RepoGuard LOW finding**\n\nUse logger\n\n**建议**：Replace stdout with logger",
+                    true,
+                    "line",
+                    null
+                ))
+            );
+        }
+
+        @Override
+        public GithubCommentPublishResponse publishGithubComments(Long id) {
+            return new GithubCommentPublishResponse(
+                id,
+                1,
+                1,
+                1,
+                0,
+                0,
+                List.of(new GithubCommentPublishItem(
+                    1L,
+                    "src/App.java",
+                    12,
+                    true,
+                    "published",
+                    "GitHub comment published",
+                    "https://github.com/repo/pull/1#discussion_r1"
+                ))
+            );
+        }
+
+        @Override
         public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
             return new ManualReviewResponse(9001L, "queued", "Review task queued");
         }
@@ -99,6 +148,27 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.id").value(512))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
             .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"));
+    }
+
+    @Test
+    void getGithubCommentPreviewReturnsCommentDrafts() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/github-comments/preview"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.commentableCount").value(1))
+            .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"))
+            .andExpect(jsonPath("$.data.items[0].commentable").value(true));
+    }
+
+    @Test
+    void publishGithubCommentsReturnsPublishSummary() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/512/github-comments"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.attemptedCount").value(1))
+            .andExpect(jsonPath("$.data.succeededCount").value(1))
+            .andExpect(jsonPath("$.data.items[0].status").value("published"));
     }
 
     @Test
