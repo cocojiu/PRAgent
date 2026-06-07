@@ -395,7 +395,11 @@ const createReviewFromSelectedPullRequest = async () => {
       branch: pullRequest.branch
     });
     createDialogVisible.value = false;
-    ElMessage.success(response.message || "审查任务已创建");
+    if (response.existing) {
+      ElMessage.info("该 PR commit 已有审查任务，已跳转到详情页");
+    } else {
+      ElMessage.success(response.message || "审查任务已创建");
+    }
     await router.push({ name: "task-detail", params: { id: response.taskId } });
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "审查任务创建失败");

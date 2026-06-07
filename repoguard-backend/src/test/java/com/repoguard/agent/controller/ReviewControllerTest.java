@@ -147,7 +147,7 @@ class ReviewControllerTest {
 
         @Override
         public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
-            return new ManualReviewResponse(9001L, "queued", "Review task queued");
+            return new ManualReviewResponse(9001L, "queued", "Review task queued", false);
         }
     };
 
@@ -224,6 +224,7 @@ class ReviewControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.taskId").value(9001))
-            .andExpect(jsonPath("$.data.status").value("queued"));
+            .andExpect(jsonPath("$.data.status").value("queued"))
+            .andExpect(jsonPath("$.data.existing").value(false));
     }
 }

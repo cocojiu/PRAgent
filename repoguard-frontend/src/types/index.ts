@@ -147,6 +147,7 @@ export interface ManualReviewResponse {
   taskId: number;
   status: ReviewStatus;
   message: string;
+  existing?: boolean;
 }
 
 export interface GithubPullRequestOptions {
