@@ -104,38 +104,33 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         for (GithubReviewCommentDraft draft : drafts) {
             try {
                 GithubReviewCommentResponse response;
+                String actualTargetType = draft.targetType();
                 if ("pull_request".equals(draft.targetType())) {
-                    response = restClient.post()
-                        .uri(prCommentUrl)
-                        .headers(headers -> applyGithubHeaders(headers, config))
-                        .body(Map.of("body", draft.body()))
-                        .retrieve()
-                        .body(GithubReviewCommentResponse.class);
+                    response = publishPullRequestComment(prCommentUrl, draft.body(), config);
                 } else {
                     if (!StringUtils.hasText(commitSha)) {
                         commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, config);
                     }
-                    response = restClient.post()
-                        .uri(lineCommentUrl)
-                        .headers(headers -> applyGithubHeaders(headers, config))
-                        .body(Map.of(
-                            "body", draft.body(),
-                            "commit_id", commitSha,
-                            "path", draft.path(),
-                            "line", draft.line(),
-                            "side", "RIGHT"
-                        ))
-                        .retrieve()
-                        .body(GithubReviewCommentResponse.class);
+                    try {
+                        response = publishLineComment(lineCommentUrl, draft, commitSha, config);
+                    } catch (RuntimeException ex) {
+                        if (!isUnresolvableLineComment(ex)) {
+                            throw ex;
+                        }
+                        actualTargetType = "pull_request";
+                        response = publishPullRequestComment(prCommentUrl, draft.body(), config);
+                    }
                 }
                 results.add(new GithubReviewCommentResult(
                     draft.findingId(),
                     draft.path(),
                     draft.line(),
-                    draft.targetType(),
+                    actualTargetType,
                     true,
                     "published",
-                    "GitHub comment published",
+                    "pull_request".equals(actualTargetType) && !"pull_request".equals(draft.targetType())
+                        ? "GitHub line comment could not be resolved; published as PR comment"
+                        : "GitHub comment published",
                     response == null ? null : response.htmlUrl(),
                     response == null ? null : response.id()
                 ));
@@ -157,6 +152,46 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             }
         }
         return results;
+    }
+
+    private GithubReviewCommentResponse publishPullRequestComment(
+        String prCommentUrl,
+        String body,
+        IntegrationConfig config
+    ) {
+        return restClient.post()
+            .uri(prCommentUrl)
+            .headers(headers -> applyGithubHeaders(headers, config))
+            .body(Map.of("body", body))
+            .retrieve()
+            .body(GithubReviewCommentResponse.class);
+    }
+
+    private GithubReviewCommentResponse publishLineComment(
+        String lineCommentUrl,
+        GithubReviewCommentDraft draft,
+        String commitSha,
+        IntegrationConfig config
+    ) {
+        return restClient.post()
+            .uri(lineCommentUrl)
+            .headers(headers -> applyGithubHeaders(headers, config))
+            .body(Map.of(
+                "body", draft.body(),
+                "commit_id", commitSha,
+                "path", draft.path(),
+                "line", draft.line(),
+                "side", "RIGHT"
+            ))
+            .retrieve()
+            .body(GithubReviewCommentResponse.class);
+    }
+
+    private boolean isUnresolvableLineComment(RuntimeException ex) {
+        String message = ex.getMessage();
+        return StringUtils.hasText(message)
+            && message.contains("422")
+            && message.contains("could not be resolved");
     }
 
     private String resolvePullRequestHeadSha(
