@@ -132,10 +132,12 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                     draft.findingId(),
                     draft.path(),
                     draft.line(),
+                    draft.targetType(),
                     true,
                     "published",
                     "GitHub comment published",
-                    response == null ? null : response.htmlUrl()
+                    response == null ? null : response.htmlUrl(),
+                    response == null ? null : response.id()
                 ));
                 markGithubChecked(config, null);
             } catch (RuntimeException ex) {
@@ -144,9 +146,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                     draft.findingId(),
                     draft.path(),
                     draft.line(),
+                    draft.targetType(),
                     false,
                     "failed",
                     message,
+                    null,
                     null
                 ));
                 markGithubChecked(config, message);

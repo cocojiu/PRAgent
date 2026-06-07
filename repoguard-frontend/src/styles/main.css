@@ -1133,6 +1133,13 @@ a {
   line-height: 1.6;
 }
 
+.comment-preview-link {
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .comment-preview-item pre {
   margin: 0;
   padding: 12px;

@@ -93,6 +93,11 @@ class ReviewControllerTest {
                     "**RepoGuard LOW finding**\n\nUse logger\n\n**建议**：Replace stdout with logger",
                     true,
                     "line",
+                    null,
+                    false,
+                    null,
+                    null,
+                    null,
                     null
                 ))
             );
@@ -114,7 +119,9 @@ class ReviewControllerTest {
                     true,
                     "published",
                     "GitHub comment published",
-                    "https://github.com/repo/pull/1#discussion_r1"
+                    "https://github.com/repo/pull/1#discussion_r1",
+                    1001L,
+                    "2026-06-07 10:00:00"
                 ))
             );
         }

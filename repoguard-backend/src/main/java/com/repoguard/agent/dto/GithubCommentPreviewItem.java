@@ -10,6 +10,11 @@ public record GithubCommentPreviewItem(
     String commentBody,
     Boolean commentable,
     String targetType,
-    String reason
+    String reason,
+    Boolean published,
+    String publicationStatus,
+    String publicationUrl,
+    String publicationMessage,
+    String publishedAt
 ) {
 }

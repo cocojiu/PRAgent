@@ -7,6 +7,8 @@ public record GithubCommentPublishItem(
     Boolean success,
     String status,
     String message,
-    String url
+    String url,
+    Long githubCommentId,
+    String publishedAt
 ) {
 }

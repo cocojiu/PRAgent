@@ -21,6 +21,7 @@ import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
+import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -28,6 +29,7 @@ import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -36,6 +38,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.service.ReviewService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -54,6 +57,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewTaskMapper reviewTaskMapper;
     private final ChangedFileMapper changedFileMapper;
     private final ReviewFindingMapper reviewFindingMapper;
+    private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final GithubPullRequestClient githubPullRequestClient;
@@ -62,6 +66,7 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTaskMapper reviewTaskMapper,
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient
@@ -69,6 +74,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
+        this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
@@ -100,10 +106,12 @@ public class ReviewServiceImpl implements ReviewService {
                 item.findingId(),
                 item.file(),
                 item.line(),
-                false,
-                "skipped",
-                item.reason(),
-                null
+                Boolean.TRUE.equals(item.published()),
+                Boolean.TRUE.equals(item.published()) ? "already_published" : "skipped",
+                Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
+                item.publicationUrl(),
+                null,
+                item.publishedAt()
             ))
             .toList();
 
@@ -184,23 +192,31 @@ public class ReviewServiceImpl implements ReviewService {
             (first, ignored) -> first
         ));
 
-        List<GithubCommentPreviewItem> items = reviewFindingMapper.selectList(
+        List<ReviewFinding> findings = reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, id)
                 .eq(ReviewFinding::getCategory, "FINDING")
                 .orderByAsc(ReviewFinding::getId)
-        ).stream()
-            .map(finding -> toGithubCommentPreviewItem(finding, changedFileByPath.get(finding.getFilePath())))
+        );
+        Map<Long, GithubCommentPublication> publicationByFindingId = loadPublicationByFindingId(id, findings);
+
+        List<GithubCommentPreviewItem> items = findings.stream()
+            .map(finding -> toGithubCommentPreviewItem(
+                finding,
+                changedFileByPath.get(finding.getFilePath()),
+                publicationByFindingId.get(finding.getId())
+            ))
             .toList();
 
         int commentableCount = (int) items.stream().filter(GithubCommentPreviewItem::commentable).count();
+        int publishedCount = (int) items.stream().filter(item -> Boolean.TRUE.equals(item.published())).count();
         return new GithubCommentPreviewResponse(
             task.getId(),
             task.getPrNumber(),
             task.getPrUrl(),
             items.size(),
             commentableCount,
-            items.size() - commentableCount,
+            items.size() - commentableCount - publishedCount,
             items
         );
     }
@@ -324,25 +340,31 @@ public class ReviewServiceImpl implements ReviewService {
         }
         try {
             return githubPullRequestClient.publishPullRequestComments(task, drafts).stream()
-                .map(this::toGithubCommentPublishItem)
+                .map(result -> toGithubCommentPublishItem(task.getId(), result))
                 .toList();
         } catch (RuntimeException ex) {
             String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
             return drafts.stream()
-                .map(draft -> new GithubCommentPublishItem(
-                    draft.findingId(),
-                    draft.path(),
-                    draft.line(),
-                    false,
-                    "failed",
-                    message,
-                    null
-                ))
+                .map(draft -> {
+                    GithubReviewCommentResult result = new GithubReviewCommentResult(
+                        draft.findingId(),
+                        draft.path(),
+                        draft.line(),
+                        draft.targetType(),
+                        false,
+                        "failed",
+                        message,
+                        null,
+                        null
+                    );
+                    return toGithubCommentPublishItem(task.getId(), result);
+                })
                 .toList();
         }
     }
 
-    private GithubCommentPublishItem toGithubCommentPublishItem(GithubReviewCommentResult result) {
+    private GithubCommentPublishItem toGithubCommentPublishItem(Long taskId, GithubReviewCommentResult result) {
+        GithubCommentPublication publication = savePublication(taskId, result);
         return new GithubCommentPublishItem(
             result.findingId(),
             result.path(),
@@ -350,8 +372,60 @@ public class ReviewServiceImpl implements ReviewService {
             result.success(),
             result.status(),
             result.message(),
-            result.url()
+            result.url(),
+            result.commentId(),
+            publication.getPublishedAt() == null ? null : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
         );
+    }
+
+    private Map<Long, GithubCommentPublication> loadPublicationByFindingId(Long taskId, List<ReviewFinding> findings) {
+        if (findings == null || findings.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Long> findingIds = findings.stream().map(ReviewFinding::getId).toList();
+        List<GithubCommentPublication> publications = githubCommentPublicationMapper.selectList(
+            new LambdaQueryWrapper<GithubCommentPublication>()
+                .eq(GithubCommentPublication::getTaskId, taskId)
+                .in(GithubCommentPublication::getFindingId, findingIds)
+        );
+        if (publications == null || publications.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return publications.stream().collect(Collectors.toMap(
+            GithubCommentPublication::getFindingId,
+            Function.identity(),
+            (first, ignored) -> first
+        ));
+    }
+
+    private GithubCommentPublication savePublication(Long taskId, GithubReviewCommentResult result) {
+        LocalDateTime now = LocalDateTime.now();
+        GithubCommentPublication publication = githubCommentPublicationMapper.selectOne(
+            new LambdaQueryWrapper<GithubCommentPublication>()
+                .eq(GithubCommentPublication::getFindingId, result.findingId())
+                .last("limit 1")
+        );
+        boolean existing = publication != null;
+        if (!existing) {
+            publication = new GithubCommentPublication();
+            publication.setTaskId(taskId);
+            publication.setFindingId(result.findingId());
+            publication.setCreatedAt(now);
+        }
+        publication.setTargetType(result.targetType());
+        publication.setStatus(result.status());
+        publication.setSuccess(result.success());
+        publication.setGithubCommentId(result.commentId());
+        publication.setGithubUrl(result.url());
+        publication.setMessage(result.message());
+        publication.setPublishedAt(Boolean.TRUE.equals(result.success()) ? now : null);
+        publication.setUpdatedAt(now);
+        if (existing) {
+            githubCommentPublicationMapper.updateById(publication);
+        } else {
+            githubCommentPublicationMapper.insert(publication);
+        }
+        return publication;
     }
 
     private ReviewTaskListItem toListItem(ReviewTask task) {
@@ -395,9 +469,14 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    private GithubCommentPreviewItem toGithubCommentPreviewItem(ReviewFinding finding, ChangedFile changedFile) {
+    private GithubCommentPreviewItem toGithubCommentPreviewItem(
+        ReviewFinding finding,
+        ChangedFile changedFile,
+        GithubCommentPublication publication
+    ) {
         String targetType = resolveCommentTargetType(finding, changedFile);
         String reason = resolveCommentReason(targetType, finding, changedFile);
+        boolean published = isPublished(publication);
         return new GithubCommentPreviewItem(
             finding.getId(),
             lower(finding.getSeverity()),
@@ -406,10 +485,24 @@ public class ReviewServiceImpl implements ReviewService {
             finding.getMessage(),
             finding.getRecommendation(),
             buildGithubCommentBody(finding),
-            true,
+            !published,
             targetType,
-            reason
+            published ? "GitHub comment already published" : reason,
+            published,
+            publication == null ? null : publication.getStatus(),
+            publication == null ? null : publication.getGithubUrl(),
+            publication == null ? null : publication.getMessage(),
+            publication == null || publication.getPublishedAt() == null
+                ? null
+                : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
         );
+    }
+
+    private boolean isPublished(GithubCommentPublication publication) {
+        return publication != null
+            && Boolean.TRUE.equals(publication.getSuccess())
+            && "published".equals(publication.getStatus())
+            && StringUtils.hasText(publication.getGithubUrl());
     }
 
     private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {

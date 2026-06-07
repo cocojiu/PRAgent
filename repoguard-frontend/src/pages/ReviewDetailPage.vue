@@ -123,6 +123,7 @@
               <div class="comment-preview-summary">
                 <span>总 findings：{{ githubCommentPreview.totalFindings }}</span>
                 <span>可回写：{{ githubCommentPreview.commentableCount }}</span>
+                <span>已发布：{{ publishedCommentCount }}</span>
                 <span>不可回写：{{ githubCommentPreview.blockedCount }}</span>
               </div>
               <div v-if="githubCommentPublishResult" class="comment-publish-summary">
@@ -142,11 +143,20 @@
                     <code>{{ item.file }}</code>
                     <span class="line-badge">L{{ item.line ?? "-" }}</span>
                     <span class="count-badge">{{ commentTargetText(item.targetType) }}</span>
-                    <span :class="`status-pill ${item.commentable ? 'success' : 'warning'}`">
-                      {{ item.commentable ? "可回写" : "需处理" }}
+                    <span :class="`status-pill ${item.published ? 'success' : item.commentable ? 'success' : 'warning'}`">
+                      {{ item.published ? "已发布" : item.commentable ? "可回写" : "需处理" }}
                     </span>
                   </div>
                   <p v-if="!item.commentable" class="comment-preview-reason">{{ commentBlockReasonText(item.reason) }}</p>
+                  <a
+                    v-if="item.publicationUrl"
+                    class="comment-preview-link"
+                    :href="item.publicationUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    查看已发布评论
+                  </a>
                   <pre>{{ item.commentBody }}</pre>
                 </section>
               </div>
@@ -273,6 +283,7 @@ const previewError = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 const githubCommentPreview = ref<GithubCommentPreview | null>(null);
 const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
+const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
@@ -399,7 +410,8 @@ const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
     published: "已发布",
     failed: "失败",
-    skipped: "跳过"
+    skipped: "跳过",
+    already_published: "已发布，已跳过"
   };
   return labels[status] ?? status;
 };

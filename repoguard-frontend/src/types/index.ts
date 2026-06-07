@@ -51,6 +51,11 @@ export interface GithubCommentPreviewItem {
   commentable: boolean;
   targetType: "line" | "pull_request" | string;
   reason?: string;
+  published?: boolean;
+  publicationStatus?: string;
+  publicationUrl?: string;
+  publicationMessage?: string;
+  publishedAt?: string;
 }
 
 export interface GithubCommentPublish {
@@ -71,6 +76,8 @@ export interface GithubCommentPublishItem {
   status: "published" | "failed" | "skipped" | string;
   message: string;
   url?: string;
+  githubCommentId?: number;
+  publishedAt?: string;
 }
 
 export interface ReviewFinding {

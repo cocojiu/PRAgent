@@ -2,14 +2,18 @@ package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -23,6 +27,7 @@ class ReviewServiceImplTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+    private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
@@ -30,6 +35,7 @@ class ReviewServiceImplTest {
         reviewTaskMapper,
         changedFileMapper,
         reviewFindingMapper,
+        githubCommentPublicationMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
         githubPullRequestClient
@@ -39,6 +45,7 @@ class ReviewServiceImplTest {
     void getGithubCommentPreviewBuildsCommentDraftsAndBlocksMissingLine() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", 3, "文档可读性不足", "补充分隔符"),
@@ -64,13 +71,15 @@ class ReviewServiceImplTest {
     void publishGithubCommentsSendsOnlyCommentableDrafts() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", null, "文件末尾缺少换行符", "添加换行符")
         ));
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
-            new GithubReviewCommentResult(1L, "README", 2, true, "published", "GitHub comment published", "https://github.com/comment/1"),
-            new GithubReviewCommentResult(2L, "README", null, true, "published", "GitHub comment published", "https://github.com/comment/2")
+            new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L),
+            new GithubReviewCommentResult(2L, "README", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/2", 102L)
         ));
 
         var result = service.publishGithubComments(521L);
@@ -81,6 +90,35 @@ class ReviewServiceImplTest {
         assertThat(result.failedCount()).isZero();
         assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).extracting("status").containsExactly("published", "published");
+        verify(githubCommentPublicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
+    }
+
+    @Test
+    void publishGithubCommentsSkipsAlreadyPublishedFindings() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
+        ));
+        GithubCommentPublication publication = new GithubCommentPublication();
+        publication.setTaskId(521L);
+        publication.setFindingId(1L);
+        publication.setTargetType("line");
+        publication.setSuccess(true);
+        publication.setStatus("published");
+        publication.setGithubUrl("https://github.com/comment/1");
+        publication.setMessage("GitHub comment published");
+        publication.setPublishedAt(LocalDateTime.of(2026, 6, 7, 10, 0));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of(publication));
+
+        var result = service.publishGithubComments(521L);
+
+        assertThat(result.attemptedCount()).isZero();
+        assertThat(result.succeededCount()).isZero();
+        assertThat(result.skippedCount()).isEqualTo(1);
+        assertThat(result.items()).extracting("status").containsExactly("already_published");
+        assertThat(result.items().getFirst().url()).isEqualTo("https://github.com/comment/1");
+        verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
     }
 
     private ReviewTask task() {
