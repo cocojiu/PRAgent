@@ -128,6 +128,11 @@
       <div v-else class="pr-picker-meta">
         <Github :size="18" />
         <span>{{ pullRequestRepositoryText }}</span>
+        <span v-if="pullRequestsLoaded" class="pr-picker-cache">已预加载 {{ pullRequestOptions.length }} 个 open PR</span>
+        <el-button size="small" text :loading="loadingPullRequests" @click="reloadPullRequests">
+          <RefreshCw :size="14" />
+          刷新 PR
+        </el-button>
       </div>
       <el-table
         v-loading="loadingPullRequests"
@@ -202,6 +207,7 @@ const currentPage = ref(1);
 const pageSize = ref(8);
 const createDialogVisible = ref(false);
 const loadingPullRequests = ref(false);
+const pullRequestsLoaded = ref(false);
 const creatingTask = ref(false);
 const pullRequestError = ref("");
 const pullRequestOrganization = ref("");
@@ -209,6 +215,7 @@ const pullRequestRepository = ref("");
 const selectedPullRequestNumber = ref<number>();
 let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 let taskRequestSeq = 0;
+let pullRequestSeq = 0;
 
 const metricIconMap = {
   blue: ListTodo,
@@ -337,6 +344,7 @@ watch([currentPage, pageSize], () => {
 onMounted(() => {
   void loadRepositories();
   void loadTasks();
+  void loadPullRequests({ preselect: false });
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
@@ -351,27 +359,51 @@ const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
 const openCreateDialog = () => {
   createDialogVisible.value = true;
-  selectedPullRequestNumber.value = undefined;
-  void loadPullRequests();
+  ensureDefaultPullRequestSelected();
+  if (!pullRequestsLoaded.value && !loadingPullRequests.value) {
+    void loadPullRequests();
+  }
 };
 
-const loadPullRequests = async () => {
+const ensureDefaultPullRequestSelected = () => {
+  if (!selectedPullRequestNumber.value && pullRequestOptions.value.length) {
+    selectedPullRequestNumber.value = pullRequestOptions.value[0].number;
+  }
+};
+
+const loadPullRequests = async (options: { preselect?: boolean } = {}) => {
+  const requestSeq = ++pullRequestSeq;
   loadingPullRequests.value = true;
   pullRequestError.value = "";
   try {
     const response = await fetchGithubPullRequestOptions();
+    if (requestSeq !== pullRequestSeq) {
+      return;
+    }
     pullRequestOrganization.value = response.organization ?? "";
     pullRequestRepository.value = response.repository ?? "";
     pullRequestOptions.value = response.items;
-    if (response.items.length) {
-      selectedPullRequestNumber.value = response.items[0].number;
+    pullRequestsLoaded.value = true;
+    if (options.preselect !== false) {
+      ensureDefaultPullRequestSelected();
     }
   } catch (error) {
+    if (requestSeq !== pullRequestSeq) {
+      return;
+    }
     pullRequestOptions.value = [];
+    pullRequestsLoaded.value = false;
     pullRequestError.value = error instanceof Error ? error.message : "GitHub PR 列表加载失败";
   } finally {
-    loadingPullRequests.value = false;
+    if (requestSeq === pullRequestSeq) {
+      loadingPullRequests.value = false;
+    }
   }
+};
+
+const reloadPullRequests = () => {
+  selectedPullRequestNumber.value = undefined;
+  void loadPullRequests();
 };
 
 const selectPullRequest = (row?: GithubPullRequestOption) => {
