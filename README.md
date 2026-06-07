@@ -1,5 +1,9 @@
 # PRAgent
 
+## PR Selection Smoke Test
+
+This small README note keeps the test branch ahead of `main` so RepoGuard can verify selecting an open GitHub PR from the task page.
+
 RepoGuard Agent 前端演示项目。
 
 ## RepoGuard Frontend
