@@ -17,7 +17,9 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.messaging.ReviewTaskMessage;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -119,6 +121,26 @@ class ReviewServiceImplTest {
         assertThat(result.items()).extracting("status").containsExactly("already_published");
         assertThat(result.items().getFirst().url()).isEqualTo("https://github.com/comment/1");
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
+    }
+
+    @Test
+    void triggerManualReviewReturnsExistingTaskWithoutPublishingDuplicateMessage() {
+        when(reviewTaskMapper.selectOne(any())).thenReturn(task());
+
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            1,
+            "Smoke review",
+            "public-pr-1-llm-string-response",
+            "master"
+        ));
+
+        assertThat(result.taskId()).isEqualTo(521L);
+        assertThat(result.existing()).isTrue();
+        assertThat(result.message()).isEqualTo("Review task already exists");
+        verify(reviewTaskMapper, never()).insert(any(ReviewTask.class));
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
     private ReviewTask task() {

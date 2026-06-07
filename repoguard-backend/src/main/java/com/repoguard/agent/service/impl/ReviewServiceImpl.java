@@ -233,7 +233,7 @@ public class ReviewServiceImpl implements ReviewService {
         String commit = resolveCommit(request);
         ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
         if (existingTask != null) {
-            return new ManualReviewResponse(existingTask.getId(), lower(existingTask.getStatus()), "Review task already exists");
+            return new ManualReviewResponse(existingTask.getId(), lower(existingTask.getStatus()), "Review task already exists", true);
         }
 
         LocalDateTime createdAt = LocalDateTime.now();
@@ -262,7 +262,7 @@ public class ReviewServiceImpl implements ReviewService {
             commit,
             createdAt
         ));
-        return new ManualReviewResponse(task.getId(), "queued", "Review task queued");
+        return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false);
     }
 
     @Override

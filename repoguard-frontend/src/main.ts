@@ -3,9 +3,11 @@ import { createPinia } from "pinia";
 import {
   ElAlert,
   ElButton,
+  ElDialog,
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
+  ElEmpty,
   ElForm,
   ElFormItem,
   ElInput,
@@ -13,10 +15,12 @@ import {
   ElOption,
   ElPagination,
   ElPopover,
+  ElRadio,
   ElSelect,
   ElSwitch,
   ElTable,
-  ElTableColumn
+  ElTableColumn,
+  ElTooltip
 } from "element-plus";
 import "element-plus/dist/index.css";
 import "./styles/main.css";
@@ -28,9 +32,11 @@ const app = createApp(App);
 [
   ElAlert,
   ElButton,
+  ElDialog,
   ElDropdown,
   ElDropdownItem,
   ElDropdownMenu,
+  ElEmpty,
   ElForm,
   ElFormItem,
   ElInput,
@@ -38,10 +44,12 @@ const app = createApp(App);
   ElOption,
   ElPagination,
   ElPopover,
+  ElRadio,
   ElSelect,
   ElSwitch,
   ElTable,
-  ElTableColumn
+  ElTableColumn,
+  ElTooltip
 ].forEach((component) => {
   app.component(component.name!, component);
 });
