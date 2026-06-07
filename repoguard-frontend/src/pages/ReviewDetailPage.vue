@@ -293,6 +293,8 @@ type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean };
 
 const POLL_INTERVAL_MS = 5000;
+const MAX_POLL_FAILURES = 3;
+const MAX_POLL_INTERVAL_MS = 30000;
 
 const router = useRouter();
 const route = useRoute();
@@ -302,12 +304,13 @@ const publishingComments = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
 const pollErrorMessage = ref("");
+const pollFailureCount = ref(0);
 const lastRefreshedAt = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 const githubCommentPreview = ref<GithubCommentPreview | null>(null);
 const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
 const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
-let pollTimer: ReturnType<typeof setInterval> | undefined;
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
@@ -325,15 +328,23 @@ const refreshStatusText = computed(() => {
       return "正在自动刷新任务状态...";
     }
     if (pollErrorMessage.value) {
-      return `自动刷新上次失败，将继续重试，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
+      if (pollFailureCount.value >= MAX_POLL_FAILURES) {
+        return "自动刷新已暂停，请手动刷新";
+      }
+      return `自动刷新上次失败，将在 ${currentPollIntervalSeconds.value} 秒后重试`;
     }
-    return `自动刷新中，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
+    return `自动刷新中，每 ${currentPollIntervalSeconds.value} 秒更新一次`;
   }
   if (selectedTask.value?.status === "failed") {
     return lastRefreshedAt.value ? `任务失败，最后更新 ${lastRefreshedAt.value}` : "任务失败";
   }
   return lastRefreshedAt.value ? `已完成，最后更新 ${lastRefreshedAt.value}` : "已完成";
 });
+
+const currentPollIntervalMs = computed(() =>
+  Math.min(POLL_INTERVAL_MS * 2 ** pollFailureCount.value, MAX_POLL_INTERVAL_MS)
+);
+const currentPollIntervalSeconds = computed(() => currentPollIntervalMs.value / 1000);
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
   reviewFindings.value.reduce(
@@ -492,7 +503,7 @@ const stopPolling = () => {
   if (!pollTimer) {
     return;
   }
-  clearInterval(pollTimer);
+  clearTimeout(pollTimer);
   pollTimer = undefined;
 };
 
@@ -504,9 +515,14 @@ const startPolling = () => {
   if (pollTimer || !shouldPollTask.value) {
     return;
   }
-  pollTimer = setInterval(() => {
+  if (pollFailureCount.value >= MAX_POLL_FAILURES) {
+    stopPolling();
+    return;
+  }
+  pollTimer = setTimeout(() => {
+    pollTimer = undefined;
     void loadDetail({ silent: true, resetPublishResult: false });
-  }, POLL_INTERVAL_MS);
+  }, currentPollIntervalMs.value);
 };
 
 const syncPolling = () => {
@@ -541,6 +557,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     const task = normalizeStatusFields(await fetchReviewDetail(id));
     selectedTask.value = task;
     pollErrorMessage.value = "";
+    pollFailureCount.value = 0;
     lastRefreshedAt.value = formatRefreshTime();
     if (task.status === "completed" || task.status === "failed") {
       await loadGithubCommentPreview(id);
@@ -557,7 +574,14 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     if (!options.silent) {
       ElMessage.error(errorMessage.value);
     } else {
-      pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
+      pollFailureCount.value += 1;
+      if (pollFailureCount.value >= MAX_POLL_FAILURES) {
+        stopPolling();
+        pollErrorMessage.value = `自动刷新连续失败 ${MAX_POLL_FAILURES} 次，已暂停。请手动刷新。`;
+      } else {
+        pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
+        syncPolling();
+      }
     }
   } finally {
     loading.value = false;
@@ -566,6 +590,8 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
 };
 
 const refreshDetail = () => {
+  pollFailureCount.value = 0;
+  pollErrorMessage.value = "";
   void loadDetail({ silent: true, resetPublishResult: false });
 };
 
