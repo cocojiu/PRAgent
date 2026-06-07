@@ -29,7 +29,7 @@
             <span>创建时间：{{ selectedTask.createdAt }}</span>
           </p>
           <p class="refresh-meta">
-            <RefreshCw :size="15" :class="{ spinning: silentRefreshing }" />
+            <RefreshCw :size="15" :class="{ 'refresh-icon-spinning': silentRefreshing }" />
             <span>{{ refreshStatusText }}</span>
           </p>
         </div>
@@ -496,6 +496,10 @@ const stopPolling = () => {
   pollTimer = undefined;
 };
 
+const cleanupPolling = () => {
+  stopPolling();
+};
+
 const startPolling = () => {
   if (pollTimer || !shouldPollTask.value) {
     return;
@@ -623,5 +627,5 @@ onMounted(() => {
   void loadDetail();
 });
 
-onBeforeUnmount(stopPolling);
+onBeforeUnmount(cleanupPolling);
 </script>

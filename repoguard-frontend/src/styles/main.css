@@ -904,7 +904,7 @@ a {
   color: #1268ff;
 }
 
-.spinning {
+.refresh-icon-spinning {
   animation: rg-spin 900ms linear infinite;
 }
 
