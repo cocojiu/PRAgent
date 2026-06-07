@@ -653,5 +653,7 @@ onMounted(() => {
   void loadDetail();
 });
 
-onBeforeUnmount(cleanupPolling);
+onBeforeUnmount(() => {
+  cleanupPolling();
+});
 </script>
