@@ -5,7 +5,7 @@
         <h1>审查任务</h1>
         <p>查看和管理所有代码审查任务</p>
       </div>
-      <el-button type="primary" :loading="loadingPullRequests" @click="openCreateDialog">
+      <el-button type="primary" @click="openCreateDialog">
         <GitPullRequestArrow :size="16" />
         新建审查任务
       </el-button>
@@ -116,7 +116,7 @@
       </div>
     </section>
 
-    <el-dialog v-model="createDialogVisible" title="选择 GitHub PR" width="760px">
+    <el-dialog v-model="createDialogVisible" title="选择 GitHub PR" width="760px" append-to-body destroy-on-close>
       <el-alert
         v-if="pullRequestError"
         class="page-alert"
@@ -349,10 +349,10 @@ const refreshTasks = () => {
 
 const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
-const openCreateDialog = async () => {
+const openCreateDialog = () => {
   createDialogVisible.value = true;
   selectedPullRequestNumber.value = undefined;
-  await loadPullRequests();
+  void loadPullRequests();
 };
 
 const loadPullRequests = async () => {
