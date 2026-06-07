@@ -3,6 +3,15 @@
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
 
     <template v-if="selectedTask">
+      <el-alert
+        v-if="pollErrorMessage"
+        class="page-alert"
+        type="warning"
+        :title="pollErrorMessage"
+        show-icon
+        :closable="false"
+      />
+
       <div class="detail-header">
         <div>
           <button class="back-link" type="button" @click="goBack">
@@ -283,7 +292,7 @@ import { statusClass, statusText } from "@/utils/status";
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean };
 
-const POLL_INTERVAL_MS = 3000;
+const POLL_INTERVAL_MS = 5000;
 
 const router = useRouter();
 const route = useRoute();
@@ -292,6 +301,7 @@ const silentRefreshing = ref(false);
 const publishingComments = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
+const pollErrorMessage = ref("");
 const lastRefreshedAt = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 const githubCommentPreview = ref<GithubCommentPreview | null>(null);
@@ -311,9 +321,13 @@ const isTerminalTask = computed(() => {
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
 const refreshStatusText = computed(() => {
   if (shouldPollTask.value) {
-    return silentRefreshing.value
-      ? "正在自动刷新任务状态..."
-      : `自动刷新中，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
+    if (silentRefreshing.value) {
+      return "正在自动刷新任务状态...";
+    }
+    if (pollErrorMessage.value) {
+      return `自动刷新上次失败，将继续重试，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
+    }
+    return `自动刷新中，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
   }
   if (selectedTask.value?.status === "failed") {
     return lastRefreshedAt.value ? `任务失败，最后更新 ${lastRefreshedAt.value}` : "任务失败";
@@ -506,6 +520,10 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     return;
   }
 
+  if (options.silent && silentRefreshing.value) {
+    return;
+  }
+
   if (options.silent) {
     silentRefreshing.value = true;
   } else {
@@ -518,6 +536,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
   try {
     const task = normalizeStatusFields(await fetchReviewDetail(id));
     selectedTask.value = task;
+    pollErrorMessage.value = "";
     lastRefreshedAt.value = formatRefreshTime();
     if (task.status === "completed" || task.status === "failed") {
       await loadGithubCommentPreview(id);
@@ -533,6 +552,8 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     errorMessage.value = error instanceof Error ? error.message : "审查详情加载失败";
     if (!options.silent) {
       ElMessage.error(errorMessage.value);
+    } else {
+      pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
     }
   } finally {
     loading.value = false;
