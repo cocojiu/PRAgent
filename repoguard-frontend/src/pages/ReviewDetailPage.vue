@@ -19,8 +19,16 @@
             {{ selectedTask.organization }} / {{ selectedTask.repository }}
             <span>创建时间：{{ selectedTask.createdAt }}</span>
           </p>
+          <p class="refresh-meta">
+            <RefreshCw :size="15" :class="{ spinning: silentRefreshing }" />
+            <span>{{ refreshStatusText }}</span>
+          </p>
         </div>
         <div class="detail-actions">
+          <el-button size="large" :loading="silentRefreshing" @click="refreshDetail">
+            <RefreshCw :size="16" />
+            刷新
+          </el-button>
           <el-button size="large" @click="openPrUrl">
             在 GitHub 查看
             <ExternalLink :size="16" />
@@ -263,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
@@ -273,23 +281,45 @@ import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
+type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean };
+
+const POLL_INTERVAL_MS = 3000;
 
 const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
+const silentRefreshing = ref(false);
 const publishingComments = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
+const lastRefreshedAt = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 const githubCommentPreview = ref<GithubCommentPreview | null>(null);
 const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
 const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
+let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
 const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
 const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
 const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
+const isTerminalTask = computed(() => {
+  const status = selectedTask.value?.status;
+  return status === "completed" || status === "failed";
+});
+const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
+const refreshStatusText = computed(() => {
+  if (shouldPollTask.value) {
+    return silentRefreshing.value
+      ? "正在自动刷新任务状态..."
+      : `自动刷新中，每 ${POLL_INTERVAL_MS / 1000} 秒更新一次`;
+  }
+  if (selectedTask.value?.status === "failed") {
+    return lastRefreshedAt.value ? `任务失败，最后更新 ${lastRefreshedAt.value}` : "任务失败";
+  }
+  return lastRefreshedAt.value ? `已完成，最后更新 ${lastRefreshedAt.value}` : "已完成";
+});
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
   reviewFindings.value.reduce(
@@ -426,32 +456,92 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
   }
 });
 
-const loadDetail = async () => {
+const formatRefreshTime = () =>
+  new Intl.DateTimeFormat("zh-CN", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).format(new Date());
+
+const loadGithubCommentPreview = async (id: number) => {
+  previewError.value = "";
+  try {
+    githubCommentPreview.value = await fetchGithubCommentPreview(id);
+  } catch (error) {
+    githubCommentPreview.value = null;
+    previewError.value = error instanceof Error ? error.message : "GitHub 评论预览加载失败";
+  }
+};
+
+const stopPolling = () => {
+  if (!pollTimer) {
+    return;
+  }
+  clearInterval(pollTimer);
+  pollTimer = undefined;
+};
+
+const startPolling = () => {
+  if (pollTimer || !shouldPollTask.value) {
+    return;
+  }
+  pollTimer = setInterval(() => {
+    void loadDetail({ silent: true, resetPublishResult: false });
+  }, POLL_INTERVAL_MS);
+};
+
+const syncPolling = () => {
+  if (shouldPollTask.value) {
+    startPolling();
+  } else {
+    stopPolling();
+  }
+};
+
+const loadDetail = async (options: LoadDetailOptions = {}) => {
   const id = Number(route.params.id);
   if (!Number.isFinite(id)) {
     ElMessage.error("审查任务 ID 无效");
     return;
   }
 
-  loading.value = true;
+  if (options.silent) {
+    silentRefreshing.value = true;
+  } else {
+    loading.value = true;
+  }
   errorMessage.value = "";
-  previewError.value = "";
-  githubCommentPreview.value = null;
-  githubCommentPublishResult.value = null;
+  if (options.resetPublishResult ?? true) {
+    githubCommentPublishResult.value = null;
+  }
   try {
-    selectedTask.value = normalizeStatusFields(await fetchReviewDetail(id));
-    try {
-      githubCommentPreview.value = await fetchGithubCommentPreview(id);
-    } catch (error) {
-      previewError.value = error instanceof Error ? error.message : "GitHub 评论预览加载失败";
+    const task = normalizeStatusFields(await fetchReviewDetail(id));
+    selectedTask.value = task;
+    lastRefreshedAt.value = formatRefreshTime();
+    if (task.status === "completed" || task.status === "failed") {
+      await loadGithubCommentPreview(id);
+    } else {
+      previewError.value = "";
+      githubCommentPreview.value = null;
     }
+    syncPolling();
   } catch (error) {
-    selectedTask.value = null;
+    if (!options.silent) {
+      selectedTask.value = null;
+    }
     errorMessage.value = error instanceof Error ? error.message : "审查详情加载失败";
-    ElMessage.error(errorMessage.value);
+    if (!options.silent) {
+      ElMessage.error(errorMessage.value);
+    }
   } finally {
     loading.value = false;
+    silentRefreshing.value = false;
   }
+};
+
+const refreshDetail = () => {
+  void loadDetail({ silent: true, resetPublishResult: false });
 };
 
 const confirmPublishGithubComments = async () => {
@@ -500,5 +590,17 @@ const openPrUrl = () => {
   }
 };
 
-onMounted(loadDetail);
+watch(
+  () => route.params.id,
+  () => {
+    stopPolling();
+    void loadDetail();
+  }
+);
+
+onMounted(() => {
+  void loadDetail();
+});
+
+onBeforeUnmount(stopPolling);
 </script>

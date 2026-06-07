@@ -884,8 +884,33 @@ a {
   color: #475569;
 }
 
+.refresh-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.refresh-meta svg {
+  color: #1268ff;
+}
+
+.spinning {
+  animation: rg-spin 900ms linear infinite;
+}
+
+@keyframes rg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 12px;
 }
 
