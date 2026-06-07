@@ -7,7 +7,8 @@ import type {
   ReviewTask,
   ReviewTaskDetail,
   GithubCommentPreview,
-  GithubCommentPublish
+  GithubCommentPublish,
+  GithubPullRequestOptions
 } from "@/types";
 
 /**
@@ -35,6 +36,9 @@ export const publishGithubComments = (id: number) =>
   request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
     method: "POST"
   });
+
+export const fetchGithubPullRequestOptions = () =>
+  request<GithubPullRequestOptions>("/api/v1/reviews/github/pull-requests");
 
 export const triggerManualReview = (payload: ManualReviewRequest) =>
   request<ManualReviewResponse>("/api/v1/reviews/manual", undefined, {

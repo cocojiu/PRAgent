@@ -3,6 +3,7 @@ package com.repoguard.agent.controller;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
@@ -67,6 +68,11 @@ public class ReviewController {
     @PostMapping("/{id}/github-comments")
     public ApiResponse<GithubCommentPublishResponse> publishGithubComments(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.publishGithubComments(id));
+    }
+
+    @GetMapping("/github/pull-requests")
+    public ApiResponse<GithubPullRequestOptionsResponse> listConfiguredGithubPullRequests() {
+        return ApiResponse.ok(reviewService.listConfiguredGithubPullRequests());
     }
 
     @PostMapping("/manual")

@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 
 public interface ReviewService {
 
@@ -24,6 +25,8 @@ public interface ReviewService {
     GithubCommentPreviewResponse getGithubCommentPreview(Long id);
 
     GithubCommentPublishResponse publishGithubComments(Long id);
+
+    GithubPullRequestOptionsResponse listConfiguredGithubPullRequests();
 
     ManualReviewResponse triggerManualReview(ManualReviewRequest request);
 }

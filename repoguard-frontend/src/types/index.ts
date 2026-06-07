@@ -149,6 +149,22 @@ export interface ManualReviewResponse {
   message: string;
 }
 
+export interface GithubPullRequestOptions {
+  organization?: string;
+  repository?: string;
+  items: GithubPullRequestOption[];
+}
+
+export interface GithubPullRequestOption {
+  number: number;
+  title: string;
+  branch?: string;
+  commit?: string;
+  author?: string;
+  url?: string;
+  updatedAt?: string;
+}
+
 export interface DashboardMetric {
   label: string;
   value: string;

@@ -9,6 +9,8 @@ import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubPullRequestOption;
+import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -26,6 +28,8 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.github.GithubPullRequestSummary;
+import com.repoguard.agent.github.GithubRepositoryRef;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -259,6 +263,27 @@ public class ReviewServiceImpl implements ReviewService {
             createdAt
         ));
         return new ManualReviewResponse(task.getId(), "queued", "Review task queued");
+    }
+
+    @Override
+    public GithubPullRequestOptionsResponse listConfiguredGithubPullRequests() {
+        GithubRepositoryRef repositoryRef = githubPullRequestClient.getConfiguredRepository();
+        List<GithubPullRequestSummary> pullRequests = githubPullRequestClient.listOpenPullRequests();
+        return new GithubPullRequestOptionsResponse(
+            repositoryRef.owner(),
+            repositoryRef.repository(),
+            pullRequests.stream()
+                .map(item -> new GithubPullRequestOption(
+                    item.number(),
+                    item.title(),
+                    item.branch(),
+                    item.commit(),
+                    item.author(),
+                    item.url(),
+                    item.updatedAt()
+                ))
+                .toList()
+        );
     }
 
     private LambdaQueryWrapper<ReviewTask> buildListWrapper(ReviewQuery query) {

@@ -1,8 +1,14 @@
 <template>
   <div v-loading="loading" class="tasks-page">
-    <div class="page-heading">
-      <h1>审查任务</h1>
-      <p>查看和管理所有代码审查任务</p>
+    <div class="page-heading page-heading-row">
+      <div>
+        <h1>审查任务</h1>
+        <p>查看和管理所有代码审查任务</p>
+      </div>
+      <el-button type="primary" :loading="loadingPullRequests" @click="openCreateDialog">
+        <GitPullRequestArrow :size="16" />
+        新建审查任务
+      </el-button>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
@@ -109,6 +115,63 @@
         />
       </div>
     </section>
+
+    <el-dialog v-model="createDialogVisible" title="选择 GitHub PR" width="760px">
+      <el-alert
+        v-if="pullRequestError"
+        class="page-alert"
+        type="warning"
+        :title="pullRequestError"
+        show-icon
+        :closable="false"
+      />
+      <div v-else class="pr-picker-meta">
+        <Github :size="18" />
+        <span>{{ pullRequestRepositoryText }}</span>
+      </div>
+      <el-table
+        v-loading="loadingPullRequests"
+        :data="pullRequestOptions"
+        class="rg-table"
+        size="large"
+        highlight-current-row
+        aria-label="GitHub PR 列表"
+        @current-change="selectPullRequest"
+      >
+        <el-table-column width="56">
+          <template #default="{ row }">
+            <el-radio v-model="selectedPullRequestNumber" :value="row.number" />
+          </template>
+        </el-table-column>
+        <el-table-column label="PR" min-width="340">
+          <template #default="{ row }">
+            <div class="pr-option-cell">
+              <strong>#{{ row.number }} {{ row.title }}</strong>
+              <span>{{ row.author || "-" }} · {{ row.updatedAt || "-" }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="分支" min-width="160">
+          <template #default="{ row }">
+            <code>{{ row.branch || "-" }}</code>
+          </template>
+        </el-table-column>
+        <el-table-column label="Commit" width="130">
+          <template #default="{ row }">
+            <code>{{ shortCommit(row.commit) }}</code>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="当前配置仓库暂无 open PR" />
+        </template>
+      </el-table>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creatingTask" :disabled="!selectedPullRequest" @click="createReviewFromSelectedPullRequest">
+          创建审查任务
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -116,11 +179,11 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { CheckCircle, Clock, Copy, Github, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
+import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
-import { fetchReviews } from "@/api/reviews";
+import { fetchGithubPullRequestOptions, fetchReviews, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import type { ReviewStatus, ReviewTask, RiskLevel } from "@/types";
+import type { GithubPullRequestOption, ReviewStatus, ReviewTask, RiskLevel } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
@@ -129,6 +192,7 @@ const loading = ref(false);
 const errorMessage = ref("");
 const reviewTasks = ref<ReviewTask[]>([]);
 const allRepositories = ref<string[]>([]);
+const pullRequestOptions = ref<GithubPullRequestOption[]>([]);
 const totalTasks = ref(0);
 const repoFilter = ref("");
 const statusFilter = ref<ReviewStatus | "">("");
@@ -136,6 +200,13 @@ const riskFilter = ref<RiskLevel | "">("");
 const keyword = ref("");
 const currentPage = ref(1);
 const pageSize = ref(8);
+const createDialogVisible = ref(false);
+const loadingPullRequests = ref(false);
+const creatingTask = ref(false);
+const pullRequestError = ref("");
+const pullRequestOrganization = ref("");
+const pullRequestRepository = ref("");
+const selectedPullRequestNumber = ref<number>();
 let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 let taskRequestSeq = 0;
 
@@ -149,6 +220,15 @@ const metricIconMap = {
 const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
 
 const repositories = computed(() => allRepositories.value);
+const selectedPullRequest = computed(() =>
+  pullRequestOptions.value.find((item) => item.number === selectedPullRequestNumber.value)
+);
+const pullRequestRepositoryText = computed(() => {
+  if (!pullRequestOrganization.value || !pullRequestRepository.value) {
+    return "使用集成配置中的 GitHub 仓库";
+  }
+  return `${pullRequestOrganization.value} / ${pullRequestRepository.value}`;
+});
 
 const parseDurationSeconds = (duration: string) => {
   const [minutes = 0, seconds = 0] = duration.match(/\d+/g)?.map(Number) ?? [];
@@ -265,5 +345,62 @@ const refreshTasks = () => {
     clearTimeout(filterDebounceTimer);
   }
   void loadTasks();
+};
+
+const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
+
+const openCreateDialog = async () => {
+  createDialogVisible.value = true;
+  selectedPullRequestNumber.value = undefined;
+  await loadPullRequests();
+};
+
+const loadPullRequests = async () => {
+  loadingPullRequests.value = true;
+  pullRequestError.value = "";
+  try {
+    const response = await fetchGithubPullRequestOptions();
+    pullRequestOrganization.value = response.organization ?? "";
+    pullRequestRepository.value = response.repository ?? "";
+    pullRequestOptions.value = response.items;
+    if (response.items.length) {
+      selectedPullRequestNumber.value = response.items[0].number;
+    }
+  } catch (error) {
+    pullRequestOptions.value = [];
+    pullRequestError.value = error instanceof Error ? error.message : "GitHub PR 列表加载失败";
+  } finally {
+    loadingPullRequests.value = false;
+  }
+};
+
+const selectPullRequest = (row?: GithubPullRequestOption) => {
+  selectedPullRequestNumber.value = row?.number;
+};
+
+const createReviewFromSelectedPullRequest = async () => {
+  const pullRequest = selectedPullRequest.value;
+  if (!pullRequest || !pullRequestOrganization.value || !pullRequestRepository.value) {
+    ElMessage.warning("请选择一个有效的 GitHub PR");
+    return;
+  }
+  creatingTask.value = true;
+  try {
+    const response = await triggerManualReview({
+      organization: pullRequestOrganization.value,
+      repository: pullRequestRepository.value,
+      prNumber: pullRequest.number,
+      title: pullRequest.title,
+      commit: pullRequest.commit,
+      branch: pullRequest.branch
+    });
+    createDialogVisible.value = false;
+    ElMessage.success(response.message || "审查任务已创建");
+    await router.push({ name: "task-detail", params: { id: response.taskId } });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "审查任务创建失败");
+  } finally {
+    creatingTask.value = false;
+  }
 };
 </script>

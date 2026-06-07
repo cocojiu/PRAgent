@@ -10,6 +10,8 @@ import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubPullRequestOption;
+import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -127,6 +129,23 @@ class ReviewControllerTest {
         }
 
         @Override
+        public GithubPullRequestOptionsResponse listConfiguredGithubPullRequests() {
+            return new GithubPullRequestOptionsResponse(
+                "repo-guard-demo",
+                "spring-boot-demo",
+                List.of(new GithubPullRequestOption(
+                    512,
+                    "Manual review smoke test",
+                    "main",
+                    "a1b2c3d",
+                    "octocat",
+                    "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
+                    "2026-06-07T08:00:00Z"
+                ))
+            );
+        }
+
+        @Override
         public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
             return new ManualReviewResponse(9001L, "queued", "Review task queued");
         }
@@ -176,6 +195,16 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.attemptedCount").value(1))
             .andExpect(jsonPath("$.data.succeededCount").value(1))
             .andExpect(jsonPath("$.data.items[0].status").value("published"));
+    }
+
+    @Test
+    void listConfiguredGithubPullRequestsReturnsOptions() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/github/pull-requests"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.organization").value("repo-guard-demo"))
+            .andExpect(jsonPath("$.data.repository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data.items[0].number").value(512));
     }
 
     @Test

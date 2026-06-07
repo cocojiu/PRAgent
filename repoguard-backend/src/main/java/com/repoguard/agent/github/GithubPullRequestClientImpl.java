@@ -38,6 +38,65 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
+    public GithubRepositoryRef getConfiguredRepository() {
+        IntegrationConfig config = loadGithubConfig();
+        String owner = config == null ? null : config.getDefaultOwner();
+        String repository = config == null ? null : config.getDefaultRepo();
+        return new GithubRepositoryRef(
+            StringUtils.hasText(owner) ? owner.trim() : null,
+            StringUtils.hasText(repository) ? repository.trim() : null
+        );
+    }
+
+    @Override
+    public List<GithubPullRequestSummary> listOpenPullRequests() {
+        IntegrationConfig config = loadGithubConfig();
+        GithubRepositoryRef repositoryRef = getConfiguredRepository();
+        String owner = repositoryRef.owner();
+        String repository = repositoryRef.repository();
+        if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
+            throw new IllegalStateException("GitHub owner or repository is not configured");
+        }
+        String baseUrl = config != null && StringUtils.hasText(config.getBaseUrl())
+            ? config.getBaseUrl().trim()
+            : "https://api.github.com";
+        String url = UriComponentsBuilder
+            .fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/pulls")
+            .queryParam("state", "open")
+            .queryParam("sort", "updated")
+            .queryParam("direction", "desc")
+            .queryParam("per_page", 50)
+            .build(owner.trim(), repository.trim())
+            .toString();
+
+        try {
+            GithubPullRequestListItem[] items = restClient.get()
+                .uri(url)
+                .headers(headers -> applyGithubHeaders(headers, config))
+                .retrieve()
+                .body(GithubPullRequestListItem[].class);
+            markGithubChecked(config, null);
+            return items == null ? List.of() : Arrays.stream(items)
+                .map(item -> new GithubPullRequestSummary(
+                    owner.trim(),
+                    repository.trim(),
+                    item.number(),
+                    item.title(),
+                    item.head() == null ? null : item.head().ref(),
+                    item.head() == null ? null : item.head().sha(),
+                    item.user() == null ? null : item.user().login(),
+                    item.htmlUrl(),
+                    item.updatedAt()
+                ))
+                .toList();
+        } catch (RuntimeException ex) {
+            markGithubChecked(config, conciseError(ex));
+            throw ex;
+        }
+    }
+
+    @Override
     public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         IntegrationConfig config = loadGithubConfig();
         String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
@@ -272,7 +331,25 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     private record GithubPullRequestHead(
+        String ref,
         String sha
+    ) {
+    }
+
+    private record GithubPullRequestListItem(
+        Integer number,
+        String title,
+        GithubPullRequestHead head,
+        GithubUser user,
+        @JsonProperty("html_url")
+        String htmlUrl,
+        @JsonProperty("updated_at")
+        String updatedAt
+    ) {
+    }
+
+    private record GithubUser(
+        String login
     ) {
     }
 }
