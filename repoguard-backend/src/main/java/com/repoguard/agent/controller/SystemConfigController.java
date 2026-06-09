@@ -10,6 +10,8 @@ import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.SystemSettingsDto;
+import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.service.SystemConfigService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -68,6 +70,18 @@ public class SystemConfigController {
         @Valid @RequestBody ReviewPolicyConfigRequest request
     ) {
         return ApiResponse.ok(systemConfigService.updateReviewPolicy(request));
+    }
+
+    @GetMapping("/system-settings")
+    public ApiResponse<SystemSettingsDto> getSystemSettings() {
+        return ApiResponse.ok(systemConfigService.getSystemSettings());
+    }
+
+    @PutMapping("/system-settings")
+    public ApiResponse<SystemSettingsDto> updateSystemSettings(
+        @Valid @RequestBody SystemSettingsRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.updateSystemSettings(request));
     }
 
     @GetMapping("/review-rules")

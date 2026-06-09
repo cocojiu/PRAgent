@@ -144,25 +144,46 @@ security:
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
-import { fetchReviewPolicyConfig, updateReviewPolicyConfig } from "@/api/config";
+import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
-import {
-  baseSettings,
-  notificationSettings,
-  reviewPolicySettings,
-  securitySettings,
-  settingLogs
-} from "@/mocks/settings";
-import type { ReviewPolicyConfig } from "@/types";
+import type {
+  BaseSettings,
+  NotificationSettings,
+  ReviewPolicySettings,
+  SecuritySettings,
+  SettingLog,
+  SystemSettings
+} from "@/types";
 
 const isEditing = ref(false);
 const loading = ref(false);
 const saving = ref(false);
-const reviewPolicyConfig = ref<ReviewPolicyConfig>();
-const baseForm = reactive({ ...baseSettings });
-const policyForm = reactive({ ...reviewPolicySettings });
-const notificationForm = reactive({ ...notificationSettings });
-const securityForm = reactive({ ...securitySettings });
+const settingLogs = ref<SettingLog[]>([]);
+const baseForm = reactive<BaseSettings>({
+  systemName: "",
+  language: "中文",
+  timezone: "Asia/Shanghai",
+  retentionDays: 90
+});
+const policyForm = reactive<ReviewPolicySettings>({
+  maxDiffLines: 800,
+  llmTimeoutSeconds: 60,
+  workerConcurrency: 1,
+  autoComment: true,
+  autoRetry: true
+});
+const notificationForm = reactive<NotificationSettings>({
+  githubComment: true,
+  highRiskPr: true,
+  failedTask: true,
+  email: ""
+});
+const securityForm = reactive<SecuritySettings>({
+  webhookSignature: true,
+  secretMasking: true,
+  publicRepoAllowed: false,
+  tokenTtlDays: 30
+});
 const { captureSnapshot, restoreSnapshot } = useFormSnapshot({
   baseForm,
   policyForm,
@@ -185,15 +206,25 @@ const saveSettings = () => {
   void persistSettings();
 };
 
-const loadReviewPolicy = async () => {
+const applySettings = (settings: SystemSettings) => {
+  Object.assign(baseForm, settings.base);
+  Object.assign(policyForm, settings.policy);
+  Object.assign(notificationForm, {
+    ...settings.notification,
+    email: settings.notification.email ?? ""
+  });
+  Object.assign(securityForm, settings.security);
+  settingLogs.value = settings.logs ?? [];
+  captureSnapshot();
+};
+
+const loadSystemSettings = async () => {
   loading.value = true;
   try {
-    const config = await fetchReviewPolicyConfig();
-    reviewPolicyConfig.value = config;
-    policyForm.llmTimeoutSeconds = config.timeoutSeconds;
-    policyForm.workerConcurrency = config.workerConcurrency;
+    const settings = await fetchSystemSettings();
+    applySettings(settings);
   } catch (error) {
-    ElMessage.warning(error instanceof Error ? error.message : "Review policy load failed, using local defaults");
+    ElMessage.error(error instanceof Error ? error.message : "系统设置加载失败");
   } finally {
     loading.value = false;
   }
@@ -202,31 +233,23 @@ const loadReviewPolicy = async () => {
 const persistSettings = async () => {
   saving.value = true;
   try {
-    const current = reviewPolicyConfig.value;
-    const saved = await updateReviewPolicyConfig({
-      llmEnabled: current?.llmEnabled ?? true,
-      llmProvider: current?.llmProvider ?? "dashscope",
-      modelName: current?.modelName ?? "qwen-plus",
-      baseUrl: current?.baseUrl,
-      apiKey: current?.apiKey,
-      timeoutSeconds: policyForm.llmTimeoutSeconds,
-      temperature: current?.temperature ?? 0.2,
-      maxTokens: current?.maxTokens ?? 4096,
-      fallbackToRules: current?.fallbackToRules ?? true,
-      workerConcurrency: policyForm.workerConcurrency
+    const saved = await updateSystemSettings({
+      base: { ...baseForm },
+      policy: { ...policyForm },
+      notification: { ...notificationForm },
+      security: { ...securityForm }
     });
-    reviewPolicyConfig.value = saved;
-    captureSnapshot();
+    applySettings(saved);
     isEditing.value = false;
     ElMessage.success("系统设置已保存");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "Review policy save failed");
+    ElMessage.error(error instanceof Error ? error.message : "系统设置保存失败");
   } finally {
     saving.value = false;
   }
 };
 
 onMounted(() => {
-  void loadReviewPolicy();
+  void loadSystemSettings();
 });
 </script>

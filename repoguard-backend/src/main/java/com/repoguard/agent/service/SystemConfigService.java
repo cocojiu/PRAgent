@@ -8,6 +8,8 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.SystemSettingsDto;
+import com.repoguard.agent.dto.SystemSettingsRequest;
 
 public interface SystemConfigService {
 
@@ -18,6 +20,10 @@ public interface SystemConfigService {
     ReviewPolicyConfigDto getReviewPolicy();
 
     ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request);
+
+    SystemSettingsDto getSystemSettings();
+
+    SystemSettingsDto updateSystemSettings(SystemSettingsRequest request);
 
     ReviewRulesResponse getReviewRules();
 

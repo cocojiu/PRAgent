@@ -356,6 +356,16 @@ export interface SettingLog {
   status: string;
 }
 
+export interface SystemSettings {
+  base: BaseSettings;
+  policy: ReviewPolicySettings;
+  notification: NotificationSettings;
+  security: SecuritySettings;
+  logs: SettingLog[];
+}
+
+export type SystemSettingsRequest = Omit<SystemSettings, "logs">;
+
 export interface IntegrationField {
   label: string;
   value: string;

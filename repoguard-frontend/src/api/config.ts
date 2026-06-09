@@ -8,7 +8,9 @@ import type {
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
   ReviewRuleStatusRequest,
-  ReviewRulesResponse
+  ReviewRulesResponse,
+  SystemSettings,
+  SystemSettingsRequest
 } from "@/types";
 
 export const fetchGithubIntegrationConfig = () =>
@@ -24,6 +26,14 @@ export const fetchReviewPolicyConfig = () => request<ReviewPolicyConfig>("/api/v
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   request<ReviewPolicyConfig>("/api/v1/config/review-policy", undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const fetchSystemSettings = () => request<SystemSettings>("/api/v1/config/system-settings");
+
+export const updateSystemSettings = (payload: SystemSettingsRequest) =>
+  request<SystemSettings>("/api/v1/config/system-settings", undefined, {
     method: "PUT",
     body: JSON.stringify(payload)
   });

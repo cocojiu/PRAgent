@@ -6,15 +6,22 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.NotificationSettingsDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
+import com.repoguard.agent.dto.ReviewPolicySettingsDto;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.SecuritySettingsDto;
+import com.repoguard.agent.dto.SettingLogDto;
+import com.repoguard.agent.dto.SystemSettingsDto;
+import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -44,6 +51,16 @@ class SystemConfigControllerTest {
         @Override
         public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
             return reviewPolicyDto();
+        }
+
+        @Override
+        public SystemSettingsDto getSystemSettings() {
+            return systemSettingsDto();
+        }
+
+        @Override
+        public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
+            return systemSettingsDto();
         }
 
         @Override
@@ -132,6 +149,57 @@ class SystemConfigControllerTest {
     }
 
     @Test
+    void getSystemSettingsReturnsFullSettings() throws Exception {
+        mockMvc.perform(get("/api/v1/config/system-settings"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.base.systemName").value("RepoGuard Agent"))
+            .andExpect(jsonPath("$.data.policy.llmTimeoutSeconds").value(60))
+            .andExpect(jsonPath("$.data.notification.githubComment").value(true))
+            .andExpect(jsonPath("$.data.security.webhookSignature").value(true))
+            .andExpect(jsonPath("$.data.logs[0].action").value("更新系统设置"));
+    }
+
+    @Test
+    void updateSystemSettingsReturnsSavedSettings() throws Exception {
+        mockMvc.perform(put("/api/v1/config/system-settings")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "base": {
+                        "systemName": "RepoGuard Agent",
+                        "language": "中文",
+                        "timezone": "Asia/Shanghai",
+                        "retentionDays": 120
+                      },
+                      "policy": {
+                        "maxDiffLines": 1200,
+                        "llmTimeoutSeconds": 90,
+                        "workerConcurrency": 3,
+                        "autoComment": true,
+                        "autoRetry": false
+                      },
+                      "notification": {
+                        "githubComment": true,
+                        "highRiskPr": true,
+                        "failedTask": false,
+                        "email": "ops@repoguard.dev"
+                      },
+                      "security": {
+                        "webhookSignature": true,
+                        "secretMasking": true,
+                        "publicRepoAllowed": false,
+                        "tokenTtlDays": 45
+                      }
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.base.systemName").value("RepoGuard Agent"))
+            .andExpect(jsonPath("$.data.policy.maxDiffLines").value(800));
+    }
+
+    @Test
     void testGithubIntegrationReturnsConnectionResult() throws Exception {
         mockMvc.perform(post("/api/v1/config/integrations/github/test"))
             .andExpect(status().isOk())
@@ -192,6 +260,16 @@ class SystemConfigControllerTest {
             true,
             1,
             "2026-06-06 01:30:00"
+        );
+    }
+
+    private SystemSettingsDto systemSettingsDto() {
+        return new SystemSettingsDto(
+            new BaseSettingsDto("RepoGuard Agent", "中文", "Asia/Shanghai", 90),
+            new ReviewPolicySettingsDto(800, 60, 1, true, true),
+            new NotificationSettingsDto(true, true, true, "ops@repoguard.dev"),
+            new SecuritySettingsDto(true, true, false, 30),
+            List.of(new SettingLogDto("2026-06-09 12:00:00", "admin", "更新系统设置", "成功"))
         );
     }
 

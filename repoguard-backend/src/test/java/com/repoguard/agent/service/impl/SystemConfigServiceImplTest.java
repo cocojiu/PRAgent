@@ -8,16 +8,25 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
+import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
+import com.repoguard.agent.dto.SecuritySettingsRequest;
+import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.entity.SystemSettingLog;
+import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
+import com.repoguard.agent.mapper.SystemSettingLogMapper;
+import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -28,6 +37,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.web.client.RestClient;
 
 class SystemConfigServiceImplTest {
@@ -36,12 +46,16 @@ class SystemConfigServiceImplTest {
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final ReviewRuleConfigMapper reviewRuleConfigMapper = org.mockito.Mockito.mock(ReviewRuleConfigMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+    private final SystemSettingsConfigMapper systemSettingsConfigMapper = org.mockito.Mockito.mock(SystemSettingsConfigMapper.class);
+    private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
         reviewRuleConfigMapper,
         reviewFindingMapper,
+        systemSettingsConfigMapper,
+        systemSettingLogMapper,
         RestClient.builder(),
         new ObjectMapper(),
         null,
@@ -135,6 +149,57 @@ class SystemConfigServiceImplTest {
         assertThat(result.apiKey()).isNull();
         verify(reviewPolicyConfigMapper).updateById(config);
         verify(reviewPolicyConfigMapper).update(any(UpdateWrapper.class));
+    }
+
+    @Test
+    void getSystemSettingsCreatesDefaultsWhenMissing() {
+        var result = service.getSystemSettings();
+
+        assertThat(result.base().systemName()).isEqualTo("RepoGuard Agent");
+        assertThat(result.base().language()).isEqualTo("中文");
+        assertThat(result.policy().maxDiffLines()).isEqualTo(800);
+        assertThat(result.policy().llmTimeoutSeconds()).isEqualTo(60);
+        assertThat(result.notification().email()).isEqualTo("ops@repoguard.dev");
+        assertThat(result.security().webhookSignature()).isTrue();
+        verify(systemSettingsConfigMapper).insert(any(SystemSettingsConfig.class));
+        verify(reviewPolicyConfigMapper).insert(any(ReviewPolicyConfig.class));
+    }
+
+    @Test
+    void updateSystemSettingsPersistsConfigAndRecordsLog() {
+        SystemSettingsConfig settingsConfig = systemSettingsConfig();
+        ReviewPolicyConfig reviewPolicyConfig = reviewPolicyConfig("sk-existing-5678");
+        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settingsConfig);
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig);
+        when(systemSettingLogMapper.selectList(any())).thenReturn(List.of(settingLog()));
+
+        var result = service.updateSystemSettings(new SystemSettingsRequest(
+            new BaseSettingsRequest("RepoGuard Agent Pro", "中文", "Asia/Shanghai", 120),
+            new ReviewPolicySettingsRequest(1200, 90, 3, true, false),
+            new NotificationSettingsRequest(true, false, true, "devops@repoguard.dev"),
+            new SecuritySettingsRequest(true, true, true, 45)
+        ));
+
+        assertThat(settingsConfig.getSystemName()).isEqualTo("RepoGuard Agent Pro");
+        assertThat(settingsConfig.getRetentionDays()).isEqualTo(120);
+        assertThat(settingsConfig.getMaxDiffLines()).isEqualTo(1200);
+        assertThat(settingsConfig.getAutoRetry()).isFalse();
+        assertThat(settingsConfig.getHighRiskPr()).isFalse();
+        assertThat(settingsConfig.getNotificationEmail()).isEqualTo("devops@repoguard.dev");
+        assertThat(settingsConfig.getPublicRepoAllowed()).isTrue();
+        assertThat(settingsConfig.getTokenTtlDays()).isEqualTo(45);
+        assertThat(reviewPolicyConfig.getTimeoutSeconds()).isEqualTo(90);
+        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(3);
+        assertThat(secretCryptoService.decrypt(reviewPolicyConfig.getApiKeyValue())).isEqualTo("sk-existing-5678");
+        assertThat(result.policy().workerConcurrency()).isEqualTo(3);
+        assertThat(result.logs()).hasSize(1);
+        verify(systemSettingsConfigMapper).updateById(settingsConfig);
+        verify(reviewPolicyConfigMapper).updateById(reviewPolicyConfig);
+        ArgumentCaptor<SystemSettingLog> logCaptor = ArgumentCaptor.forClass(SystemSettingLog.class);
+        verify(systemSettingLogMapper).insert(logCaptor.capture());
+        assertThat(logCaptor.getValue().getOperator()).isEqualTo("admin");
+        assertThat(logCaptor.getValue().getAction()).isEqualTo("更新系统设置");
+        assertThat(logCaptor.getValue().getStatus()).isEqualTo("成功");
     }
 
     @Test
@@ -295,6 +360,39 @@ class SystemConfigServiceImplTest {
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
+    }
+
+    private SystemSettingsConfig systemSettingsConfig() {
+        SystemSettingsConfig config = new SystemSettingsConfig();
+        config.setId(1L);
+        config.setSystemName("RepoGuard Agent");
+        config.setLanguage("中文");
+        config.setTimezone("Asia/Shanghai");
+        config.setRetentionDays(90);
+        config.setMaxDiffLines(800);
+        config.setAutoComment(true);
+        config.setAutoRetry(true);
+        config.setGithubComment(true);
+        config.setHighRiskPr(true);
+        config.setFailedTask(true);
+        config.setNotificationEmail("ops@repoguard.dev");
+        config.setWebhookSignature(true);
+        config.setSecretMasking(true);
+        config.setPublicRepoAllowed(false);
+        config.setTokenTtlDays(30);
+        config.setCreatedAt(LocalDateTime.now());
+        config.setUpdatedAt(LocalDateTime.now());
+        return config;
+    }
+
+    private SystemSettingLog settingLog() {
+        SystemSettingLog log = new SystemSettingLog();
+        log.setId(1L);
+        log.setOperator("admin");
+        log.setAction("更新系统设置");
+        log.setStatus("成功");
+        log.setCreatedAt(LocalDateTime.of(2026, 6, 9, 12, 0));
+        return log;
     }
 
     private ReviewRuleConfig rule(String id, String name, String severity, String status, int confidence) {
