@@ -45,7 +45,7 @@
                 <button type="button" @click="loadNotifications">重试</button>
               </div>
               <div v-else-if="!notifications.length" class="notification-state">暂无待处理通知</div>
-              <template v-else>
+              <div v-else class="notification-list">
                 <button
                   v-for="item in notifications"
                   :key="item.id"
@@ -60,7 +60,7 @@
                     <small>{{ item.time }}</small>
                   </span>
                 </button>
-              </template>
+              </div>
               <RouterLink class="notification-more" to="/repoguard/tasks">查看全部消息 ›</RouterLink>
             </div>
           </el-popover>
