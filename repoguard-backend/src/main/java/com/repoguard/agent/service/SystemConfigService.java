@@ -8,6 +8,8 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 
@@ -16,6 +18,14 @@ public interface SystemConfigService {
     GithubIntegrationConfigDto getGithubIntegration();
 
     GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request);
+
+    ServiceIntegrationConfigDto getMysqlIntegration();
+
+    ServiceIntegrationConfigDto updateMysqlIntegration(ServiceIntegrationConfigRequest request);
+
+    ServiceIntegrationConfigDto getRabbitMqIntegration();
+
+    ServiceIntegrationConfigDto updateRabbitMqIntegration(ServiceIntegrationConfigRequest request);
 
     ReviewPolicyConfigDto getReviewPolicy();
 
@@ -33,11 +43,11 @@ public interface SystemConfigService {
 
     ReviewRuleConfigDto updateReviewRuleStatus(String id, String status);
 
-    ConnectionTestResultDto testGithubIntegration();
+    ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest request);
 
-    ConnectionTestResultDto testReviewPolicy();
+    ConnectionTestResultDto testReviewPolicy(ReviewPolicyConfigRequest request);
 
-    ConnectionTestResultDto testMysqlConnection();
+    ConnectionTestResultDto testMysqlConnection(ServiceIntegrationConfigRequest request);
 
-    ConnectionTestResultDto testRabbitMqConnection();
+    ConnectionTestResultDto testRabbitMqConnection(ServiceIntegrationConfigRequest request);
 }

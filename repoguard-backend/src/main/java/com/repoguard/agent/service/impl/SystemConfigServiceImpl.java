@@ -17,6 +17,8 @@ import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.SecuritySettingsDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
@@ -36,7 +38,9 @@ import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -47,6 +51,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -59,6 +64,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class SystemConfigServiceImpl implements SystemConfigService {
 
     private static final String GITHUB_PROVIDER = "GITHUB";
+    private static final String MYSQL_PROVIDER = "MYSQL";
+    private static final String RABBITMQ_PROVIDER = "RABBITMQ";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int MIN_LLM_TEST_MAX_TOKENS = 512;
     private static final int MAX_LLM_TEST_MAX_TOKENS = 4096;
@@ -75,6 +82,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     private final DataSource dataSource;
     private final RabbitTemplate rabbitTemplate;
     private final SecretCryptoService secretCryptoService;
+    private final Environment environment;
 
     public SystemConfigServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
@@ -87,7 +95,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         ObjectMapper objectMapper,
         DataSource dataSource,
         RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService
+        SecretCryptoService secretCryptoService,
+        Environment environment
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
@@ -101,6 +110,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         this.dataSource = dataSource;
         this.rabbitTemplate = rabbitTemplate;
         this.secretCryptoService = secretCryptoService;
+        this.environment = environment;
     }
 
     @Override
@@ -134,6 +144,28 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .set("last_error", null)
         );
         return toGithubDto(config);
+    }
+
+    @Override
+    public ServiceIntegrationConfigDto getMysqlIntegration() {
+        return toServiceIntegrationDto(loadServiceIntegration(MYSQL_PROVIDER));
+    }
+
+    @Override
+    @Transactional
+    public ServiceIntegrationConfigDto updateMysqlIntegration(ServiceIntegrationConfigRequest request) {
+        return updateServiceIntegration(MYSQL_PROVIDER, request);
+    }
+
+    @Override
+    public ServiceIntegrationConfigDto getRabbitMqIntegration() {
+        return toServiceIntegrationDto(loadServiceIntegration(RABBITMQ_PROVIDER));
+    }
+
+    @Override
+    @Transactional
+    public ServiceIntegrationConfigDto updateRabbitMqIntegration(ServiceIntegrationConfigRequest request) {
+        return updateServiceIntegration(RABBITMQ_PROVIDER, request);
     }
 
     @Override
@@ -270,8 +302,10 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     @Transactional
-    public ConnectionTestResultDto testGithubIntegration() {
-        IntegrationConfig config = findGithubConfig();
+    public ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest configRequest) {
+        IntegrationConfig savedConfig = findGithubConfig();
+        boolean transientConfig = configRequest != null;
+        IntegrationConfig config = transientConfig ? githubIntegrationForTest(configRequest, savedConfig) : savedConfig;
         if (config == null) {
             return connectionResult(false, "failed", "GitHub integration is not configured");
         }
@@ -286,18 +320,23 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 request.header("Authorization", "Bearer " + token.trim());
             }
             request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
-            markGithubIntegrationChecked(config, null);
+            if (!transientConfig) {
+                markGithubIntegrationChecked(config, null);
+            }
             return connectionResult(true, "connected", "GitHub connection test succeeded");
         } catch (RuntimeException ex) {
             String error = conciseError(ex);
-            markGithubIntegrationChecked(config, error);
+            if (!transientConfig) {
+                markGithubIntegrationChecked(config, error);
+            }
             return connectionResult(false, "failed", error);
         }
     }
 
     @Override
-    public ConnectionTestResultDto testReviewPolicy() {
-        ReviewPolicyConfig config = findReviewPolicy();
+    public ConnectionTestResultDto testReviewPolicy(ReviewPolicyConfigRequest configRequest) {
+        ReviewPolicyConfig savedConfig = findReviewPolicy();
+        ReviewPolicyConfig config = configRequest == null ? savedConfig : reviewPolicyForTest(configRequest, savedConfig);
         if (config == null) {
             return connectionResult(false, "failed", "LLM config is not configured");
         }
@@ -345,7 +384,32 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
-    public ConnectionTestResultDto testMysqlConnection() {
+    public ConnectionTestResultDto testMysqlConnection(ServiceIntegrationConfigRequest configRequest) {
+        IntegrationConfig savedConfig = findServiceIntegration(MYSQL_PROVIDER);
+        boolean transientConfig = configRequest != null;
+        IntegrationConfig config = transientConfig ? serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig) : savedConfig;
+        if (config != null) {
+            try (Connection connection = DriverManager.getConnection(
+                config.getBaseUrl(),
+                config.getDefaultOwner(),
+                secretCryptoService.decrypt(config.getTokenValue())
+            )) {
+                boolean valid = connection.isValid(2);
+                String error = valid ? null : "MySQL connection is not valid";
+                if (!transientConfig) {
+                    markServiceIntegrationChecked(config, error);
+                }
+                return valid
+                    ? connectionResult(true, "connected", "MySQL connection test succeeded")
+                    : connectionResult(false, "failed", error);
+            } catch (Exception ex) {
+                String error = conciseError(ex);
+                if (!transientConfig) {
+                    markServiceIntegrationChecked(config, error);
+                }
+                return connectionResult(false, "failed", error);
+            }
+        }
         try (Connection connection = dataSource.getConnection()) {
             boolean valid = connection.isValid(2);
             return valid
@@ -357,7 +421,28 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
-    public ConnectionTestResultDto testRabbitMqConnection() {
+    public ConnectionTestResultDto testRabbitMqConnection(ServiceIntegrationConfigRequest configRequest) {
+        IntegrationConfig savedConfig = findServiceIntegration(RABBITMQ_PROVIDER);
+        boolean transientConfig = configRequest != null;
+        IntegrationConfig config = transientConfig ? serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig) : savedConfig;
+        if (config != null) {
+            try (com.rabbitmq.client.Connection connection = rabbitMqConnectionFactory(config).newConnection()) {
+                boolean open = connection.isOpen();
+                String error = open ? null : "RabbitMQ connection is not open";
+                if (!transientConfig) {
+                    markServiceIntegrationChecked(config, error);
+                }
+                return open
+                    ? connectionResult(true, "connected", "RabbitMQ connection test succeeded")
+                    : connectionResult(false, "failed", error);
+            } catch (Exception ex) {
+                String error = conciseError(ex);
+                if (!transientConfig) {
+                    markServiceIntegrationChecked(config, error);
+                }
+                return connectionResult(false, "failed", error);
+            }
+        }
         try {
             Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
             return Boolean.TRUE.equals(open)
@@ -476,6 +561,92 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         );
     }
 
+    private IntegrationConfig githubIntegrationForTest(GithubIntegrationConfigRequest request, IntegrationConfig savedConfig) {
+        IntegrationConfig config = new IntegrationConfig();
+        String token = resolveSecretValue(
+            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
+            request.token()
+        );
+        config.setProvider(GITHUB_PROVIDER);
+        config.setStatus("CONFIGURED");
+        config.setBaseUrl(request.baseUrl().trim());
+        config.setTokenValue(secretCryptoService.encrypt(token));
+        config.setDefaultOwner(trimToNull(request.defaultOwner()));
+        config.setDefaultRepo(trimToNull(request.defaultRepo()));
+        return config;
+    }
+
+    private ServiceIntegrationConfigDto updateServiceIntegration(String provider, ServiceIntegrationConfigRequest request) {
+        IntegrationConfig config = loadServiceIntegration(provider);
+        String secret = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.secret());
+        config.setBaseUrl(request.baseUrl().trim());
+        config.setDefaultOwner(trimToNull(request.username()));
+        config.setDefaultRepo(trimToNull(request.resource()));
+        config.setTokenValue(secretCryptoService.encrypt(secret));
+        config.setStatus(StringUtils.hasText(config.getBaseUrl()) ? "CONFIGURED" : "NOT_CONFIGURED");
+        config.setLastError(null);
+        config.setUpdatedAt(LocalDateTime.now());
+        integrationConfigMapper.updateById(config);
+        if (config.getTokenValue() == null) {
+            integrationConfigMapper.update(
+                new UpdateWrapper<IntegrationConfig>()
+                    .eq("id", config.getId())
+                    .set("token_value", null)
+            );
+        }
+        integrationConfigMapper.update(
+            new UpdateWrapper<IntegrationConfig>()
+                .eq("id", config.getId())
+                .set("last_error", null)
+        );
+        return toServiceIntegrationDto(config);
+    }
+
+    private IntegrationConfig loadServiceIntegration(String provider) {
+        IntegrationConfig config = findServiceIntegration(provider);
+        if (config != null) {
+            return config;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        IntegrationConfig defaultConfig = new IntegrationConfig();
+        defaultConfig.setProvider(provider);
+        defaultConfig.setStatus("NOT_CONFIGURED");
+        defaultConfig.setBaseUrl(defaultServiceBaseUrl(provider));
+        defaultConfig.setDefaultOwner(defaultServiceUsername(provider));
+        defaultConfig.setDefaultRepo(defaultServiceResource(provider));
+        defaultConfig.setTokenValue(secretCryptoService.encrypt(defaultServiceSecret(provider)));
+        defaultConfig.setCreatedAt(now);
+        defaultConfig.setUpdatedAt(now);
+        integrationConfigMapper.insert(defaultConfig);
+        return defaultConfig;
+    }
+
+    private IntegrationConfig findServiceIntegration(String provider) {
+        return integrationConfigMapper.selectOne(
+            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, provider)
+        );
+    }
+
+    private IntegrationConfig serviceIntegrationForTest(
+        String provider,
+        ServiceIntegrationConfigRequest request,
+        IntegrationConfig savedConfig
+    ) {
+        IntegrationConfig config = new IntegrationConfig();
+        String secret = resolveSecretValue(
+            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
+            request.secret()
+        );
+        config.setProvider(provider);
+        config.setStatus("CONFIGURED");
+        config.setBaseUrl(request.baseUrl().trim());
+        config.setTokenValue(secretCryptoService.encrypt(secret));
+        config.setDefaultOwner(trimToNull(request.username()));
+        config.setDefaultRepo(trimToNull(request.resource()));
+        return config;
+    }
+
     private ReviewPolicyConfig loadReviewPolicy() {
         ReviewPolicyConfig config = findReviewPolicy();
         if (config != null) {
@@ -502,6 +673,25 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private ReviewPolicyConfig findReviewPolicy() {
         return reviewPolicyConfigMapper.selectById(1L);
+    }
+
+    private ReviewPolicyConfig reviewPolicyForTest(ReviewPolicyConfigRequest request, ReviewPolicyConfig savedConfig) {
+        ReviewPolicyConfig config = new ReviewPolicyConfig();
+        String apiKey = resolveSecretValue(
+            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getApiKeyValue()),
+            request.apiKey()
+        );
+        config.setLlmEnabled(request.llmEnabled());
+        config.setLlmProvider(request.llmProvider().trim());
+        config.setModelName(request.modelName().trim());
+        config.setBaseUrl(trimToNull(request.baseUrl()));
+        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
+        config.setTimeoutSeconds(request.timeoutSeconds());
+        config.setTemperature(request.temperature());
+        config.setMaxTokens(request.maxTokens());
+        config.setFallbackToRules(request.fallbackToRules());
+        config.setWorkerConcurrency(request.workerConcurrency());
+        return config;
     }
 
     private SystemSettingsConfig loadSystemSettings() {
@@ -556,6 +746,66 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         systemSettingLogMapper.insert(log);
     }
 
+    private String defaultServiceBaseUrl(String provider) {
+        if (MYSQL_PROVIDER.equals(provider)) {
+            return property(
+                "spring.datasource.url",
+                "jdbc:mysql://localhost:3306/repoguard?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
+            );
+        }
+        if (RABBITMQ_PROVIDER.equals(provider)) {
+            return "amqp://" + property("spring.rabbitmq.host", "localhost") + ":" + property("spring.rabbitmq.port", "5672");
+        }
+        return "";
+    }
+
+    private String defaultServiceUsername(String provider) {
+        if (MYSQL_PROVIDER.equals(provider)) {
+            return property("spring.datasource.username", "root");
+        }
+        if (RABBITMQ_PROVIDER.equals(provider)) {
+            return property("spring.rabbitmq.username", "guest");
+        }
+        return null;
+    }
+
+    private String defaultServiceSecret(String provider) {
+        if (MYSQL_PROVIDER.equals(provider)) {
+            return property("spring.datasource.password", null);
+        }
+        if (RABBITMQ_PROVIDER.equals(provider)) {
+            return property("spring.rabbitmq.password", null);
+        }
+        return null;
+    }
+
+    private String defaultServiceResource(String provider) {
+        if (MYSQL_PROVIDER.equals(provider)) {
+            return databaseNameFromJdbcUrl(defaultServiceBaseUrl(provider));
+        }
+        if (RABBITMQ_PROVIDER.equals(provider)) {
+            return property("spring.rabbitmq.virtual-host", "/");
+        }
+        return null;
+    }
+
+    private String databaseNameFromJdbcUrl(String jdbcUrl) {
+        if (!StringUtils.hasText(jdbcUrl)) {
+            return null;
+        }
+        int slash = jdbcUrl.lastIndexOf('/');
+        if (slash < 0 || slash == jdbcUrl.length() - 1) {
+            return null;
+        }
+        String database = jdbcUrl.substring(slash + 1);
+        int query = database.indexOf('?');
+        return query >= 0 ? database.substring(0, query) : database;
+    }
+
+    private String property(String key, String defaultValue) {
+        return environment == null ? defaultValue : environment.getProperty(key, defaultValue);
+    }
+
     private String buildGithubTestUrl(IntegrationConfig config) {
         String baseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl().trim() : "https://api.github.com";
         if (StringUtils.hasText(config.getDefaultOwner()) && StringUtils.hasText(config.getDefaultRepo())) {
@@ -584,6 +834,57 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                     .set("last_error", null)
             );
         }
+    }
+
+    private void markServiceIntegrationChecked(IntegrationConfig config, String error) {
+        if (config == null || config.getId() == null) {
+            return;
+        }
+        config.setLastCheckedAt(LocalDateTime.now());
+        config.setLastError(error);
+        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
+        config.setUpdatedAt(LocalDateTime.now());
+        integrationConfigMapper.updateById(config);
+        if (error == null) {
+            integrationConfigMapper.update(
+                new UpdateWrapper<IntegrationConfig>()
+                    .eq("id", config.getId())
+                    .set("last_error", null)
+            );
+        }
+    }
+
+    private com.rabbitmq.client.ConnectionFactory rabbitMqConnectionFactory(IntegrationConfig config) {
+        URI uri = URI.create(config.getBaseUrl());
+        com.rabbitmq.client.ConnectionFactory factory = new com.rabbitmq.client.ConnectionFactory();
+        if (StringUtils.hasText(uri.getHost())) {
+            factory.setHost(uri.getHost());
+        }
+        if (uri.getPort() > 0) {
+            factory.setPort(uri.getPort());
+        }
+        if (StringUtils.hasText(config.getDefaultOwner())) {
+            factory.setUsername(config.getDefaultOwner());
+        }
+        String secret = secretCryptoService.decrypt(config.getTokenValue());
+        if (StringUtils.hasText(secret)) {
+            factory.setPassword(secret);
+        }
+        String virtualHost = StringUtils.hasText(config.getDefaultRepo()) ? config.getDefaultRepo() : pathVirtualHost(uri);
+        if (StringUtils.hasText(virtualHost)) {
+            factory.setVirtualHost(virtualHost);
+        }
+        factory.setConnectionTimeout(2_000);
+        factory.setRequestedHeartbeat(10);
+        return factory;
+    }
+
+    private String pathVirtualHost(URI uri) {
+        String path = uri.getPath();
+        if (!StringUtils.hasText(path) || "/".equals(path)) {
+            return "/";
+        }
+        return path.substring(1);
     }
 
     private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
@@ -674,6 +975,20 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             config.getBaseUrl(),
             maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
             config.getDefaultOwner(),
+            config.getDefaultRepo(),
+            format(config.getLastCheckedAt()),
+            config.getLastError(),
+            format(config.getUpdatedAt())
+        );
+    }
+
+    private ServiceIntegrationConfigDto toServiceIntegrationDto(IntegrationConfig config) {
+        return new ServiceIntegrationConfigDto(
+            config.getProvider(),
+            lower(config.getStatus()),
+            config.getBaseUrl(),
+            config.getDefaultOwner(),
+            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
             config.getDefaultRepo(),
             format(config.getLastCheckedAt()),
             config.getLastError(),

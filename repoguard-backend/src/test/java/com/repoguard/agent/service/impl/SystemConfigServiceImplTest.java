@@ -14,6 +14,7 @@ import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
 import com.repoguard.agent.dto.SecuritySettingsRequest;
+import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -60,7 +61,8 @@ class SystemConfigServiceImplTest {
         new ObjectMapper(),
         null,
         null,
-        secretCryptoService
+        secretCryptoService,
+        null
     );
 
     @Test
@@ -152,6 +154,25 @@ class SystemConfigServiceImplTest {
     }
 
     @Test
+    void updateMysqlIntegrationKeepsExistingSecretWhenMaskedValueIsSubmitted() {
+        IntegrationConfig config = serviceConfig("MYSQL", "mysql-existing-1234");
+        when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(config);
+
+        var result = service.updateMysqlIntegration(new ServiceIntegrationConfigRequest(
+            "jdbc:mysql://localhost:3306/repoguard",
+            "root",
+            "****1234",
+            "repoguard"
+        ));
+
+        assertThat(config.getTokenValue()).startsWith("enc:v1:");
+        assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("mysql-existing-1234");
+        assertThat(config.getStatus()).isEqualTo("CONFIGURED");
+        assertThat(result.secret()).isEqualTo("****1234");
+        verify(integrationConfigMapper).updateById(config);
+    }
+
+    @Test
     void getSystemSettingsCreatesDefaultsWhenMissing() {
         var result = service.getSystemSettings();
 
@@ -211,7 +232,7 @@ class SystemConfigServiceImplTest {
             config.setLastError("stale GitHub error");
             when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(config);
 
-            var result = service.testGithubIntegration();
+            var result = service.testGithubIntegration(null);
 
             assertThat(result.success()).isTrue();
             assertThat(config.getStatus()).isEqualTo("CONFIGURED");
@@ -224,13 +245,35 @@ class SystemConfigServiceImplTest {
     }
 
     @Test
+    void testGithubIntegrationUsesCurrentFormConfigWithoutPersistingStatus() throws Exception {
+        try (ProbeServer server = startProbeServer("/rate_limit", 200, "{}")) {
+            IntegrationConfig savedConfig = githubConfig("ghp_saved_1234");
+            savedConfig.setBaseUrl("https://api.github.com");
+            when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(savedConfig);
+
+            var result = service.testGithubIntegration(new GithubIntegrationConfigRequest(
+                server.baseUrl(),
+                "****1234",
+                null,
+                null
+            ));
+
+            assertThat(result.success()).isTrue();
+            assertThat(server.authorization()).isEqualTo("Bearer ghp_saved_1234");
+            assertThat(savedConfig.getBaseUrl()).isEqualTo("https://api.github.com");
+            verify(integrationConfigMapper, org.mockito.Mockito.never()).updateById(org.mockito.ArgumentMatchers.any(IntegrationConfig.class));
+            verify(integrationConfigMapper, org.mockito.Mockito.never()).update(any(UpdateWrapper.class));
+        }
+    }
+
+    @Test
     void testGithubIntegrationRecordsLatestErrorOnFailure() throws Exception {
         try (ProbeServer server = startProbeServer("/rate_limit", 500, "{\"message\":\"boom\"}")) {
             IntegrationConfig config = githubConfig("ghp_test_1234");
             config.setBaseUrl(server.baseUrl());
             when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(config);
 
-            var result = service.testGithubIntegration();
+            var result = service.testGithubIntegration(null);
 
             assertThat(result.success()).isFalse();
             assertThat(config.getStatus()).isEqualTo("FAILED");
@@ -251,7 +294,7 @@ class SystemConfigServiceImplTest {
             config.setMaxTokens(64);
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
-            var result = service.testReviewPolicy();
+            var result = service.testReviewPolicy(null);
 
             assertThat(result.success()).isTrue();
             assertThat(result.status()).isEqualTo("connected");
@@ -273,7 +316,7 @@ class SystemConfigServiceImplTest {
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
-            var result = service.testReviewPolicy();
+            var result = service.testReviewPolicy(null);
 
             assertThat(result.success()).isTrue();
             assertThat(result.status()).isEqualTo("connected");
@@ -290,7 +333,7 @@ class SystemConfigServiceImplTest {
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
-            var result = service.testReviewPolicy();
+            var result = service.testReviewPolicy(null);
 
             assertThat(result.success()).isFalse();
             assertThat(result.status()).isEqualTo("failed");
@@ -339,6 +382,20 @@ class SystemConfigServiceImplTest {
         config.setStatus("CONFIGURED");
         config.setBaseUrl("https://api.github.com");
         config.setTokenValue(token);
+        config.setCreatedAt(LocalDateTime.now());
+        config.setUpdatedAt(LocalDateTime.now());
+        return config;
+    }
+
+    private IntegrationConfig serviceConfig(String provider, String secret) {
+        IntegrationConfig config = new IntegrationConfig();
+        config.setId(2L);
+        config.setProvider(provider);
+        config.setStatus("CONFIGURED");
+        config.setBaseUrl("MYSQL".equals(provider) ? "jdbc:mysql://localhost:3306/repoguard" : "amqp://localhost:5672");
+        config.setDefaultOwner("repoguard");
+        config.setDefaultRepo("MYSQL".equals(provider) ? "repoguard" : "/");
+        config.setTokenValue(secret);
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;

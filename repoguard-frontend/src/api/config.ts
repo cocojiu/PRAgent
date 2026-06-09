@@ -9,6 +9,8 @@ import type {
   ReviewRuleConfigRequest,
   ReviewRuleStatusRequest,
   ReviewRulesResponse,
+  ServiceIntegrationConfig,
+  ServiceIntegrationConfigRequest,
   SystemSettings,
   SystemSettingsRequest
 } from "@/types";
@@ -18,6 +20,24 @@ export const fetchGithubIntegrationConfig = () =>
 
 export const updateGithubIntegrationConfig = (payload: GithubIntegrationConfigRequest) =>
   request<GithubIntegrationConfig>("/api/v1/config/integrations/github", undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const fetchMysqlIntegrationConfig = () =>
+  request<ServiceIntegrationConfig>("/api/v1/config/integrations/mysql");
+
+export const updateMysqlIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
+  request<ServiceIntegrationConfig>("/api/v1/config/integrations/mysql", undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const fetchRabbitMqIntegrationConfig = () =>
+  request<ServiceIntegrationConfig>("/api/v1/config/integrations/rabbitmq");
+
+export const updateRabbitMqIntegrationConfig = (payload: ServiceIntegrationConfigRequest) =>
+  request<ServiceIntegrationConfig>("/api/v1/config/integrations/rabbitmq", undefined, {
     method: "PUT",
     body: JSON.stringify(payload)
   });
@@ -58,14 +78,26 @@ export const updateReviewRuleStatus = (id: string, payload: ReviewRuleStatusRequ
     body: JSON.stringify(payload)
   });
 
-export const testGithubIntegrationConnection = () =>
-  request<ConnectionTestResult>("/api/v1/config/integrations/github/test", undefined, { method: "POST" });
+export const testGithubIntegrationConnection = (payload?: GithubIntegrationConfigRequest) =>
+  request<ConnectionTestResult>("/api/v1/config/integrations/github/test", undefined, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined
+  });
 
-export const testMysqlConnection = () =>
-  request<ConnectionTestResult>("/api/v1/config/integrations/mysql/test", undefined, { method: "POST" });
+export const testMysqlConnection = (payload?: ServiceIntegrationConfigRequest) =>
+  request<ConnectionTestResult>("/api/v1/config/integrations/mysql/test", undefined, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined
+  });
 
-export const testRabbitMqConnection = () =>
-  request<ConnectionTestResult>("/api/v1/config/integrations/rabbitmq/test", undefined, { method: "POST" });
+export const testRabbitMqConnection = (payload?: ServiceIntegrationConfigRequest) =>
+  request<ConnectionTestResult>("/api/v1/config/integrations/rabbitmq/test", undefined, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined
+  });
 
-export const testReviewPolicyConnection = () =>
-  request<ConnectionTestResult>("/api/v1/config/review-policy/test", undefined, { method: "POST" });
+export const testReviewPolicyConnection = (payload?: ReviewPolicyConfigRequest) =>
+  request<ConnectionTestResult>("/api/v1/config/review-policy/test", undefined, {
+    method: "POST",
+    body: payload ? JSON.stringify(payload) : undefined
+  });

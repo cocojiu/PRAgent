@@ -19,6 +19,8 @@ import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.SecuritySettingsDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
@@ -41,6 +43,26 @@ class SystemConfigControllerTest {
         @Override
         public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
             return githubDto();
+        }
+
+        @Override
+        public ServiceIntegrationConfigDto getMysqlIntegration() {
+            return mysqlDto();
+        }
+
+        @Override
+        public ServiceIntegrationConfigDto updateMysqlIntegration(ServiceIntegrationConfigRequest request) {
+            return mysqlDto();
+        }
+
+        @Override
+        public ServiceIntegrationConfigDto getRabbitMqIntegration() {
+            return rabbitMqDto();
+        }
+
+        @Override
+        public ServiceIntegrationConfigDto updateRabbitMqIntegration(ServiceIntegrationConfigRequest request) {
+            return rabbitMqDto();
         }
 
         @Override
@@ -94,22 +116,22 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public ConnectionTestResultDto testGithubIntegration() {
+        public ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest request) {
             return connectionResult();
         }
 
         @Override
-        public ConnectionTestResultDto testReviewPolicy() {
+        public ConnectionTestResultDto testReviewPolicy(ReviewPolicyConfigRequest request) {
             return connectionResult();
         }
 
         @Override
-        public ConnectionTestResultDto testMysqlConnection() {
+        public ConnectionTestResultDto testMysqlConnection(ServiceIntegrationConfigRequest request) {
             return connectionResult();
         }
 
         @Override
-        public ConnectionTestResultDto testRabbitMqConnection() {
+        public ConnectionTestResultDto testRabbitMqConnection(ServiceIntegrationConfigRequest request) {
             return connectionResult();
         }
     };
@@ -123,6 +145,34 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.provider").value("GITHUB"))
             .andExpect(jsonPath("$.data.token").value("****1234"));
+    }
+
+    @Test
+    void getMysqlIntegrationReturnsMaskedConfig() throws Exception {
+        mockMvc.perform(get("/api/v1/config/integrations/mysql"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.provider").value("MYSQL"))
+            .andExpect(jsonPath("$.data.secret").value("****1234"))
+            .andExpect(jsonPath("$.data.resource").value("repoguard"));
+    }
+
+    @Test
+    void updateRabbitMqIntegrationReturnsMaskedConfig() throws Exception {
+        mockMvc.perform(put("/api/v1/config/integrations/rabbitmq")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "baseUrl": "amqp://localhost:5672",
+                      "username": "repoguard",
+                      "secret": "repoguard-secret",
+                      "resource": "/"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.provider").value("RABBITMQ"))
+            .andExpect(jsonPath("$.data.secret").value("****5678"));
     }
 
     @Test
@@ -209,6 +259,23 @@ class SystemConfigControllerTest {
     }
 
     @Test
+    void testMysqlIntegrationAcceptsCurrentFormConfig() throws Exception {
+        mockMvc.perform(post("/api/v1/config/integrations/mysql/test")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "baseUrl": "jdbc:mysql://localhost:3306/repoguard",
+                      "username": "root",
+                      "secret": "root-password",
+                      "resource": "repoguard"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.status").value("connected"));
+    }
+
+    @Test
     void getReviewRulesReturnsRulesAndMetrics() throws Exception {
         mockMvc.perform(get("/api/v1/config/review-rules"))
             .andExpect(status().isOk())
@@ -259,6 +326,34 @@ class SystemConfigControllerTest {
             4096,
             true,
             1,
+            "2026-06-06 01:30:00"
+        );
+    }
+
+    private ServiceIntegrationConfigDto mysqlDto() {
+        return new ServiceIntegrationConfigDto(
+            "MYSQL",
+            "configured",
+            "jdbc:mysql://localhost:3306/repoguard",
+            "root",
+            "****1234",
+            "repoguard",
+            null,
+            null,
+            "2026-06-06 01:30:00"
+        );
+    }
+
+    private ServiceIntegrationConfigDto rabbitMqDto() {
+        return new ServiceIntegrationConfigDto(
+            "RABBITMQ",
+            "configured",
+            "amqp://localhost:5672",
+            "repoguard",
+            "****5678",
+            "/",
+            null,
+            null,
             "2026-06-06 01:30:00"
         );
     }

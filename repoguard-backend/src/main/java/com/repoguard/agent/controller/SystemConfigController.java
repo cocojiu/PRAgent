@@ -10,6 +10,8 @@ import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
+import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.service.SystemConfigService;
@@ -46,18 +48,48 @@ public class SystemConfigController {
     }
 
     @PostMapping("/integrations/github/test")
-    public ApiResponse<ConnectionTestResultDto> testGithubIntegration() {
-        return ApiResponse.ok(systemConfigService.testGithubIntegration());
+    public ApiResponse<ConnectionTestResultDto> testGithubIntegration(
+        @Valid @RequestBody(required = false) GithubIntegrationConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.testGithubIntegration(request));
+    }
+
+    @GetMapping("/integrations/mysql")
+    public ApiResponse<ServiceIntegrationConfigDto> getMysqlIntegration() {
+        return ApiResponse.ok(systemConfigService.getMysqlIntegration());
+    }
+
+    @PutMapping("/integrations/mysql")
+    public ApiResponse<ServiceIntegrationConfigDto> updateMysqlIntegration(
+        @Valid @RequestBody ServiceIntegrationConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.updateMysqlIntegration(request));
     }
 
     @PostMapping("/integrations/mysql/test")
-    public ApiResponse<ConnectionTestResultDto> testMysqlConnection() {
-        return ApiResponse.ok(systemConfigService.testMysqlConnection());
+    public ApiResponse<ConnectionTestResultDto> testMysqlConnection(
+        @Valid @RequestBody(required = false) ServiceIntegrationConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.testMysqlConnection(request));
+    }
+
+    @GetMapping("/integrations/rabbitmq")
+    public ApiResponse<ServiceIntegrationConfigDto> getRabbitMqIntegration() {
+        return ApiResponse.ok(systemConfigService.getRabbitMqIntegration());
+    }
+
+    @PutMapping("/integrations/rabbitmq")
+    public ApiResponse<ServiceIntegrationConfigDto> updateRabbitMqIntegration(
+        @Valid @RequestBody ServiceIntegrationConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.updateRabbitMqIntegration(request));
     }
 
     @PostMapping("/integrations/rabbitmq/test")
-    public ApiResponse<ConnectionTestResultDto> testRabbitMqConnection() {
-        return ApiResponse.ok(systemConfigService.testRabbitMqConnection());
+    public ApiResponse<ConnectionTestResultDto> testRabbitMqConnection(
+        @Valid @RequestBody(required = false) ServiceIntegrationConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.testRabbitMqConnection(request));
     }
 
     @GetMapping("/review-policy")
@@ -113,7 +145,9 @@ public class SystemConfigController {
     }
 
     @PostMapping("/review-policy/test")
-    public ApiResponse<ConnectionTestResultDto> testReviewPolicy() {
-        return ApiResponse.ok(systemConfigService.testReviewPolicy());
+    public ApiResponse<ConnectionTestResultDto> testReviewPolicy(
+        @Valid @RequestBody(required = false) ReviewPolicyConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.testReviewPolicy(request));
     }
 }

@@ -40,17 +40,32 @@ import { Database, Github, Hexagon, RadioTower, Save } from "lucide-vue-next";
 import type { Component } from "vue";
 import {
   fetchGithubIntegrationConfig,
+  fetchMysqlIntegrationConfig,
+  fetchRabbitMqIntegrationConfig,
   fetchReviewPolicyConfig,
   testGithubIntegrationConnection,
   testMysqlConnection,
   testRabbitMqConnection,
   testReviewPolicyConnection,
   updateGithubIntegrationConfig,
+  updateMysqlIntegrationConfig,
+  updateRabbitMqIntegrationConfig,
   updateReviewPolicyConfig
 } from "@/api/config";
 import IntegrationCard from "@/components/IntegrationCard.vue";
-import { integrations } from "@/mocks/integrations";
-import type { ConnectionTestResult, GithubIntegrationConfig, IntegrationConfig, ReviewPolicyConfig } from "@/types";
+import type {
+  ConnectionTestResult,
+  GithubIntegrationConfig,
+  GithubIntegrationConfigRequest,
+  IntegrationConfig,
+  IntegrationField,
+  ReviewPolicyConfig,
+  ReviewPolicyConfigRequest,
+  ServiceIntegrationConfig,
+  ServiceIntegrationConfigRequest
+} from "@/types";
+
+type IntegrationId = "github" | "mysql" | "rabbitmq" | "spring-ai";
 
 const serviceIcons: Record<string, Component> = {
   github: Github,
@@ -59,16 +74,86 @@ const serviceIcons: Record<string, Component> = {
   "spring-ai": Hexagon
 };
 
+const defaultIntegrationItems: IntegrationConfig[] = [
+  {
+    id: "github",
+    name: "GitHub",
+    description: "用于读取 Pull Request 信息与回写审查评论",
+    status: "missing_secret",
+    statusText: "未配置",
+    metaLabel: "更新时间",
+    metaValue: "未更新",
+    message: "请配置 GitHub Token",
+    fields: [
+      { label: "API Base URL", value: "https://api.github.com", type: "text" },
+      { label: "Token", value: "", type: "password", placeholder: "GitHub token" },
+      { label: "Default Owner", value: "", type: "text" },
+      { label: "Default Repo", value: "", type: "text" }
+    ]
+  },
+  {
+    id: "mysql",
+    name: "MySQL",
+    description: "用于存储系统数据和审查结果等信息",
+    status: "missing_secret",
+    statusText: "未配置",
+    metaLabel: "更新时间",
+    metaValue: "未更新",
+    message: "请配置 MySQL 连接信息",
+    fields: [
+      { label: "JDBC URL", value: "", type: "text", placeholder: "jdbc:mysql://localhost:3306/repoguard" },
+      { label: "Username", value: "", type: "text" },
+      { label: "Password", value: "", type: "password", placeholder: "MySQL password" },
+      { label: "Database", value: "", type: "text" }
+    ]
+  },
+  {
+    id: "rabbitmq",
+    name: "RabbitMQ",
+    description: "用于异步任务处理和消息队列通信",
+    status: "missing_secret",
+    statusText: "未配置",
+    metaLabel: "更新时间",
+    metaValue: "未更新",
+    message: "请配置 RabbitMQ 连接信息",
+    fields: [
+      { label: "AMQP URL", value: "", type: "text", placeholder: "amqp://localhost:5672" },
+      { label: "Username", value: "", type: "text" },
+      { label: "Password", value: "", type: "password", placeholder: "RabbitMQ password" },
+      { label: "Virtual Host", value: "/", type: "text" }
+    ]
+  },
+  {
+    id: "spring-ai",
+    name: "Spring AI Alibaba",
+    description: "用于 AI 代码审查和智能分析能力",
+    status: "missing_secret",
+    statusText: "缺少 API Key",
+    metaLabel: "模型名称",
+    metaValue: "qwen-plus",
+    message: "请配置 LLM API Key",
+    fields: [
+      { label: "Provider", value: "DashScope", type: "select", options: ["DashScope", "OpenAI Compatible", "Mock"] },
+      { label: "API Key", value: "", type: "password", placeholder: "LLM API key" },
+      { label: "Model", value: "qwen-plus", type: "text" },
+      { label: "Base URL", value: "https://dashscope.aliyuncs.com/compatible-mode/v1", type: "text" }
+    ]
+  }
+];
+
+const cloneItems = () =>
+  defaultIntegrationItems.map((item) => ({ ...item, fields: item.fields.map((field) => ({ ...field })) }));
+
 const loading = ref(false);
 const saving = ref(false);
 const githubConfig = ref<GithubIntegrationConfig>();
+const mysqlConfig = ref<ServiceIntegrationConfig>();
+const rabbitMqConfig = ref<ServiceIntegrationConfig>();
 const reviewPolicyConfig = ref<ReviewPolicyConfig>();
-const integrationItems = ref<IntegrationConfig[]>(
-  integrations.map((item) => ({ ...item, fields: item.fields.map((field) => ({ ...field })) }))
-);
+const integrationItems = ref<IntegrationConfig[]>(cloneItems());
 
 const formState = reactive<Record<string, Record<string, string>>>(
-  Object.fromEntries(integrations.map((item) => [item.id, Object.fromEntries(item.fields.map((field) => [field.label, field.value]))]))
+  Object.fromEntries(defaultIntegrationItems.map((item) => [item.id, Object.fromEntries(item.fields.map((field) => [field.label, field.value]))]))
 );
 
 const visibleSecrets = reactive<Record<string, boolean>>({});
@@ -85,10 +170,10 @@ const reverseProviderMap = computed(() =>
 );
 
 const testActions: Record<string, () => Promise<ConnectionTestResult>> = {
-  github: testGithubIntegrationConnection,
-  mysql: testMysqlConnection,
-  rabbitmq: testRabbitMqConnection,
-  "spring-ai": testReviewPolicyConnection
+  github: () => testGithubIntegrationConnection(githubPayload()),
+  mysql: () => testMysqlConnection(mysqlPayload()),
+  rabbitmq: () => testRabbitMqConnection(rabbitMqPayload()),
+  "spring-ai": () => testReviewPolicyConnection(springAiPayload())
 };
 
 const testConnection = async (id: string) => {
@@ -124,13 +209,19 @@ const testConnection = async (id: string) => {
 const loadConfig = async () => {
   loading.value = true;
   try {
-    const [github, reviewPolicy] = await Promise.all([
+    const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
       fetchGithubIntegrationConfig(),
+      fetchMysqlIntegrationConfig(),
+      fetchRabbitMqIntegrationConfig(),
       fetchReviewPolicyConfig()
     ]);
     githubConfig.value = github;
+    mysqlConfig.value = mysql;
+    rabbitMqConfig.value = rabbitMq;
     reviewPolicyConfig.value = reviewPolicy;
     applyGithubConfig(github);
+    applyServiceConfig("mysql", mysql);
+    applyServiceConfig("rabbitmq", rabbitMq);
     applyReviewPolicyConfig(reviewPolicy);
   } catch (error) {
     ElMessage.warning(error instanceof Error ? error.message : "Config load failed, using local defaults");
@@ -142,32 +233,19 @@ const loadConfig = async () => {
 const saveConfig = async () => {
   saving.value = true;
   try {
-    const githubPayload = {
-      baseUrl: formState.github["API Base URL"] || "https://api.github.com",
-      token: formState.github.Token,
-      defaultOwner: formState.github["Default Owner"],
-      defaultRepo: formState.github["Default Repo"]
-    };
-    const springAiPayload = {
-      llmEnabled: true,
-      llmProvider: reverseProviderMap.value[formState["spring-ai"].Provider] ?? "dashscope",
-      modelName: formState["spring-ai"].Model || "qwen-plus",
-      baseUrl: formState["spring-ai"]["Base URL"],
-      apiKey: formState["spring-ai"]["API Key"],
-      timeoutSeconds: reviewPolicyConfig.value?.timeoutSeconds ?? 60,
-      temperature: reviewPolicyConfig.value?.temperature ?? 0.2,
-      maxTokens: reviewPolicyConfig.value?.maxTokens ?? 4096,
-      fallbackToRules: reviewPolicyConfig.value?.fallbackToRules ?? true,
-      workerConcurrency: reviewPolicyConfig.value?.workerConcurrency ?? 1
-    };
-
-    const [github, reviewPolicy] = await Promise.all([
-      updateGithubIntegrationConfig(githubPayload),
-      updateReviewPolicyConfig(springAiPayload)
+    const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
+      updateGithubIntegrationConfig(githubPayload()),
+      updateMysqlIntegrationConfig(mysqlPayload()),
+      updateRabbitMqIntegrationConfig(rabbitMqPayload()),
+      updateReviewPolicyConfig(springAiPayload())
     ]);
     githubConfig.value = github;
+    mysqlConfig.value = mysql;
+    rabbitMqConfig.value = rabbitMq;
     reviewPolicyConfig.value = reviewPolicy;
     applyGithubConfig(github);
+    applyServiceConfig("mysql", mysql);
+    applyServiceConfig("rabbitmq", rabbitMq);
     applyReviewPolicyConfig(reviewPolicy);
     ElMessage.success("Config saved");
   } catch (error) {
@@ -176,6 +254,42 @@ const saveConfig = async () => {
     saving.value = false;
   }
 };
+
+const fieldValue = (id: IntegrationId, label: string) => formState[id]?.[label] ?? "";
+
+const githubPayload = (): GithubIntegrationConfigRequest => ({
+  baseUrl: fieldValue("github", "API Base URL").trim() || "https://api.github.com",
+  token: fieldValue("github", "Token"),
+  defaultOwner: fieldValue("github", "Default Owner"),
+  defaultRepo: fieldValue("github", "Default Repo")
+});
+
+const mysqlPayload = (): ServiceIntegrationConfigRequest => ({
+  baseUrl: fieldValue("mysql", "JDBC URL").trim(),
+  username: fieldValue("mysql", "Username"),
+  secret: fieldValue("mysql", "Password"),
+  resource: fieldValue("mysql", "Database")
+});
+
+const rabbitMqPayload = (): ServiceIntegrationConfigRequest => ({
+  baseUrl: fieldValue("rabbitmq", "AMQP URL").trim(),
+  username: fieldValue("rabbitmq", "Username"),
+  secret: fieldValue("rabbitmq", "Password"),
+  resource: fieldValue("rabbitmq", "Virtual Host")
+});
+
+const springAiPayload = (): ReviewPolicyConfigRequest => ({
+  llmEnabled: true,
+  llmProvider: reverseProviderMap.value[fieldValue("spring-ai", "Provider")] ?? "dashscope",
+  modelName: fieldValue("spring-ai", "Model").trim() || "qwen-plus",
+  baseUrl: fieldValue("spring-ai", "Base URL"),
+  apiKey: fieldValue("spring-ai", "API Key"),
+  timeoutSeconds: reviewPolicyConfig.value?.timeoutSeconds ?? 60,
+  temperature: reviewPolicyConfig.value?.temperature ?? 0.2,
+  maxTokens: reviewPolicyConfig.value?.maxTokens ?? 4096,
+  fallbackToRules: reviewPolicyConfig.value?.fallbackToRules ?? true,
+  workerConcurrency: reviewPolicyConfig.value?.workerConcurrency ?? 1
+});
 
 const applyGithubConfig = (config: GithubIntegrationConfig) => {
   const item = integrationItems.value.find((integration) => integration.id === "github");
@@ -194,6 +308,40 @@ const applyGithubConfig = (config: GithubIntegrationConfig) => {
     { label: "Default Repo", value: config.defaultRepo ?? "", type: "text" }
   ];
   formState.github = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
+};
+
+const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig) => {
+  const item = integrationItems.value.find((integration) => integration.id === id);
+  if (!item) {
+    return;
+  }
+  const isConfigured = config.status === "configured";
+  const isFailed = config.status === "failed";
+  const serviceName = id === "mysql" ? "MySQL" : "RabbitMQ";
+  item.status = isConfigured ? "connected" : isFailed ? "failed" : "missing_secret";
+  item.statusText = isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置";
+  item.metaLabel = config.lastCheckedAt ? "检测时间" : "更新时间";
+  item.metaValue = config.lastCheckedAt ?? config.updatedAt ?? "未更新";
+  item.message = config.lastError ?? (isConfigured ? `${serviceName} 配置已保存` : `请配置 ${serviceName} 连接信息`);
+  item.fields = serviceFields(id, config);
+  formState[id] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
+};
+
+const serviceFields = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig): IntegrationField[] => {
+  if (id === "mysql") {
+    return [
+      { label: "JDBC URL", value: config.baseUrl ?? "", type: "text", placeholder: "jdbc:mysql://localhost:3306/repoguard" },
+      { label: "Username", value: config.username ?? "", type: "text" },
+      { label: "Password", value: config.secret ?? "", type: "password", placeholder: "MySQL password" },
+      { label: "Database", value: config.resource ?? "", type: "text" }
+    ];
+  }
+  return [
+    { label: "AMQP URL", value: config.baseUrl ?? "", type: "text", placeholder: "amqp://localhost:5672" },
+    { label: "Username", value: config.username ?? "", type: "text" },
+    { label: "Password", value: config.secret ?? "", type: "password", placeholder: "RabbitMQ password" },
+    { label: "Virtual Host", value: config.resource ?? "/", type: "text" }
+  ];
 };
 
 const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {

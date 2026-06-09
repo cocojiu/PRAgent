@@ -405,6 +405,25 @@ export interface GithubIntegrationConfigRequest {
   defaultRepo?: string;
 }
 
+export interface ServiceIntegrationConfig {
+  provider: string;
+  status: "configured" | "not_configured" | "failed";
+  baseUrl: string;
+  username?: string;
+  secret?: string;
+  resource?: string;
+  lastCheckedAt?: string;
+  lastError?: string;
+  updatedAt?: string;
+}
+
+export interface ServiceIntegrationConfigRequest {
+  baseUrl: string;
+  username?: string;
+  secret?: string;
+  resource?: string;
+}
+
 export interface ReviewPolicyConfig {
   llmEnabled: boolean;
   llmProvider: string;
