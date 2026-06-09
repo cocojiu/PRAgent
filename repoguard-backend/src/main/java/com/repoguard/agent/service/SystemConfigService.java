@@ -5,6 +5,9 @@ import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleConfigDto;
+import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRulesResponse;
 
 public interface SystemConfigService {
 
@@ -15,6 +18,14 @@ public interface SystemConfigService {
     ReviewPolicyConfigDto getReviewPolicy();
 
     ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request);
+
+    ReviewRulesResponse getReviewRules();
+
+    ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request);
+
+    ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request);
+
+    ReviewRuleConfigDto updateReviewRuleStatus(String id, String status);
 
     ConnectionTestResultDto testGithubIntegration();
 

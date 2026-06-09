@@ -1,27 +1,39 @@
 package com.repoguard.agent.review;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RuleBasedPullRequestReviewer {
 
+    private final ReviewRuleConfigMapper reviewRuleConfigMapper;
+
+    public RuleBasedPullRequestReviewer(ReviewRuleConfigMapper reviewRuleConfigMapper) {
+        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
+    }
+
     public ReviewResult review(GithubPullRequestDiff diff) {
+        Set<String> disabledRuleIds = loadDisabledRuleIds();
         List<ReviewFindingResult> findings = new ArrayList<>();
         for (GithubChangedFile file : diff.files()) {
             String patch = file.patch();
             if (patch == null || patch.isBlank()) {
                 continue;
             }
-            scanPatch(file.filename(), patch, findings);
+            scanPatch(file.filename(), patch, disabledRuleIds, findings);
         }
         return ReviewResult.completed(resolveRisk(findings), findings);
     }
 
-    private void scanPatch(String filePath, String patch, List<ReviewFindingResult> findings) {
+    private void scanPatch(String filePath, String patch, Set<String> disabledRuleIds, List<ReviewFindingResult> findings) {
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         for (String line : lines) {
@@ -31,7 +43,7 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                addFindingIfMatches(filePath, currentLine, added, findings);
+                addFindingIfMatches(filePath, currentLine, added, disabledRuleIds, findings);
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -39,20 +51,34 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private void addFindingIfMatches(String filePath, int lineNumber, String line, List<ReviewFindingResult> findings) {
+    private void addFindingIfMatches(String filePath, int lineNumber, String line, Set<String> disabledRuleIds, List<ReviewFindingResult> findings) {
         String trimmed = line.trim();
-        if (trimmed.contains("catch (Exception") || trimmed.contains("catch(Throwable") || trimmed.contains("catch (Throwable")) {
+        if (isEnabled("RG-JAVA-001", disabledRuleIds)
+            && (trimmed.contains("catch (Exception") || trimmed.contains("catch(Throwable") || trimmed.contains("catch (Throwable"))) {
             findings.add(finding("MEDIUM", "RG-JAVA-001", filePath, lineNumber, "新增代码捕获了过宽的异常类型", "请捕获更具体的异常类型，并保留必要的错误上下文。"));
         }
-        if (trimmed.contains("System.out.print")) {
+        if (isEnabled("RG-JAVA-002", disabledRuleIds) && trimmed.contains("System.out.print")) {
             findings.add(finding("LOW", "RG-JAVA-002", filePath, lineNumber, "新增代码使用了标准输出日志", "请改用项目日志组件，避免生产日志不可控。"));
         }
-        if (trimmed.contains("Thread.sleep(")) {
+        if (isEnabled("RG-JAVA-003", disabledRuleIds) && trimmed.contains("Thread.sleep(")) {
             findings.add(finding("MEDIUM", "RG-JAVA-003", filePath, lineNumber, "新增代码包含固定休眠", "请使用可测试的等待条件、重试策略或调度机制。"));
         }
-        if (trimmed.contains("TODO") || trimmed.contains("FIXME")) {
+        if (isEnabled("RG-GEN-001", disabledRuleIds) && (trimmed.contains("TODO") || trimmed.contains("FIXME"))) {
             findings.add(finding("LOW", "RG-GEN-001", filePath, lineNumber, "新增代码包含未收敛的 TODO/FIXME", "请在合并前补充实现或明确跟踪任务。"));
         }
+    }
+
+    private boolean isEnabled(String ruleId, Set<String> disabledRuleIds) {
+        return !disabledRuleIds.contains(ruleId);
+    }
+
+    private Set<String> loadDisabledRuleIds() {
+        return reviewRuleConfigMapper.selectList(
+                new LambdaQueryWrapper<ReviewRuleConfig>().eq(ReviewRuleConfig::getStatus, "DISABLED")
+            )
+            .stream()
+            .map(ReviewRuleConfig::getId)
+            .collect(Collectors.toSet());
     }
 
     private ReviewFindingResult finding(String severity, String ruleId, String filePath, Integer lineNumber, String message, String recommendation) {

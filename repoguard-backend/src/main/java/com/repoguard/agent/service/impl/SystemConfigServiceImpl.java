@@ -9,10 +9,18 @@ import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleConfigDto;
+import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleMetricDto;
+import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.SystemConfigService;
@@ -22,7 +30,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.MediaType;
@@ -43,6 +54,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final ReviewRuleConfigMapper reviewRuleConfigMapper;
+    private final ReviewFindingMapper reviewFindingMapper;
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
     private final LlmReviewResultParser llmReviewResultParser;
@@ -53,6 +66,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     public SystemConfigServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        ReviewRuleConfigMapper reviewRuleConfigMapper,
+        ReviewFindingMapper reviewFindingMapper,
         RestClient.Builder restClientBuilder,
         ObjectMapper objectMapper,
         DataSource dataSource,
@@ -61,6 +76,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
+        this.reviewFindingMapper = reviewFindingMapper;
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
         this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
@@ -132,6 +149,67 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             );
         }
         return toReviewPolicyDto(config);
+    }
+
+    @Override
+    public ReviewRulesResponse getReviewRules() {
+        List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
+            new LambdaQueryWrapper<ReviewRuleConfig>()
+                .orderByAsc(ReviewRuleConfig::getSortOrder)
+                .orderByAsc(ReviewRuleConfig::getId)
+        );
+        Map<String, Long> hitCountByRule = loadRuleHitCounts();
+        List<ReviewRuleConfigDto> ruleDtos = rules.stream()
+            .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
+            .toList();
+        return new ReviewRulesResponse(buildRuleMetrics(rules, hitCountByRule), ruleDtos);
+    }
+
+    @Override
+    @Transactional
+    public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
+        String id = normalizeRuleId(request.id());
+        if (reviewRuleConfigMapper.selectById(id) != null) {
+            throw new com.repoguard.agent.common.BusinessException(
+                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
+                "Review rule already exists: " + id
+            );
+        }
+        ReviewRuleConfig rule = new ReviewRuleConfig();
+        applyReviewRuleRequest(rule, id, request);
+        rule.setSortOrder(nextRuleSortOrder());
+        LocalDateTime now = LocalDateTime.now();
+        rule.setCreatedAt(now);
+        rule.setUpdatedAt(now);
+        reviewRuleConfigMapper.insert(rule);
+        return toReviewRuleDto(rule, 0);
+    }
+
+    @Override
+    @Transactional
+    public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
+        String normalizedId = normalizeRuleId(id);
+        if (!normalizedId.equals(normalizeRuleId(request.id()))) {
+            throw new com.repoguard.agent.common.BusinessException(
+                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
+                "Review rule id in path and body must match"
+            );
+        }
+        ReviewRuleConfig rule = loadReviewRule(normalizedId);
+        applyReviewRuleRequest(rule, normalizedId, request);
+        rule.setUpdatedAt(LocalDateTime.now());
+        reviewRuleConfigMapper.updateById(rule);
+        return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
+    }
+
+    @Override
+    @Transactional
+    public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
+        ReviewRuleConfig rule = loadReviewRule(normalizeRuleId(id));
+        rule.setStatus(normalizeStatus(status));
+        rule.setUpdatedAt(LocalDateTime.now());
+        reviewRuleConfigMapper.updateById(rule);
+        return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
     @Override
@@ -232,6 +310,91 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         } catch (RuntimeException ex) {
             return connectionResult(false, "failed", conciseError(ex));
         }
+    }
+
+    private ReviewRuleConfig loadReviewRule(String id) {
+        ReviewRuleConfig rule = reviewRuleConfigMapper.selectById(id);
+        if (rule == null) {
+            throw new com.repoguard.agent.common.BusinessException(
+                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
+                "Review rule not found: " + id
+            );
+        }
+        return rule;
+    }
+
+    private void applyReviewRuleRequest(ReviewRuleConfig rule, String id, ReviewRuleConfigRequest request) {
+        rule.setId(id);
+        rule.setRuleName(request.name().trim());
+        rule.setScope(request.scope().trim());
+        rule.setSeverity(normalizeSeverity(request.severity()));
+        rule.setStatus(normalizeStatus(request.status()));
+        rule.setConfidence(request.confidence() == null ? 90 : request.confidence());
+        rule.setDescription(request.description().trim());
+    }
+
+    private int nextRuleSortOrder() {
+        List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
+            new LambdaQueryWrapper<ReviewRuleConfig>().orderByDesc(ReviewRuleConfig::getSortOrder)
+        );
+        return rules == null || rules.isEmpty() || rules.getFirst().getSortOrder() == null
+            ? 10
+            : rules.getFirst().getSortOrder() + 10;
+    }
+
+    private Map<String, Long> loadRuleHitCounts() {
+        List<ReviewFinding> findings = reviewFindingMapper.selectList(
+            new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
+        );
+        return findings.stream()
+            .map(ReviewFinding::getRuleId)
+            .filter(StringUtils::hasText)
+            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+    }
+
+    private List<ReviewRuleMetricDto> buildRuleMetrics(List<ReviewRuleConfig> rules, Map<String, Long> hitCountByRule) {
+        long enabledCount = rules.stream().filter(rule -> "ENABLED".equals(rule.getStatus())).count();
+        long highRiskCount = rules.stream().filter(rule -> isHighSeverity(rule.getSeverity())).count();
+        long totalHits = hitCountByRule.values().stream().mapToLong(Long::longValue).sum();
+        int averageConfidence = rules.isEmpty()
+            ? 0
+            : (int) Math.round(rules.stream().mapToInt(rule -> rule.getConfidence() == null ? 0 : rule.getConfidence()).average().orElse(0));
+        return List.of(
+            new ReviewRuleMetricDto("启用规则", String.valueOf(enabledCount), "共 " + rules.size() + " 条规则", "blue"),
+            new ReviewRuleMetricDto("高风险规则", String.valueOf(highRiskCount), "包含 high / critical", "red"),
+            new ReviewRuleMetricDto("累计命中", String.valueOf(totalHits), "来自历史审查结果", "orange"),
+            new ReviewRuleMetricDto("平均置信度", averageConfidence + "%", "规则配置均值", "green")
+        );
+    }
+
+    private boolean isHighSeverity(String severity) {
+        return "HIGH".equals(severity) || "CRITICAL".equals(severity);
+    }
+
+    private ReviewRuleConfigDto toReviewRuleDto(ReviewRuleConfig rule, long hitCount) {
+        return new ReviewRuleConfigDto(
+            rule.getId(),
+            rule.getRuleName(),
+            rule.getScope(),
+            lower(rule.getSeverity()),
+            lower(rule.getStatus()),
+            hitCount,
+            (rule.getConfidence() == null ? 0 : rule.getConfidence()) + "%",
+            format(rule.getUpdatedAt()),
+            rule.getDescription()
+        );
+    }
+
+    private String normalizeRuleId(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeSeverity(String value) {
+        return value == null ? "INFO" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeStatus(String value) {
+        return value == null ? "DISABLED" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private IntegrationConfig loadGithubConfig() {

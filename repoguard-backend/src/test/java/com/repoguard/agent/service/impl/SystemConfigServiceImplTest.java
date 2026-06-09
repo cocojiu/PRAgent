@@ -11,9 +11,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -21,6 +25,7 @@ import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -29,10 +34,14 @@ class SystemConfigServiceImplTest {
 
     private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+    private final ReviewRuleConfigMapper reviewRuleConfigMapper = org.mockito.Mockito.mock(ReviewRuleConfigMapper.class);
+    private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
+        reviewRuleConfigMapper,
+        reviewFindingMapper,
         RestClient.builder(),
         new ObjectMapper(),
         null,
@@ -224,6 +233,40 @@ class SystemConfigServiceImplTest {
         }
     }
 
+    @Test
+    void getReviewRulesReturnsRulesAndMetricsFromDatabase() {
+        when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(
+            rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88),
+            rule("RG-SECRET-001", "硬编码密钥检测", "HIGH", "DISABLED", 96)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding("RG-JAVA-001"),
+            finding("RG-JAVA-001"),
+            finding("RG-SECRET-001")
+        ));
+
+        var result = service.getReviewRules();
+
+        assertThat(result.rules()).hasSize(2);
+        assertThat(result.rules().getFirst().id()).isEqualTo("RG-JAVA-001");
+        assertThat(result.rules().getFirst().status()).isEqualTo("enabled");
+        assertThat(result.rules().getFirst().hitCount()).isEqualTo(2);
+        assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
+    }
+
+    @Test
+    void updateReviewRuleStatusPersistsNormalizedStatus() {
+        ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
+        when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+
+        var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
+
+        assertThat(rule.getStatus()).isEqualTo("DISABLED");
+        assertThat(result.status()).isEqualTo("disabled");
+        verify(reviewRuleConfigMapper).updateById(rule);
+    }
+
     private IntegrationConfig githubConfig(String token) {
         IntegrationConfig config = new IntegrationConfig();
         config.setId(1L);
@@ -252,6 +295,28 @@ class SystemConfigServiceImplTest {
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
+    }
+
+    private ReviewRuleConfig rule(String id, String name, String severity, String status, int confidence) {
+        ReviewRuleConfig rule = new ReviewRuleConfig();
+        rule.setId(id);
+        rule.setRuleName(name);
+        rule.setScope("Java Patch");
+        rule.setSeverity(severity);
+        rule.setStatus(status);
+        rule.setConfidence(confidence);
+        rule.setDescription(name + " description");
+        rule.setSortOrder(10);
+        rule.setCreatedAt(LocalDateTime.now());
+        rule.setUpdatedAt(LocalDateTime.of(2026, 6, 9, 12, 0));
+        return rule;
+    }
+
+    private ReviewFinding finding(String ruleId) {
+        ReviewFinding finding = new ReviewFinding();
+        finding.setCategory("FINDING");
+        finding.setRuleId(ruleId);
+        return finding;
     }
 
     private ProbeServer startLlmProbeServer(String responseBody) throws IOException {

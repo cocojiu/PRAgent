@@ -4,7 +4,11 @@ import type {
   GithubIntegrationConfigRequest,
   ConnectionTestResult,
   ReviewPolicyConfig,
-  ReviewPolicyConfigRequest
+  ReviewPolicyConfigRequest,
+  ReviewRuleConfig,
+  ReviewRuleConfigRequest,
+  ReviewRuleStatusRequest,
+  ReviewRulesResponse
 } from "@/types";
 
 export const fetchGithubIntegrationConfig = () =>
@@ -20,6 +24,26 @@ export const fetchReviewPolicyConfig = () => request<ReviewPolicyConfig>("/api/v
 
 export const updateReviewPolicyConfig = (payload: ReviewPolicyConfigRequest) =>
   request<ReviewPolicyConfig>("/api/v1/config/review-policy", undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const fetchReviewRules = () => request<ReviewRulesResponse>("/api/v1/config/review-rules");
+
+export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
+  request<ReviewRuleConfig>("/api/v1/config/review-rules", undefined, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+export const updateReviewRule = (id: string, payload: ReviewRuleConfigRequest) =>
+  request<ReviewRuleConfig>(`/api/v1/config/review-rules/${encodeURIComponent(id)}`, undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const updateReviewRuleStatus = (id: string, payload: ReviewRuleStatusRequest) =>
+  request<ReviewRuleConfig>(`/api/v1/config/review-rules/${encodeURIComponent(id)}/status`, undefined, {
     method: "PUT",
     body: JSON.stringify(payload)
   });

@@ -301,6 +301,25 @@ export interface ReviewRuleConfig {
   description: string;
 }
 
+export interface ReviewRulesResponse {
+  metrics: SimpleMetric[];
+  rules: ReviewRuleConfig[];
+}
+
+export interface ReviewRuleConfigRequest {
+  id: string;
+  name: string;
+  scope: string;
+  severity: RiskLevel;
+  status: RuleStatus;
+  confidence: number;
+  description: string;
+}
+
+export interface ReviewRuleStatusRequest {
+  status: RuleStatus;
+}
+
 export interface BaseSettings {
   systemName: string;
   language: string;

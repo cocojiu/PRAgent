@@ -6,9 +6,15 @@ import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleConfigDto;
+import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleStatusRequest;
+import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.service.SystemConfigService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -62,6 +68,34 @@ public class SystemConfigController {
         @Valid @RequestBody ReviewPolicyConfigRequest request
     ) {
         return ApiResponse.ok(systemConfigService.updateReviewPolicy(request));
+    }
+
+    @GetMapping("/review-rules")
+    public ApiResponse<ReviewRulesResponse> getReviewRules() {
+        return ApiResponse.ok(systemConfigService.getReviewRules());
+    }
+
+    @PostMapping("/review-rules")
+    public ApiResponse<ReviewRuleConfigDto> createReviewRule(
+        @Valid @RequestBody ReviewRuleConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.createReviewRule(request));
+    }
+
+    @PutMapping("/review-rules/{id}")
+    public ApiResponse<ReviewRuleConfigDto> updateReviewRule(
+        @PathVariable @Size(max = 64) String id,
+        @Valid @RequestBody ReviewRuleConfigRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.updateReviewRule(id, request));
+    }
+
+    @PutMapping("/review-rules/{id}/status")
+    public ApiResponse<ReviewRuleConfigDto> updateReviewRuleStatus(
+        @PathVariable @Size(max = 64) String id,
+        @Valid @RequestBody ReviewRuleStatusRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.updateReviewRuleStatus(id, request.status()));
     }
 
     @PostMapping("/review-policy/test")
