@@ -201,6 +201,13 @@ export interface ManualReviewResponse {
   triggerSource?: string;
 }
 
+export interface ReviewRetryResponse {
+  taskId: number;
+  status: ReviewStatus;
+  message: string;
+  retryCount: number;
+}
+
 export interface GithubPullRequestOptions {
   organization?: string;
   repository?: string;

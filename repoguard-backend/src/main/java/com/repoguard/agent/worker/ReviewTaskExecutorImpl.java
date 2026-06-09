@@ -169,7 +169,17 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         timeline.setLabel(label);
         timeline.setEventTime(eventTime);
         timeline.setStatus(status);
-        timeline.setSortOrder(sortOrder);
+        timeline.setSortOrder(Math.max(sortOrder, nextTimelineSortOrder(taskId)));
         reviewTimelineMapper.insert(timeline);
+    }
+
+    private int nextTimelineSortOrder(Long taskId) {
+        ReviewTimeline latest = reviewTimelineMapper.selectOne(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .eq(ReviewTimeline::getTaskId, taskId)
+                .orderByDesc(ReviewTimeline::getSortOrder)
+                .last("limit 1")
+        );
+        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 }

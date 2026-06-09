@@ -4,6 +4,7 @@ import type {
   ManualReviewResponse,
   PageResponse,
   ReviewQuery,
+  ReviewRetryResponse,
   ReviewTask,
   ReviewTaskDetail,
   GithubCommentPreview,
@@ -40,6 +41,11 @@ export const fetchGithubCommentPublicationHistory = (id: number) =>
 
 export const publishGithubComments = (id: number) =>
   request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
+    method: "POST"
+  });
+
+export const retryReview = (id: number) =>
+  request<ReviewRetryResponse>(`/api/v1/reviews/${id}/retry`, undefined, {
     method: "POST"
   });
 

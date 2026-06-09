@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -10,6 +11,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -17,6 +19,7 @@ import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -301,6 +304,54 @@ class ReviewServiceImplTest {
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
+    void retryReviewQueuesFailedTaskAndPublishesMessage() {
+        ReviewTask task = task();
+        task.setStatus("FAILED");
+        task.setRiskLevel("HIGH");
+        task.setMqRetries(2);
+        task.setLlmStatus("FAILED");
+        ReviewTimeline latestTimeline = new ReviewTimeline();
+        latestTimeline.setSortOrder(5);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(latestTimeline);
+
+        var result = service.retryReview(521L);
+
+        assertThat(result.status()).isEqualTo("queued");
+        assertThat(result.retryCount()).isEqualTo(3);
+
+        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
+        verify(reviewTaskMapper).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("QUEUED");
+        assertThat(taskCaptor.getValue().getLlmStatus()).isEqualTo("PENDING");
+        assertThat(taskCaptor.getValue().getRiskLevel()).isEqualTo("INFO");
+        assertThat(taskCaptor.getValue().getMqRetries()).isEqualTo(3);
+
+        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
+        verify(reviewTimelineMapper).insert(timelineCaptor.capture());
+        assertThat(timelineCaptor.getValue().getLabel()).isEqualTo("Retry queued");
+        assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("CURRENT");
+        assertThat(timelineCaptor.getValue().getSortOrder()).isEqualTo(6);
+
+        ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
+        verify(reviewTaskPublisher).publish(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().taskId()).isEqualTo(521L);
+        assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-1-llm-string-response");
+    }
+
+    @Test
+    void retryReviewRejectsNonFailedTask() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+
+        assertThatThrownBy(() -> service.retryReview(521L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Only failed review tasks can be retried");
+
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
     private ReviewTask task() {

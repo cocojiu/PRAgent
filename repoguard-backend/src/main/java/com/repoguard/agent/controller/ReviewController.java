@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.service.ReviewService;
@@ -92,5 +93,10 @@ public class ReviewController {
     @PostMapping("/manual")
     public ApiResponse<ManualReviewResponse> triggerManualReview(@Valid @RequestBody ManualReviewRequest request) {
         return ApiResponse.ok(reviewService.triggerManualReview(request));
+    }
+
+    @PostMapping("/{id}/retry")
+    public ApiResponse<ReviewRetryResponse> retryReview(@PathVariable @Min(1) Long id) {
+        return ApiResponse.ok(reviewService.retryReview(id));
     }
 }

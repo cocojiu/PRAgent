@@ -23,6 +23,7 @@ import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.service.ReviewService;
@@ -205,6 +206,11 @@ class ReviewControllerTest {
         public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
             return new ManualReviewResponse(9001L, "queued", "Review task queued", false, "github_pr_picker", "github_pr_picker");
         }
+
+        @Override
+        public ReviewRetryResponse retryReview(Long id) {
+            return new ReviewRetryResponse(id, "queued", "Review task queued for retry", 2);
+        }
     };
 
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ReviewController(reviewService)).build();
@@ -305,5 +311,15 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.existing").value(false))
             .andExpect(jsonPath("$.data.source").value("github_pr_picker"))
             .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"));
+    }
+
+    @Test
+    void retryReviewReturnsQueuedTask() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/512/retry"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.status").value("queued"))
+            .andExpect(jsonPath("$.data.retryCount").value(2));
     }
 }

@@ -44,9 +44,15 @@
             在 GitHub 查看
             <ExternalLink :size="16" />
           </el-button>
-          <el-tooltip content="任务重试接口尚未接入">
+          <el-tooltip :content="retryTooltip">
             <span>
-              <el-button type="primary" size="large" disabled>
+              <el-button
+                type="primary"
+                size="large"
+                :disabled="!canRetryTask"
+                :loading="retryingTask"
+                @click="confirmRetryReview"
+              >
                 <RefreshCw :size="16" />
                 重试
               </el-button>
@@ -350,7 +356,8 @@ import {
   fetchGithubCommentPreview,
   fetchGithubCommentPublicationHistory,
   fetchReviewDetail,
-  publishGithubComments
+  publishGithubComments,
+  retryReview
 } from "@/api/reviews";
 import type {
   ChangedFile,
@@ -378,6 +385,7 @@ const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
 const publishingComments = ref(false);
+const retryingTask = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
 const historyError = ref("");
@@ -406,6 +414,8 @@ const isTerminalTask = computed(() => {
   return status === "completed" || status === "failed";
 });
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
+const canRetryTask = computed(() => selectedTask.value?.status === "failed");
+const retryTooltip = computed(() => (canRetryTask.value ? "重新入队执行审查" : "仅失败任务支持重试"));
 const refreshStatusText = computed(() => {
   if (shouldPollTask.value) {
     if (silentRefreshing.value) {
@@ -827,6 +837,42 @@ const confirmPublishGithubComments = async () => {
     ElMessage.error(error instanceof Error ? error.message : "GitHub 评论回写失败");
   } finally {
     publishingComments.value = false;
+  }
+};
+
+const confirmRetryReview = async () => {
+  if (!selectedTask.value || !canRetryTask.value || retryingTask.value) {
+    return;
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确认将 PR #${selectedTask.value.prNumber} 重新加入审查队列？`,
+      "确认重试审查任务",
+      {
+        confirmButtonText: "确认重试",
+        cancelButtonText: "取消",
+        type: "warning"
+      }
+    );
+  } catch {
+    return;
+  }
+
+  retryingTask.value = true;
+  try {
+    const response = await retryReview(selectedTask.value.id);
+    ElMessage.success(response.message || "审查任务已重新入队");
+    githubCommentPreview.value = null;
+    githubCommentPublicationHistory.value = null;
+    githubCommentPublishResult.value = null;
+    pollFailureCount.value = 0;
+    pollErrorMessage.value = "";
+    await loadDetail({ silent: true, resetPublishResult: true });
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "审查任务重试失败");
+  } finally {
+    retryingTask.value = false;
   }
 };
 

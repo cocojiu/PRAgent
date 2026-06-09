@@ -104,9 +104,16 @@
           <template #default="{ row }">
             <div class="table-actions">
               <el-button type="primary" size="small" @click="goDetail(row.id)">查看</el-button>
-              <el-tooltip content="执行链路接口尚未接入">
+              <el-tooltip :content="retryTooltip(row)">
                 <span>
-                  <el-button size="small" disabled>重试</el-button>
+                  <el-button
+                    size="small"
+                    :disabled="!canRetryTask(row)"
+                    :loading="retryingTaskId === row.id"
+                    @click="retryTask(row)"
+                  >
+                    重试
+                  </el-button>
                 </span>
               </el-tooltip>
             </div>
@@ -196,10 +203,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
-import { fetchGithubPullRequestOptions, fetchReviews, triggerManualReview } from "@/api/reviews";
+import { fetchGithubPullRequestOptions, fetchReviews, retryReview, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import type { GithubPullRequestOption, ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { riskText } from "@/utils/risk";
@@ -223,6 +230,7 @@ const createDialogVisible = ref(false);
 const loadingPullRequests = ref(false);
 const pullRequestsLoaded = ref(false);
 const creatingTask = ref(false);
+const retryingTaskId = ref<number>();
 const pullRequestError = ref("");
 const pullRequestOrganization = ref("");
 const pullRequestRepository = ref("");
@@ -368,6 +376,36 @@ const refreshTasks = () => {
     clearTimeout(filterDebounceTimer);
   }
   void loadTasks();
+};
+
+const canRetryTask = (task: ReviewTask) => task.status === "failed";
+
+const retryTooltip = (task: ReviewTask) => (canRetryTask(task) ? "重新入队执行审查" : "仅失败任务支持重试");
+
+const retryTask = async (task: ReviewTask) => {
+  if (!canRetryTask(task) || retryingTaskId.value) {
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(`确认将 PR #${task.prNumber} 重新加入审查队列？`, "确认重试审查任务", {
+      confirmButtonText: "确认重试",
+      cancelButtonText: "取消",
+      type: "warning"
+    });
+  } catch {
+    return;
+  }
+
+  retryingTaskId.value = task.id;
+  try {
+    const response = await retryReview(task.id);
+    ElMessage.success(response.message || "审查任务已重新入队");
+    await loadTasks();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "审查任务重试失败");
+  } finally {
+    retryingTaskId.value = undefined;
+  }
 };
 
 const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");

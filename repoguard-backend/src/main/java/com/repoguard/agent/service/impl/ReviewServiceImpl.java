@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
@@ -23,6 +24,7 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTimelineItem;
@@ -420,6 +422,39 @@ public class ReviewServiceImpl implements ReviewService {
             createdAt
         ));
         return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
+    }
+
+    @Override
+    @Transactional
+    public ReviewRetryResponse retryReview(Long id) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        if (!"FAILED".equals(task.getStatus())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
+        }
+
+        LocalDateTime queuedAt = LocalDateTime.now();
+        int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
+        // 重试只重新入队，不清理上一次 findings；worker 成功拉取新结果后会统一替换。
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setMqRetries(retryCount);
+        task.setLlmStatus("PENDING");
+        task.setDurationSeconds(0);
+        reviewTaskMapper.updateById(task);
+
+        insertRetryTimeline(task.getId(), queuedAt);
+        reviewTaskPublisher.publish(new ReviewTaskMessage(
+            task.getId(),
+            task.getOrganization(),
+            task.getRepository(),
+            task.getPrNumber(),
+            task.getCommitSha(),
+            queuedAt
+        ));
+        return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
     }
 
     @Override
@@ -866,6 +901,7 @@ public class ReviewServiceImpl implements ReviewService {
             switch (timeline.getStatus()) {
                 case "DONE" -> "done";
                 case "CURRENT" -> "current";
+                case "FAILED" -> "done";
                 default -> "pending";
             }
         );
@@ -930,6 +966,33 @@ public class ReviewServiceImpl implements ReviewService {
         timeline.setStatus("CURRENT");
         timeline.setSortOrder(1);
         reviewTimelineMapper.insert(timeline);
+    }
+
+    private void insertRetryTimeline(Long taskId, LocalDateTime queuedAt) {
+        reviewTimelineMapper.update(
+            new UpdateWrapper<ReviewTimeline>()
+                .eq("task_id", taskId)
+                .eq("status", "CURRENT")
+                .set("status", "DONE")
+        );
+
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(taskId);
+        timeline.setLabel("Retry queued");
+        timeline.setEventTime(queuedAt);
+        timeline.setStatus("CURRENT");
+        timeline.setSortOrder(nextTimelineSortOrder(taskId));
+        reviewTimelineMapper.insert(timeline);
+    }
+
+    private int nextTimelineSortOrder(Long taskId) {
+        ReviewTimeline latest = reviewTimelineMapper.selectOne(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .eq(ReviewTimeline::getTaskId, taskId)
+                .orderByDesc(ReviewTimeline::getSortOrder)
+                .last("limit 1")
+        );
+        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 
     private String buildPrUrl(ManualReviewRequest request) {
