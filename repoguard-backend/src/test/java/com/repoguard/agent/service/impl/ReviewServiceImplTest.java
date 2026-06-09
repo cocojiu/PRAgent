@@ -161,6 +161,37 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void publishGithubCommentsAddsReadableFailureForPermissionError() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
+        ));
+        when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
+            new GithubReviewCommentResult(
+                1L,
+                "README",
+                2,
+                "line",
+                false,
+                "failed",
+                "403 Resource not accessible by integration",
+                null,
+                null
+            )
+        ));
+
+        var result = service.publishGithubComments(521L);
+
+        assertThat(result.failedCount()).isEqualTo(1);
+        assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_permission_denied");
+        assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 权限不足");
+        assertThat(result.items().getFirst().failureSuggestion()).contains("评论权限");
+    }
+
+    @Test
     void publishGithubCommentsSkipsAlreadyPublishedFindings() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
@@ -228,6 +259,41 @@ class ReviewServiceImplTest {
         assertThat(history.batches().getFirst().items()).hasSize(1);
         assertThat(history.batches().getFirst().items().getFirst().status()).isEqualTo("published");
         assertThat(history.batches().getFirst().items().getFirst().url()).isEqualTo("https://github.com/comment/1");
+    }
+
+    @Test
+    void getGithubCommentPublicationHistoryAddsReadableFailureForTokenError() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        GithubCommentPublicationBatch batch = new GithubCommentPublicationBatch();
+        batch.setId(11L);
+        batch.setTaskId(521L);
+        batch.setStatus("failed");
+        batch.setTotalFindings(1);
+        batch.setAttemptedCount(1);
+        batch.setSucceededCount(0);
+        batch.setFailedCount(1);
+        batch.setSkippedCount(0);
+        batch.setCreatedAt(LocalDateTime.of(2026, 6, 9, 12, 0));
+        batch.setCompletedAt(LocalDateTime.of(2026, 6, 9, 12, 0, 1));
+        GithubCommentPublicationBatchItem item = new GithubCommentPublicationBatchItem();
+        item.setBatchId(11L);
+        item.setTaskId(521L);
+        item.setFindingId(1L);
+        item.setFilePath("README");
+        item.setLineNumber(2);
+        item.setTargetType("line");
+        item.setSuccess(false);
+        item.setStatus("failed");
+        item.setMessage("401 Bad credentials");
+        when(githubCommentPublicationBatchMapper.selectList(any())).thenReturn(List.of(batch));
+        when(githubCommentPublicationBatchItemMapper.selectList(any())).thenReturn(List.of(item));
+
+        var history = service.getGithubCommentPublicationHistory(521L);
+
+        var historyItem = history.batches().getFirst().items().getFirst();
+        assertThat(historyItem.failureCategory()).isEqualTo("github_token_invalid");
+        assertThat(historyItem.failureReason()).isEqualTo("GitHub Token 无效或已过期");
+        assertThat(historyItem.failureSuggestion()).contains("更新 GitHub Token");
     }
 
     @Test

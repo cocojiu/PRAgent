@@ -11,6 +11,9 @@ public record GithubCommentPublicationHistoryItem(
     Boolean success,
     String status,
     String message,
+    String failureCategory,
+    String failureReason,
+    String failureSuggestion,
     String url,
     Long githubCommentId,
     String publishedAt

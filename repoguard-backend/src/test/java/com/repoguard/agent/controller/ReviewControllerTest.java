@@ -154,6 +154,9 @@ class ReviewControllerTest {
                     true,
                     "published",
                     "GitHub comment published",
+                    null,
+                    null,
+                    null,
                     "https://github.com/repo/pull/1#discussion_r1",
                     1001L,
                     "2026-06-07 10:00:00"
@@ -183,6 +186,9 @@ class ReviewControllerTest {
                         true,
                         "published",
                         "GitHub comment published",
+                        null,
+                        null,
+                        null,
                         "https://github.com/repo/pull/1#discussion_r1",
                         1001L,
                         "2026-06-09 12:00:01"

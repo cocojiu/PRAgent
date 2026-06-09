@@ -1432,6 +1432,30 @@ a {
   font-weight: 700;
 }
 
+.publication-failure-note {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fff1f2;
+}
+
+.publication-failure-note strong {
+  color: #991b1b;
+}
+
+.publication-failure-note span {
+  color: #7f1d1d;
+  font-weight: 600;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .comment-history {
   display: flex;
   flex-direction: column;
@@ -1545,6 +1569,21 @@ a {
   margin-top: 6px;
   color: #1268ff;
   font-weight: 700;
+}
+
+.comment-result-item .publication-failure-note,
+.comment-history-item .publication-failure-note {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.comment-result-item .publication-failure-note span,
+.comment-history-item .publication-failure-note span {
+  color: #7f1d1d;
+  font-weight: 600;
 }
 
 .file-type {

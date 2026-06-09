@@ -104,6 +104,9 @@ export interface GithubCommentPublishItem {
   success: boolean;
   status: "published" | "failed" | "skipped" | "already_published" | "downgraded_to_pr_comment" | string;
   message?: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
   url?: string;
   githubCommentId?: number;
   publishedAt?: string;

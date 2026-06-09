@@ -146,6 +146,9 @@ public class ReviewServiceImpl implements ReviewService {
                 Boolean.TRUE.equals(item.published()),
                 Boolean.TRUE.equals(item.published()) ? "already_published" : "skipped",
                 Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
+                null,
+                null,
+                null,
                 item.publicationUrl(),
                 null,
                 item.publishedAt()
@@ -600,6 +603,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private GithubCommentPublishItem toGithubCommentPublishItem(Long taskId, GithubReviewCommentResult result) {
         GithubCommentPublication publication = savePublication(taskId, result);
+        FailureSummary failureSummary = resolveGithubWritebackFailure(result.status(), result.success(), result.message());
         return new GithubCommentPublishItem(
             result.findingId(),
             result.path(),
@@ -608,6 +612,9 @@ public class ReviewServiceImpl implements ReviewService {
             result.success(),
             result.status(),
             result.message(),
+            failureSummary.category(),
+            failureSummary.reason(),
+            failureSummary.suggestion(),
             result.url(),
             result.commentId(),
             publication.getPublishedAt() == null ? null : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
@@ -681,6 +688,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     private GithubCommentPublicationHistoryItem toGithubCommentPublicationHistoryItem(GithubCommentPublicationBatchItem item) {
+        FailureSummary failureSummary = resolveGithubWritebackFailure(item.getStatus(), item.getSuccess(), item.getMessage());
         return new GithubCommentPublicationHistoryItem(
             item.getFindingId(),
             item.getFilePath(),
@@ -689,6 +697,9 @@ public class ReviewServiceImpl implements ReviewService {
             item.getSuccess(),
             item.getStatus(),
             item.getMessage(),
+            failureSummary.category(),
+            failureSummary.reason(),
+            failureSummary.suggestion(),
             item.getGithubUrl(),
             item.getGithubCommentId(),
             formatDateTimeOrNull(item.getPublishedAt())
@@ -885,6 +896,95 @@ public class ReviewServiceImpl implements ReviewService {
             "审查执行失败",
             "请检查 GitHub/LLM 集成配置和任务时间线，修复后点击重试。"
         );
+    }
+
+    private FailureSummary resolveGithubWritebackFailure(String status, Boolean success, String message) {
+        if (Boolean.TRUE.equals(success) || !"failed".equalsIgnoreCase(status)) {
+            return NO_FAILURE_SUMMARY;
+        }
+        return classifyGithubWritebackFailure(message);
+    }
+
+    private FailureSummary classifyGithubWritebackFailure(String message) {
+        // 回写失败只持久化原始 message，这里即时派生中文提示，避免为展示字段新增数据库列。
+        String normalized = StringUtils.hasText(message) ? message.trim() : "";
+        String lowerMessage = normalized.toLowerCase(Locale.ROOT);
+
+        if (lowerMessage.contains("token is not configured")) {
+            return new FailureSummary(
+                "github_token_missing",
+                "GitHub Token 未配置",
+                "请到集成配置页保存 GitHub Token 后重新回写评论。"
+            );
+        }
+        if (lowerMessage.contains("401") || lowerMessage.contains("bad credentials")
+            || lowerMessage.contains("unauthorized") || lowerMessage.contains("requires authentication")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 无效或已过期",
+                "请到集成配置页更新 GitHub Token，确认连接测试通过后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("403") || lowerMessage.contains("forbidden")
+            || lowerMessage.contains("resource not accessible") || lowerMessage.contains("permission")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 权限不足",
+                "请确认 Token 对目标仓库具备 Pull Request/Issue 评论权限后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("404") || lowerMessage.contains("not found")) {
+            return new FailureSummary(
+                "github_target_not_found",
+                "GitHub PR 或仓库不可访问",
+                "请确认任务仓库、PR 编号和 Token 可访问范围，再重新回写评论。"
+            );
+        }
+        if (isGithubCommentPositionFailure(lowerMessage)) {
+            return new FailureSummary(
+                "github_comment_position_invalid",
+                "GitHub 行评论定位失败",
+                "请检查该审查发现是否仍在 PR Diff 中；必要时改为 PR 总评评论。"
+            );
+        }
+        if (lowerMessage.contains("rate limit")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 访问受限",
+                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+            );
+        }
+        if (lowerMessage.contains("timeout") || lowerMessage.contains("timed out")) {
+            return new FailureSummary(
+                "github_writeback_timeout",
+                "GitHub 回写请求超时",
+                "请检查网络和 GitHub 服务状态，稍后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("owner or repository is not configured")) {
+            return new FailureSummary(
+                "github_repository_not_configured",
+                "GitHub 仓库未配置",
+                "请在集成配置中补全默认仓库，或确认任务携带了正确仓库信息。"
+            );
+        }
+        return new FailureSummary(
+            "github_writeback_failed",
+            "GitHub 评论回写失败",
+            "请查看原始错误信息，确认 GitHub 集成配置和目标 PR 状态后重试。"
+        );
+    }
+
+    private boolean isGithubCommentPositionFailure(String lowerMessage) {
+        return lowerMessage.contains("422")
+            || lowerMessage.contains("validation failed")
+            || lowerMessage.contains("position")
+            || lowerMessage.contains("commit_id")
+            || lowerMessage.contains("line must")
+            || lowerMessage.contains("line is")
+            || lowerMessage.contains("line does not")
+            || lowerMessage.contains("not part of the diff")
+            || lowerMessage.contains("diff hunk");
     }
 
     private ChangedFileDto toChangedFileDto(ChangedFile file) {

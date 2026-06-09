@@ -232,6 +232,10 @@
                     <span>{{ publishStatusText(item.status) }}</span>
                   </div>
                   <p>{{ publicationMessageText(item.message, item.status) }}</p>
+                  <div v-if="item.failureReason || item.failureSuggestion" class="publication-failure-note">
+                    <strong v-if="item.failureReason">{{ item.failureReason }}</strong>
+                    <span v-if="item.failureSuggestion">{{ item.failureSuggestion }}</span>
+                  </div>
                   <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">查看 GitHub 评论</a>
                 </section>
               </div>
@@ -274,6 +278,10 @@
                         <span>{{ publishStatusText(item.status) }}</span>
                       </div>
                       <p>{{ publicationMessageText(item.message, item.status) }}</p>
+                      <div v-if="item.failureReason || item.failureSuggestion" class="publication-failure-note">
+                        <strong v-if="item.failureReason">{{ item.failureReason }}</strong>
+                        <span v-if="item.failureSuggestion">{{ item.failureSuggestion }}</span>
+                      </div>
                       <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">查看 GitHub 评论</a>
                     </div>
                   </div>
