@@ -1,5 +1,6 @@
 package com.repoguard.agent.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -33,9 +34,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ReviewControllerTest {
 
+    private ReviewQuery lastListQuery;
+
     private final ReviewService reviewService = new ReviewService() {
         @Override
         public PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query) {
+            lastListQuery = query;
             ReviewTaskListItem item = new ReviewTaskListItem(
                 512L,
                 512,
@@ -210,13 +214,18 @@ class ReviewControllerTest {
         mockMvc.perform(get("/api/v1/reviews")
                 .param("page", "1")
                 .param("pageSize", "20")
-                .param("status", "completed"))
+                .param("status", "completed")
+                .param("source", "github_pr_picker")
+                .param("triggerSource", "existing_reused"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.total").value(1))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
             .andExpect(jsonPath("$.data.items[0].status").value("completed"))
-            .andExpect(jsonPath("$.data.items[0].source").value("github_pr_picker"));
+            .andExpect(jsonPath("$.data.items[0].source").value("github_pr_picker"))
+            .andExpect(jsonPath("$.data.items[0].triggerSource").value("github_pr_picker"));
+        assertThat(lastListQuery.source()).isEqualTo("github_pr_picker");
+        assertThat(lastListQuery.triggerSource()).isEqualTo("existing_reused");
     }
 
     @Test

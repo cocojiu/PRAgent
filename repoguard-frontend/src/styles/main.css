@@ -685,7 +685,7 @@ a {
 
 .filter-bar {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr minmax(260px, 2.2fr) auto;
+  grid-template-columns: 1fr 1fr 1fr 1fr minmax(260px, 2.2fr) auto;
   gap: 12px;
   padding: 12px;
   border-bottom: 1px solid #e5eaf3;

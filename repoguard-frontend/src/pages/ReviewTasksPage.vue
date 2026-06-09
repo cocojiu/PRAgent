@@ -33,6 +33,12 @@
           <el-option label="中风险" value="medium" />
           <el-option label="低风险" value="low" />
         </el-select>
+        <el-select v-model="sourceFilter" placeholder="全部来源" clearable>
+          <el-option label="全部来源" value="" />
+          <el-option label="手动输入" value="manual_input" />
+          <el-option label="PR 选择" value="github_pr_picker" />
+          <el-option label="复用已有" value="existing_reused" />
+        </el-select>
         <el-input v-model="keyword" class="search-input" placeholder="搜索 PR 标题、作者或 Commit ID" clearable>
           <template #suffix><Search :size="18" /></template>
         </el-input>
@@ -195,7 +201,7 @@ import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, Refres
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchGithubPullRequestOptions, fetchReviews, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import type { GithubPullRequestOption, ReviewStatus, ReviewTask, RiskLevel } from "@/types";
+import type { GithubPullRequestOption, ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
@@ -209,6 +215,7 @@ const totalTasks = ref(0);
 const repoFilter = ref("");
 const statusFilter = ref<ReviewStatus | "">("");
 const riskFilter = ref<RiskLevel | "">("");
+const sourceFilter = ref<ReviewTaskTriggerSource | "">("");
 const keyword = ref("");
 const currentPage = ref(1);
 const pageSize = ref(8);
@@ -295,6 +302,7 @@ const loadTasks = async () => {
       repository: repoFilter.value,
       status: statusFilter.value,
       riskLevel: riskFilter.value,
+      triggerSource: sourceFilter.value,
       keyword: keyword.value.trim()
     });
     if (requestSeq !== taskRequestSeq) {
@@ -342,7 +350,7 @@ const scheduleFilterLoad = () => {
   }, 350);
 };
 
-watch([repoFilter, statusFilter, riskFilter, keyword], scheduleFilterLoad);
+watch([repoFilter, statusFilter, riskFilter, sourceFilter, keyword], scheduleFilterLoad);
 
 watch([currentPage, pageSize], () => {
   void loadTasks();

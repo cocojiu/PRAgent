@@ -6,6 +6,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -24,11 +28,14 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.dto.ManualReviewRequest;
+import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ReviewServiceImplTest {
 
@@ -218,6 +225,36 @@ class ReviewServiceImplTest {
         assertThat(history.batches().getFirst().items()).hasSize(1);
         assertThat(history.batches().getFirst().items().getFirst().status()).isEqualTo("published");
         assertThat(history.batches().getFirst().items().getFirst().url()).isEqualTo("https://github.com/comment/1");
+    }
+
+    @Test
+    void listReviewsFiltersBySourceAndTriggerSource() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        Page<ReviewTask> page = Page.of(1, 20);
+        page.setRecords(List.of(task()));
+        page.setTotal(1);
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+
+        var result = service.listReviews(new ReviewQuery(
+            1,
+            20,
+            null,
+            null,
+            null,
+            "github_pr_picker",
+            "existing_reused",
+            null
+        ));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(reviewTaskMapper).selectPage(any(), wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertThat(sqlSegment).contains("source", "trigger_source");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+            .contains("GITHUB_PR_PICKER", "EXISTING_REUSED");
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.items().getFirst().source()).isEqualTo("github_pr_picker");
     }
 
     @Test

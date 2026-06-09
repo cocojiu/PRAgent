@@ -9,6 +9,8 @@ public record ReviewQuery(
     String repository,
     String status,
     String riskLevel,
+    String source,
+    String triggerSource,
     String keyword
 ) {
 }

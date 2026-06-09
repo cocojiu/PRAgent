@@ -177,6 +177,8 @@ export interface ReviewQuery {
   repository?: string;
   status?: ReviewStatus | "";
   riskLevel?: RiskLevel | "";
+  source?: ReviewTaskSource | "";
+  triggerSource?: ReviewTaskTriggerSource | "";
   keyword?: string;
 }
 

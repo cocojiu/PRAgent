@@ -47,9 +47,11 @@ public class ReviewController {
         @RequestParam(required = false) String repository,
         @RequestParam(required = false) String status,
         @RequestParam(required = false) String riskLevel,
+        @RequestParam(required = false) String source,
+        @RequestParam(required = false) String triggerSource,
         @RequestParam(required = false) String keyword
     ) {
-        ReviewQuery query = new ReviewQuery(page, pageSize, repository, status, riskLevel, keyword);
+        ReviewQuery query = new ReviewQuery(page, pageSize, repository, status, riskLevel, source, triggerSource, keyword);
         return ApiResponse.ok(reviewService.listReviews(query));
     }
 

@@ -457,6 +457,13 @@ public class ReviewServiceImpl implements ReviewService {
         if (StringUtils.hasText(query.riskLevel())) {
             wrapper.eq(ReviewTask::getRiskLevel, query.riskLevel().trim().toUpperCase());
         }
+        // 来源筛选使用前端小写值，落库字段保持大写枚举。
+        if (StringUtils.hasText(query.source())) {
+            wrapper.eq(ReviewTask::getSource, query.source().trim().toUpperCase());
+        }
+        if (StringUtils.hasText(query.triggerSource())) {
+            wrapper.eq(ReviewTask::getTriggerSource, query.triggerSource().trim().toUpperCase());
+        }
         if (StringUtils.hasText(query.keyword())) {
             String keyword = query.keyword().trim();
             Integer prNumber = parseIntegerOrNull(keyword);

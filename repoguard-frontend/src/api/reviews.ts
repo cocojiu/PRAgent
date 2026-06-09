@@ -22,6 +22,8 @@ export const fetchReviews = (query: ReviewQuery) =>
     repository: query.repository,
     status: query.status,
     riskLevel: query.riskLevel,
+    source: query.source,
+    triggerSource: query.triggerSource,
     keyword: query.keyword
   });
 
