@@ -9,7 +9,6 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
@@ -26,6 +25,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
     private final SecretCryptoService secretCryptoService;
+    private final LlmReviewResultParser reviewResultParser;
 
     public LlmPullRequestReviewer(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
@@ -39,6 +39,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
         this.secretCryptoService = secretCryptoService;
+        this.reviewResultParser = new LlmReviewResultParser(objectMapper);
     }
 
     @Override
@@ -50,7 +51,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
 
         try {
             String content = callLlm(config, task, diff);
-            return parseLlmResult(content);
+            return reviewResultParser.parse(content);
         } catch (RuntimeException ex) {
             if (Boolean.TRUE.equals(config.getFallbackToRules())) {
                 return fallbackReview(diff, ex.getMessage());
@@ -127,7 +128,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
 
     private String buildPrompt(ReviewTask task, GithubPullRequestDiff diff) {
         return """
-            请审查下面的 GitHub PR diff，并返回 JSON：
+            请审查下面的 GitHub PR diff，并只返回 JSON 对象：
             {
               "riskLevel": "INFO|LOW|MEDIUM|HIGH",
               "findings": [
@@ -162,33 +163,4 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         return builder.toString();
     }
 
-    private ReviewResult parseLlmResult(String content) {
-        try {
-            JsonNode root = objectMapper.readTree(stripJsonFence(content));
-            String riskLevel = root.path("riskLevel").asText("INFO").toUpperCase();
-            List<ReviewFindingResult> findings = new ArrayList<>();
-            for (JsonNode finding : root.path("findings")) {
-                findings.add(new ReviewFindingResult(
-                    finding.path("severity").asText("LOW").toUpperCase(),
-                    "LLM",
-                    null,
-                    finding.path("filePath").asText("unknown"),
-                    finding.path("lineNumber").isNumber() ? finding.path("lineNumber").asInt() : null,
-                    finding.path("message").asText("LLM 审查发现潜在问题"),
-                    finding.path("recommendation").asText("请结合上下文确认并修复。")
-                ));
-            }
-            return ReviewResult.completed(riskLevel, findings);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Unable to parse LLM review result", ex);
-        }
-    }
-
-    private String stripJsonFence(String content) {
-        String trimmed = content == null ? "" : content.trim();
-        if (trimmed.startsWith("```")) {
-            trimmed = trimmed.replaceFirst("^```(?:json)?", "").replaceFirst("```$", "").trim();
-        }
-        return trimmed;
-    }
 }
