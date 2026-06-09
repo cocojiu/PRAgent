@@ -6,15 +6,15 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.util.StringUtils;
 
-class LlmReviewResultParser {
+public class LlmReviewResultParser {
 
     private final ObjectMapper objectMapper;
 
-    LlmReviewResultParser(ObjectMapper objectMapper) {
+    public LlmReviewResultParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    ReviewResult parse(String content) {
+    public ReviewResult parse(String content) {
         try {
             JsonNode root = objectMapper.readTree(extractJsonObject(content));
             String riskLevel = defaultText(readText(root, "riskLevel", "risk_level", "risk"), "INFO").toUpperCase();

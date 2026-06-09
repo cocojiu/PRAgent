@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
@@ -14,8 +15,13 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -122,6 +128,64 @@ class SystemConfigServiceImplTest {
         verify(reviewPolicyConfigMapper).update(any(UpdateWrapper.class));
     }
 
+    @Test
+    void testReviewPolicyParsesChatCompletionSmokeResponse() throws Exception {
+        String llmResponse = """
+            {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}"}}]}
+            """;
+        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+            config.setMaxTokens(64);
+            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+            var result = service.testReviewPolicy();
+
+            assertThat(result.success()).isTrue();
+            assertThat(result.status()).isEqualTo("connected");
+            assertThat(server.authorization()).isEqualTo("Bearer sk-test-1234");
+            JsonNode request = new ObjectMapper().readTree(server.requestBody());
+            assertThat(request.path("model").asText()).isEqualTo("qwen-plus");
+            assertThat(request.path("max_tokens").asInt()).isGreaterThanOrEqualTo(512);
+            assertThat(request.at("/messages/1/content").asText()).contains("riskLevel");
+        }
+    }
+
+    @Test
+    void testReviewPolicyAcceptsContentPartArrayResponse() throws Exception {
+        String llmResponse = """
+            {"choices":[{"message":{"content":[{"type":"text","text":"```json\\n{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}\\n```"}]}}]}
+            """;
+        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+            var result = service.testReviewPolicy();
+
+            assertThat(result.success()).isTrue();
+            assertThat(result.status()).isEqualTo("connected");
+        }
+    }
+
+    @Test
+    void testReviewPolicyReportsMalformedReviewJson() throws Exception {
+        String llmResponse = """
+            {"choices":[{"message":{"content":"OK"}}]}
+            """;
+        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+            when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+            var result = service.testReviewPolicy();
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.status()).isEqualTo("failed");
+            assertThat(result.message()).contains("could not be parsed as review JSON");
+        }
+    }
+
     private IntegrationConfig githubConfig(String token) {
         IntegrationConfig config = new IntegrationConfig();
         config.setId(1L);
@@ -150,5 +214,47 @@ class SystemConfigServiceImplTest {
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
+    }
+
+    private LlmProbeServer startLlmProbeServer(String responseBody) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicReference<String> requestBody = new AtomicReference<>("");
+        AtomicReference<String> authorization = new AtomicReference<>("");
+        server.createContext("/chat/completions", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        return new LlmProbeServer(
+            server,
+            "http://127.0.0.1:" + server.getAddress().getPort(),
+            requestBody,
+            authorization
+        );
+    }
+
+    private record LlmProbeServer(
+        HttpServer server,
+        String baseUrl,
+        AtomicReference<String> requestBodyRef,
+        AtomicReference<String> authorizationRef
+    ) implements AutoCloseable {
+        @Override
+        public void close() {
+            server.stop(0);
+        }
+
+        String requestBody() {
+            return requestBodyRef.get();
+        }
+
+        String authorization() {
+            return authorizationRef.get();
+        }
     }
 }

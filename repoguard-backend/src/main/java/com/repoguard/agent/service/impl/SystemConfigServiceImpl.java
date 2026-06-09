@@ -13,8 +13,10 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.SystemConfigService;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -36,11 +38,14 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private static final String GITHUB_PROVIDER = "GITHUB";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int MIN_LLM_TEST_MAX_TOKENS = 512;
+    private static final int MAX_LLM_TEST_MAX_TOKENS = 4096;
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final RestClient.Builder restClientBuilder;
     private final ObjectMapper objectMapper;
+    private final LlmReviewResultParser llmReviewResultParser;
     private final DataSource dataSource;
     private final RabbitTemplate rabbitTemplate;
     private final SecretCryptoService secretCryptoService;
@@ -58,6 +63,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
+        this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
         this.dataSource = dataSource;
         this.rabbitTemplate = rabbitTemplate;
         this.secretCryptoService = secretCryptoService;
@@ -158,6 +164,9 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         if (config == null) {
             return connectionResult(false, "failed", "LLM config is not configured");
         }
+        if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
+            return connectionResult(false, "failed", "LLM review is disabled");
+        }
         String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
         if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
             return connectionResult(false, "failed", "LLM base URL, model or API key is missing");
@@ -174,16 +183,23 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .accept(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                     "model", config.getModelName(),
-                    "temperature", 0,
-                    "max_tokens", 32,
-                    "messages", List.of(Map.of("role", "user", "content", "Return only OK."))
+                    "temperature", connectionTestTemperature(config.getTemperature()),
+                    "max_tokens", connectionTestMaxTokens(config.getMaxTokens()),
+                    "messages", List.of(
+                        Map.of("role", "system", "content", "You are a RepoGuard connectivity probe. Reply with strict JSON only."),
+                        Map.of("role", "user", "content", "Return exactly this JSON object and no markdown: {\"riskLevel\":\"INFO\",\"findings\":[]}")
+                    )
                 ))
                 .retrieve()
                 .body(String.class);
-            JsonNode root = objectMapper.readTree(response == null ? "" : response);
-            String content = root.at("/choices/0/message/content").asText("");
+            String content = extractLlmMessageContent(response);
             if (!StringUtils.hasText(content)) {
-                return connectionResult(false, "failed", "LLM response did not include message content");
+                return connectionResult(false, "failed", "LLM response did not include usable review content");
+            }
+            try {
+                llmReviewResultParser.parse(content);
+            } catch (RuntimeException ex) {
+                return connectionResult(false, "failed", "LLM response was received but could not be parsed as review JSON: " + conciseError(ex));
             }
             return connectionResult(true, "connected", "LLM connection test succeeded");
         } catch (Exception ex) {
@@ -284,6 +300,63 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         requestFactory.setConnectTimeout(timeout);
         requestFactory.setReadTimeout(timeout);
         return requestFactory;
+    }
+
+    private BigDecimal connectionTestTemperature(BigDecimal configuredTemperature) {
+        return configuredTemperature == null ? BigDecimal.ZERO : configuredTemperature;
+    }
+
+    private int connectionTestMaxTokens(Integer configuredMaxTokens) {
+        int maxTokens = configuredMaxTokens == null ? MIN_LLM_TEST_MAX_TOKENS : configuredMaxTokens;
+        return Math.max(MIN_LLM_TEST_MAX_TOKENS, Math.min(maxTokens, MAX_LLM_TEST_MAX_TOKENS));
+    }
+
+    private String extractLlmMessageContent(String response) throws Exception {
+        JsonNode root = objectMapper.readTree(response == null ? "" : response);
+        for (String pointer : List.of(
+            "/choices/0/message/content",
+            "/choices/0/text",
+            "/output_text",
+            "/output/0/content/0/text",
+            "/content"
+        )) {
+            String content = nodeText(root.at(pointer));
+            if (StringUtils.hasText(content)) {
+                return content.trim();
+            }
+        }
+        return "";
+    }
+
+    private String nodeText(JsonNode node) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            return "";
+        }
+        if (node.isTextual()) {
+            return node.asText();
+        }
+        if (node.isArray()) {
+            StringBuilder builder = new StringBuilder();
+            for (JsonNode item : node) {
+                String text = nodeText(item);
+                if (StringUtils.hasText(text)) {
+                    if (builder.length() > 0) {
+                        builder.append('\n');
+                    }
+                    builder.append(text.trim());
+                }
+            }
+            return builder.toString();
+        }
+        if (node.isObject()) {
+            for (String field : List.of("text", "content")) {
+                String text = nodeText(node.path(field));
+                if (StringUtils.hasText(text)) {
+                    return text;
+                }
+            }
+        }
+        return "";
     }
 
     private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
