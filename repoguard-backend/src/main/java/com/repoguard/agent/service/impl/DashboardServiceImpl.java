@@ -8,10 +8,15 @@ import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
+import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.DashboardService;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -20,20 +25,38 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
+    private static final String GITHUB_PROVIDER = "GITHUB";
     private static final DateTimeFormatter TREND_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
+    private final IntegrationConfigMapper integrationConfigMapper;
+    private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final RabbitTemplate rabbitTemplate;
+    private final SecretCryptoService secretCryptoService;
 
-    public DashboardServiceImpl(ReviewTaskMapper reviewTaskMapper, ReviewFindingMapper reviewFindingMapper) {
+    public DashboardServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        IntegrationConfigMapper integrationConfigMapper,
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        RabbitTemplate rabbitTemplate,
+        SecretCryptoService secretCryptoService
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
+        this.integrationConfigMapper = integrationConfigMapper;
+        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.rabbitTemplate = rabbitTemplate;
+        this.secretCryptoService = secretCryptoService;
     }
 
     @Override
@@ -52,13 +75,59 @@ public class DashboardServiceImpl implements DashboardService {
             buildRuleHits(findings),
             buildHighRiskReviews(tasks, findings),
             buildFailedRules(findings),
-            List.of(
-                new SystemHealthItemDto("MySQL", "正常"),
-                new SystemHealthItemDto("RabbitMQ", "未接入"),
-                new SystemHealthItemDto("GitHub", "未接入"),
-                new SystemHealthItemDto("Spring AI", "未接入")
-            )
+            buildSystemHealth()
         );
+    }
+
+    private List<SystemHealthItemDto> buildSystemHealth() {
+        return List.of(
+            new SystemHealthItemDto("MySQL", "正常"),
+            new SystemHealthItemDto("RabbitMQ", rabbitMqHealthStatus()),
+            new SystemHealthItemDto("GitHub", githubHealthStatus()),
+            new SystemHealthItemDto("Spring AI", llmHealthStatus())
+        );
+    }
+
+    private String rabbitMqHealthStatus() {
+        try {
+            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
+            return Boolean.TRUE.equals(open) ? "正常" : "异常";
+        } catch (RuntimeException ex) {
+            return "异常";
+        }
+    }
+
+    private String githubHealthStatus() {
+        try {
+            IntegrationConfig config = integrationConfigMapper.selectOne(
+                new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
+            );
+            if (config == null || !StringUtils.hasText(secretCryptoService.decrypt(config.getTokenValue()))) {
+                return "未接入";
+            }
+            return "FAILED".equalsIgnoreCase(config.getStatus()) ? "异常" : "正常";
+        } catch (RuntimeException ex) {
+            return "异常";
+        }
+    }
+
+    private String llmHealthStatus() {
+        try {
+            ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
+            if (config == null) {
+                return "未接入";
+            }
+            if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
+                return "已禁用";
+            }
+            boolean configured = StringUtils.hasText(config.getBaseUrl())
+                && StringUtils.hasText(config.getModelName())
+                && StringUtils.hasText(secretCryptoService.decrypt(config.getApiKeyValue()))
+                && !"mock".equalsIgnoreCase(config.getLlmProvider());
+            return configured ? "正常" : "未接入";
+        } catch (RuntimeException ex) {
+            return "异常";
+        }
     }
 
     private List<DashboardMetricDto> buildMetrics(List<ReviewTask> tasks) {
