@@ -129,11 +129,49 @@ class SystemConfigServiceImplTest {
     }
 
     @Test
+    void testGithubIntegrationClearsStaleErrorOnSuccess() throws Exception {
+        try (ProbeServer server = startProbeServer("/rate_limit", 200, "{}")) {
+            IntegrationConfig config = githubConfig("ghp_test_1234");
+            config.setBaseUrl(server.baseUrl());
+            config.setStatus("FAILED");
+            config.setLastError("stale GitHub error");
+            when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(config);
+
+            var result = service.testGithubIntegration();
+
+            assertThat(result.success()).isTrue();
+            assertThat(config.getStatus()).isEqualTo("CONFIGURED");
+            assertThat(config.getLastError()).isNull();
+            assertThat(config.getLastCheckedAt()).isNotNull();
+            assertThat(server.authorization()).isEqualTo("Bearer ghp_test_1234");
+            verify(integrationConfigMapper).updateById(config);
+            verify(integrationConfigMapper).update(any(UpdateWrapper.class));
+        }
+    }
+
+    @Test
+    void testGithubIntegrationRecordsLatestErrorOnFailure() throws Exception {
+        try (ProbeServer server = startProbeServer("/rate_limit", 500, "{\"message\":\"boom\"}")) {
+            IntegrationConfig config = githubConfig("ghp_test_1234");
+            config.setBaseUrl(server.baseUrl());
+            when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(config);
+
+            var result = service.testGithubIntegration();
+
+            assertThat(result.success()).isFalse();
+            assertThat(config.getStatus()).isEqualTo("FAILED");
+            assertThat(config.getLastError()).contains("500");
+            assertThat(config.getLastCheckedAt()).isNotNull();
+            verify(integrationConfigMapper).updateById(config);
+        }
+    }
+
+    @Test
     void testReviewPolicyParsesChatCompletionSmokeResponse() throws Exception {
         String llmResponse = """
             {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}"}}]}
             """;
-        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+        try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
             config.setMaxTokens(64);
@@ -156,7 +194,7 @@ class SystemConfigServiceImplTest {
         String llmResponse = """
             {"choices":[{"message":{"content":[{"type":"text","text":"```json\\n{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}\\n```"}]}}]}
             """;
-        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+        try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
@@ -173,7 +211,7 @@ class SystemConfigServiceImplTest {
         String llmResponse = """
             {"choices":[{"message":{"content":"OK"}}]}
             """;
-        try (LlmProbeServer server = startLlmProbeServer(llmResponse)) {
+        try (ProbeServer server = startLlmProbeServer(llmResponse)) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
@@ -216,21 +254,25 @@ class SystemConfigServiceImplTest {
         return config;
     }
 
-    private LlmProbeServer startLlmProbeServer(String responseBody) throws IOException {
+    private ProbeServer startLlmProbeServer(String responseBody) throws IOException {
+        return startProbeServer("/chat/completions", 200, responseBody);
+    }
+
+    private ProbeServer startProbeServer(String path, int statusCode, String responseBody) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<String> requestBody = new AtomicReference<>("");
         AtomicReference<String> authorization = new AtomicReference<>("");
-        server.createContext("/chat/completions", exchange -> {
+        server.createContext(path, exchange -> {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(statusCode, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
         server.start();
-        return new LlmProbeServer(
+        return new ProbeServer(
             server,
             "http://127.0.0.1:" + server.getAddress().getPort(),
             requestBody,
@@ -238,7 +280,7 @@ class SystemConfigServiceImplTest {
         );
     }
 
-    private record LlmProbeServer(
+    private record ProbeServer(
         HttpServer server,
         String baseUrl,
         AtomicReference<String> requestBodyRef,

@@ -152,9 +152,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 request.header("Authorization", "Bearer " + token.trim());
             }
             request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
+            markGithubIntegrationChecked(config, null);
             return connectionResult(true, "connected", "GitHub connection test succeeded");
         } catch (RuntimeException ex) {
-            return connectionResult(false, "failed", conciseError(ex));
+            String error = conciseError(ex);
+            markGithubIntegrationChecked(config, error);
+            return connectionResult(false, "failed", error);
         }
     }
 
@@ -292,6 +295,24 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .toString();
         }
         return UriComponentsBuilder.fromUriString(baseUrl).path("/rate_limit").toUriString();
+    }
+
+    private void markGithubIntegrationChecked(IntegrationConfig config, String error) {
+        if (config == null || config.getId() == null) {
+            return;
+        }
+        config.setLastCheckedAt(LocalDateTime.now());
+        config.setLastError(error);
+        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
+        config.setUpdatedAt(LocalDateTime.now());
+        integrationConfigMapper.updateById(config);
+        if (error == null) {
+            integrationConfigMapper.update(
+                new UpdateWrapper<IntegrationConfig>()
+                    .eq("id", config.getId())
+                    .set("last_error", null)
+            );
+        }
     }
 
     private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
