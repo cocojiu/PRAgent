@@ -22,6 +22,9 @@ export interface ReviewTask {
   triggerSource: ReviewTaskTriggerSource | string;
   createdAt: string;
   duration: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
 }
 
 export interface ReviewTaskDetail extends ReviewTask {

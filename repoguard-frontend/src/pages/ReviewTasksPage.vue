@@ -88,6 +88,21 @@
             <span :class="`status-pill ${statusClass(row.status)}`">{{ statusText(row.status) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="失败原因" min-width="210">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.failureReason && row.failureSuggestion" :content="row.failureSuggestion" placement="top">
+              <span class="failure-summary-cell">
+                <ShieldAlert :size="15" />
+                <span>{{ row.failureReason }}</span>
+              </span>
+            </el-tooltip>
+            <span v-else-if="row.failureReason" class="failure-summary-cell">
+              <ShieldAlert :size="15" />
+              <span>{{ row.failureReason }}</span>
+            </span>
+            <span v-else class="muted-text">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="风险等级" width="130">
           <template #default="{ row }">
             <span :class="`risk-pill ${row.riskLevel}`">{{ riskText(row.riskLevel) }}</span>
@@ -380,14 +395,20 @@ const refreshTasks = () => {
 
 const canRetryTask = (task: ReviewTask) => task.status === "failed";
 
-const retryTooltip = (task: ReviewTask) => (canRetryTask(task) ? "重新入队执行审查" : "仅失败任务支持重试");
+const retryTooltip = (task: ReviewTask) => {
+  if (!canRetryTask(task)) {
+    return "仅失败任务支持重试";
+  }
+  return task.failureSuggestion || "重新入队执行审查";
+};
 
 const retryTask = async (task: ReviewTask) => {
   if (!canRetryTask(task) || retryingTaskId.value) {
     return;
   }
   try {
-    await ElMessageBox.confirm(`确认将 PR #${task.prNumber} 重新加入审查队列？`, "确认重试审查任务", {
+    const failureText = task.failureReason ? `\n\n失败原因：${task.failureReason}` : "";
+    await ElMessageBox.confirm(`确认将 PR #${task.prNumber} 重新加入审查队列？${failureText}`, "确认重试审查任务", {
       confirmButtonText: "确认重试",
       cancelButtonText: "取消",
       type: "warning"

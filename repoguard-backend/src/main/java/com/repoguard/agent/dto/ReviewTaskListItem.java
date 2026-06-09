@@ -18,6 +18,9 @@ public record ReviewTaskListItem(
     String source,
     String triggerSource,
     String createdAt,
-    String duration
+    String duration,
+    String failureCategory,
+    String failureReason,
+    String failureSuggestion
 ) {
 }

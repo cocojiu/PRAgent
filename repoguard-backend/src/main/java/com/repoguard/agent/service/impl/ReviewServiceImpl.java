@@ -57,6 +57,7 @@ import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
@@ -74,6 +75,7 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
+    private static final FailureSummary NO_FAILURE_SUMMARY = new FailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ChangedFileMapper changedFileMapper;
@@ -116,8 +118,12 @@ public class ReviewServiceImpl implements ReviewService {
             Page.of(query.page(), query.pageSize()),
             buildListWrapper(query)
         );
+        List<ReviewTask> tasks = page.getRecords();
+        Map<Long, List<ReviewTimeline>> timelinesByTaskId = loadTimelinesByTaskId(tasks);
         return new PageResponse<>(
-            page.getRecords().stream().map(this::toListItem).toList(),
+            tasks.stream()
+                .map(task -> toListItem(task, resolveFailureSummary(task, timelineLabels(timelinesByTaskId.get(task.getId())))))
+                .toList(),
             page.getTotal()
         );
     }
@@ -533,7 +539,7 @@ public class ReviewServiceImpl implements ReviewService {
         List<ChangedFileDto> changedFiles,
         List<ReviewTimelineItem> timeline
     ) {
-        ReviewTaskListItem item = toListItem(task);
+        ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timeline.stream().map(ReviewTimelineItem::label).toList()));
         return new ReviewTaskDetail(
             item.id(),
             item.prNumber(),
@@ -550,6 +556,9 @@ public class ReviewServiceImpl implements ReviewService {
             item.triggerSource(),
             item.createdAt(),
             item.duration(),
+            item.failureCategory(),
+            item.failureReason(),
+            item.failureSuggestion(),
             task.getPrUrl(),
             findings,
             missingTests,
@@ -737,6 +746,10 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     private ReviewTaskListItem toListItem(ReviewTask task) {
+        return toListItem(task, resolveFailureSummary(task, List.of()));
+    }
+
+    private ReviewTaskListItem toListItem(ReviewTask task, FailureSummary failureSummary) {
         return new ReviewTaskListItem(
             task.getId(),
             task.getPrNumber(),
@@ -752,7 +765,125 @@ public class ReviewServiceImpl implements ReviewService {
             lower(resolveStoredSource(task.getSource())),
             lower(resolveStoredSource(task.getTriggerSource())),
             task.getCreatedAt().format(DATE_TIME_FORMATTER),
-            formatDuration(task.getDurationSeconds())
+            formatDuration(task.getDurationSeconds()),
+            failureSummary.category(),
+            failureSummary.reason(),
+            failureSummary.suggestion()
+        );
+    }
+
+    private Map<Long, List<ReviewTimeline>> loadTimelinesByTaskId(List<ReviewTask> tasks) {
+        if (tasks == null || tasks.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Long> taskIds = tasks.stream()
+            .map(ReviewTask::getId)
+            .filter(id -> id != null)
+            .toList();
+        if (taskIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .in(ReviewTimeline::getTaskId, taskIds)
+                .orderByAsc(ReviewTimeline::getTaskId)
+                .orderByAsc(ReviewTimeline::getSortOrder)
+        );
+        if (timelines == null || timelines.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return timelines.stream().collect(Collectors.groupingBy(ReviewTimeline::getTaskId));
+    }
+
+    private List<String> timelineLabels(List<ReviewTimeline> timelines) {
+        if (timelines == null || timelines.isEmpty()) {
+            return List.of();
+        }
+        return timelines.stream().map(ReviewTimeline::getLabel).toList();
+    }
+
+    private FailureSummary resolveFailureSummary(ReviewTask task, List<String> timelineLabels) {
+        if (!"FAILED".equals(task.getStatus())) {
+            return NO_FAILURE_SUMMARY;
+        }
+
+        String detail = timelineLabels.stream()
+            .filter(StringUtils::hasText)
+            .filter(label -> label.equals("Review failed") || label.startsWith("Review failed:"))
+            .reduce((first, second) -> second)
+            .map(this::extractFailureDetail)
+            .orElse("");
+        return classifyFailure(detail);
+    }
+
+    private String extractFailureDetail(String label) {
+        if (label.startsWith("Review failed:")) {
+            return label.replaceFirst("Review failed:", "").trim();
+        }
+        return "";
+    }
+
+    private FailureSummary classifyFailure(String detail) {
+        // 失败原因来自执行时间线，统一在服务层归类，避免前端重复解析英文日志标签。
+        String normalized = StringUtils.hasText(detail) ? detail.trim() : "";
+        String lowerDetail = normalized.toLowerCase(Locale.ROOT);
+
+        if (lowerDetail.contains("401") || lowerDetail.contains("bad credentials")
+            || lowerDetail.contains("unauthorized") || lowerDetail.contains("requires authentication")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 无效或已过期",
+                "请到集成配置页更新 GitHub Token，确认保存成功后再重试审查。"
+            );
+        }
+        if (lowerDetail.contains("403") || lowerDetail.contains("forbidden")
+            || lowerDetail.contains("resource not accessible") || lowerDetail.contains("permission")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 权限不足",
+                "请确认 Token 对目标仓库和 PR 具备读取权限，必要时补充 repo 权限后重试。"
+            );
+        }
+        if (lowerDetail.contains("404") || lowerDetail.contains("not found")) {
+            return new FailureSummary(
+                "github_resource_not_found",
+                "PR 或仓库不存在/不可访问",
+                "请确认仓库名称、组织、PR 编号和 Token 可访问范围，然后重新触发审查。"
+            );
+        }
+        if (lowerDetail.contains("rate limit")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 访问受限",
+                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+            );
+        }
+        if (lowerDetail.contains("timeout") || lowerDetail.contains("timed out")) {
+            return new FailureSummary(
+                "external_service_timeout",
+                "外部服务响应超时",
+                "请检查网络、GitHub 和 LLM 服务状态，稍后再重试审查。"
+            );
+        }
+        if (lowerDetail.contains("unable to parse llm review result") || lowerDetail.contains("llm review result")) {
+            return new FailureSummary(
+                "llm_result_parse_failed",
+                "LLM 输出解析失败",
+                "请检查 LLM 模型返回格式或临时启用规则兜底后重试。"
+            );
+        }
+        if (lowerDetail.contains("llm config is incomplete") || lowerDetail.contains("api key")) {
+            return new FailureSummary(
+                "llm_config_incomplete",
+                "LLM 配置不完整",
+                "请在系统配置中补全 LLM Provider、模型和密钥，保存后再重试。"
+            );
+        }
+        return new FailureSummary(
+            "review_execution_failed",
+            "审查执行失败",
+            "请检查 GitHub/LLM 集成配置和任务时间线，修复后点击重试。"
         );
     }
 
@@ -1024,5 +1155,8 @@ public class ReviewServiceImpl implements ReviewService {
         int minutes = totalSeconds / 60;
         int seconds = totalSeconds % 60;
         return minutes + " 分 " + seconds + " 秒";
+    }
+
+    private record FailureSummary(String category, String reason, String suggestion) {
     }
 }

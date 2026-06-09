@@ -56,7 +56,10 @@ class ReviewControllerTest {
                 "github_pr_picker",
                 "github_pr_picker",
                 "2025-05-31 14:32:21",
-                "2 分 48 秒"
+                "2 分 48 秒",
+                null,
+                null,
+                null
             );
             return new PageResponse<>(List.of(item), 1);
         }
@@ -79,6 +82,9 @@ class ReviewControllerTest {
                 "github_pr_picker",
                 "2025-05-31 14:32:21",
                 "2 分 48 秒",
+                null,
+                null,
+                null,
                 "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
                 List.of(),
                 List.of(),

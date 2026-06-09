@@ -261,6 +261,47 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void listReviewsAddsReadableFailureSummaryFromTimeline() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        ReviewTask failedTask = task();
+        failedTask.setStatus("FAILED");
+        failedTask.setRiskLevel("HIGH");
+        failedTask.setLlmStatus("FAILED");
+        Page<ReviewTask> page = Page.of(1, 20);
+        page.setRecords(List.of(failedTask));
+        page.setTotal(1);
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Review failed: 401 Bad credentials")));
+
+        var result = service.listReviews(new ReviewQuery(1, 20, null, null, null, null, null, null));
+
+        assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_token_invalid");
+        assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 无效或已过期");
+        assertThat(result.items().getFirst().failureSuggestion()).contains("更新 GitHub Token");
+    }
+
+    @Test
+    void getReviewDetailAddsReadableFailureSummaryFromTimeline() {
+        ReviewTask failedTask = task();
+        failedTask.setStatus("FAILED");
+        failedTask.setRiskLevel("HIGH");
+        failedTask.setLlmStatus("FAILED");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
+            timeline("Task queued"),
+            timeline("Review failed: 403 Resource not accessible by integration")
+        ));
+
+        var result = service.getReviewDetail(521L);
+
+        assertThat(result.failureCategory()).isEqualTo("github_permission_denied");
+        assertThat(result.failureReason()).isEqualTo("GitHub Token 权限不足");
+        assertThat(result.failureSuggestion()).contains("目标仓库和 PR");
+    }
+
+    @Test
     void triggerManualReviewReturnsExistingTaskWithoutPublishingDuplicateMessage() {
         when(reviewTaskMapper.selectOne(any())).thenReturn(task());
 
@@ -398,6 +439,16 @@ class ReviewServiceImplTest {
         finding.setMessage(message);
         finding.setRecommendation(recommendation);
         return finding;
+    }
+
+    private ReviewTimeline timeline(String label) {
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(521L);
+        timeline.setLabel(label);
+        timeline.setEventTime(LocalDateTime.of(2026, 6, 9, 12, 0));
+        timeline.setStatus(label.startsWith("Review failed") ? "FAILED" : "DONE");
+        timeline.setSortOrder(label.startsWith("Review failed") ? 5 : 1);
+        return timeline;
     }
 
     private IntegrationConfig githubConfig(String owner, String repository, String status, String token, String lastError) {

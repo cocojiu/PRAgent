@@ -607,6 +607,11 @@ a {
   background: #f1f5f9;
 }
 
+.muted-text {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
 .source-pill {
   display: inline-flex;
   align-items: center;
@@ -813,6 +818,28 @@ a {
   color: #64748b;
 }
 
+.failure-summary-cell {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 6px;
+  color: #b91c1c;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.failure-summary-cell svg {
+  flex: 0 0 auto;
+  color: #dc2626;
+}
+
+.failure-summary-cell > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pr-link {
   color: #1268ff;
   font-weight: 800;
@@ -949,6 +976,64 @@ a {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 12px;
+}
+
+.failure-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+}
+
+.failure-banner-main {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 12px;
+}
+
+.failure-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #dc2626;
+  background: #fee2e2;
+}
+
+.failure-banner-main div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+.failure-banner-main div > span {
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.failure-banner strong {
+  color: #991b1b;
+  overflow-wrap: anywhere;
+}
+
+.failure-banner p {
+  margin: 0;
+  color: #7f1d1d;
+  line-height: 1.6;
+}
+
+.failure-banner .el-button {
+  flex: 0 0 auto;
 }
 
 .detail-kpi-grid {
@@ -1807,9 +1892,14 @@ a {
   }
 
   .detail-header,
-  .detail-actions {
+  .detail-actions,
+  .failure-banner {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .failure-banner .el-button {
+    width: 100%;
   }
 
   .detail-kpi-grid,
