@@ -34,10 +34,31 @@ export interface GithubCommentPreview {
   taskId: number;
   prNumber: number;
   prUrl: string;
+  writebackCheck: GithubCommentWritebackCheck;
   totalFindings: number;
   commentableCount: number;
   blockedCount: number;
   items: GithubCommentPreviewItem[];
+}
+
+export interface GithubCommentWritebackCheck {
+  status:
+    | "ready"
+    | "repository_mismatch"
+    | "repository_not_configured"
+    | "token_missing"
+    | "connection_failed"
+    | string;
+  level: "success" | "warning" | "danger" | string;
+  taskOwner?: string;
+  taskRepository?: string;
+  configuredOwner?: string;
+  configuredRepository?: string;
+  repositoryMatched: boolean;
+  tokenConfigured: boolean;
+  connectionHealthy: boolean;
+  lastError?: string;
+  messages: string[];
 }
 
 export interface GithubCommentPreviewItem {

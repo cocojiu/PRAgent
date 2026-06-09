@@ -13,6 +13,7 @@ import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
@@ -85,6 +86,19 @@ class ReviewControllerTest {
                 id,
                 512,
                 "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
+                new GithubCommentWritebackCheck(
+                    "ready",
+                    "success",
+                    "repo-guard-demo",
+                    "spring-boot-demo",
+                    "repo-guard-demo",
+                    "spring-boot-demo",
+                    true,
+                    true,
+                    true,
+                    null,
+                    List.of("GitHub 回写配置与当前任务仓库匹配。")
+                ),
                 1,
                 1,
                 0,
@@ -216,6 +230,8 @@ class ReviewControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.commentableCount").value(1))
+            .andExpect(jsonPath("$.data.writebackCheck.status").value("ready"))
+            .andExpect(jsonPath("$.data.writebackCheck.repositoryMatched").value(true))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
             .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"))
             .andExpect(jsonPath("$.data.items[0].commentable").value(true));

@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
+import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
@@ -29,6 +30,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
+import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -41,6 +43,7 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
+import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -65,6 +68,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final String GITHUB_PROVIDER = "GITHUB";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ChangedFileMapper changedFileMapper;
@@ -72,6 +76,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
+    private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final GithubPullRequestClient githubPullRequestClient;
@@ -83,6 +88,7 @@ public class ReviewServiceImpl implements ReviewService {
         GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        IntegrationConfigMapper integrationConfigMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient
@@ -93,6 +99,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
+        this.integrationConfigMapper = integrationConfigMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
@@ -236,11 +243,96 @@ public class ReviewServiceImpl implements ReviewService {
             task.getId(),
             task.getPrNumber(),
             task.getPrUrl(),
+            buildGithubCommentWritebackCheck(task),
             items.size(),
             commentableCount,
             items.size() - commentableCount - publishedCount,
             items
         );
+    }
+
+    private GithubCommentWritebackCheck buildGithubCommentWritebackCheck(ReviewTask task) {
+        IntegrationConfig config = loadGithubIntegrationConfig();
+        String taskOwner = trimToNull(task.getOrganization());
+        String taskRepository = trimToNull(task.getRepository());
+        String configuredOwner = trimToNull(config == null ? null : config.getDefaultOwner());
+        String configuredRepository = trimToNull(config == null ? null : config.getDefaultRepo());
+        boolean tokenConfigured = config != null && StringUtils.hasText(config.getTokenValue());
+        boolean repositoryConfigured = StringUtils.hasText(configuredOwner) && StringUtils.hasText(configuredRepository);
+        boolean repositoryMatched = repositoryConfigured
+            && equalsIgnoreCase(taskOwner, configuredOwner)
+            && equalsIgnoreCase(taskRepository, configuredRepository);
+        boolean connectionHealthy = config != null
+            && "CONFIGURED".equals(config.getStatus())
+            && !StringUtils.hasText(config.getLastError());
+
+        List<String> messages = new java.util.ArrayList<>();
+        if (!tokenConfigured) {
+            messages.add("GitHub Token 未配置，请先到集成配置页保存 Token。");
+        }
+        if (!repositoryConfigured) {
+            messages.add("GitHub 默认 owner/repo 未配置，无法提前判断任务仓库是否匹配。");
+        } else if (!repositoryMatched) {
+            messages.add("当前任务仓库与 GitHub 集成默认仓库不一致，请确认 Token 对目标仓库有评论权限。");
+        }
+        if (config != null && StringUtils.hasText(config.getLastError())) {
+            messages.add("GitHub 最近一次连接测试失败：" + config.getLastError());
+        } else if (config != null && !"CONFIGURED".equals(config.getStatus())) {
+            messages.add("GitHub 当前连接状态不是已配置成功，请先到集成配置页测试连接。");
+        }
+        if (messages.isEmpty()) {
+            messages.add("GitHub 回写配置与当前任务仓库匹配。");
+        }
+
+        String status = resolveWritebackCheckStatus(tokenConfigured, repositoryConfigured, repositoryMatched, connectionHealthy);
+        return new GithubCommentWritebackCheck(
+            status,
+            resolveWritebackCheckLevel(status),
+            taskOwner,
+            taskRepository,
+            configuredOwner,
+            configuredRepository,
+            repositoryMatched,
+            tokenConfigured,
+            connectionHealthy,
+            config == null ? null : config.getLastError(),
+            messages
+        );
+    }
+
+    private IntegrationConfig loadGithubIntegrationConfig() {
+        return integrationConfigMapper.selectOne(
+            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
+        );
+    }
+
+    private String resolveWritebackCheckStatus(
+        boolean tokenConfigured,
+        boolean repositoryConfigured,
+        boolean repositoryMatched,
+        boolean connectionHealthy
+    ) {
+        if (!tokenConfigured) {
+            return "token_missing";
+        }
+        if (!connectionHealthy) {
+            return "connection_failed";
+        }
+        if (!repositoryConfigured) {
+            return "repository_not_configured";
+        }
+        if (!repositoryMatched) {
+            return "repository_mismatch";
+        }
+        return "ready";
+    }
+
+    private String resolveWritebackCheckLevel(String status) {
+        return switch (status) {
+            case "ready" -> "success";
+            case "repository_mismatch", "repository_not_configured" -> "warning";
+            default -> "danger";
+        };
     }
 
     @Override
@@ -808,6 +900,17 @@ public class ReviewServiceImpl implements ReviewService {
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase();
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private boolean equalsIgnoreCase(String first, String second) {
+        return first != null && second != null && first.equalsIgnoreCase(second);
     }
 
     private String formatDuration(Integer durationSeconds) {

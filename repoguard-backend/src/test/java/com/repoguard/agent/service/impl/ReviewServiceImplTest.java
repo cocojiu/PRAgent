@@ -10,6 +10,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
+import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
@@ -18,6 +19,7 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
+import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -36,6 +38,7 @@ class ReviewServiceImplTest {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
+    private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
@@ -46,6 +49,7 @@ class ReviewServiceImplTest {
         githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
+        integrationConfigMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
         githubPullRequestClient
@@ -56,6 +60,7 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "CONFIGURED", "enc:v1:test", null));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", 3, "文档可读性不足", "补充分隔符"),
@@ -68,6 +73,8 @@ class ReviewServiceImplTest {
         assertThat(preview.totalFindings()).isEqualTo(4);
         assertThat(preview.commentableCount()).isEqualTo(4);
         assertThat(preview.blockedCount()).isZero();
+        assertThat(preview.writebackCheck().status()).isEqualTo("ready");
+        assertThat(preview.writebackCheck().repositoryMatched()).isTrue();
         assertThat(preview.items().getFirst().commentBody())
             .contains("**RepoGuard LOW finding**")
             .contains("命令与描述未正确分隔")
@@ -75,6 +82,44 @@ class ReviewServiceImplTest {
         assertThat(preview.items().getLast().commentable()).isTrue();
         assertThat(preview.items().getLast().targetType()).isEqualTo("pull_request");
         assertThat(preview.items().getLast().reason()).isEqualTo("Finding is missing a valid line number and will be posted as a PR comment");
+    }
+
+    @Test
+    void getGithubCommentPreviewWarnsWhenConfiguredRepositoryDiffersFromTaskRepository() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("other-owner", "other-repo", "CONFIGURED", "enc:v1:test", null));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
+        ));
+
+        var preview = service.getGithubCommentPreview(521L);
+
+        assertThat(preview.writebackCheck().status()).isEqualTo("repository_mismatch");
+        assertThat(preview.writebackCheck().level()).isEqualTo("warning");
+        assertThat(preview.writebackCheck().repositoryMatched()).isFalse();
+        assertThat(preview.writebackCheck().messages())
+            .contains("当前任务仓库与 GitHub 集成默认仓库不一致，请确认 Token 对目标仓库有评论权限。");
+    }
+
+    @Test
+    void getGithubCommentPreviewWarnsWhenGithubTokenIsMissing() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "NOT_CONFIGURED", null, null));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
+        ));
+
+        var preview = service.getGithubCommentPreview(521L);
+
+        assertThat(preview.writebackCheck().status()).isEqualTo("token_missing");
+        assertThat(preview.writebackCheck().level()).isEqualTo("danger");
+        assertThat(preview.writebackCheck().tokenConfigured()).isFalse();
+        assertThat(preview.writebackCheck().messages())
+            .contains("GitHub Token 未配置，请先到集成配置页保存 Token。");
     }
 
     @Test
@@ -237,5 +282,16 @@ class ReviewServiceImplTest {
         finding.setMessage(message);
         finding.setRecommendation(recommendation);
         return finding;
+    }
+
+    private IntegrationConfig githubConfig(String owner, String repository, String status, String token, String lastError) {
+        IntegrationConfig config = new IntegrationConfig();
+        config.setProvider("GITHUB");
+        config.setDefaultOwner(owner);
+        config.setDefaultRepo(repository);
+        config.setStatus(status);
+        config.setTokenValue(token);
+        config.setLastError(lastError);
+        return config;
     }
 }

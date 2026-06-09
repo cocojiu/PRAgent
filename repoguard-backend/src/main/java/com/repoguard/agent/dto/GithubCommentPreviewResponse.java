@@ -6,6 +6,7 @@ public record GithubCommentPreviewResponse(
     Long taskId,
     Integer prNumber,
     String prUrl,
+    GithubCommentWritebackCheck writebackCheck,
     Integer totalFindings,
     Integer commentableCount,
     Integer blockedCount,

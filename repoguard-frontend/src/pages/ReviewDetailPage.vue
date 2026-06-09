@@ -120,7 +120,7 @@
               <h2>GitHub 评论预览</h2>
               <el-button
                 type="primary"
-                :disabled="!githubCommentPreview?.commentableCount"
+                :disabled="!canPublishGithubComments"
                 :loading="publishingComments"
                 @click="confirmPublishGithubComments"
               >
@@ -137,6 +137,21 @@
               :closable="false"
             />
             <template v-if="githubCommentPreview">
+              <div v-if="writebackCheck" :class="['writeback-check', `writeback-check--${writebackCheck.level}`]">
+                <div class="writeback-check-head">
+                  <span :class="`status-pill ${writebackCheckStatusClass}`">{{ writebackCheckStatusText }}</span>
+                  <span>任务仓库：{{ repositoryText(writebackCheck.taskOwner, writebackCheck.taskRepository) }}</span>
+                  <span>配置仓库：{{ repositoryText(writebackCheck.configuredOwner, writebackCheck.configuredRepository) }}</span>
+                </div>
+                <p v-for="message in writebackCheck.messages" :key="message">{{ message }}</p>
+                <RouterLink
+                  v-if="writebackCheck.status !== 'ready'"
+                  class="writeback-check-link"
+                  :to="{ name: 'integrations' }"
+                >
+                  前往集成配置
+                </RouterLink>
+              </div>
               <div class="comment-preview-summary">
                 <span>总审查发现：{{ githubCommentPreview.totalFindings }}</span>
                 <span>可回写：{{ githubCommentPreview.commentableCount }}</span>
@@ -328,7 +343,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
-import { useRoute, useRouter } from "vue-router";
+import { RouterLink, useRoute, useRouter } from "vue-router";
 import {
   fetchGithubCommentPreview,
   fetchGithubCommentPublicationHistory,
@@ -373,6 +388,10 @@ const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | nu
 const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
 const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
 const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
+const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
+const canPublishGithubComments = computed(() =>
+  Boolean(githubCommentPreview.value?.commentableCount && writebackCheck.value?.tokenConfigured !== false)
+);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
@@ -523,6 +542,35 @@ const commentTargetText = (targetType: string) => {
   };
   return labels[targetType] ?? targetType;
 };
+
+const repositoryText = (owner?: string, repository?: string) => {
+  if (!owner || !repository) {
+    return "未配置";
+  }
+  return `${owner} / ${repository}`;
+};
+
+const writebackCheckStatusText = computed(() => {
+  const labels: Record<string, string> = {
+    ready: "配置匹配",
+    repository_mismatch: "仓库不一致",
+    repository_not_configured: "仓库未配置",
+    token_missing: "Token 缺失",
+    connection_failed: "连接异常"
+  };
+  return writebackCheck.value ? labels[writebackCheck.value.status] ?? writebackCheck.value.status : "";
+});
+
+const writebackCheckStatusClass = computed(() => {
+  const level = writebackCheck.value?.level;
+  if (level === "success") {
+    return "success";
+  }
+  if (level === "warning") {
+    return "warning";
+  }
+  return "danger";
+});
 
 const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
@@ -735,8 +783,11 @@ const confirmPublishGithubComments = async () => {
   }
 
   try {
+    const warningText = writebackCheck.value && writebackCheck.value.status !== "ready"
+      ? `\n\n提示：${writebackCheck.value.messages.join(" ")}`
+      : "";
     await ElMessageBox.confirm(
-      `将向 GitHub PR #${selectedTask.value.prNumber} 回写 ${githubCommentPreview.value.commentableCount} 条行评论。确认继续？`,
+      `将向 GitHub PR #${selectedTask.value.prNumber} 回写 ${githubCommentPreview.value.commentableCount} 条评论。确认继续？${warningText}`,
       "确认回写 GitHub 评论",
       {
         confirmButtonText: "确认回写",
