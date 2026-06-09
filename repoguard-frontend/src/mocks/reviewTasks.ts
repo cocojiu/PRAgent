@@ -13,6 +13,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "high",
     mqRetries: 0,
     llmStatus: "completed",
+    source: "manual_input",
+    triggerSource: "manual_input",
     createdAt: "2025-05-31 14:32:21",
     duration: "2 分 48 秒"
   },
@@ -28,6 +30,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "medium",
     mqRetries: 1,
     llmStatus: "reviewing",
+    source: "github_pr_picker",
+    triggerSource: "github_pr_picker",
     createdAt: "2025-05-30 14:21:07",
     duration: "1 分 12 秒"
   },
@@ -43,6 +47,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "low",
     mqRetries: 0,
     llmStatus: "completed",
+    source: "manual_input",
+    triggerSource: "manual_input",
     createdAt: "2025-05-30 13:58:42",
     duration: "2 分 03 秒"
   },
@@ -58,6 +64,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "medium",
     mqRetries: 0,
     llmStatus: "completed",
+    source: "github_pr_picker",
+    triggerSource: "github_pr_picker",
     createdAt: "2025-05-30 13:37:11",
     duration: "1 分 50 秒"
   },
@@ -73,6 +81,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "high",
     mqRetries: 3,
     llmStatus: "failed",
+    source: "manual_input",
+    triggerSource: "manual_input",
     createdAt: "2025-05-30 12:54:33",
     duration: "3 分 26 秒"
   },
@@ -88,6 +98,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "low",
     mqRetries: 0,
     llmStatus: "completed",
+    source: "github_pr_picker",
+    triggerSource: "existing_reused",
     createdAt: "2025-05-30 11:22:09",
     duration: "2 分 11 秒"
   },
@@ -103,6 +115,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "medium",
     mqRetries: 1,
     llmStatus: "reviewing",
+    source: "manual_input",
+    triggerSource: "manual_input",
     createdAt: "2025-05-30 10:15:55",
     duration: "1 分 38 秒"
   },
@@ -118,6 +132,8 @@ export const reviewTasks: ReviewTask[] = [
     riskLevel: "high",
     mqRetries: 2,
     llmStatus: "failed",
+    source: "github_pr_picker",
+    triggerSource: "github_pr_picker",
     createdAt: "2025-05-30 09:45:31",
     duration: "4 分 02 秒"
   }

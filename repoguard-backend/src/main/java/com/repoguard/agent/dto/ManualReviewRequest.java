@@ -11,6 +11,7 @@ public record ManualReviewRequest(
     @NotNull @Min(1) Integer prNumber,
     @Size(max = 512) String title,
     @Size(max = 64) String commit,
-    @Size(max = 128) String branch
+    @Size(max = 128) String branch,
+    @Size(max = 32) String source
 ) {
 }

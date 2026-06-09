@@ -230,14 +230,40 @@ class ReviewServiceImplTest {
             1,
             "Smoke review",
             "public-pr-1-llm-string-response",
-            "master"
+            "master",
+            "github_pr_picker"
         ));
 
         assertThat(result.taskId()).isEqualTo(521L);
         assertThat(result.existing()).isTrue();
+        assertThat(result.triggerSource()).isEqualTo("existing_reused");
         assertThat(result.message()).isEqualTo("Review task already exists");
         verify(reviewTaskMapper, never()).insert(any(ReviewTask.class));
+        verify(reviewTaskMapper).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
+    void triggerManualReviewStoresGithubPrPickerSourceForNewTask() {
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            1,
+            "Smoke review",
+            "public-pr-2",
+            "master",
+            "github_pr_picker"
+        ));
+
+        assertThat(result.existing()).isFalse();
+        assertThat(result.source()).isEqualTo("github_pr_picker");
+        assertThat(result.triggerSource()).isEqualTo("github_pr_picker");
+        verify(reviewTaskMapper).insert(org.mockito.Mockito.argThat((ReviewTask task) ->
+            "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
+        ));
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
     }
 
     private ReviewTask task() {
@@ -254,6 +280,8 @@ class ReviewServiceImplTest {
         task.setMqRetries(0);
         task.setLlmStatus("COMPLETED");
         task.setPrUrl("https://github.com/octocat/Hello-World/pull/1");
+        task.setSource("GITHUB_PR_PICKER");
+        task.setTriggerSource("GITHUB_PR_PICKER");
         task.setCreatedAt(LocalDateTime.now());
         task.setDurationSeconds(37);
         return task;

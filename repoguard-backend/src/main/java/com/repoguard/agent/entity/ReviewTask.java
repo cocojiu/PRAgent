@@ -20,6 +20,10 @@ public class ReviewTask {
     private Integer mqRetries;
     private String llmStatus;
     private String prUrl;
+    /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
+    private String source;
+    /** 本次触发来源，用于标记复用已有任务等再次触发场景。 */
+    private String triggerSource;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -119,6 +123,22 @@ public class ReviewTask {
 
     public void setPrUrl(String prUrl) {
         this.prUrl = prUrl;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
+    }
+
+    public String getTriggerSource() {
+        return triggerSource;
+    }
+
+    public void setTriggerSource(String triggerSource) {
+        this.triggerSource = triggerSource;
     }
 
     public LocalDateTime getCreatedAt() {

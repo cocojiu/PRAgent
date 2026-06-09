@@ -69,6 +69,9 @@ public class ReviewServiceImpl implements ReviewService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final String GITHUB_PROVIDER = "GITHUB";
+    private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
+    private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
+    private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ChangedFileMapper changedFileMapper;
@@ -372,9 +375,20 @@ public class ReviewServiceImpl implements ReviewService {
         String organization = request.organization().trim();
         String repository = request.repository().trim();
         String commit = resolveCommit(request);
+        String source = resolveTaskSource(request.source());
         ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
         if (existingTask != null) {
-            return new ManualReviewResponse(existingTask.getId(), lower(existingTask.getStatus()), "Review task already exists", true);
+            // 同一 PR/commit 已有任务时不重复入队，只记录这次触发来自复用链路。
+            existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
+            reviewTaskMapper.updateById(existingTask);
+            return new ManualReviewResponse(
+                existingTask.getId(),
+                lower(existingTask.getStatus()),
+                "Review task already exists",
+                true,
+                lower(resolveStoredSource(existingTask.getSource())),
+                lower(SOURCE_EXISTING_REUSED)
+            );
         }
 
         LocalDateTime createdAt = LocalDateTime.now();
@@ -390,6 +404,8 @@ public class ReviewServiceImpl implements ReviewService {
         task.setMqRetries(0);
         task.setLlmStatus("PENDING");
         task.setPrUrl(buildPrUrl(request));
+        task.setSource(source);
+        task.setTriggerSource(source);
         task.setCreatedAt(createdAt);
         task.setDurationSeconds(0);
 
@@ -403,7 +419,7 @@ public class ReviewServiceImpl implements ReviewService {
             commit,
             createdAt
         ));
-        return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false);
+        return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
     }
 
     @Override
@@ -488,6 +504,8 @@ public class ReviewServiceImpl implements ReviewService {
             item.riskLevel(),
             item.mqRetries(),
             item.llmStatus(),
+            item.source(),
+            item.triggerSource(),
             item.createdAt(),
             item.duration(),
             task.getPrUrl(),
@@ -689,6 +707,8 @@ public class ReviewServiceImpl implements ReviewService {
             lower(task.getRiskLevel()),
             task.getMqRetries(),
             lower(task.getLlmStatus()),
+            lower(resolveStoredSource(task.getSource())),
+            lower(resolveStoredSource(task.getTriggerSource())),
             task.getCreatedAt().format(DATE_TIME_FORMATTER),
             formatDuration(task.getDurationSeconds())
         );
@@ -863,6 +883,22 @@ public class ReviewServiceImpl implements ReviewService {
             return request.branch().trim();
         }
         return "unknown";
+    }
+
+    private String resolveTaskSource(String source) {
+        if (!StringUtils.hasText(source)) {
+            return SOURCE_MANUAL_INPUT;
+        }
+        // 创建来源只接受真实入口，未知值按手动输入兜底，避免污染任务来源统计。
+        String normalized = source.trim().toUpperCase();
+        return switch (normalized) {
+            case SOURCE_GITHUB_PR_PICKER -> SOURCE_GITHUB_PR_PICKER;
+            default -> SOURCE_MANUAL_INPUT;
+        };
+    }
+
+    private String resolveStoredSource(String source) {
+        return StringUtils.hasText(source) ? source : SOURCE_MANUAL_INPUT;
     }
 
     private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {

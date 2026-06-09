@@ -27,6 +27,8 @@
             <Github :size="20" />
             {{ selectedTask.organization }} / {{ selectedTask.repository }}
             <span>创建时间：{{ selectedTask.createdAt }}</span>
+            <span>创建方式：{{ sourceText(selectedTask.source) }}</span>
+            <span>触发来源：{{ sourceText(selectedTask.triggerSource) }}</span>
           </p>
           <p class="refresh-meta">
             <RefreshCw :size="15" :class="{ 'refresh-icon-spinning': silentRefreshing }" />
@@ -541,6 +543,15 @@ const commentTargetText = (targetType: string) => {
     pull_request: "PR 评论"
   };
   return labels[targetType] ?? targetType;
+};
+
+const sourceText = (source?: string) => {
+  const labels: Record<string, string> = {
+    manual_input: "手动输入",
+    github_pr_picker: "GitHub PR 选择",
+    existing_reused: "复用已有任务"
+  };
+  return source ? labels[source] ?? source : "手动输入";
 };
 
 const repositoryText = (owner?: string, repository?: string) => {

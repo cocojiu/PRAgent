@@ -607,6 +607,31 @@ a {
   background: #f1f5f9;
 }
 
+.source-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.source-pill.github {
+  color: #1268ff;
+  background: #eaf2ff;
+}
+
+.source-pill.manual {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.source-pill.reused {
+  color: #b45309;
+  background: #fef3c7;
+}
+
 .table-link,
 .card-footer-link,
 .health-footer a {

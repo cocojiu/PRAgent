@@ -15,6 +15,8 @@ public record ReviewTaskListItem(
     String riskLevel,
     Integer mqRetries,
     String llmStatus,
+    String source,
+    String triggerSource,
     String createdAt,
     String duration
 ) {

@@ -3,6 +3,8 @@ export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued" | "fa
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
 export type RuleStatus = "enabled" | "disabled";
 export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
+export type ReviewTaskSource = "manual_input" | "github_pr_picker";
+export type ReviewTaskTriggerSource = ReviewTaskSource | "existing_reused";
 
 export interface ReviewTask {
   id: number;
@@ -16,6 +18,8 @@ export interface ReviewTask {
   riskLevel: RiskLevel;
   mqRetries: number;
   llmStatus: ReviewStatus;
+  source: ReviewTaskSource | string;
+  triggerSource: ReviewTaskTriggerSource | string;
   createdAt: string;
   duration: string;
 }
@@ -183,6 +187,7 @@ export interface ManualReviewRequest {
   title?: string;
   commit?: string;
   branch?: string;
+  source?: ReviewTaskSource | string;
 }
 
 export interface ManualReviewResponse {
@@ -190,6 +195,8 @@ export interface ManualReviewResponse {
   status: ReviewStatus;
   message: string;
   existing?: boolean;
+  source?: string;
+  triggerSource?: string;
 }
 
 export interface GithubPullRequestOptions {

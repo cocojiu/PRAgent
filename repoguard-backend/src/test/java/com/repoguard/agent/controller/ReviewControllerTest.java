@@ -48,6 +48,8 @@ class ReviewControllerTest {
                 "high",
                 0,
                 "completed",
+                "github_pr_picker",
+                "github_pr_picker",
                 "2025-05-31 14:32:21",
                 "2 分 48 秒"
             );
@@ -68,6 +70,8 @@ class ReviewControllerTest {
                 "high",
                 0,
                 "completed",
+                "github_pr_picker",
+                "github_pr_picker",
                 "2025-05-31 14:32:21",
                 "2 分 48 秒",
                 "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
@@ -195,7 +199,7 @@ class ReviewControllerTest {
 
         @Override
         public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
-            return new ManualReviewResponse(9001L, "queued", "Review task queued", false);
+            return new ManualReviewResponse(9001L, "queued", "Review task queued", false, "github_pr_picker", "github_pr_picker");
         }
     };
 
@@ -211,7 +215,8 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.total").value(1))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
-            .andExpect(jsonPath("$.data.items[0].status").value("completed"));
+            .andExpect(jsonPath("$.data.items[0].status").value("completed"))
+            .andExpect(jsonPath("$.data.items[0].source").value("github_pr_picker"));
     }
 
     @Test
@@ -220,6 +225,8 @@ class ReviewControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.id").value(512))
+            .andExpect(jsonPath("$.data.source").value("github_pr_picker"))
+            .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
             .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"));
     }
@@ -278,13 +285,16 @@ class ReviewControllerTest {
                       "prNumber": 512,
                       "title": "Manual review smoke test",
                       "commit": "a1b2c3d",
-                      "branch": "main"
+                      "branch": "main",
+                      "source": "github_pr_picker"
                     }
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.taskId").value(9001))
             .andExpect(jsonPath("$.data.status").value("queued"))
-            .andExpect(jsonPath("$.data.existing").value(false));
+            .andExpect(jsonPath("$.data.existing").value(false))
+            .andExpect(jsonPath("$.data.source").value("github_pr_picker"))
+            .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"));
     }
 }

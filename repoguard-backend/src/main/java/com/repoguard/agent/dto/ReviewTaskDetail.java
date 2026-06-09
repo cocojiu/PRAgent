@@ -17,6 +17,8 @@ public record ReviewTaskDetail(
     String riskLevel,
     Integer mqRetries,
     String llmStatus,
+    String source,
+    String triggerSource,
     String createdAt,
     String duration,
     String prUrl,

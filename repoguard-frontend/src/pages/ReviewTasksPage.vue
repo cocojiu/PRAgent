@@ -70,6 +70,13 @@
             <Copy :size="15" class="copy-icon" />
           </template>
         </el-table-column>
+        <el-table-column label="来源" width="130">
+          <template #default="{ row }">
+            <span :class="`source-pill ${sourceClass(row.triggerSource || row.source)}`">
+              {{ sourceText(row.triggerSource || row.source) }}
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="120">
           <template #default="{ row }">
             <span :class="`status-pill ${statusClass(row.status)}`">{{ statusText(row.status) }}</span>
@@ -424,7 +431,8 @@ const createReviewFromSelectedPullRequest = async () => {
       prNumber: pullRequest.number,
       title: pullRequest.title,
       commit: pullRequest.commit,
-      branch: pullRequest.branch
+      branch: pullRequest.branch,
+      source: "github_pr_picker"
     });
     createDialogVisible.value = false;
     if (response.existing) {
@@ -438,5 +446,23 @@ const createReviewFromSelectedPullRequest = async () => {
   } finally {
     creatingTask.value = false;
   }
+};
+
+const sourceText = (source?: string) => {
+  const labels: Record<string, string> = {
+    manual_input: "手动输入",
+    github_pr_picker: "PR 选择",
+    existing_reused: "复用已有"
+  };
+  return source ? labels[source] ?? source : "手动输入";
+};
+
+const sourceClass = (source?: string) => {
+  const classes: Record<string, string> = {
+    manual_input: "manual",
+    github_pr_picker: "github",
+    existing_reused: "reused"
+  };
+  return source ? classes[source] ?? "manual" : "manual";
 };
 </script>
