@@ -6,19 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
-class LlmPullRequestReviewerTest {
+class LlmReviewResultParserTest {
 
-    private final LlmPullRequestReviewer reviewer = new LlmPullRequestReviewer(
-        null,
-        null,
-        null,
-        new ObjectMapper(),
-        null
-    );
+    private final LlmReviewResultParser parser = new LlmReviewResultParser(new ObjectMapper());
 
     @Test
     void parsesStrictJsonResult() {
-        ReviewResult result = reviewer.parseLlmResult("""
+        ReviewResult result = parser.parse("""
             {
               "riskLevel": "MEDIUM",
               "findings": [
@@ -42,7 +36,7 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void parsesJsonWrappedInMarkdownFenceAndText() {
-        ReviewResult result = reviewer.parseLlmResult("""
+        ReviewResult result = parser.parse("""
             下面是审查结果：
             ```json
             {
@@ -58,8 +52,34 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void keepsBracesInsideJsonStringsWhenExtractingWrappedJson() {
+        ReviewResult result = parser.parse("""
+            Here is the review result:
+            {
+              "riskLevel": "LOW",
+              "findings": [
+                {
+                  "severity": "LOW",
+                  "filePath": "src/parser.ts",
+                  "lineNumber": "17",
+                  "message": "Do not stop at {placeholder} text.",
+                  "recommendation": "Keep scanning until the real object closes."
+                }
+              ]
+            }
+            Thanks.
+            """);
+
+        ReviewFindingResult finding = result.findings().getFirst();
+        assertThat(result.riskLevel()).isEqualTo("LOW");
+        assertThat(finding.filePath()).isEqualTo("src/parser.ts");
+        assertThat(finding.lineNumber()).isEqualTo(17);
+        assertThat(finding.message()).isEqualTo("Do not stop at {placeholder} text.");
+    }
+
+    @Test
     void acceptsCommonFindingFieldAliases() {
-        ReviewResult result = reviewer.parseLlmResult("""
+        ReviewResult result = parser.parse("""
             {
               "risk": "high",
               "findings": [
@@ -85,7 +105,7 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void treatsNonArrayFindingsAsEmpty() {
-        ReviewResult result = reviewer.parseLlmResult("""
+        ReviewResult result = parser.parse("""
             {
               "riskLevel": "INFO",
               "findings": null
@@ -97,9 +117,10 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void includesResponseSummaryWhenParsingFails() {
-        assertThatThrownBy(() -> reviewer.parseLlmResult("模型回答：没有 JSON。"))
+        assertThatThrownBy(() -> parser.parse("模型回答：没有 JSON。"))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Unable to parse LLM review result")
-            .hasMessageContaining("模型回答");
+            .hasMessageContaining("length=")
+            .satisfies(error -> assertThat(error.getMessage()).doesNotContain("模型回答"));
     }
 }
