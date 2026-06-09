@@ -24,26 +24,43 @@
         </button>
         <div class="top-title">{{ currentTitle }}</div>
         <div class="top-actions">
-          <el-popover placement="bottom-end" trigger="click" width="360" popper-class="notification-popover">
+          <el-popover placement="bottom-end" trigger="click" width="380" popper-class="notification-popover" @show="loadNotifications">
             <template #reference>
               <button class="top-action-button bell-wrap" type="button" aria-label="查看通知">
                 <Bell :size="20" />
-                <span>12</span>
+                <span v-if="unreadCount" class="notification-badge">{{ unreadBadgeText }}</span>
               </button>
             </template>
             <div class="notification-panel">
               <div class="notification-head">
-                <strong>消息通知</strong>
-                <button type="button" @click="markAllRead">全部已读</button>
+                <div>
+                  <strong>消息通知</strong>
+                  <small v-if="notificationCenter?.generatedAt">更新于 {{ notificationCenter.generatedAt }}</small>
+                </div>
+                <button type="button" :disabled="!unreadCount" @click.stop="markAllRead">全部已读</button>
               </div>
-              <button v-for="item in notifications" :key="item.id" type="button" class="notification-item" @click="openNotification(item)">
-                <span :class="`notification-dot ${item.level}`"></span>
-                <span>
-                  <b>{{ item.title }}</b>
-                  <em>{{ item.description }}</em>
-                  <small>{{ item.time }}</small>
-                </span>
-              </button>
+              <div v-if="loadingNotifications" class="notification-state">正在加载通知...</div>
+              <div v-else-if="notificationError" class="notification-state notification-state--error">
+                <span>{{ notificationError }}</span>
+                <button type="button" @click="loadNotifications">重试</button>
+              </div>
+              <div v-else-if="!notifications.length" class="notification-state">暂无待处理通知</div>
+              <template v-else>
+                <button
+                  v-for="item in notifications"
+                  :key="item.id"
+                  type="button"
+                  :class="['notification-item', { read: isNotificationRead(item.id) }]"
+                  @click="openNotification(item)"
+                >
+                  <span :class="`notification-dot ${item.level}`"></span>
+                  <span>
+                    <b>{{ item.title }}</b>
+                    <em>{{ item.description }}</em>
+                    <small>{{ item.time }}</small>
+                  </span>
+                </button>
+              </template>
               <RouterLink class="notification-more" to="/repoguard/tasks">查看全部消息 ›</RouterLink>
             </div>
           </el-popover>
@@ -76,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import {
@@ -91,10 +108,17 @@ import {
   Plug,
   ShieldCheck
 } from "lucide-vue-next";
+import { fetchNotifications } from "@/api/notifications";
+import type { NotificationCenter, NotificationItem } from "@/types";
 
 const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
+const notificationCenter = ref<NotificationCenter>();
+const loadingNotifications = ref(false);
+const notificationError = ref("");
+const readNotificationIds = ref<Set<string>>(new Set());
+const NOTIFICATION_READ_KEY = "repoguard-read-notifications";
 
 const navItems = [
   { label: "总览", path: "/repoguard/overview", icon: Home },
@@ -104,23 +128,63 @@ const navItems = [
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 
-const notifications = [
-  { id: 1, level: "danger", title: "高风险 PR 待处理", description: "PR #512 命中 2 个高风险规则", time: "2 分钟前" },
-  { id: 2, level: "warning", title: "LLM 审查降级", description: "auth-service 审查已使用规则结果兜底", time: "18 分钟前" },
-  { id: 3, level: "success", title: "RabbitMQ 队列正常", description: "最近一次健康检查通过", time: "35 分钟前" }
-];
-
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
+const notifications = computed(() => notificationCenter.value?.items ?? []);
+const unreadCount = computed(() => notifications.value.filter((item) => !isNotificationRead(item.id)).length);
+const unreadBadgeText = computed(() => (unreadCount.value > 99 ? "99+" : String(unreadCount.value)));
 
-const markAllRead = () => {
-  ElMessage.success("已将所有消息标记为已读");
+const loadReadNotificationIds = () => {
+  try {
+    const storedValue = window.localStorage.getItem(NOTIFICATION_READ_KEY);
+    const ids = storedValue ? (JSON.parse(storedValue) as string[]) : [];
+    readNotificationIds.value = new Set(ids);
+  } catch {
+    readNotificationIds.value = new Set();
+  }
 };
 
-const openNotification = (item: (typeof notifications)[number]) => {
-  ElMessage.info(item.title);
-  if (item.id === 1) {
-    router.push("/repoguard/tasks/512");
+const persistReadNotificationIds = () => {
+  window.localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify([...readNotificationIds.value]));
+};
+
+const markNotificationRead = (id: string) => {
+  if (readNotificationIds.value.has(id)) {
+    return;
   }
+  readNotificationIds.value = new Set([...readNotificationIds.value, id]);
+  persistReadNotificationIds();
+};
+
+const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
+
+const loadNotifications = async () => {
+  loadingNotifications.value = true;
+  notificationError.value = "";
+  try {
+    notificationCenter.value = await fetchNotifications();
+  } catch (error) {
+    notificationError.value = error instanceof Error ? error.message : "通知加载失败";
+  } finally {
+    loadingNotifications.value = false;
+  }
+};
+
+const markAllRead = () => {
+  if (!notifications.value.length) {
+    return;
+  }
+  readNotificationIds.value = new Set([...readNotificationIds.value, ...notifications.value.map((item) => item.id)]);
+  persistReadNotificationIds();
+  ElMessage.success("已将当前通知标记为已读");
+};
+
+const openNotification = (item: NotificationItem) => {
+  markNotificationRead(item.id);
+  if (item.targetPath) {
+    router.push(item.targetPath);
+    return;
+  }
+  ElMessage.info(item.title);
 };
 
 const openHelp = () => {
@@ -138,4 +202,9 @@ const handleUserCommand = (command: string) => {
   }
   ElMessage.info("个人资料功能暂未接入后端");
 };
+
+onMounted(() => {
+  loadReadNotificationIds();
+  void loadNotifications();
+});
 </script>

@@ -215,6 +215,10 @@ a {
   text-align: center;
 }
 
+.bell-wrap .notification-badge {
+  pointer-events: none;
+}
+
 .user {
   display: flex;
   align-items: center;
@@ -251,11 +255,53 @@ a {
   border-bottom: 1px solid #e5eaf3;
 }
 
+.notification-head div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .notification-head strong {
   font-size: 16px;
 }
 
+.notification-head small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .notification-head button {
+  border: 0;
+  background: transparent;
+  color: #1268ff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notification-head button:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.notification-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 82px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+}
+
+.notification-state--error {
+  flex-direction: column;
+  gap: 8px;
+  color: #b91c1c;
+}
+
+.notification-state button {
   border: 0;
   background: transparent;
   color: #1268ff;
@@ -280,6 +326,10 @@ a {
   background: #f8fafc;
 }
 
+.notification-item.read {
+  opacity: 0.58;
+}
+
 .notification-dot {
   width: 8px;
   height: 8px;
@@ -297,6 +347,10 @@ a {
 
 .notification-dot.success {
   background: #22c55e;
+}
+
+.notification-dot.info {
+  background: #2563eb;
 }
 
 .notification-item b,

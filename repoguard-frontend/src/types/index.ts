@@ -446,3 +446,21 @@ export interface ConnectionTestResult {
   message: string;
   checkedAt: string;
 }
+
+export type NotificationLevel = "danger" | "warning" | "success" | "info";
+
+export interface NotificationItem {
+  id: string;
+  level: NotificationLevel;
+  title: string;
+  description: string;
+  time: string;
+  targetPath?: string;
+  createdAt?: string;
+}
+
+export interface NotificationCenter {
+  total: number;
+  generatedAt: string;
+  items: NotificationItem[];
+}
