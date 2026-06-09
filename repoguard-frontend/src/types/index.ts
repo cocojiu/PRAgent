@@ -72,13 +72,34 @@ export interface GithubCommentPublishItem {
   findingId: number;
   file: string;
   line?: number;
+  targetType: "line" | "pull_request" | string;
   success: boolean;
-  status: "published" | "failed" | "skipped" | string;
-  message: string;
+  status: "published" | "failed" | "skipped" | "already_published" | "downgraded_to_pr_comment" | string;
+  message?: string;
   url?: string;
   githubCommentId?: number;
   publishedAt?: string;
 }
+
+export interface GithubCommentPublicationHistory {
+  taskId: number;
+  batches: GithubCommentPublicationBatch[];
+}
+
+export interface GithubCommentPublicationBatch {
+  batchId: number;
+  status: "completed" | "partial_failed" | "failed" | "skipped" | "empty" | string;
+  totalFindings: number;
+  attemptedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  completedAt?: string;
+  items: GithubCommentPublicationHistoryItem[];
+}
+
+export interface GithubCommentPublicationHistoryItem extends GithubCommentPublishItem {}
 
 export interface ReviewFinding {
   severity: RiskLevel;

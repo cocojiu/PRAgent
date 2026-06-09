@@ -8,6 +8,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOption;
@@ -118,12 +121,43 @@ class ReviewControllerTest {
                     1L,
                     "src/App.java",
                     12,
+                    "line",
                     true,
                     "published",
                     "GitHub comment published",
                     "https://github.com/repo/pull/1#discussion_r1",
                     1001L,
                     "2026-06-07 10:00:00"
+                ))
+            );
+        }
+
+        @Override
+        public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id) {
+            return new GithubCommentPublicationHistoryResponse(
+                id,
+                List.of(new GithubCommentPublicationBatchDto(
+                    10L,
+                    "completed",
+                    1,
+                    1,
+                    1,
+                    0,
+                    0,
+                    "2026-06-09 12:00:00",
+                    "2026-06-09 12:00:01",
+                    List.of(new GithubCommentPublicationHistoryItem(
+                        1L,
+                        "src/App.java",
+                        12,
+                        "line",
+                        true,
+                        "published",
+                        "GitHub comment published",
+                        "https://github.com/repo/pull/1#discussion_r1",
+                        1001L,
+                        "2026-06-09 12:00:01"
+                    ))
                 ))
             );
         }
@@ -195,6 +229,16 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.attemptedCount").value(1))
             .andExpect(jsonPath("$.data.succeededCount").value(1))
             .andExpect(jsonPath("$.data.items[0].status").value("published"));
+    }
+
+    @Test
+    void getGithubCommentPublicationHistoryReturnsBatches() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/github-comments/publications"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.batches", hasSize(1)))
+            .andExpect(jsonPath("$.data.batches[0].batchId").value(10))
+            .andExpect(jsonPath("$.data.batches[0].items[0].status").value("published"));
     }
 
     @Test

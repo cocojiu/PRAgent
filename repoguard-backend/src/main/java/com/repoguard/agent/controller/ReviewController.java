@@ -2,6 +2,7 @@ package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.ManualReviewRequest;
@@ -65,9 +66,20 @@ public class ReviewController {
         return ApiResponse.ok(reviewService.getGithubCommentPreview(id));
     }
 
+    /**
+     * 执行真实 GitHub 评论回写，并返回本次操作结果。
+     */
     @PostMapping("/{id}/github-comments")
     public ApiResponse<GithubCommentPublishResponse> publishGithubComments(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.publishGithubComments(id));
+    }
+
+    /**
+     * 返回历史回写批次，辅助前端展示成功、失败、跳过和降级为 PR 总评评论等状态。
+     */
+    @GetMapping("/{id}/github-comments/publications")
+    public ApiResponse<GithubCommentPublicationHistoryResponse> getGithubCommentPublicationHistory(@PathVariable @Min(1) Long id) {
+        return ApiResponse.ok(reviewService.getGithubCommentPublicationHistory(id));
     }
 
     @GetMapping("/github/pull-requests")

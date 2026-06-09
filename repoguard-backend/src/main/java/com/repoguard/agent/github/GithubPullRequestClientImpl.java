@@ -180,14 +180,15 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                         response = publishPullRequestComment(prCommentUrl, draft.body(), config);
                     }
                 }
+                boolean downgradedToPrComment = "pull_request".equals(actualTargetType) && !"pull_request".equals(draft.targetType());
                 results.add(new GithubReviewCommentResult(
                     draft.findingId(),
                     draft.path(),
                     draft.line(),
                     actualTargetType,
                     true,
-                    "published",
-                    "pull_request".equals(actualTargetType) && !"pull_request".equals(draft.targetType())
+                    downgradedToPrComment ? "downgraded_to_pr_comment" : "published",
+                    downgradedToPrComment
                         ? "GitHub line comment could not be resolved; published as PR comment"
                         : "GitHub comment published",
                     response == null ? null : response.htmlUrl(),

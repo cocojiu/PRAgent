@@ -6,13 +6,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ChangedFile;
+import com.repoguard.agent.entity.GithubCommentPublication;
+import com.repoguard.agent.entity.GithubCommentPublicationBatch;
+import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -30,6 +34,8 @@ class ReviewServiceImplTest {
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
+    private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
+    private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
@@ -38,6 +44,8 @@ class ReviewServiceImplTest {
         changedFileMapper,
         reviewFindingMapper,
         githubCommentPublicationMapper,
+        githubCommentPublicationBatchMapper,
+        githubCommentPublicationBatchItemMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
         githubPullRequestClient
@@ -93,6 +101,8 @@ class ReviewServiceImplTest {
         assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).extracting("status").containsExactly("published", "published");
         verify(githubCommentPublicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
+        verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
+        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
     }
 
     @Test
@@ -121,6 +131,48 @@ class ReviewServiceImplTest {
         assertThat(result.items()).extracting("status").containsExactly("already_published");
         assertThat(result.items().getFirst().url()).isEqualTo("https://github.com/comment/1");
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
+        verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
+        verify(githubCommentPublicationBatchItemMapper).insert(any(GithubCommentPublicationBatchItem.class));
+    }
+
+    @Test
+    void getGithubCommentPublicationHistoryReturnsBatchesAndItems() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        GithubCommentPublicationBatch batch = new GithubCommentPublicationBatch();
+        batch.setId(10L);
+        batch.setTaskId(521L);
+        batch.setStatus("completed");
+        batch.setTotalFindings(1);
+        batch.setAttemptedCount(1);
+        batch.setSucceededCount(1);
+        batch.setFailedCount(0);
+        batch.setSkippedCount(0);
+        batch.setCreatedAt(LocalDateTime.of(2026, 6, 9, 12, 0));
+        batch.setCompletedAt(LocalDateTime.of(2026, 6, 9, 12, 0, 1));
+        GithubCommentPublicationBatchItem item = new GithubCommentPublicationBatchItem();
+        item.setBatchId(10L);
+        item.setTaskId(521L);
+        item.setFindingId(1L);
+        item.setFilePath("README");
+        item.setLineNumber(2);
+        item.setTargetType("line");
+        item.setSuccess(true);
+        item.setStatus("published");
+        item.setMessage("GitHub comment published");
+        item.setGithubUrl("https://github.com/comment/1");
+        item.setGithubCommentId(101L);
+        item.setPublishedAt(LocalDateTime.of(2026, 6, 9, 12, 0, 1));
+        when(githubCommentPublicationBatchMapper.selectList(any())).thenReturn(List.of(batch));
+        when(githubCommentPublicationBatchItemMapper.selectList(any())).thenReturn(List.of(item));
+
+        var history = service.getGithubCommentPublicationHistory(521L);
+
+        assertThat(history.taskId()).isEqualTo(521L);
+        assertThat(history.batches()).hasSize(1);
+        assertThat(history.batches().getFirst().batchId()).isEqualTo(10L);
+        assertThat(history.batches().getFirst().items()).hasSize(1);
+        assertThat(history.batches().getFirst().items().getFirst().status()).isEqualTo("published");
+        assertThat(history.batches().getFirst().items().getFirst().url()).isEqualTo("https://github.com/comment/1");
     }
 
     @Test

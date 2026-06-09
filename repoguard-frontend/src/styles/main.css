@@ -602,6 +602,11 @@ a {
   background: #fef3c7;
 }
 
+.status-pill.pending {
+  color: #475569;
+  background: #f1f5f9;
+}
+
 .table-link,
 .card-footer-link,
 .health-footer a {
@@ -1265,6 +1270,121 @@ a {
 .comment-result-item a {
   display: inline-flex;
   margin-top: 8px;
+  color: #1268ff;
+  font-weight: 700;
+}
+
+.comment-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comment-history-title,
+.comment-history-batch-head,
+.comment-history-batch-head > div,
+.comment-history-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.comment-history-title {
+  justify-content: space-between;
+}
+
+.comment-history-title h3 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.comment-history-title span,
+.comment-history-counts span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: #475569;
+  background: #f1f5f9;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.comment-history-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.comment-history-batch-head {
+  justify-content: space-between;
+}
+
+.comment-history-batch-head strong {
+  color: #0f172a;
+}
+
+.comment-history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comment-history-item {
+  padding: 10px;
+  border: 1px solid #e5eaf3;
+  border-radius: 7px;
+  background: #f8fafc;
+}
+
+.comment-history-item.success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.comment-history-item.failed {
+  border-color: #fecaca;
+  background: #fff7f7;
+}
+
+.comment-history-item.skipped {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.comment-history-item div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.comment-history-item strong {
+  overflow-wrap: anywhere;
+}
+
+.comment-history-item span {
+  font-weight: 700;
+}
+
+.comment-history-item p {
+  margin: 6px 0 0;
+  color: #334155;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.comment-history-item a {
+  display: inline-flex;
+  margin-top: 6px;
   color: #1268ff;
   font-weight: 700;
 }

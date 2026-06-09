@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 
@@ -24,7 +25,15 @@ public interface ReviewService {
 
     GithubCommentPreviewResponse getGithubCommentPreview(Long id);
 
+    /**
+     * 将可回写审查发现发布到 GitHub，并记录本次操作的批次历史。
+     */
     GithubCommentPublishResponse publishGithubComments(Long id);
+
+    /**
+     * 查询某个任务的 GitHub 评论回写历史，用于任务详情页追踪每次操作结果。
+     */
+    GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id);
 
     GithubPullRequestOptionsResponse listConfiguredGithubPullRequests();
 

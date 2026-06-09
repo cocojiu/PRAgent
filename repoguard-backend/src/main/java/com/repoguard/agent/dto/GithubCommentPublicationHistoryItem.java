@@ -1,6 +1,9 @@
 package com.repoguard.agent.dto;
 
-public record GithubCommentPublishItem(
+/**
+ * 回写历史中的单条审查发现发布结果。
+ */
+public record GithubCommentPublicationHistoryItem(
     Long findingId,
     String file,
     Integer line,

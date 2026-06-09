@@ -7,6 +7,7 @@ import type {
   ReviewTask,
   ReviewTaskDetail,
   GithubCommentPreview,
+  GithubCommentPublicationHistory,
   GithubCommentPublish,
   GithubPullRequestOptions
 } from "@/types";
@@ -31,6 +32,9 @@ export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api
 
 export const fetchGithubCommentPreview = (id: number) =>
   request<GithubCommentPreview>(`/api/v1/reviews/${id}/github-comments/preview`);
+
+export const fetchGithubCommentPublicationHistory = (id: number) =>
+  request<GithubCommentPublicationHistory>(`/api/v1/reviews/${id}/github-comments/publications`);
 
 export const publishGithubComments = (id: number) =>
   request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {

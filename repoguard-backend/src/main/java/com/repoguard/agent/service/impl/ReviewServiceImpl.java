@@ -7,6 +7,9 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
+import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOption;
@@ -24,6 +27,8 @@ import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
+import com.repoguard.agent.entity.GithubCommentPublicationBatch;
+import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -33,6 +38,8 @@ import com.repoguard.agent.github.GithubRepositoryRef;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -41,6 +48,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.service.ReviewService;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
@@ -62,6 +70,8 @@ public class ReviewServiceImpl implements ReviewService {
     private final ChangedFileMapper changedFileMapper;
     private final ReviewFindingMapper reviewFindingMapper;
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
+    private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
+    private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final GithubPullRequestClient githubPullRequestClient;
@@ -71,6 +81,8 @@ public class ReviewServiceImpl implements ReviewService {
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
         GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient
@@ -79,6 +91,8 @@ public class ReviewServiceImpl implements ReviewService {
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.githubCommentPublicationMapper = githubCommentPublicationMapper;
+        this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
+        this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
@@ -110,6 +124,7 @@ public class ReviewServiceImpl implements ReviewService {
                 item.findingId(),
                 item.file(),
                 item.line(),
+                item.targetType(),
                 Boolean.TRUE.equals(item.published()),
                 Boolean.TRUE.equals(item.published()) ? "already_published" : "skipped",
                 Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
@@ -130,7 +145,7 @@ public class ReviewServiceImpl implements ReviewService {
 
         int succeededCount = (int) publishedItems.stream().filter(GithubCommentPublishItem::success).count();
         int failedCount = publishedItems.size() - succeededCount;
-        return new GithubCommentPublishResponse(
+        GithubCommentPublishResponse response = new GithubCommentPublishResponse(
             task.getId(),
             preview.totalFindings(),
             drafts.size(),
@@ -139,6 +154,9 @@ public class ReviewServiceImpl implements ReviewService {
             skippedItems.size(),
             items
         );
+        // 幂等表只保留审查发现当前发布状态；批次表保留本次点击回写按钮的完整审计轨迹。
+        savePublicationBatch(response);
+        return response;
     }
 
     @Override
@@ -223,6 +241,37 @@ public class ReviewServiceImpl implements ReviewService {
             items.size() - commentableCount - publishedCount,
             items
         );
+    }
+
+    @Override
+    public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+
+        // 批次倒序展示，用户先看到最近一次回写结果。
+        List<GithubCommentPublicationBatch> batches = githubCommentPublicationBatchMapper.selectList(
+            new LambdaQueryWrapper<GithubCommentPublicationBatch>()
+                .eq(GithubCommentPublicationBatch::getTaskId, id)
+                .orderByDesc(GithubCommentPublicationBatch::getCreatedAt)
+                .orderByDesc(GithubCommentPublicationBatch::getId)
+        );
+        if (batches == null || batches.isEmpty()) {
+            return new GithubCommentPublicationHistoryResponse(task.getId(), List.of());
+        }
+
+        List<Long> batchIds = batches.stream().map(GithubCommentPublicationBatch::getId).toList();
+        Map<Long, List<GithubCommentPublicationBatchItem>> itemsByBatchId = githubCommentPublicationBatchItemMapper.selectList(
+            new LambdaQueryWrapper<GithubCommentPublicationBatchItem>()
+                .in(GithubCommentPublicationBatchItem::getBatchId, batchIds)
+                .orderByAsc(GithubCommentPublicationBatchItem::getId)
+        ).stream().collect(Collectors.groupingBy(GithubCommentPublicationBatchItem::getBatchId));
+
+        List<GithubCommentPublicationBatchDto> batchDtos = batches.stream()
+            .map(batch -> toGithubCommentPublicationBatchDto(batch, itemsByBatchId.getOrDefault(batch.getId(), List.of())))
+            .toList();
+        return new GithubCommentPublicationHistoryResponse(task.getId(), batchDtos);
     }
 
     @Override
@@ -394,12 +443,94 @@ public class ReviewServiceImpl implements ReviewService {
             result.findingId(),
             result.path(),
             result.line(),
+            result.targetType(),
             result.success(),
             result.status(),
             result.message(),
             result.url(),
             result.commentId(),
             publication.getPublishedAt() == null ? null : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
+        );
+    }
+
+    private void savePublicationBatch(GithubCommentPublishResponse response) {
+        LocalDateTime now = LocalDateTime.now();
+        GithubCommentPublicationBatch batch = new GithubCommentPublicationBatch();
+        batch.setTaskId(response.taskId());
+        batch.setStatus(resolvePublicationBatchStatus(response));
+        batch.setTotalFindings(response.totalFindings());
+        batch.setAttemptedCount(response.attemptedCount());
+        batch.setSucceededCount(response.succeededCount());
+        batch.setFailedCount(response.failedCount());
+        batch.setSkippedCount(response.skippedCount());
+        batch.setCreatedAt(now);
+        batch.setCompletedAt(now);
+        githubCommentPublicationBatchMapper.insert(batch);
+
+        // 所有结果都写入批次明细，包括 already_published 和 skipped，避免历史视图丢上下文。
+        for (GithubCommentPublishItem item : response.items()) {
+            GithubCommentPublicationBatchItem historyItem = new GithubCommentPublicationBatchItem();
+            historyItem.setBatchId(batch.getId());
+            historyItem.setTaskId(response.taskId());
+            historyItem.setFindingId(item.findingId());
+            historyItem.setFilePath(item.file());
+            historyItem.setLineNumber(item.line());
+            historyItem.setTargetType(item.targetType());
+            historyItem.setStatus(item.status());
+            historyItem.setSuccess(item.success());
+            historyItem.setGithubCommentId(item.githubCommentId());
+            historyItem.setGithubUrl(item.url());
+            historyItem.setMessage(item.message());
+            historyItem.setPublishedAt(parseDateTimeOrNull(item.publishedAt()));
+            historyItem.setCreatedAt(now);
+            githubCommentPublicationBatchItemMapper.insert(historyItem);
+        }
+    }
+
+    private String resolvePublicationBatchStatus(GithubCommentPublishResponse response) {
+        // 批次状态用于页面摘要，不替代逐条审查发现的精确状态。
+        if (response.totalFindings() == 0) {
+            return "empty";
+        }
+        if (response.failedCount() > 0) {
+            return response.succeededCount() > 0 ? "partial_failed" : "failed";
+        }
+        if (response.attemptedCount() == 0 && response.skippedCount() > 0) {
+            return "skipped";
+        }
+        return "completed";
+    }
+
+    private GithubCommentPublicationBatchDto toGithubCommentPublicationBatchDto(
+        GithubCommentPublicationBatch batch,
+        List<GithubCommentPublicationBatchItem> items
+    ) {
+        return new GithubCommentPublicationBatchDto(
+            batch.getId(),
+            batch.getStatus(),
+            batch.getTotalFindings(),
+            batch.getAttemptedCount(),
+            batch.getSucceededCount(),
+            batch.getFailedCount(),
+            batch.getSkippedCount(),
+            formatDateTimeOrNull(batch.getCreatedAt()),
+            formatDateTimeOrNull(batch.getCompletedAt()),
+            items.stream().map(this::toGithubCommentPublicationHistoryItem).toList()
+        );
+    }
+
+    private GithubCommentPublicationHistoryItem toGithubCommentPublicationHistoryItem(GithubCommentPublicationBatchItem item) {
+        return new GithubCommentPublicationHistoryItem(
+            item.getFindingId(),
+            item.getFilePath(),
+            item.getLineNumber(),
+            item.getTargetType(),
+            item.getSuccess(),
+            item.getStatus(),
+            item.getMessage(),
+            item.getGithubUrl(),
+            item.getGithubCommentId(),
+            formatDateTimeOrNull(item.getPublishedAt())
         );
     }
 
@@ -524,10 +655,25 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     private boolean isPublished(GithubCommentPublication publication) {
+        // 降级为 PR 总评评论也已经产生 GitHub URL，因此也应参与幂等跳过。
         return publication != null
             && Boolean.TRUE.equals(publication.getSuccess())
-            && "published".equals(publication.getStatus())
             && StringUtils.hasText(publication.getGithubUrl());
+    }
+
+    private LocalDateTime parseDateTimeOrNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value, DATE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    private String formatDateTimeOrNull(LocalDateTime value) {
+        return value == null ? null : value.format(DATE_TIME_FORMATTER);
     }
 
     private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {

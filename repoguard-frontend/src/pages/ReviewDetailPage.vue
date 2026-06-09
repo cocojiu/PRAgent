@@ -138,7 +138,7 @@
             />
             <template v-if="githubCommentPreview">
               <div class="comment-preview-summary">
-                <span>总 findings：{{ githubCommentPreview.totalFindings }}</span>
+                <span>总审查发现：{{ githubCommentPreview.totalFindings }}</span>
                 <span>可回写：{{ githubCommentPreview.commentableCount }}</span>
                 <span>已发布：{{ publishedCommentCount }}</span>
                 <span>不可回写：{{ githubCommentPreview.blockedCount }}</span>
@@ -177,21 +177,66 @@
                   <pre>{{ item.commentBody }}</pre>
                 </section>
               </div>
+              <el-empty v-else description="暂无评论草稿" />
               <div v-if="githubCommentPublishResult?.items.length" class="comment-result-list">
                 <section
                   v-for="item in githubCommentPublishResult.items"
                   :key="`${item.findingId}-${item.status}`"
-                  :class="['comment-result-item', item.success ? 'success' : item.status === 'skipped' ? 'skipped' : 'failed']"
+                  :class="['comment-result-item', publicationItemStatusClass(item.status)]"
                 >
                   <div>
                     <strong>{{ item.file }}{{ item.line ? `:L${item.line}` : "" }}</strong>
                     <span>{{ publishStatusText(item.status) }}</span>
                   </div>
-                  <p>{{ item.message }}</p>
+                  <p>{{ publicationMessageText(item.message, item.status) }}</p>
                   <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">查看 GitHub 评论</a>
                 </section>
               </div>
-              <el-empty v-else description="暂无评论草稿" />
+              <el-alert
+                v-if="historyError"
+                class="preview-alert"
+                type="warning"
+                :title="historyError"
+                show-icon
+                :closable="false"
+              />
+              <div v-if="publicationHistoryBatches.length" class="comment-history">
+                <div class="comment-history-title">
+                  <h3>回写历史</h3>
+                  <span>{{ publicationHistoryBatches.length }} 次</span>
+                </div>
+                <section v-for="batch in publicationHistoryBatches" :key="batch.batchId" class="comment-history-batch">
+                  <div class="comment-history-batch-head">
+                    <div>
+                      <strong>{{ batch.createdAt }}</strong>
+                      <span :class="`status-pill ${publicationBatchStatusClass(batch.status)}`">
+                        {{ publicationBatchStatusText(batch.status) }}
+                      </span>
+                    </div>
+                    <div class="comment-history-counts">
+                      <span>尝试 {{ batch.attemptedCount }}</span>
+                      <span>成功 {{ batch.succeededCount }}</span>
+                      <span>失败 {{ batch.failedCount }}</span>
+                      <span>跳过 {{ batch.skippedCount }}</span>
+                    </div>
+                  </div>
+                  <div class="comment-history-items">
+                    <div
+                      v-for="item in batch.items"
+                      :key="`${batch.batchId}-${item.findingId}-${item.status}`"
+                      :class="['comment-history-item', publicationItemStatusClass(item.status)]"
+                    >
+                      <div>
+                        <strong>{{ item.file || "PR 总评" }}{{ item.line ? `:L${item.line}` : "" }}</strong>
+                        <span>{{ publishStatusText(item.status) }}</span>
+                      </div>
+                      <p>{{ publicationMessageText(item.message, item.status) }}</p>
+                      <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">查看 GitHub 评论</a>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <el-empty v-else-if="!historyError" description="暂无回写历史" />
             </template>
             <el-empty v-else-if="!previewError" description="评论预览加载中" />
           </article>
@@ -284,8 +329,23 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
-import { fetchGithubCommentPreview, fetchReviewDetail, publishGithubComments } from "@/api/reviews";
-import type { ChangedFile, GithubCommentPreview, GithubCommentPublish, ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItem } from "@/types";
+import {
+  fetchGithubCommentPreview,
+  fetchGithubCommentPublicationHistory,
+  fetchReviewDetail,
+  publishGithubComments
+} from "@/api/reviews";
+import type {
+  ChangedFile,
+  GithubCommentPreview,
+  GithubCommentPublicationBatch,
+  GithubCommentPublicationHistory,
+  GithubCommentPublish,
+  ReviewStatus,
+  ReviewTaskDetail,
+  RiskLevel,
+  TimelineItem
+} from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
@@ -303,13 +363,16 @@ const silentRefreshing = ref(false);
 const publishingComments = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
+const historyError = ref("");
 const pollErrorMessage = ref("");
 const pollFailureCount = ref(0);
 const lastRefreshedAt = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
 const githubCommentPreview = ref<GithubCommentPreview | null>(null);
+const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | null>(null);
 const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
 const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
+const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
@@ -466,9 +529,65 @@ const publishStatusText = (status: string) => {
     published: "已发布",
     failed: "失败",
     skipped: "跳过",
-    already_published: "已发布，已跳过"
+    already_published: "已发布，已跳过",
+    downgraded_to_pr_comment: "已降级为 PR 评论"
   };
   return labels[status] ?? status;
+};
+
+const publicationBatchStatusText = (status: string) => {
+  const labels: Record<string, string> = {
+    completed: "完成",
+    partial_failed: "部分失败",
+    failed: "失败",
+    skipped: "全部跳过",
+    empty: "无审查发现"
+  };
+  return labels[status] ?? status;
+};
+
+const publicationBatchStatusClass = (status: string) => {
+  const classes: Record<string, string> = {
+    completed: "success",
+    partial_failed: "warning",
+    failed: "danger",
+    skipped: "warning",
+    empty: "pending"
+  };
+  return classes[status] ?? "pending";
+};
+
+const publicationItemStatusClass = (status: string) => {
+  const classes: Record<string, string> = {
+    published: "success",
+    downgraded_to_pr_comment: "success",
+    already_published: "skipped",
+    skipped: "skipped",
+    failed: "failed"
+  };
+  return classes[status] ?? "skipped";
+};
+
+const publicationMessageText = (message: string | undefined, status: string) => {
+  const labels: Record<string, string> = {
+    "GitHub comment published": "GitHub 评论已发布。",
+    "GitHub comment already published": "该审查发现此前已经发布，本次已跳过。",
+    "GitHub line comment could not be resolved; published as PR comment": "GitHub 行评论定位失败，已降级为 PR 总评评论。"
+  };
+  if (message && labels[message]) {
+    return labels[message];
+  }
+  if (message) {
+    return message;
+  }
+  const fallbackLabels: Record<string, string> = {
+    published: "GitHub 评论已发布。",
+    downgraded_to_pr_comment: "GitHub 行评论定位失败，已降级为 PR 总评评论。",
+    already_published: "该审查发现此前已经发布，本次已跳过。",
+    skipped: "本次未回写该审查发现。",
+    failed: "GitHub 评论回写失败。"
+  };
+  return fallbackLabels[status] ?? status;
 };
 
 const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
@@ -496,6 +615,16 @@ const loadGithubCommentPreview = async (id: number) => {
   } catch (error) {
     githubCommentPreview.value = null;
     previewError.value = error instanceof Error ? error.message : "GitHub 评论预览加载失败";
+  }
+};
+
+const loadGithubCommentPublicationHistory = async (id: number) => {
+  historyError.value = "";
+  try {
+    githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id);
+  } catch (error) {
+    githubCommentPublicationHistory.value = null;
+    historyError.value = error instanceof Error ? error.message : "GitHub 回写历史加载失败";
   }
 };
 
@@ -560,10 +689,15 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     pollFailureCount.value = 0;
     lastRefreshedAt.value = formatRefreshTime();
     if (task.status === "completed" || task.status === "failed") {
-      await loadGithubCommentPreview(id);
+      await Promise.all([
+        loadGithubCommentPreview(id),
+        loadGithubCommentPublicationHistory(id)
+      ]);
     } else {
       previewError.value = "";
       githubCommentPreview.value = null;
+      historyError.value = "";
+      githubCommentPublicationHistory.value = null;
     }
     syncPolling();
   } catch (error) {
@@ -623,7 +757,10 @@ const confirmPublishGithubComments = async () => {
     } else {
       ElMessage.success(`GitHub 评论回写成功：${result.succeededCount} 条`);
     }
-    githubCommentPreview.value = await fetchGithubCommentPreview(selectedTask.value.id);
+    await Promise.all([
+      loadGithubCommentPreview(selectedTask.value.id),
+      loadGithubCommentPublicationHistory(selectedTask.value.id)
+    ]);
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "GitHub 评论回写失败");
   } finally {
