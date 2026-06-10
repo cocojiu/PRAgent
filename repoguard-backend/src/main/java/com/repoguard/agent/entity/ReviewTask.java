@@ -21,6 +21,8 @@ public class ReviewTask {
     private Integer publishAttempts;
     private LocalDateTime nextPublishRetryAt;
     private String lastPublishError;
+    private LocalDateTime publishClaimedAt;
+    private String publishClaimedBy;
     private String llmStatus;
     private String prUrl;
     /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
@@ -134,6 +136,22 @@ public class ReviewTask {
 
     public void setLastPublishError(String lastPublishError) {
         this.lastPublishError = lastPublishError;
+    }
+
+    public LocalDateTime getPublishClaimedAt() {
+        return publishClaimedAt;
+    }
+
+    public void setPublishClaimedAt(LocalDateTime publishClaimedAt) {
+        this.publishClaimedAt = publishClaimedAt;
+    }
+
+    public String getPublishClaimedBy() {
+        return publishClaimedBy;
+    }
+
+    public void setPublishClaimedBy(String publishClaimedBy) {
+        this.publishClaimedBy = publishClaimedBy;
     }
 
     public String getLlmStatus() {

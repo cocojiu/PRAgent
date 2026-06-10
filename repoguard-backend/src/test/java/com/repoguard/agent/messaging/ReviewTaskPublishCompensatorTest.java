@@ -3,9 +3,11 @@ package com.repoguard.agent.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -25,7 +27,8 @@ class ReviewTaskPublishCompensatorTest {
         reviewTaskMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
-        properties
+        properties,
+        "test-instance"
     );
 
     @Test
@@ -34,6 +37,7 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(1);
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(3);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
 
         compensator.compensate(task);
@@ -45,6 +49,8 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(2);
         assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNull();
         assertThat(taskCaptor.getValue().getLastPublishError()).isNull();
+        assertThat(taskCaptor.getValue().getPublishClaimedAt()).isNull();
+        assertThat(taskCaptor.getValue().getPublishClaimedBy()).isNull();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -58,6 +64,7 @@ class ReviewTaskPublishCompensatorTest {
         ReviewTask task = task();
         task.setPublishAttempts(1);
         properties.setPublishCompensationIntervalMs(1000);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(reviewTaskPublisher)
             .publish(any(ReviewTaskMessage.class));
@@ -70,11 +77,43 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(2);
         assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
         assertThat(taskCaptor.getValue().getLastPublishError()).contains("publisher confirm timed out");
+        assertThat(taskCaptor.getValue().getPublishClaimedAt()).isNull();
+        assertThat(taskCaptor.getValue().getPublishClaimedBy()).isNull();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getValue().getLabel()).contains("Message publish retry failed");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("FAILED");
+    }
+
+    @Test
+    void compensateSkipsPublishWhenClaimFails() {
+        ReviewTask task = task();
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
+    void compensateClaimUsesLeaseAwareConditionalUpdate() {
+        ReviewTask task = task();
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        compensator.compensate(task);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        assertThat(sqlSegment)
+            .contains("publish_claimed_at")
+            .contains("status")
+            .contains("next_publish_retry_at")
+            .contains("publish_attempts");
     }
 
     private ReviewTask task() {

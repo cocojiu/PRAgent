@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -8,6 +9,8 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,17 +24,36 @@ public class ReviewTaskPublishCompensator {
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RabbitReviewQueueProperties properties;
+    private final String instanceId;
 
+    @Autowired
     public ReviewTaskPublishCompensator(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         RabbitReviewQueueProperties properties
     ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "repoguard-" + UUID.randomUUID()
+        );
+    }
+
+    ReviewTaskPublishCompensator(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RabbitReviewQueueProperties properties,
+        String instanceId
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.properties = properties;
+        this.instanceId = instanceId;
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
@@ -50,6 +72,10 @@ public class ReviewTaskPublishCompensator {
     }
 
     void compensate(ReviewTask task) {
+        LocalDateTime claimedAt = LocalDateTime.now();
+        if (!claimTask(task, claimedAt)) {
+            return;
+        }
         int nextAttempt = safeAttempts(task) + 1;
         try {
             reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
@@ -58,15 +84,43 @@ public class ReviewTaskPublishCompensator {
             task.setPublishAttempts(nextAttempt);
             task.setNextPublishRetryAt(null);
             task.setLastPublishError(null);
+            task.setPublishClaimedAt(null);
+            task.setPublishClaimedBy(null);
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
         } catch (MessagePublishException ex) {
             task.setPublishAttempts(nextAttempt);
             task.setNextPublishRetryAt(LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000));
             task.setLastPublishError(truncate(errorMessage(ex)));
+            task.setPublishClaimedAt(null);
+            task.setPublishClaimedBy(null);
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), "Message publish retry failed: " + truncate(errorMessage(ex)), LocalDateTime.now(), "FAILED");
         }
+    }
+
+    private boolean claimTask(ReviewTask task, LocalDateTime claimedAt) {
+        LocalDateTime expiredBefore = claimedAt.minusNanos(leaseMs() * 1_000_000);
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", STATUS_PUBLISH_FAILED)
+                .le("next_publish_retry_at", claimedAt)
+                .lt("publish_attempts", maxAttempts())
+                .and(wrapper -> wrapper
+                    .isNull("publish_claimed_at")
+                    .or()
+                    .le("publish_claimed_at", expiredBefore)
+                )
+                .set("publish_claimed_at", claimedAt)
+                .set("publish_claimed_by", instanceId)
+        );
+        if (updated > 0) {
+            task.setPublishClaimedAt(claimedAt);
+            task.setPublishClaimedBy(instanceId);
+            return true;
+        }
+        return false;
     }
 
     private ReviewTaskMessage toMessage(ReviewTask task, LocalDateTime queuedAt) {
@@ -114,6 +168,10 @@ public class ReviewTaskPublishCompensator {
 
     private long retryIntervalMs() {
         return Math.max(1000, properties.getPublishCompensationIntervalMs());
+    }
+
+    private long leaseMs() {
+        return Math.max(1000, properties.getPublishCompensationLeaseMs());
     }
 
     private String errorMessage(Exception ex) {

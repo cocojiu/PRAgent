@@ -18,6 +18,7 @@ public class RabbitReviewQueueProperties {
     private int publishCompensationMaxAttempts = 10;
     private long publishCompensationIntervalMs = 60000;
     private int publishCompensationBatchSize = 20;
+    private long publishCompensationLeaseMs = 120000;
 
     public String getExchange() {
         return exchange;
@@ -121,5 +122,13 @@ public class RabbitReviewQueueProperties {
 
     public void setPublishCompensationBatchSize(int publishCompensationBatchSize) {
         this.publishCompensationBatchSize = publishCompensationBatchSize;
+    }
+
+    public long getPublishCompensationLeaseMs() {
+        return publishCompensationLeaseMs;
+    }
+
+    public void setPublishCompensationLeaseMs(long publishCompensationLeaseMs) {
+        this.publishCompensationLeaseMs = publishCompensationLeaseMs;
     }
 }
