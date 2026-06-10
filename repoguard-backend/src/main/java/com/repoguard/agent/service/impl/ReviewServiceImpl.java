@@ -479,6 +479,7 @@ public class ReviewServiceImpl implements ReviewService {
                     item.title(),
                     item.branch(),
                     item.commit(),
+                    item.commit(),
                     item.author(),
                     item.url(),
                     item.updatedAt()

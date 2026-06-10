@@ -207,6 +207,7 @@ class ReviewControllerTest {
                     "Manual review smoke test",
                     "main",
                     "a1b2c3d",
+                    "a1b2c3d",
                     "octocat",
                     "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
                     "2026-06-07T08:00:00Z"
@@ -298,7 +299,8 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.organization").value("repo-guard-demo"))
             .andExpect(jsonPath("$.data.repository").value("spring-boot-demo"))
-            .andExpect(jsonPath("$.data.items[0].number").value(512));
+            .andExpect(jsonPath("$.data.items[0].number").value(512))
+            .andExpect(jsonPath("$.data.items[0].headSha").value("a1b2c3d"));
     }
 
     @Test

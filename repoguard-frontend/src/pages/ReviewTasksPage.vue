@@ -198,7 +198,7 @@
         </el-table-column>
         <el-table-column label="Commit" width="130">
           <template #default="{ row }">
-            <code>{{ shortCommit(row.commit) }}</code>
+            <code>{{ shortCommit(resolvePullRequestHeadSha(row)) }}</code>
           </template>
         </el-table-column>
         <template #empty>
@@ -429,6 +429,8 @@ const retryTask = async (task: ReviewTask) => {
   }
 };
 
+const resolvePullRequestHeadSha = (pullRequest: GithubPullRequestOption) => pullRequest.headSha || pullRequest.commit;
+
 const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
 const openCreateDialog = () => {
@@ -497,7 +499,7 @@ const createReviewFromSelectedPullRequest = async () => {
       repository: pullRequestRepository.value,
       prNumber: pullRequest.number,
       title: pullRequest.title,
-      commit: pullRequest.commit,
+      commit: resolvePullRequestHeadSha(pullRequest),
       branch: pullRequest.branch,
       source: "github_pr_picker"
     });

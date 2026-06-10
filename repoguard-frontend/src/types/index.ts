@@ -225,6 +225,7 @@ export interface GithubPullRequestOption {
   title: string;
   branch?: string;
   commit?: string;
+  headSha?: string;
   author?: string;
   url?: string;
   updatedAt?: string;

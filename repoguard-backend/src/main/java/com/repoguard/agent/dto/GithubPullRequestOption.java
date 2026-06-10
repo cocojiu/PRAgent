@@ -5,6 +5,7 @@ public record GithubPullRequestOption(
     String title,
     String branch,
     String commit,
+    String headSha,
     String author,
     String url,
     String updatedAt

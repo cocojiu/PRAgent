@@ -11,7 +11,7 @@
     </div>
 
     <el-alert
-      title="配置系统所需的外部服务连接信息。密钥字段保存后只会显示脱敏值。"
+      title="GitHub 与 LLM 配置会参与审查链路；MySQL 与 RabbitMQ 配置用于页面检测和运维核对，保存后不会动态切换当前运行中的数据源或消息队列连接。密钥字段保存后只会显示脱敏值。"
       type="primary"
       :closable="false"
       show-icon
@@ -94,12 +94,12 @@ const defaultIntegrationItems: IntegrationConfig[] = [
   {
     id: "mysql",
     name: "MySQL",
-    description: "用于存储系统数据和审查结果等信息",
+    description: "用于检测数据库连接；当前运行数据源仍由后端启动配置决定",
     status: "missing_secret",
     statusText: "未配置",
     metaLabel: "更新时间",
     metaValue: "未更新",
-    message: "请配置 MySQL 连接信息",
+    message: "请配置用于检测的 MySQL 连接信息",
     fields: [
       { label: "JDBC URL", value: "", type: "text", placeholder: "jdbc:mysql://localhost:3306/repoguard" },
       { label: "Username", value: "", type: "text" },
@@ -110,12 +110,12 @@ const defaultIntegrationItems: IntegrationConfig[] = [
   {
     id: "rabbitmq",
     name: "RabbitMQ",
-    description: "用于异步任务处理和消息队列通信",
+    description: "用于检测消息队列连接；当前运行队列仍由后端启动配置决定",
     status: "missing_secret",
     statusText: "未配置",
     metaLabel: "更新时间",
     metaValue: "未更新",
-    message: "请配置 RabbitMQ 连接信息",
+    message: "请配置用于检测的 RabbitMQ 连接信息",
     fields: [
       { label: "AMQP URL", value: "", type: "text", placeholder: "amqp://localhost:5672" },
       { label: "Username", value: "", type: "text" },
@@ -322,7 +322,9 @@ const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegration
   item.statusText = isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置";
   item.metaLabel = config.lastCheckedAt ? "检测时间" : "更新时间";
   item.metaValue = config.lastCheckedAt ?? config.updatedAt ?? "未更新";
-  item.message = config.lastError ?? (isConfigured ? `${serviceName} 配置已保存` : `请配置 ${serviceName} 连接信息`);
+  item.message = config.lastError ?? (isConfigured
+    ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
+    : `请配置用于检测的 ${serviceName} 连接信息`);
   item.fields = serviceFields(id, config);
   formState[id] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
 };
