@@ -9,7 +9,7 @@
       </header>
 
       <div class="login-brand-content">
-        <h1>智能代码安全<br />审查平台</h1>
+        <h1>智能代码安全审查平台</h1>
         <p>基于 AI 驱动的代码审查与安全检测，全面保障您的软件供应链安全。</p>
 
         <div class="login-feature-list">
@@ -270,10 +270,11 @@ const handleRegister = () => {
 .login-brand-content h1 {
   margin: 0;
   color: #ffffff;
-  font-size: 42px;
+  font-size: 40px;
   line-height: 1.26;
   font-weight: 800;
   letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .login-brand-content p {
@@ -511,6 +512,7 @@ const handleRegister = () => {
 
   .login-brand-content h1 {
     font-size: 36px;
+    white-space: normal;
   }
 
   .login-brand-content p {
