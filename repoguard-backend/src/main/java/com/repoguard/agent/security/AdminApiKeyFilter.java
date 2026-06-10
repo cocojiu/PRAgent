@@ -59,7 +59,8 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
         }
         return "/api/v1/reviews/manual".equals(path)
             || path.matches("/api/v1/reviews/\\d+/retry")
-            || path.matches("/api/v1/reviews/\\d+/github-comments");
+            || path.matches("/api/v1/reviews/\\d+/github-comments")
+            || path.matches("/api/v1/message-queue/tasks/\\d+/requeue");
     }
 
     private boolean secureEquals(String expected, String actual) {

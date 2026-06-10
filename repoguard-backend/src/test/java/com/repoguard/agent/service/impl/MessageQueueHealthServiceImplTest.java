@@ -14,9 +14,11 @@ import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -32,6 +34,7 @@ class MessageQueueHealthServiceImplTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
+    private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
@@ -39,6 +42,7 @@ class MessageQueueHealthServiceImplTest {
     private final MessageQueueHealthServiceImpl service = new MessageQueueHealthServiceImpl(
         reviewTaskMapper,
         reviewTimelineMapper,
+        systemSettingLogMapper,
         integrationConfigMapper,
         properties,
         rabbitTemplate,
@@ -105,6 +109,7 @@ class MessageQueueHealthServiceImplTest {
         verify(reviewTaskMapper).updateById(task);
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
+        verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 
     @Test
@@ -123,6 +128,7 @@ class MessageQueueHealthServiceImplTest {
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getNextPublishRetryAt()).isNotNull();
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
+        verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 
     @Test
@@ -133,6 +139,7 @@ class MessageQueueHealthServiceImplTest {
         assertThatThrownBy(() -> service.requeueTask(42L))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Claimed message tasks cannot be requeued");
+        verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 
     private IntegrationConfig rabbitConfig() {

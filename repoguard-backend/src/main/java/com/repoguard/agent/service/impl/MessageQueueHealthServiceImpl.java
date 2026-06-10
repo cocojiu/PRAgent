@@ -15,9 +15,11 @@ import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -42,6 +44,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
+    private final SystemSettingLogMapper systemSettingLogMapper;
     private final IntegrationConfigMapper integrationConfigMapper;
     private final RabbitReviewQueueProperties properties;
     private final RabbitTemplate rabbitTemplate;
@@ -50,6 +53,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
         IntegrationConfigMapper integrationConfigMapper,
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
@@ -57,6 +61,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
+        this.systemSettingLogMapper = systemSettingLogMapper;
         this.integrationConfigMapper = integrationConfigMapper;
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
@@ -84,16 +89,19 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public MessageQueueRequeueResponse requeueTask(Long taskId) {
         ReviewTask task = reviewTaskMapper.selectById(taskId);
         if (task == null) {
+            recordAudit(taskId, "FAILED", "not found");
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
         if (!isPublishFailed(task)) {
+            recordAudit(taskId, "FAILED", "status=" + task.getStatus());
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
         }
         if (task.getPublishClaimedAt() != null) {
+            recordAudit(taskId, "FAILED", "claimedBy=" + task.getPublishClaimedBy());
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
         }
 
@@ -117,9 +125,11 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 task.getCommitSha(),
                 queuedAt
             ));
+            recordAudit(task.getId(), "SUCCESS", "queued");
             return new MessageQueueRequeueResponse(task.getId(), "queued", "Message task requeued", task.getPublishAttempts());
         } catch (MessagePublishException ex) {
             markPublishFailed(task, ex, queuedAt);
+            recordAudit(task.getId(), "FAILED", truncate(errorMessage(ex)));
             return new MessageQueueRequeueResponse(
                 task.getId(),
                 "publish_failed",
@@ -256,6 +266,15 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         task.setPublishClaimedBy(null);
         reviewTaskMapper.updateById(task);
         appendTimeline(task.getId(), "Message manual requeue failed: " + errorMessage(ex), failedAt, "FAILED");
+    }
+
+    private void recordAudit(Long taskId, String status, String detail) {
+        SystemSettingLog log = new SystemSettingLog();
+        log.setOperator("admin-api-key");
+        log.setAction(truncate("MQ requeue task #" + taskId + ": " + detail));
+        log.setStatus(status);
+        log.setCreatedAt(LocalDateTime.now());
+        systemSettingLogMapper.insert(log);
     }
 
     private int nextTimelineSortOrder(Long taskId) {
