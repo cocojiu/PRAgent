@@ -106,6 +106,7 @@ import {
   Menu,
   PanelLeftClose,
   Plug,
+  RadioTower,
   ShieldCheck
 } from "lucide-vue-next";
 import { fetchNotifications } from "@/api/notifications";
@@ -125,6 +126,7 @@ const navItems = [
   { label: "审查任务", path: "/repoguard/tasks", icon: ClipboardList },
   { label: "规则配置", path: "/repoguard/rules", icon: ShieldCheck },
   { label: "集成设置", path: "/repoguard/integrations", icon: Plug },
+  { label: "消息队列", path: "/repoguard/message-queue", icon: RadioTower },
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 

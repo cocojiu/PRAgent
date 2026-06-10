@@ -45,6 +45,12 @@ export const router = createRouter({
           meta: { title: "集成配置" }
         },
         {
+          path: "message-queue",
+          name: routeNames.messageQueue,
+          component: () => import("@/pages/MessageQueueHealthPage.vue"),
+          meta: { title: "消息队列健康状态" }
+        },
+        {
           path: "settings",
           name: routeNames.settings,
           component: () => import("@/pages/SystemSettingsPage.vue"),
