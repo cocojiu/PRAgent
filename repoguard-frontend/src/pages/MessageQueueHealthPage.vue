@@ -155,9 +155,16 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <div class="table-actions">
-              <el-tooltip content="重新入队接口将在后续优化接入">
+              <el-tooltip content="将发布失败任务重新发送到 RabbitMQ">
                 <span>
-                  <el-button size="small" :disabled="!canRequeue(row.status)">重新入队</el-button>
+                  <el-button
+                    size="small"
+                    :disabled="!canRequeue(row.status)"
+                    :loading="requeueingTaskId === row.taskId"
+                    @click="requeueTask(row)"
+                  >
+                    重新入队
+                  </el-button>
                 </span>
               </el-tooltip>
               <RouterLink class="table-link" :to="{ name: routeNames.taskDetail, params: { id: row.taskId } }">查看</RouterLink>
@@ -180,7 +187,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Boxes,
   CircleAlert,
@@ -195,7 +202,7 @@ import {
   Workflow
 } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
-import { fetchMessageQueueHealth } from "@/api/messageQueue";
+import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQueue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { routeNames } from "@/router/names";
 import type { MessageQueueExceptionTask, MessageQueueHealth, MessageQueueMetric } from "@/types";
@@ -208,6 +215,7 @@ const statusFilter = ref("");
 const repositoryFilter = ref("");
 const keyword = ref("");
 const autoRefresh = ref(false);
+const requeueingTaskId = ref<number>();
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
 const metricIconMap = {
@@ -359,6 +367,40 @@ const queueStatusClass = (status: string) => {
 };
 
 const canRequeue = (status: MessageQueueExceptionTask["status"]) => status === "PUBLISH_FAILED" || status === "RETRY_EXHAUSTED";
+
+const requeueTask = async (task: MessageQueueExceptionTask) => {
+  if (!canRequeue(task.status) || requeueingTaskId.value) {
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认将任务 #${task.taskId} 重新发布到 RabbitMQ 队列？`,
+      "确认重新入队",
+      {
+        confirmButtonText: "重新入队",
+        cancelButtonText: "取消",
+        type: "warning"
+      }
+    );
+  } catch {
+    return;
+  }
+
+  requeueingTaskId.value = task.taskId;
+  try {
+    const response = await requeueMessageQueueTask(task.taskId);
+    if (response.status === "queued") {
+      ElMessage.success("任务已重新入队");
+    } else {
+      ElMessage.warning(response.message || "任务仍等待发布补偿");
+    }
+    await loadHealth();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "重新入队失败");
+  } finally {
+    requeueingTaskId.value = undefined;
+  }
+};
 
 const stopAutoRefresh = () => {
   if (refreshTimer) {

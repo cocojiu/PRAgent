@@ -354,6 +354,13 @@ export interface MessageQueueHealth {
   dataSource: string;
 }
 
+export interface MessageQueueRequeueResponse {
+  taskId: number;
+  status: "queued" | "publish_failed" | string;
+  message: string;
+  publishAttempts: number;
+}
+
 export interface ReviewRuleConfig {
   id: string;
   name: string;

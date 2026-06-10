@@ -1,17 +1,26 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueMetricDto;
+import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.dto.RabbitMqTopologyDto;
 import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -19,31 +28,39 @@ import java.util.Comparator;
 import java.util.List;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
 
     private static final String RABBITMQ_PROVIDER = "RABBITMQ";
     private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
+    private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_DLQ = "DLQ";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTimelineMapper reviewTimelineMapper;
     private final IntegrationConfigMapper integrationConfigMapper;
     private final RabbitReviewQueueProperties properties;
     private final RabbitTemplate rabbitTemplate;
+    private final ReviewTaskPublisher reviewTaskPublisher;
 
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
         IntegrationConfigMapper integrationConfigMapper,
         RabbitReviewQueueProperties properties,
-        RabbitTemplate rabbitTemplate
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
+        this.reviewTimelineMapper = reviewTimelineMapper;
         this.integrationConfigMapper = integrationConfigMapper;
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
+        this.reviewTaskPublisher = reviewTaskPublisher;
     }
 
     @Override
@@ -64,6 +81,52 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             format(LocalDateTime.now()),
             "DATABASE_TASK_STATE"
         );
+    }
+
+    @Override
+    @Transactional
+    public MessageQueueRequeueResponse requeueTask(Long taskId) {
+        ReviewTask task = reviewTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
+        }
+        if (!isPublishFailed(task)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
+        }
+        if (task.getPublishClaimedAt() != null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
+        }
+
+        LocalDateTime queuedAt = LocalDateTime.now();
+        task.setStatus(STATUS_QUEUED);
+        task.setLlmStatus("PENDING");
+        task.setPublishAttempts(0);
+        task.setNextPublishRetryAt(null);
+        task.setLastPublishError(null);
+        task.setPublishClaimedAt(null);
+        task.setPublishClaimedBy(null);
+        reviewTaskMapper.updateById(task);
+        appendTimeline(task.getId(), "Message manually requeued", queuedAt, "CURRENT");
+
+        try {
+            reviewTaskPublisher.publish(new ReviewTaskMessage(
+                task.getId(),
+                task.getOrganization(),
+                task.getRepository(),
+                task.getPrNumber(),
+                task.getCommitSha(),
+                queuedAt
+            ));
+            return new MessageQueueRequeueResponse(task.getId(), "queued", "Message task requeued", task.getPublishAttempts());
+        } catch (MessagePublishException ex) {
+            markPublishFailed(task, ex, queuedAt);
+            return new MessageQueueRequeueResponse(
+                task.getId(),
+                "publish_failed",
+                "Message task saved, waiting for publish compensation",
+                task.getPublishAttempts()
+            );
+        }
     }
 
     private ActiveRabbitMqConfigDto activeConfig(IntegrationConfig config) {
@@ -166,6 +229,45 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         return isPublishFailed(task) || STATUS_DLQ.equals(task.getStatus());
     }
 
+    private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
+        reviewTimelineMapper.update(
+            new UpdateWrapper<ReviewTimeline>()
+                .eq("task_id", taskId)
+                .eq("status", "CURRENT")
+                .set("status", "DONE")
+        );
+
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(taskId);
+        timeline.setLabel(truncate(label));
+        timeline.setEventTime(eventTime);
+        timeline.setStatus(status);
+        timeline.setSortOrder(nextTimelineSortOrder(taskId));
+        reviewTimelineMapper.insert(timeline);
+    }
+
+    private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
+        task.setStatus(STATUS_PUBLISH_FAILED);
+        task.setLlmStatus("PENDING");
+        task.setPublishAttempts(safeAttempts(task) + 1);
+        task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, properties.getPublishCompensationIntervalMs()) * 1_000_000));
+        task.setLastPublishError(truncate(errorMessage(ex)));
+        task.setPublishClaimedAt(null);
+        task.setPublishClaimedBy(null);
+        reviewTaskMapper.updateById(task);
+        appendTimeline(task.getId(), "Message manual requeue failed: " + errorMessage(ex), failedAt, "FAILED");
+    }
+
+    private int nextTimelineSortOrder(Long taskId) {
+        ReviewTimeline latest = reviewTimelineMapper.selectOne(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .eq(ReviewTimeline::getTaskId, taskId)
+                .orderByDesc(ReviewTimeline::getSortOrder)
+                .last("limit 1")
+        );
+        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
+    }
+
     private String exceptionStatus(ReviewTask task) {
         if (STATUS_DLQ.equals(task.getStatus())) {
             return STATUS_DLQ;
@@ -193,6 +295,16 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
     private int maxAttempts() {
         return Math.max(1, properties.getPublishCompensationMaxAttempts());
+    }
+
+    private String errorMessage(Exception ex) {
+        return ex.getMessage() == null || ex.getMessage().isBlank()
+            ? ex.getClass().getSimpleName()
+            : ex.getMessage().replaceAll("\\s+", " ").trim();
+    }
+
+    private String truncate(String value) {
+        return value.length() > 120 ? value.substring(0, 117) + "..." : value;
     }
 
     private String format(LocalDateTime value) {
