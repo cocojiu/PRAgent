@@ -22,6 +22,9 @@ class RabbitMqConfigTest {
         assertThat(properties.getPublishInitialIntervalMs()).isEqualTo(500);
         assertThat(properties.getPublishMultiplier()).isEqualTo(3.0);
         assertThat(properties.getPublishConfirmTimeoutMs()).isEqualTo(5000);
+        assertThat(properties.getPublishCompensationMaxAttempts()).isEqualTo(10);
+        assertThat(properties.getPublishCompensationIntervalMs()).isEqualTo(60000);
+        assertThat(properties.getPublishCompensationBatchSize()).isEqualTo(20);
     }
 
     @Test

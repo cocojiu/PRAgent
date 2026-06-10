@@ -15,6 +15,9 @@ public class RabbitReviewQueueProperties {
     private long publishInitialIntervalMs = 500;
     private double publishMultiplier = 3.0;
     private long publishConfirmTimeoutMs = 5000;
+    private int publishCompensationMaxAttempts = 10;
+    private long publishCompensationIntervalMs = 60000;
+    private int publishCompensationBatchSize = 20;
 
     public String getExchange() {
         return exchange;
@@ -94,5 +97,29 @@ public class RabbitReviewQueueProperties {
 
     public void setPublishConfirmTimeoutMs(long publishConfirmTimeoutMs) {
         this.publishConfirmTimeoutMs = publishConfirmTimeoutMs;
+    }
+
+    public int getPublishCompensationMaxAttempts() {
+        return publishCompensationMaxAttempts;
+    }
+
+    public void setPublishCompensationMaxAttempts(int publishCompensationMaxAttempts) {
+        this.publishCompensationMaxAttempts = publishCompensationMaxAttempts;
+    }
+
+    public long getPublishCompensationIntervalMs() {
+        return publishCompensationIntervalMs;
+    }
+
+    public void setPublishCompensationIntervalMs(long publishCompensationIntervalMs) {
+        this.publishCompensationIntervalMs = publishCompensationIntervalMs;
+    }
+
+    public int getPublishCompensationBatchSize() {
+        return publishCompensationBatchSize;
+    }
+
+    public void setPublishCompensationBatchSize(int publishCompensationBatchSize) {
+        this.publishCompensationBatchSize = publishCompensationBatchSize;
     }
 }

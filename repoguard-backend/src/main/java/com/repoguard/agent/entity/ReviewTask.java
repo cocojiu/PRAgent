@@ -18,6 +18,9 @@ public class ReviewTask {
     private String status;
     private String riskLevel;
     private Integer mqRetries;
+    private Integer publishAttempts;
+    private LocalDateTime nextPublishRetryAt;
+    private String lastPublishError;
     private String llmStatus;
     private String prUrl;
     /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
@@ -107,6 +110,30 @@ public class ReviewTask {
 
     public void setMqRetries(Integer mqRetries) {
         this.mqRetries = mqRetries;
+    }
+
+    public Integer getPublishAttempts() {
+        return publishAttempts;
+    }
+
+    public void setPublishAttempts(Integer publishAttempts) {
+        this.publishAttempts = publishAttempts;
+    }
+
+    public LocalDateTime getNextPublishRetryAt() {
+        return nextPublishRetryAt;
+    }
+
+    public void setNextPublishRetryAt(LocalDateTime nextPublishRetryAt) {
+        this.nextPublishRetryAt = nextPublishRetryAt;
+    }
+
+    public String getLastPublishError() {
+        return lastPublishError;
+    }
+
+    public void setLastPublishError(String lastPublishError) {
+        this.lastPublishError = lastPublishError;
     }
 
     public String getLlmStatus() {

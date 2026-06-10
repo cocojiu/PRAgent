@@ -49,6 +49,7 @@ import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.service.ReviewService;
@@ -75,6 +76,9 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
+    private static final String STATUS_QUEUED = "QUEUED";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
     private static final FailureSummary NO_FAILURE_SUMMARY = new FailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -410,9 +414,10 @@ public class ReviewServiceImpl implements ReviewService {
         task.setOrganization(organization);
         task.setCommitSha(commit);
         task.setBranchName(resolveBranch(request));
-        task.setStatus("QUEUED");
+        task.setStatus(STATUS_QUEUED);
         task.setRiskLevel("INFO");
         task.setMqRetries(0);
+        task.setPublishAttempts(0);
         task.setLlmStatus("PENDING");
         task.setPrUrl(buildPrUrl(request));
         task.setSource(source);
@@ -422,15 +427,27 @@ public class ReviewServiceImpl implements ReviewService {
 
         reviewTaskMapper.insert(task);
         insertInitialTimeline(task.getId(), createdAt);
-        reviewTaskPublisher.publish(new ReviewTaskMessage(
-            task.getId(),
-            organization,
-            repository,
-            request.prNumber(),
-            commit,
-            createdAt
-        ));
-        return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
+        try {
+            reviewTaskPublisher.publish(new ReviewTaskMessage(
+                task.getId(),
+                organization,
+                repository,
+                request.prNumber(),
+                commit,
+                createdAt
+            ));
+            return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
+        } catch (MessagePublishException ex) {
+            markPublishFailed(task, ex, createdAt);
+            return new ManualReviewResponse(
+                task.getId(),
+                "publish_failed",
+                "Review task saved, waiting for message publish compensation",
+                false,
+                lower(source),
+                lower(source)
+            );
+        }
     }
 
     @Override
@@ -440,30 +457,43 @@ public class ReviewServiceImpl implements ReviewService {
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
-        if (!"FAILED".equals(task.getStatus())) {
+        if (!STATUS_FAILED.equals(task.getStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
         }
 
         LocalDateTime queuedAt = LocalDateTime.now();
         int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
         // 重试只重新入队，不清理上一次 findings；worker 成功拉取新结果后会统一替换。
-        task.setStatus("QUEUED");
+        task.setStatus(STATUS_QUEUED);
         task.setRiskLevel("INFO");
         task.setMqRetries(retryCount);
+        task.setPublishAttempts(0);
+        task.setNextPublishRetryAt(null);
+        task.setLastPublishError(null);
         task.setLlmStatus("PENDING");
         task.setDurationSeconds(0);
         reviewTaskMapper.updateById(task);
 
         insertRetryTimeline(task.getId(), queuedAt);
-        reviewTaskPublisher.publish(new ReviewTaskMessage(
-            task.getId(),
-            task.getOrganization(),
-            task.getRepository(),
-            task.getPrNumber(),
-            task.getCommitSha(),
-            queuedAt
-        ));
-        return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
+        try {
+            reviewTaskPublisher.publish(new ReviewTaskMessage(
+                task.getId(),
+                task.getOrganization(),
+                task.getRepository(),
+                task.getPrNumber(),
+                task.getCommitSha(),
+                queuedAt
+            ));
+            return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
+        } catch (MessagePublishException ex) {
+            markPublishFailed(task, ex, queuedAt);
+            return new ReviewRetryResponse(
+                task.getId(),
+                "publish_failed",
+                "Review task saved, waiting for message publish compensation",
+                retryCount
+            );
+        }
     }
 
     @Override
@@ -1215,6 +1245,33 @@ public class ReviewServiceImpl implements ReviewService {
         timeline.setStatus("CURRENT");
         timeline.setSortOrder(nextTimelineSortOrder(taskId));
         reviewTimelineMapper.insert(timeline);
+    }
+
+    private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
+        task.setStatus(STATUS_PUBLISH_FAILED);
+        task.setLlmStatus("PENDING");
+        task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
+        task.setNextPublishRetryAt(failedAt.plusSeconds(60));
+        task.setLastPublishError(truncate(errorMessage(ex)));
+        reviewTaskMapper.updateById(task);
+
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(task.getId());
+        timeline.setLabel(truncate("Message publish failed: " + errorMessage(ex)));
+        timeline.setEventTime(failedAt);
+        timeline.setStatus("FAILED");
+        timeline.setSortOrder(nextTimelineSortOrder(task.getId()));
+        reviewTimelineMapper.insert(timeline);
+    }
+
+    private String errorMessage(Exception ex) {
+        return ex.getMessage() == null || ex.getMessage().isBlank()
+            ? ex.getClass().getSimpleName()
+            : ex.getMessage().replaceAll("\\s+", " ").trim();
+    }
+
+    private String truncate(String value) {
+        return value.length() > 120 ? value.substring(0, 117) + "..." : value;
     }
 
     private int nextTimelineSortOrder(Long taskId) {

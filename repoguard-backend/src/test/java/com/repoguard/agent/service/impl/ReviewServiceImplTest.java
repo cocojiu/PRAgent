@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import java.time.LocalDateTime;
@@ -414,6 +416,37 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void triggerManualReviewMarksPublishFailedWhenMessageCannotBePublished() {
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+        doThrow(new MessagePublishException("publisher confirm timed out"))
+            .when(reviewTaskPublisher)
+            .publish(any(ReviewTaskMessage.class));
+
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            1,
+            "Smoke review",
+            "public-pr-publish-failed",
+            "master",
+            "github_pr_picker"
+        ));
+
+        assertThat(result.status()).isEqualTo("publish_failed");
+
+        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
+        verify(reviewTaskMapper).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(1);
+        assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
+        assertThat(taskCaptor.getValue().getLastPublishError()).contains("publisher confirm timed out");
+
+        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
+        verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
+        assertThat(timelineCaptor.getAllValues().getLast().getLabel()).contains("Message publish failed");
+    }
+
+    @Test
     void retryReviewQueuesFailedTaskAndPublishesMessage() {
         ReviewTask task = task();
         task.setStatus("FAILED");
@@ -447,6 +480,33 @@ class ReviewServiceImplTest {
         verify(reviewTaskPublisher).publish(messageCaptor.capture());
         assertThat(messageCaptor.getValue().taskId()).isEqualTo(521L);
         assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-1-llm-string-response");
+    }
+
+    @Test
+    void retryReviewMarksPublishFailedWhenMessageCannotBePublished() {
+        ReviewTask task = task();
+        task.setStatus("FAILED");
+        task.setRiskLevel("HIGH");
+        task.setMqRetries(2);
+        task.setLlmStatus("FAILED");
+        ReviewTimeline latestTimeline = new ReviewTimeline();
+        latestTimeline.setSortOrder(5);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(latestTimeline);
+        doThrow(new MessagePublishException("unroutable"))
+            .when(reviewTaskPublisher)
+            .publish(any(ReviewTaskMessage.class));
+
+        var result = service.retryReview(521L);
+
+        assertThat(result.status()).isEqualTo("publish_failed");
+        assertThat(result.retryCount()).isEqualTo(3);
+
+        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
+        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).updateById(taskCaptor.capture());
+        assertThat(taskCaptor.getAllValues().getLast().getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(taskCaptor.getAllValues().getLast().getPublishAttempts()).isEqualTo(1);
+        assertThat(taskCaptor.getAllValues().getLast().getLastPublishError()).contains("unroutable");
     }
 
     @Test

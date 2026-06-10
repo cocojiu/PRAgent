@@ -71,3 +71,6 @@ app:
       publish-initial-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_INITIAL_INTERVAL_MS:500}
       publish-multiplier: ${REPOGUARD_REVIEW_PUBLISH_MULTIPLIER:3.0}
       publish-confirm-timeout-ms: ${REPOGUARD_REVIEW_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
+      publish-compensation-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_MAX_ATTEMPTS:10}
+      publish-compensation-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
+      publish-compensation-batch-size: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_BATCH_SIZE:20}
