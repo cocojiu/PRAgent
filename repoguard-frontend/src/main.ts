@@ -3,6 +3,7 @@ import { createPinia } from "pinia";
 import {
   ElAlert,
   ElButton,
+  ElCheckbox,
   ElDialog,
   ElDropdown,
   ElDropdownItem,
@@ -32,6 +33,7 @@ const app = createApp(App);
 [
   ElAlert,
   ElButton,
+  ElCheckbox,
   ElDialog,
   ElDropdown,
   ElDropdownItem,

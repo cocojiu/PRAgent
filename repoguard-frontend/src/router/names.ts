@@ -1,4 +1,5 @@
 export const routeNames = {
+  login: "login",
   overview: "overview",
   tasks: "tasks",
   taskDetail: "task-detail",

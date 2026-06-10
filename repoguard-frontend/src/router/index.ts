@@ -6,6 +6,12 @@ export const router = createRouter({
   history: createWebHistory(),
   routes: [
     {
+      path: "/login",
+      name: routeNames.login,
+      component: () => import("@/pages/LoginPage.vue"),
+      meta: { title: "登录" }
+    },
+    {
       path: "/",
       redirect: "/repoguard/overview"
     },
