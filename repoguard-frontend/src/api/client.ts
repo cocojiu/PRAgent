@@ -12,6 +12,7 @@ const ADMIN_KEY_STORAGE_KEYS = [
   "repoguard.adminApiKey",
   "REPOGUARD_ADMIN_API_KEY"
 ];
+const AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
 
 const buildUrl = (path: string, params?: Record<string, string | number | undefined>) => {
   const url = new URL(`${API_BASE_URL}${path}`, window.location.origin);
@@ -36,20 +37,42 @@ export const request = async <T>(
   if (adminApiKey && !headers.has(ADMIN_KEY_HEADER)) {
     headers.set(ADMIN_KEY_HEADER, adminApiKey);
   }
+  const authToken = resolveAuthToken();
+  if (authToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${authToken}`);
+  }
 
   const response = await fetch(buildUrl(path, params), {
     ...options,
     headers
   });
-  if (!response.ok) {
-    throw new Error(`请求失败：HTTP ${response.status}`);
+
+  let body: ApiResponse<T> | undefined;
+  try {
+    body = (await response.json()) as ApiResponse<T>;
+  } catch {
+    body = undefined;
   }
 
-  const body = (await response.json()) as ApiResponse<T>;
-  if (!body.success) {
-    throw new Error(body.message || body.code || "请求失败");
+  if (!response.ok) {
+    throw new Error(body?.message || body?.code || `请求失败：HTTP ${response.status}`);
+  }
+  if (!body?.success) {
+    throw new Error(body?.message || body?.code || "请求失败");
   }
   return body.data;
+};
+
+export const saveAuthToken = (token: string, remember: boolean) => {
+  window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  const storage = remember ? window.localStorage : window.sessionStorage;
+  storage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+};
+
+export const clearAuthToken = () => {
+  window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 };
 
 const resolveAdminApiKey = () => {
@@ -71,4 +94,13 @@ const resolveAdminApiKey = () => {
     }
   }
   return "";
+};
+
+const resolveAuthToken = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+    || window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+    || "";
 };

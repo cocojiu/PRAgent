@@ -65,7 +65,7 @@
             <button class="text-action" type="button" @click="handleForgotPassword">忘记密码?</button>
           </div>
 
-          <el-button class="auth-primary" type="primary" size="large" @click="handleLogin">登录</el-button>
+          <el-button class="auth-primary" type="primary" size="large" :loading="submitting" @click="handleLogin">登录</el-button>
 
           <div class="auth-divider">
             <span></span>
@@ -123,7 +123,7 @@
             </el-input>
           </el-form-item>
 
-          <el-button class="auth-primary" type="primary" size="large" @click="handleRegister">立即注册</el-button>
+          <el-button class="auth-primary" type="primary" size="large" :loading="submitting" @click="handleRegister">立即注册</el-button>
 
           <div class="auth-divider">
             <span></span>
@@ -145,11 +145,13 @@ import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ArrowLeft, LockKeyhole, Mail, Shield, UserRound } from "lucide-vue-next";
+import { login, register } from "@/api/auth";
 
 type AuthMode = "login" | "register";
 
 const router = useRouter();
 const authMode = ref<AuthMode>("login");
+const submitting = ref(false);
 
 const features = [
   {
@@ -187,17 +189,51 @@ const handleForgotPassword = () => {
   ElMessage.info("密码找回功能将在账号体系接入后开放");
 };
 
-const handleLogin = () => {
-  ElMessage.info("登录接口尚未接入，当前仅完成登录页交互");
-  void router.push("/repoguard/overview");
+const handleLogin = async () => {
+  if (!loginForm.account.trim() || !loginForm.password) {
+    ElMessage.warning("请输入账号和密码");
+    return;
+  }
+  submitting.value = true;
+  try {
+    await login({
+      account: loginForm.account.trim(),
+      password: loginForm.password,
+      remember: loginForm.remember
+    });
+    ElMessage.success("登录成功");
+    void router.push("/repoguard/overview");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "登录失败");
+  } finally {
+    submitting.value = false;
+  }
 };
 
-const handleRegister = () => {
+const handleRegister = async () => {
+  if (!registerForm.username.trim() || !registerForm.email.trim() || !registerForm.password || !registerForm.confirmPassword) {
+    ElMessage.warning("请完整填写注册信息");
+    return;
+  }
   if (registerForm.password && registerForm.confirmPassword && registerForm.password !== registerForm.confirmPassword) {
     ElMessage.warning("两次输入的密码不一致");
     return;
   }
-  ElMessage.info("注册接口尚未接入，当前仅完成注册表单交互");
+  submitting.value = true;
+  try {
+    await register({
+      username: registerForm.username.trim(),
+      email: registerForm.email.trim(),
+      password: registerForm.password,
+      confirmPassword: registerForm.confirmPassword
+    });
+    ElMessage.success("注册成功");
+    void router.push("/repoguard/overview");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "注册失败");
+  } finally {
+    submitting.value = false;
+  }
 };
 </script>
 

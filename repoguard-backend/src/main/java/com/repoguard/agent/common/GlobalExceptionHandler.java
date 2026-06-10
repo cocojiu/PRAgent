@@ -18,9 +18,11 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException exception) {
-        HttpStatus status = exception.getErrorCode() == ErrorCode.TASK_NOT_FOUND
-            ? HttpStatus.NOT_FOUND
-            : HttpStatus.BAD_REQUEST;
+        HttpStatus status = switch (exception.getErrorCode()) {
+            case TASK_NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            default -> HttpStatus.BAD_REQUEST;
+        };
         return ResponseEntity.status(status)
             .body(ApiResponse.error(exception.getErrorCode(), exception.getMessage()));
     }

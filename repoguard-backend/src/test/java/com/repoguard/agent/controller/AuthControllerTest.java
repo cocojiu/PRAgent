@@ -1,0 +1,100 @@
+package com.repoguard.agent.controller;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.AuthLoginRequest;
+import com.repoguard.agent.dto.AuthRegisterRequest;
+import com.repoguard.agent.dto.AuthResponse;
+import com.repoguard.agent.dto.AuthUserDto;
+import com.repoguard.agent.service.AuthService;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+class AuthControllerTest {
+
+    private final AuthService authService = new AuthService() {
+        @Override
+        public AuthResponse register(AuthRegisterRequest request) {
+            return authResponse(request.username(), request.email());
+        }
+
+        @Override
+        public AuthResponse login(AuthLoginRequest request) {
+            if ("wrong".equals(request.password())) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
+            }
+            return authResponse("admin", "admin@repoguard.dev");
+        }
+    };
+
+    private final MockMvc mockMvc = MockMvcBuilders
+        .standaloneSetup(new AuthController(authService))
+        .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+        .build();
+
+    @Test
+    void registerReturnsTokenAndUser() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "admin",
+                      "email": "admin@repoguard.dev",
+                      "password": "Secure123",
+                      "confirmPassword": "Secure123"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.token").value("token-value"))
+            .andExpect(jsonPath("$.data.user.username").value("admin"));
+    }
+
+    @Test
+    void loginReturnsTokenAndUser() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "admin",
+                      "password": "Secure123",
+                      "remember": true
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.data.expiresInSeconds").value(7200));
+    }
+
+    @Test
+    void loginWithWrongPasswordReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "admin",
+                      "password": "wrong",
+                      "remember": false
+                    }
+                    """))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    private AuthResponse authResponse(String username, String email) {
+        return new AuthResponse(
+            "token-value",
+            "Bearer",
+            7200L,
+            new AuthUserDto(1001L, username, email, "ADMIN")
+        );
+    }
+}
