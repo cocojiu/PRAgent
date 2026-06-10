@@ -5,9 +5,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.rabbit.review")
 public class RabbitReviewQueueProperties {
 
-    private String exchange = "repoguard.review.exchange";
-    private String queue = "repoguard.review.queue";
-    private String routingKey = "repoguard.review.created";
+    private String exchange = "repoguard.review.exchange.v2";
+    private String queue = "repoguard.review.queue.v2";
+    private String routingKey = "repoguard.review.created.v2";
     private String deadLetterExchange = "repoguard.review.dlx";
     private String deadLetterQueue = "repoguard.review.dlq";
     private String deadLetterRoutingKey = "repoguard.review.dead";

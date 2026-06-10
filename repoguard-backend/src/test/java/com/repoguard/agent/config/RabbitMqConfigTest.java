@@ -12,6 +12,15 @@ class RabbitMqConfigTest {
     private final RabbitMqConfig config = new RabbitMqConfig();
 
     @Test
+    void defaultsUseVersionedReviewTopology() {
+        RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
+
+        assertThat(properties.getExchange()).isEqualTo("repoguard.review.exchange.v2");
+        assertThat(properties.getQueue()).isEqualTo("repoguard.review.queue.v2");
+        assertThat(properties.getRoutingKey()).isEqualTo("repoguard.review.created.v2");
+    }
+
+    @Test
     void reviewQueueDeclaresDeadLetterArguments() {
         RabbitReviewQueueProperties properties = properties();
 

@@ -52,9 +52,9 @@ app:
       - http://localhost:5173
   rabbit:
     review:
-      exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange}
-      queue: ${REPOGUARD_REVIEW_QUEUE:repoguard.review.queue}
-      routing-key: ${REPOGUARD_REVIEW_ROUTING_KEY:repoguard.review.created}
+      exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v2}
+      queue: ${REPOGUARD_REVIEW_QUEUE:repoguard.review.queue.v2}
+      routing-key: ${REPOGUARD_REVIEW_ROUTING_KEY:repoguard.review.created.v2}
       dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
       dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
       dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}
