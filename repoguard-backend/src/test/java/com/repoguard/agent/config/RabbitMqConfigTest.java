@@ -18,6 +18,10 @@ class RabbitMqConfigTest {
         assertThat(properties.getExchange()).isEqualTo("repoguard.review.exchange.v2");
         assertThat(properties.getQueue()).isEqualTo("repoguard.review.queue.v2");
         assertThat(properties.getRoutingKey()).isEqualTo("repoguard.review.created.v2");
+        assertThat(properties.getPublishMaxAttempts()).isEqualTo(3);
+        assertThat(properties.getPublishInitialIntervalMs()).isEqualTo(500);
+        assertThat(properties.getPublishMultiplier()).isEqualTo(3.0);
+        assertThat(properties.getPublishConfirmTimeoutMs()).isEqualTo(5000);
     }
 
     @Test

@@ -14,6 +14,10 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5672}
     username: ${SPRING_RABBITMQ_USERNAME:repoguard}
     password: ${SPRING_RABBITMQ_PASSWORD:repoguard}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         acknowledge-mode: auto
@@ -63,3 +67,7 @@ app:
       dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
       dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
       dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}
+      publish-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_MAX_ATTEMPTS:3}
+      publish-initial-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_INITIAL_INTERVAL_MS:500}
+      publish-multiplier: ${REPOGUARD_REVIEW_PUBLISH_MULTIPLIER:3.0}
+      publish-confirm-timeout-ms: ${REPOGUARD_REVIEW_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
