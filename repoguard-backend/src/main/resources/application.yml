@@ -20,6 +20,13 @@ spring:
         prefetch: 1
         concurrency: 1
         max-concurrency: 1
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000
+          multiplier: 2.0
+          max-interval: 10000
 
 mybatis-plus:
   configuration:
@@ -48,3 +55,6 @@ app:
       exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange}
       queue: ${REPOGUARD_REVIEW_QUEUE:repoguard.review.queue}
       routing-key: ${REPOGUARD_REVIEW_ROUTING_KEY:repoguard.review.created}
+      dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
+      dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
+      dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}
