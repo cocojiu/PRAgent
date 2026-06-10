@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
@@ -51,6 +52,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         GithubPullRequestDiff diff = new GithubPullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -71,7 +73,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStartedAt()).isNotNull();
         assertThat(task.getFinishedAt()).isNotNull();
         assertThat(task.getDurationSeconds()).isNotNull();
-        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).updateById(task);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));
         verify(reviewFindingMapper).insert(any(ReviewFinding.class));
         verify(reviewTimelineMapper, org.mockito.Mockito.times(4)).insert(any(ReviewTimeline.class));
@@ -91,6 +94,37 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeIgnoresTaskAlreadyInProgress() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("REVIEWING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+
+        executor.execute(message());
+
+        verify(reviewTaskMapper, never()).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
+    void executeStopsWhenQueuedTaskWasClaimedByAnotherConsumer() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        executor.execute(message());
+
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
     void executeMarksTaskFailedWhenDiffFetchFails() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
@@ -98,6 +132,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenThrow(new IllegalStateException("github unavailable"));
 
         executor.execute(message());
@@ -105,7 +140,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getRiskLevel()).isEqualTo("HIGH");
-        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).updateById(task);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getAllValues().get(1).getLabel()).contains("github unavailable");
