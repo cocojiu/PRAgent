@@ -3,6 +3,7 @@ package com.repoguard.agent.common;
 public enum ErrorCode {
     OK("OK"),
     BAD_REQUEST("BAD_REQUEST"),
+    UNAUTHORIZED("UNAUTHORIZED"),
     TASK_NOT_FOUND("TASK_NOT_FOUND"),
     INTERNAL_ERROR("INTERNAL_ERROR");
 
