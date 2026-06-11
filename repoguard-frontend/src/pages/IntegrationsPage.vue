@@ -59,6 +59,7 @@ import type {
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   IntegrationConfig,
+  IntegrationDiagnosticItem,
   IntegrationField,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
@@ -329,6 +330,13 @@ const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegration
   item.message = config.lastError ?? (isConfigured
     ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
     : `请配置用于检测的 ${serviceName} 连接信息`);
+  item.diagnostics = [
+    {
+      label: "保存配置",
+      value: serviceConfigStatusText(config.status),
+      status: isConfigured ? "success" : isFailed ? "danger" : "warning"
+    }
+  ];
   item.fields = serviceFields(id, config);
   formState[id] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
 };
@@ -384,6 +392,70 @@ const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => 
   item.message = result.message;
   item.metaLabel = "检测时间";
   item.metaValue = result.checkedAt;
+  if (id === "mysql" || id === "rabbitmq") {
+    item.diagnostics = serviceDiagnostics(result);
+  }
+};
+
+const serviceDiagnostics = (result: ConnectionTestResult): IntegrationDiagnosticItem[] => [
+  {
+    label: "检测来源",
+    value: testedConfigSourceText(result.testedConfigSource),
+    status: "info"
+  },
+  {
+    label: "运行时",
+    value: healthText(result.runtimeHealthy, result.runtimeConnectionStatus),
+    status: healthStatus(result.runtimeHealthy)
+  },
+  {
+    label: "保存配置",
+    value: healthText(result.savedConfigHealthy, result.savedConfigStatus),
+    status: healthStatus(result.savedConfigHealthy)
+  },
+  {
+    label: "一致性",
+    value: result.mismatch == null ? "未比较" : result.mismatch ? "不一致" : "一致",
+    status: result.mismatch == null ? "info" : result.mismatch ? "warning" : "success"
+  }
+];
+
+const testedConfigSourceText = (source?: string) => {
+  switch (source) {
+    case "submitted_config":
+      return "当前表单";
+    case "saved_config":
+      return "保存配置";
+    case "runtime_config":
+      return "运行时配置";
+    default:
+      return "未标记";
+  }
+};
+
+const healthText = (healthy?: boolean | null, status?: string | null) => {
+  if (healthy == null) {
+    return status === "not_configured" ? "未配置" : "不可用";
+  }
+  return healthy ? "健康" : "异常";
+};
+
+const healthStatus = (healthy?: boolean | null): IntegrationDiagnosticItem["status"] => {
+  if (healthy == null) {
+    return "info";
+  }
+  return healthy ? "success" : "danger";
+};
+
+const serviceConfigStatusText = (status: ServiceIntegrationConfig["status"]) => {
+  switch (status) {
+    case "configured":
+      return "健康";
+    case "failed":
+      return "异常";
+    default:
+      return "未配置";
+  }
 };
 
 onMounted(() => {

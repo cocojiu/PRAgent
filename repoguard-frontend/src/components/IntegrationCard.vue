@@ -47,6 +47,16 @@
       <span :class="`integration-status ${item.status}`">{{ item.statusText }}</span>
       <p>{{ item.metaLabel }}</p>
       <strong>{{ item.metaValue }}</strong>
+      <div v-if="item.diagnostics?.length" class="integration-diagnostics">
+        <div
+          v-for="diagnostic in item.diagnostics"
+          :key="diagnostic.label"
+          :class="['integration-diagnostic', diagnostic.status ?? 'info']"
+        >
+          <span>{{ diagnostic.label }}</span>
+          <strong>{{ diagnostic.value }}</strong>
+        </div>
+      </div>
       <el-button type="primary" plain :loading="testing" @click="$emit('test-connection', item.id)">
         <RadioTower :size="17" />
         测试连接

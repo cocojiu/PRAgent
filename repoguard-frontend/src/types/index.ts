@@ -456,6 +456,13 @@ export interface IntegrationConfig {
   metaLabel: string;
   metaValue: string;
   fields: IntegrationField[];
+  diagnostics?: IntegrationDiagnosticItem[];
+}
+
+export interface IntegrationDiagnosticItem {
+  label: string;
+  value: string;
+  status?: "success" | "warning" | "danger" | "info";
 }
 
 export interface GithubIntegrationConfig {

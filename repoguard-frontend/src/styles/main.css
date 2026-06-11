@@ -2167,6 +2167,64 @@ a {
   font-weight: 500;
 }
 
+.integration-diagnostics {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.integration-diagnostic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.integration-diagnostic span {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.integration-diagnostic strong {
+  margin: 0;
+  color: #334155;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.integration-diagnostic.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.integration-diagnostic.success strong {
+  color: #15803d;
+}
+
+.integration-diagnostic.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.integration-diagnostic.warning strong {
+  color: #b45309;
+}
+
+.integration-diagnostic.danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.integration-diagnostic.danger strong {
+  color: #b91c1c;
+}
+
 .side-caret {
   position: absolute;
   top: 22px;
