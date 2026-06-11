@@ -109,7 +109,7 @@ import {
   RadioTower,
   ShieldCheck
 } from "lucide-vue-next";
-import { clearAuthToken } from "@/api/client";
+import { logout } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
@@ -194,13 +194,13 @@ const openHelp = () => {
   ElMessage.info("帮助文档功能将在接入后端后开放，当前可查看 README 和需求文档。");
 };
 
-const handleUserCommand = (command: string) => {
+const handleUserCommand = async (command: string) => {
   if (command === "settings") {
     router.push("/repoguard/settings");
     return;
   }
   if (command === "logout") {
-    clearAuthToken();
+    await logout();
     ElMessage.success("已退出登录");
     router.push("/login");
     return;

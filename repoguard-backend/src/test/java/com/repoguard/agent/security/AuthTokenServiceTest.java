@@ -20,7 +20,7 @@ class AuthTokenServiceTest {
             Clock.fixed(Instant.parse("2026-06-11T00:00:00Z"), ZoneOffset.UTC)
         );
 
-        String token = tokenService.issue(user(), false).token();
+        String token = tokenService.issueAccessToken(user()).token();
 
         var authenticatedUser = tokenService.verify(token);
         assertThat(authenticatedUser).isPresent();
@@ -34,7 +34,7 @@ class AuthTokenServiceTest {
         authProperties.setTokenSecret("test-secret");
         AuthTokenService tokenService = new AuthTokenService(authProperties);
 
-        String token = tokenService.issue(user(), false).token() + "x";
+        String token = tokenService.issueAccessToken(user()).token() + "x";
 
         assertThat(tokenService.verify(token)).isEmpty();
     }
@@ -42,7 +42,7 @@ class AuthTokenServiceTest {
     @Test
     void verifyRejectsExpiredToken() {
         authProperties.setTokenSecret("test-secret");
-        authProperties.setTokenTtlSeconds(1);
+        authProperties.setAccessTokenTtlSeconds(1);
         AuthTokenService issuingService = new AuthTokenService(
             authProperties,
             Clock.fixed(Instant.parse("2026-06-11T00:00:00Z"), ZoneOffset.UTC)
@@ -52,7 +52,7 @@ class AuthTokenServiceTest {
             Clock.fixed(Instant.parse("2026-06-11T00:00:02Z"), ZoneOffset.UTC)
         );
 
-        String token = issuingService.issue(user(), false).token();
+        String token = issuingService.issueAccessToken(user()).token();
 
         assertThat(verifyingService.verify(token)).isEmpty();
     }
@@ -63,5 +63,16 @@ class AuthTokenServiceTest {
         user.setUsername("admin");
         user.setRole("ADMIN");
         return user;
+    }
+
+    @Test
+    void refreshTokenHashDoesNotExposeRawRefreshToken() {
+        AuthTokenService tokenService = new AuthTokenService(authProperties);
+
+        String refreshToken = tokenService.issueRefreshToken(false).token();
+        String tokenHash = tokenService.hashRefreshToken(refreshToken);
+
+        assertThat(tokenHash).isNotEqualTo(refreshToken);
+        assertThat(tokenHash).hasSize(64);
     }
 }

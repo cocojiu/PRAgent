@@ -1,9 +1,11 @@
 package com.repoguard.agent.dto;
 
 public record AuthResponse(
-    String token,
+    String accessToken,
+    String refreshToken,
     String tokenType,
-    Long expiresInSeconds,
+    Long accessTokenExpiresInSeconds,
+    Long refreshTokenExpiresInSeconds,
     AuthUserDto user
 ) {
 }

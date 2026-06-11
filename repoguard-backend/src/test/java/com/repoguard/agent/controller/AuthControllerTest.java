@@ -7,6 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthLoginRequest;
+import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthRefreshRequest;
+import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
@@ -31,6 +34,20 @@ class AuthControllerTest {
             }
             return authResponse("admin", "admin@repoguard.dev");
         }
+
+        @Override
+        public AuthResponse refresh(AuthRefreshRequest request) {
+            return authResponse("admin", "admin@repoguard.dev");
+        }
+
+        @Override
+        public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
+            return authResponse("admin", "admin@repoguard.dev");
+        }
+
+        @Override
+        public void logout(AuthLogoutRequest request) {
+        }
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
@@ -39,7 +56,7 @@ class AuthControllerTest {
         .build();
 
     @Test
-    void registerReturnsTokenAndUser() throws Exception {
+    void registerReturnsTokenPairAndUser() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -52,12 +69,13 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
-            .andExpect(jsonPath("$.data.token").value("token-value"))
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"))
             .andExpect(jsonPath("$.data.user.username").value("admin"));
     }
 
     @Test
-    void loginReturnsTokenAndUser() throws Exception {
+    void loginReturnsTokenPairAndUser() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -70,7 +88,50 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
-            .andExpect(jsonPath("$.data.expiresInSeconds").value(7200));
+            .andExpect(jsonPath("$.data.accessTokenExpiresInSeconds").value(900))
+            .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200));
+    }
+
+    @Test
+    void refreshReturnsNewTokenPair() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "refresh-token-value"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"));
+    }
+
+    @Test
+    void resetRefreshTokenReturnsNewTokenPair() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh-token/reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "admin",
+                      "password": "Secure123",
+                      "remember": false
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"));
+    }
+
+    @Test
+    void logoutReturnsOk() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "refresh-token-value"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
@@ -91,8 +152,10 @@ class AuthControllerTest {
 
     private AuthResponse authResponse(String username, String email) {
         return new AuthResponse(
-            "token-value",
+            "access-token-value",
+            "refresh-token-value",
             "Bearer",
+            900L,
             7200L,
             new AuthUserDto(1001L, username, email, "ADMIN")
         );

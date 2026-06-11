@@ -1,10 +1,13 @@
 package com.repoguard.agent.security;
 
 import com.repoguard.agent.entity.UserAccount;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HexFormat;
 import java.util.Optional;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -16,6 +19,7 @@ public class AuthTokenService {
 
     private final AuthProperties authProperties;
     private final Clock clock;
+    private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
     public AuthTokenService(AuthProperties authProperties) {
@@ -27,13 +31,33 @@ public class AuthTokenService {
         this.clock = clock;
     }
 
-    public TokenIssue issue(UserAccount user, boolean remember) {
-        long ttlSeconds = remember ? authProperties.getRememberTokenTtlSeconds() : authProperties.getTokenTtlSeconds();
+    public TokenIssue issueAccessToken(UserAccount user) {
+        long ttlSeconds = authProperties.getAccessTokenTtlSeconds();
         long expiresAt = Instant.now(clock).plusSeconds(ttlSeconds).getEpochSecond();
         String payload = user.getId() + ":" + user.getUsername() + ":" + user.getRole() + ":" + expiresAt;
         String encodedPayload = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         String signature = sign(encodedPayload);
         return new TokenIssue(encodedPayload + "." + signature, ttlSeconds);
+    }
+
+    public TokenIssue issueRefreshToken(boolean remember) {
+        long ttlSeconds = refreshTokenTtlSeconds(remember);
+        byte[] bytes = new byte[32];
+        secureRandom.nextBytes(bytes);
+        return new TokenIssue(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes), ttlSeconds);
+    }
+
+    public long refreshTokenTtlSeconds(boolean remember) {
+        return remember ? authProperties.getRememberTokenTtlSeconds() : authProperties.getRefreshTokenTtlSeconds();
+    }
+
+    public String hashRefreshToken(String refreshToken) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(refreshToken.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Refresh token hashing is not available", ex);
+        }
     }
 
     public Optional<AuthenticatedUser> verify(String token) {

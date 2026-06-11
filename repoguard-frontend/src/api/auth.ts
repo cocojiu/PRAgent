@@ -1,4 +1,4 @@
-import { request, saveAuthToken } from "@/api/client";
+import { clearAuthToken, request, resolveRefreshToken, saveAuthTokens } from "@/api/client";
 
 export interface AuthUser {
   id: number;
@@ -8,9 +8,11 @@ export interface AuthUser {
 }
 
 export interface AuthResponse {
-  token: string;
+  accessToken: string;
+  refreshToken: string;
   tokenType: string;
-  expiresInSeconds: number;
+  accessTokenExpiresInSeconds: number;
+  refreshTokenExpiresInSeconds: number;
   user: AuthUser;
 }
 
@@ -32,7 +34,7 @@ export const login = async (payload: LoginRequest) => {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  saveAuthToken(response.token, payload.remember);
+  saveAuthTokens(response.accessToken, response.refreshToken, payload.remember);
   return response;
 };
 
@@ -41,6 +43,22 @@ export const register = async (payload: RegisterRequest) => {
     method: "POST",
     body: JSON.stringify(payload)
   });
-  saveAuthToken(response.token, false);
+  saveAuthTokens(response.accessToken, response.refreshToken, false);
   return response;
+};
+
+export const logout = async () => {
+  const refreshToken = resolveRefreshToken();
+  if (refreshToken) {
+    try {
+      await request<void>("/api/v1/auth/logout", undefined, {
+        method: "POST",
+        body: JSON.stringify({ refreshToken })
+      });
+    } finally {
+      clearAuthToken();
+    }
+    return;
+  }
+  clearAuthToken();
 };

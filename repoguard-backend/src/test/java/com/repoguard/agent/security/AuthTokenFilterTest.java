@@ -54,7 +54,7 @@ class AuthTokenFilterTest {
     @Test
     void protectedApiAllowsValidTokenAndSetsRequestAttribute() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
-        request.addHeader("Authorization", "Bearer " + authTokenService.issue(user(), false).token());
+        request.addHeader("Authorization", "Bearer " + authTokenService.issueAccessToken(user()).token());
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
 

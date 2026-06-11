@@ -1,14 +1,20 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthLoginRequest;
+import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthRefreshRequest;
+import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
@@ -24,17 +30,22 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String ROLE_ADMIN = "ADMIN";
     private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_REVOKED = "REVOKED";
+    private static final String TOKEN_TYPE_BEARER = "Bearer";
 
     private final UserAccountMapper userAccountMapper;
+    private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final PasswordHashService passwordHashService;
     private final AuthTokenService authTokenService;
 
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
+        UserRefreshTokenMapper userRefreshTokenMapper,
         PasswordHashService passwordHashService,
         AuthTokenService authTokenService
     ) {
         this.userAccountMapper = userAccountMapper;
+        this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.passwordHashService = passwordHashService;
         this.authTokenService = authTokenService;
     }
@@ -72,26 +83,118 @@ public class AuthServiceImpl implements AuthService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
         }
-        AuthTokenService.TokenIssue token = authTokenService.issue(user, false);
-        return toResponse(user, token);
+        return issueTokenPair(user, false);
     }
 
     @Override
     @Transactional
     public AuthResponse login(AuthLoginRequest request) {
-        String account = request.account().trim();
+        UserAccount user = verifyCredentials(request.account(), request.password());
+        user.setLastLoginAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userAccountMapper.updateById(user);
+        return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse refresh(AuthRefreshRequest request) {
+        UserRefreshToken storedToken = findActiveRefreshToken(request.refreshToken());
+        LocalDateTime now = LocalDateTime.now();
+        if (storedToken == null || !storedToken.getExpiresAt().isAfter(now)) {
+            revokeIfPresent(storedToken, now);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+        }
+
+        UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
+        if (user == null || !STATUS_ACTIVE.equals(user.getStatus())) {
+            revokeIfPresent(storedToken, now);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
+        }
+
+        storedToken.setStatus(STATUS_REVOKED);
+        storedToken.setRevokedAt(now);
+        storedToken.setLastUsedAt(now);
+        storedToken.setUpdatedAt(now);
+        userRefreshTokenMapper.updateById(storedToken);
+
+        boolean remember = storedToken.getExpiresAt().isAfter(now.plusSeconds(authTokenService.refreshTokenTtlSeconds(false)));
+        return issueTokenPair(user, remember);
+    }
+
+    @Override
+    @Transactional
+    public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
+        UserAccount user = verifyCredentials(request.account(), request.password());
+        LocalDateTime now = LocalDateTime.now();
+        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("user_id", user.getId())
+            .eq("status", STATUS_ACTIVE)
+            .set("status", STATUS_REVOKED)
+            .set("revoked_at", now)
+            .set("updated_at", now));
+        return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+    }
+
+    @Override
+    @Transactional
+    public void logout(AuthLogoutRequest request) {
+        revokeIfPresent(findActiveRefreshToken(request.refreshToken()), LocalDateTime.now());
+    }
+
+    private UserAccount verifyCredentials(String accountValue, String password) {
+        String account = accountValue.trim();
         UserAccount user = account.contains("@") ? findByEmail(account.toLowerCase(Locale.ROOT)) : findByUsername(account);
-        if (user == null || !passwordHashService.matches(request.password(), user.getPasswordHash())) {
+        if (user == null || !passwordHashService.matches(password, user.getPasswordHash())) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
         if (!STATUS_ACTIVE.equals(user.getStatus())) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号已被禁用，请联系管理员");
         }
-        user.setLastLoginAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
-        userAccountMapper.updateById(user);
-        AuthTokenService.TokenIssue token = authTokenService.issue(user, Boolean.TRUE.equals(request.remember()));
-        return toResponse(user, token);
+        return user;
+    }
+
+    private AuthResponse issueTokenPair(UserAccount user, boolean remember) {
+        AuthTokenService.TokenIssue accessToken = authTokenService.issueAccessToken(user);
+        AuthTokenService.TokenIssue refreshToken = authTokenService.issueRefreshToken(remember);
+        LocalDateTime now = LocalDateTime.now();
+
+        UserRefreshToken storedToken = new UserRefreshToken();
+        storedToken.setUserId(user.getId());
+        storedToken.setTokenHash(authTokenService.hashRefreshToken(refreshToken.token()));
+        storedToken.setStatus(STATUS_ACTIVE);
+        storedToken.setExpiresAt(now.plusSeconds(refreshToken.expiresInSeconds()));
+        storedToken.setCreatedAt(now);
+        storedToken.setUpdatedAt(now);
+        userRefreshTokenMapper.insert(storedToken);
+
+        return new AuthResponse(
+            accessToken.token(),
+            refreshToken.token(),
+            TOKEN_TYPE_BEARER,
+            accessToken.expiresInSeconds(),
+            refreshToken.expiresInSeconds(),
+            new AuthUserDto(user.getId(), user.getUsername(), user.getEmail(), user.getRole())
+        );
+    }
+
+    private UserRefreshToken findActiveRefreshToken(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) {
+            return null;
+        }
+        return userRefreshTokenMapper.selectOne(new LambdaQueryWrapper<UserRefreshToken>()
+            .eq(UserRefreshToken::getTokenHash, authTokenService.hashRefreshToken(refreshToken))
+            .eq(UserRefreshToken::getStatus, STATUS_ACTIVE));
+    }
+
+    private void revokeIfPresent(UserRefreshToken storedToken, LocalDateTime now) {
+        if (storedToken == null) {
+            return;
+        }
+        storedToken.setStatus(STATUS_REVOKED);
+        storedToken.setRevokedAt(now);
+        storedToken.setUpdatedAt(now);
+        userRefreshTokenMapper.updateById(storedToken);
     }
 
     private UserAccount findByUsername(String username) {
@@ -110,14 +213,5 @@ public class AuthServiceImpl implements AuthService {
 
     private boolean isStrongEnough(String password) {
         return password.chars().anyMatch(Character::isLetter) && password.chars().anyMatch(Character::isDigit);
-    }
-
-    private AuthResponse toResponse(UserAccount user, AuthTokenService.TokenIssue token) {
-        return new AuthResponse(
-            token.token(),
-            "Bearer",
-            token.expiresInSeconds(),
-            new AuthUserDto(user.getId(), user.getUsername(), user.getEmail(), user.getRole())
-        );
     }
 }

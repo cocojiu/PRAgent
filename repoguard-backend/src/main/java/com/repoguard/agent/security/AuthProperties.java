@@ -9,7 +9,8 @@ public class AuthProperties {
     private static final String DEFAULT_TOKEN_SECRET = "repoguard-local-dev-auth-token-secret";
 
     private String tokenSecret = "repoguard-local-dev-auth-token-secret";
-    private long tokenTtlSeconds = 7200;
+    private long accessTokenTtlSeconds = 900;
+    private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
 
     public String getTokenSecret() {
@@ -20,12 +21,20 @@ public class AuthProperties {
         this.tokenSecret = tokenSecret;
     }
 
-    public long getTokenTtlSeconds() {
-        return tokenTtlSeconds;
+    public long getAccessTokenTtlSeconds() {
+        return accessTokenTtlSeconds;
     }
 
-    public void setTokenTtlSeconds(long tokenTtlSeconds) {
-        this.tokenTtlSeconds = tokenTtlSeconds;
+    public void setAccessTokenTtlSeconds(long accessTokenTtlSeconds) {
+        this.accessTokenTtlSeconds = accessTokenTtlSeconds;
+    }
+
+    public long getRefreshTokenTtlSeconds() {
+        return refreshTokenTtlSeconds;
+    }
+
+    public void setRefreshTokenTtlSeconds(long refreshTokenTtlSeconds) {
+        this.refreshTokenTtlSeconds = refreshTokenTtlSeconds;
     }
 
     public long getRememberTokenTtlSeconds() {
