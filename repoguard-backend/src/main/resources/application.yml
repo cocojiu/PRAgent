@@ -85,3 +85,4 @@ app:
       publish-compensation-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
       publish-compensation-batch-size: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_BATCH_SIZE:20}
       publish-compensation-lease-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_LEASE_MS:120000}
+      worker-concurrency: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}

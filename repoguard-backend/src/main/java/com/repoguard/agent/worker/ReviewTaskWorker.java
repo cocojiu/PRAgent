@@ -13,7 +13,7 @@ public class ReviewTaskWorker {
         this.reviewTaskExecutor = reviewTaskExecutor;
     }
 
-    @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "1")
+    @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "${app.rabbit.review.worker-concurrency:1}")
     public void handle(ReviewTaskMessage message) {
         reviewTaskExecutor.execute(message);
     }

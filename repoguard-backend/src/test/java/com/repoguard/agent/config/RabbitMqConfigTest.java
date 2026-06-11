@@ -26,6 +26,7 @@ class RabbitMqConfigTest {
         assertThat(properties.getPublishCompensationIntervalMs()).isEqualTo(60000);
         assertThat(properties.getPublishCompensationBatchSize()).isEqualTo(20);
         assertThat(properties.getPublishCompensationLeaseMs()).isEqualTo(120000);
+        assertThat(properties.getWorkerConcurrency()).isEqualTo(1);
     }
 
     @Test

@@ -19,6 +19,7 @@ public class RabbitReviewQueueProperties {
     private long publishCompensationIntervalMs = 60000;
     private int publishCompensationBatchSize = 20;
     private long publishCompensationLeaseMs = 120000;
+    private int workerConcurrency = 1;
 
     public String getExchange() {
         return exchange;
@@ -130,5 +131,13 @@ public class RabbitReviewQueueProperties {
 
     public void setPublishCompensationLeaseMs(long publishCompensationLeaseMs) {
         this.publishCompensationLeaseMs = publishCompensationLeaseMs;
+    }
+
+    public int getWorkerConcurrency() {
+        return workerConcurrency;
+    }
+
+    public void setWorkerConcurrency(int workerConcurrency) {
+        this.workerConcurrency = workerConcurrency;
     }
 }
