@@ -19,15 +19,20 @@ import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.SecuritySettingsDto;
+import com.repoguard.agent.dto.SecretReEncryptionItemDto;
+import com.repoguard.agent.dto.SecretReEncryptionRequest;
+import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
+import com.repoguard.agent.security.SecretReEncryptionService;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -136,7 +141,10 @@ class SystemConfigControllerTest {
         }
     };
 
-    private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new SystemConfigController(systemConfigService)).build();
+    private final SecretReEncryptionService secretReEncryptionService = Mockito.mock(SecretReEncryptionService.class);
+    private final MockMvc mockMvc = MockMvcBuilders
+        .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionService))
+        .build();
 
     @Test
     void getGithubIntegrationReturnsMaskedConfig() throws Exception {
@@ -298,6 +306,45 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.id").value("RG-JAVA-001"))
             .andExpect(jsonPath("$.data.status").value("disabled"));
+    }
+
+    @Test
+    void reEncryptSecretsReturnsOperationReport() throws Exception {
+        Mockito.when(secretReEncryptionService.reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class)))
+            .thenReturn(new SecretReEncryptionResponse(
+                false,
+                1,
+                1,
+                0,
+                0,
+                List.of(new SecretReEncryptionItemDto(
+                    "integration_config",
+                    1L,
+                    "token_value",
+                    "GITHUB",
+                    "enc:v2",
+                    "old-2026",
+                    "new-2026",
+                    "WOULD_RE_ENCRYPT",
+                    "Secret can be re-encrypted"
+                ))
+            ));
+
+        mockMvc.perform(post("/api/v1/config/secrets/re-encryption")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sourceEncryptionKey": "Old-Encryption-Key-2026!Rotate-Primary",
+                      "sourceKeyId": "old-2026",
+                      "targetEncryptionKey": "New-Encryption-Key-2026!Rotate-Primary",
+                      "targetKeyId": "new-2026",
+                      "execute": false
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.executed").value(false))
+            .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"));
     }
 
     private GithubIntegrationConfigDto githubDto() {

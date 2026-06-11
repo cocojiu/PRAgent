@@ -10,11 +10,14 @@ import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.SecretReEncryptionRequest;
+import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.security.RequireRole;
+import com.repoguard.agent.security.SecretReEncryptionService;
 import com.repoguard.agent.service.SystemConfigService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -31,9 +34,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;
+    private final SecretReEncryptionService secretReEncryptionService;
 
-    public SystemConfigController(SystemConfigService systemConfigService) {
+    public SystemConfigController(
+        SystemConfigService systemConfigService,
+        SecretReEncryptionService secretReEncryptionService
+    ) {
         this.systemConfigService = systemConfigService;
+        this.secretReEncryptionService = secretReEncryptionService;
     }
 
     @GetMapping("/integrations/github")
@@ -162,5 +170,13 @@ public class SystemConfigController {
         @Valid @RequestBody(required = false) ReviewPolicyConfigRequest request
     ) {
         return ApiResponse.ok(systemConfigService.testReviewPolicy(request));
+    }
+
+    @PostMapping("/secrets/re-encryption")
+    @RequireRole("ADMIN")
+    public ApiResponse<SecretReEncryptionResponse> reEncryptSecrets(
+        @Valid @RequestBody SecretReEncryptionRequest request
+    ) {
+        return ApiResponse.ok(secretReEncryptionService.reEncrypt(request));
     }
 }

@@ -105,6 +105,27 @@ public class SecretCryptoService {
         return StringUtils.hasText(value) && value.startsWith(V2_PREFIX);
     }
 
+    public String encryptedKeyId(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        if (value.startsWith(V1_PREFIX)) {
+            return "v1";
+        }
+        if (!value.startsWith(V2_PREFIX)) {
+            return null;
+        }
+        int payloadStart = value.indexOf(':', V2_PREFIX.length());
+        if (payloadStart <= V2_PREFIX.length()) {
+            throw new IllegalStateException("Invalid encrypted secret format");
+        }
+        return value.substring(V2_PREFIX.length(), payloadStart);
+    }
+
+    public String activeKeyId() {
+        return activeKeyId;
+    }
+
     private String decryptPayload(String encodedPayload) {
         try {
             byte[] payload = Base64.getDecoder().decode(encodedPayload);
