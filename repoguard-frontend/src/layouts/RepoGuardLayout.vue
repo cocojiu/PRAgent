@@ -6,7 +6,7 @@
         <strong v-if="!collapsed">RepoGuard Agent</strong>
       </div>
       <nav class="nav-list">
-        <RouterLink v-for="item in navItems" :key="item.path" class="nav-item" :to="item.path">
+        <RouterLink v-for="item in visibleNavItems" :key="item.path" class="nav-item" :to="item.path">
           <component :is="item.icon" :size="20" />
           <span v-if="!collapsed">{{ item.label }}</span>
         </RouterLink>
@@ -107,11 +107,12 @@ import {
   PanelLeftClose,
   Plug,
   RadioTower,
-  ShieldCheck
+  ShieldCheck,
+  Users
 } from "lucide-vue-next";
 import { logout } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
-import { currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
+import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const collapsed = ref(false);
@@ -129,9 +130,11 @@ const navItems = [
   { label: "规则配置", path: "/repoguard/rules", icon: ShieldCheck },
   { label: "集成设置", path: "/repoguard/integrations", icon: Plug },
   { label: "消息队列", path: "/repoguard/message-queue", icon: RadioTower },
+  { label: "用户管理", path: "/repoguard/users", icon: Users, requiresManage: true },
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 
+const visibleNavItems = computed(() => navItems.filter((item) => !item.requiresManage || canManage.value));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
 const notifications = computed(() => notificationCenter.value?.items ?? []);
 const unreadCount = computed(() => notifications.value.filter((item) => !isNotificationRead(item.id)).length);

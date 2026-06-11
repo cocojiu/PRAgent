@@ -59,6 +59,12 @@ export const router = createRouter({
           meta: { title: "消息队列健康状态", requiresAuth: true }
         },
         {
+          path: "users",
+          name: routeNames.users,
+          component: () => import("@/pages/UserManagementPage.vue"),
+          meta: { title: "用户管理", requiresAuth: true }
+        },
+        {
           path: "settings",
           name: routeNames.settings,
           component: () => import("@/pages/SystemSettingsPage.vue"),
