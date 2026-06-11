@@ -7,6 +7,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -25,20 +26,23 @@ public class ReviewTaskPublishCompensator {
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RabbitReviewQueueProperties properties;
     private final String instanceId;
+    private final RepoGuardMetrics metrics;
 
     @Autowired
     public ReviewTaskPublishCompensator(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
-        RabbitReviewQueueProperties properties
+        RabbitReviewQueueProperties properties,
+        RepoGuardMetrics metrics
     ) {
         this(
             reviewTaskMapper,
             reviewTimelineMapper,
             reviewTaskPublisher,
             properties,
-            "repoguard-" + UUID.randomUUID()
+            "repoguard-" + UUID.randomUUID(),
+            metrics
         );
     }
 
@@ -49,11 +53,23 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         String instanceId
     ) {
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null);
+    }
+
+    ReviewTaskPublishCompensator(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RabbitReviewQueueProperties properties,
+        String instanceId,
+        RepoGuardMetrics metrics
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.properties = properties;
         this.instanceId = instanceId;
+        this.metrics = metrics;
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
@@ -88,6 +104,9 @@ public class ReviewTaskPublishCompensator {
             task.setPublishClaimedBy(null);
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
+            if (metrics != null) {
+                metrics.rabbitPublishCompensationSucceeded();
+            }
         } catch (MessagePublishException ex) {
             task.setPublishAttempts(nextAttempt);
             task.setNextPublishRetryAt(LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000));
@@ -96,6 +115,9 @@ public class ReviewTaskPublishCompensator {
             task.setPublishClaimedBy(null);
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), "Message publish retry failed: " + truncate(errorMessage(ex)), LocalDateTime.now(), "FAILED");
+            if (metrics != null) {
+                metrics.rabbitPublishCompensationFailed(errorMessage(ex));
+            }
         }
     }
 

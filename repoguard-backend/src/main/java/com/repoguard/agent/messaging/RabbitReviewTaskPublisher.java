@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -9,6 +10,7 @@ import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,10 +18,21 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitReviewQueueProperties properties;
+    private final RepoGuardMetrics metrics;
 
-    public RabbitReviewTaskPublisher(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
+    RabbitReviewTaskPublisher(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
+        this(rabbitTemplate, properties, null);
+    }
+
+    @Autowired
+    public RabbitReviewTaskPublisher(
+        RabbitTemplate rabbitTemplate,
+        RabbitReviewQueueProperties properties,
+        RepoGuardMetrics metrics
+    ) {
         this.rabbitTemplate = rabbitTemplate;
         this.properties = properties;
+        this.metrics = metrics;
     }
 
     @Override
@@ -39,6 +52,9 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
                 sleepBeforeRetry(backoffMs);
                 backoffMs = nextBackoff(backoffMs);
             }
+        }
+        if (metrics != null) {
+            metrics.rabbitPublishFailed(failureReason(lastFailure));
         }
         throw lastFailure == null
             ? new MessagePublishException("RabbitMQ message publish failed")
@@ -92,5 +108,25 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     private long nextBackoff(long currentBackoffMs) {
         double multiplier = properties.getPublishMultiplier() <= 0 ? 1.0 : properties.getPublishMultiplier();
         return Math.max(0, Math.round(currentBackoffMs * multiplier));
+    }
+
+    private String failureReason(MessagePublishException ex) {
+        if (ex == null || ex.getMessage() == null || ex.getMessage().isBlank()) {
+            return "publish_failed";
+        }
+        String message = ex.getMessage().toLowerCase();
+        if (message.contains("unroutable")) {
+            return "unroutable";
+        }
+        if (message.contains("nacked")) {
+            return "nacked";
+        }
+        if (message.contains("timed out")) {
+            return "confirm_timeout";
+        }
+        if (message.contains("interrupted")) {
+            return "interrupted";
+        }
+        return "publish_failed";
     }
 }

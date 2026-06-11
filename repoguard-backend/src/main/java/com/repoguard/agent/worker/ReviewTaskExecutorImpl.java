@@ -14,6 +14,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
@@ -34,6 +35,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final GithubPullRequestClient githubPullRequestClient;
     private final PullRequestReviewer pullRequestReviewer;
     private final PlatformTransactionManager transactionManager;
+    private final RepoGuardMetrics metrics;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -43,7 +45,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ChangedFileMapper changedFileMapper,
         GithubPullRequestClient githubPullRequestClient,
         PullRequestReviewer pullRequestReviewer,
-        PlatformTransactionManager transactionManager
+        PlatformTransactionManager transactionManager,
+        RepoGuardMetrics metrics
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
@@ -52,6 +55,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         this.githubPullRequestClient = githubPullRequestClient;
         this.pullRequestReviewer = pullRequestReviewer;
         this.transactionManager = transactionManager;
+        this.metrics = metrics;
     }
 
     ReviewTaskExecutorImpl(
@@ -69,6 +73,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             changedFileMapper,
             githubPullRequestClient,
             pullRequestReviewer,
+            null,
             null
         );
     }
@@ -92,6 +97,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             completeReview(task, reviewResult, startedAt);
         } catch (RuntimeException ex) {
             failReview(task, startedAt, ex);
+            if (metrics != null) {
+                metrics.reviewTaskFailed(ex);
+            }
         }
     }
 
@@ -142,6 +150,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             task.setDurationSeconds((int) Duration.between(startedAt, finishedAt).toSeconds());
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), "Review completed", finishedAt, "DONE", 5);
+            if (metrics != null) {
+                metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
+            }
         });
     }
 

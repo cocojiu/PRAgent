@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,15 +28,26 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private final IntegrationConfigMapper integrationConfigMapper;
     private final RestClient restClient;
     private final SecretCryptoService secretCryptoService;
+    private final RepoGuardMetrics metrics;
 
-    public GithubPullRequestClientImpl(
+    GithubPullRequestClientImpl(
         IntegrationConfigMapper integrationConfigMapper,
         RestClient.Builder restClientBuilder,
         SecretCryptoService secretCryptoService
     ) {
+        this(integrationConfigMapper, restClientBuilder, secretCryptoService, null);
+    }
+
+    public GithubPullRequestClientImpl(
+        IntegrationConfigMapper integrationConfigMapper,
+        RestClient.Builder restClientBuilder,
+        SecretCryptoService secretCryptoService,
+        RepoGuardMetrics metrics
+    ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.restClient = restClientBuilder.build();
         this.secretCryptoService = secretCryptoService;
+        this.metrics = metrics;
     }
 
     @Override
@@ -93,6 +105,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 .toList();
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            recordExternalFailure(classified);
             markGithubChecked(config, conciseError(classified));
             throw classified;
         }
@@ -128,6 +141,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            recordExternalFailure(classified);
             markGithubChecked(config, conciseError(classified));
             throw classified;
         }
@@ -200,6 +214,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 markGithubChecked(config, null);
             } catch (RuntimeException ex) {
                 RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+                recordExternalFailure(classified);
                 String message = conciseError(classified);
                 results.add(new GithubReviewCommentResult(
                     draft.findingId(),
@@ -216,6 +231,12 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             }
         }
         return results;
+    }
+
+    private void recordExternalFailure(RuntimeException ex) {
+        if (metrics != null && ex instanceof com.repoguard.agent.external.ExternalCallException externalCallException) {
+            metrics.externalCallFailed(externalCallException);
+        }
     }
 
     private GithubReviewCommentResponse publishPullRequestComment(

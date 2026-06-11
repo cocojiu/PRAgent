@@ -52,6 +52,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.ReviewService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -92,6 +93,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final GithubPullRequestClient githubPullRequestClient;
+    private final RepoGuardMetrics metrics;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -105,6 +107,34 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient
     ) {
+        this(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            integrationConfigMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            githubPullRequestClient,
+            null
+        );
+    }
+
+    ReviewServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        IntegrationConfigMapper integrationConfigMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        GithubPullRequestClient githubPullRequestClient,
+        RepoGuardMetrics metrics
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
@@ -115,6 +145,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
+        this.metrics = metrics;
     }
 
     @Override
@@ -426,6 +457,9 @@ public class ReviewServiceImpl implements ReviewService {
             throw ex;
         }
         insertInitialTimeline(task.getId(), createdAt);
+        if (metrics != null) {
+            metrics.reviewTaskCreated(source);
+        }
         try {
             reviewTaskPublisher.publish(new ReviewTaskMessage(
                 task.getId(),

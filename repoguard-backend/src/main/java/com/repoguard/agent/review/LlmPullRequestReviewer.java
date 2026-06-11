@@ -8,6 +8,7 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.Duration;
 import java.util.List;
@@ -27,6 +28,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final ObjectMapper objectMapper;
     private final SecretCryptoService secretCryptoService;
     private final LlmReviewResultParser reviewResultParser;
+    private final RepoGuardMetrics metrics;
 
     public LlmPullRequestReviewer(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
@@ -35,11 +37,23 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         ObjectMapper objectMapper,
         SecretCryptoService secretCryptoService
     ) {
+        this(reviewPolicyConfigMapper, ruleBasedReviewer, restClientBuilder, objectMapper, secretCryptoService, null);
+    }
+
+    LlmPullRequestReviewer(
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        SecretCryptoService secretCryptoService,
+        RepoGuardMetrics metrics
+    ) {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.restClientBuilder = restClientBuilder;
         this.objectMapper = objectMapper;
         this.secretCryptoService = secretCryptoService;
+        this.metrics = metrics;
         this.reviewResultParser = new LlmReviewResultParser(objectMapper);
     }
 
@@ -110,7 +124,11 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 .body(String.class);
             return extractMessageContent(response);
         } catch (RuntimeException ex) {
-            throw ExternalCallErrorClassifier.llm(ex);
+            var classified = ExternalCallErrorClassifier.llm(ex);
+            if (metrics != null) {
+                metrics.externalCallFailed(classified);
+            }
+            throw classified;
         }
     }
 
