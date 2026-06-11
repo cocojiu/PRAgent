@@ -16,8 +16,10 @@ import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
@@ -31,12 +33,14 @@ class AuthServiceImplTest {
 
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
+    private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
     private final AuthServiceImpl authService = new AuthServiceImpl(
         userAccountMapper,
         userRefreshTokenMapper,
+        userLoginAuditMapper,
         passwordHashService,
         authTokenService
     );
@@ -63,6 +67,7 @@ class AuthServiceImplTest {
         assertThat(saved.getEmail()).isEqualTo("admin@repoguard.dev");
         assertThat(saved.getPasswordHash()).startsWith("$2");
         assertThat(saved.getPasswordHash()).doesNotContain("Secure123");
+        assertThat(saved.getFailedLoginCount()).isZero();
         assertThat(response.accessToken()).isNotBlank();
         assertThat(response.refreshToken()).isNotBlank();
         assertThat(response.user().username()).isEqualTo("admin");
@@ -70,6 +75,7 @@ class AuthServiceImplTest {
         ArgumentCaptor<UserRefreshToken> refreshCaptor = ArgumentCaptor.forClass(UserRefreshToken.class);
         verify(userRefreshTokenMapper).insert(refreshCaptor.capture());
         assertThat(refreshCaptor.getValue().getTokenHash()).isNotEqualTo(response.refreshToken());
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -87,7 +93,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void loginRejectsWrongPassword() {
+    void loginRejectsWrongPasswordAndRecordsFailure() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
@@ -95,14 +101,53 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Wrong123", false)))
             .isInstanceOf(BusinessException.class)
             .hasMessage("账号或密码错误");
+
+        assertThat(user.getFailedLoginCount()).isEqualTo(1);
+        verify(userAccountMapper).updateById(user);
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
-    void loginReturnsLongerRefreshTokenWhenRemembered() {
+    void loginLocksAccountAfterFiveWrongPasswords() {
+        UserAccount user = existingUser();
+        user.setFailedLoginCount(4);
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Wrong123", false)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("账号或密码错误");
+
+        assertThat(user.getFailedLoginCount()).isEqualTo(5);
+        assertThat(user.getLockedUntil()).isAfter(LocalDateTime.now());
+        verify(userAccountMapper).updateById(user);
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void loginRejectsLockedAccountWithoutIssuingToken() {
+        UserAccount user = existingUser();
+        user.setFailedLoginCount(5);
+        user.setLockedUntil(LocalDateTime.now().plusMinutes(10));
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Secure123", false)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("账号已暂时锁定，请 15 分钟后再试");
+
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+        Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
+    }
+
+    @Test
+    void loginReturnsLongerRefreshTokenWhenRememberedAndClearsFailures() {
         authProperties.setAccessTokenTtlSeconds(10);
         authProperties.setRefreshTokenTtlSeconds(20);
         authProperties.setRememberTokenTtlSeconds(30);
         UserAccount user = existingUser();
+        user.setFailedLoginCount(3);
+        user.setLockedUntil(LocalDateTime.now().minusMinutes(1));
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
 
@@ -111,7 +156,10 @@ class AuthServiceImplTest {
         assertThat(response.accessTokenExpiresInSeconds()).isEqualTo(10);
         assertThat(response.refreshTokenExpiresInSeconds()).isEqualTo(30);
         assertThat(response.tokenType()).isEqualTo("Bearer");
+        assertThat(user.getFailedLoginCount()).isZero();
+        assertThat(user.getLockedUntil()).isNull();
         verify(userAccountMapper).updateById(user);
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -128,6 +176,7 @@ class AuthServiceImplTest {
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
         verify(userRefreshTokenMapper).updateById(storedToken);
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -140,6 +189,7 @@ class AuthServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("登录状态已过期，请重新登录");
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -152,6 +202,7 @@ class AuthServiceImplTest {
 
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
         verify(userRefreshTokenMapper).updateById(storedToken);
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -165,6 +216,7 @@ class AuthServiceImplTest {
         assertThat(response.refreshToken()).isNotBlank();
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     private UserRefreshToken activeRefreshToken(String refreshToken, LocalDateTime expiresAt) {
@@ -184,6 +236,7 @@ class AuthServiceImplTest {
         user.setEmail("admin@repoguard.dev");
         user.setRole("ADMIN");
         user.setStatus("ACTIVE");
+        user.setFailedLoginCount(0);
         return user;
     }
 }

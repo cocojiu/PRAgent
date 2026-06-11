@@ -14,6 +14,8 @@ public class UserAccount {
     private String passwordHash;
     private String role;
     private String status;
+    private Integer failedLoginCount;
+    private LocalDateTime lockedUntil;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -64,6 +66,22 @@ public class UserAccount {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public Integer getFailedLoginCount() {
+        return failedLoginCount;
+    }
+
+    public void setFailedLoginCount(Integer failedLoginCount) {
+        this.failedLoginCount = failedLoginCount;
+    }
+
+    public LocalDateTime getLockedUntil() {
+        return lockedUntil;
+    }
+
+    public void setLockedUntil(LocalDateTime lockedUntil) {
+        this.lockedUntil = lockedUntil;
     }
 
     public LocalDateTime getLastLoginAt() {

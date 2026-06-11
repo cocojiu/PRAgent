@@ -12,18 +12,23 @@ import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -32,20 +37,27 @@ public class AuthServiceImpl implements AuthService {
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_REVOKED = "REVOKED";
     private static final String TOKEN_TYPE_BEARER = "Bearer";
+    private static final String AUDIT_SUCCESS = "SUCCESS";
+    private static final String AUDIT_FAILURE = "FAILURE";
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
+    private static final long ACCOUNT_LOCK_MINUTES = 15;
 
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
+    private final UserLoginAuditMapper userLoginAuditMapper;
     private final PasswordHashService passwordHashService;
     private final AuthTokenService authTokenService;
 
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
+        UserLoginAuditMapper userLoginAuditMapper,
         PasswordHashService passwordHashService,
         AuthTokenService authTokenService
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
+        this.userLoginAuditMapper = userLoginAuditMapper;
         this.passwordHashService = passwordHashService;
         this.authTokenService = authTokenService;
     }
@@ -75,6 +87,7 @@ public class AuthServiceImpl implements AuthService {
         user.setPasswordHash(passwordHashService.hash(request.password()));
         user.setRole(ROLE_ADMIN);
         user.setStatus(STATUS_ACTIVE);
+        user.setFailedLoginCount(0);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         user.setLastLoginAt(now);
@@ -83,16 +96,21 @@ public class AuthServiceImpl implements AuthService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
         }
+        recordAudit(user.getId(), user.getUsername(), "REGISTER", AUDIT_SUCCESS, null);
         return issueTokenPair(user, false);
     }
 
     @Override
     @Transactional
     public AuthResponse login(AuthLoginRequest request) {
-        UserAccount user = verifyCredentials(request.account(), request.password());
-        user.setLastLoginAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
+        UserAccount user = verifyCredentials(request.account(), request.password(), "LOGIN");
+        LocalDateTime now = LocalDateTime.now();
+        user.setLastLoginAt(now);
+        user.setFailedLoginCount(0);
+        user.setLockedUntil(null);
+        user.setUpdatedAt(now);
         userAccountMapper.updateById(user);
+        recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
     }
 
@@ -103,12 +121,14 @@ public class AuthServiceImpl implements AuthService {
         LocalDateTime now = LocalDateTime.now();
         if (storedToken == null || !storedToken.getExpiresAt().isAfter(now)) {
             revokeIfPresent(storedToken, now);
+            recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token expired or invalid");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
         }
 
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user == null || !STATUS_ACTIVE.equals(user.getStatus())) {
             revokeIfPresent(storedToken, now);
+            recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "account unavailable");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
         }
 
@@ -119,13 +139,14 @@ public class AuthServiceImpl implements AuthService {
         userRefreshTokenMapper.updateById(storedToken);
 
         boolean remember = storedToken.getExpiresAt().isAfter(now.plusSeconds(authTokenService.refreshTokenTtlSeconds(false)));
+        recordAudit(user.getId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_SUCCESS, null);
         return issueTokenPair(user, remember);
     }
 
     @Override
     @Transactional
     public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
-        UserAccount user = verifyCredentials(request.account(), request.password());
+        UserAccount user = verifyCredentials(request.account(), request.password(), "TOKEN_RESET");
         LocalDateTime now = LocalDateTime.now();
         userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
             .eq("user_id", user.getId())
@@ -133,22 +154,31 @@ public class AuthServiceImpl implements AuthService {
             .set("status", STATUS_REVOKED)
             .set("revoked_at", now)
             .set("updated_at", now));
+        recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
     }
 
     @Override
     @Transactional
     public void logout(AuthLogoutRequest request) {
-        revokeIfPresent(findActiveRefreshToken(request.refreshToken()), LocalDateTime.now());
+        UserRefreshToken storedToken = findActiveRefreshToken(request.refreshToken());
+        revokeIfPresent(storedToken, LocalDateTime.now());
+        recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "LOGOUT", AUDIT_SUCCESS, null);
     }
 
-    private UserAccount verifyCredentials(String accountValue, String password) {
+    private UserAccount verifyCredentials(String accountValue, String password, String eventType) {
         String account = accountValue.trim();
         UserAccount user = account.contains("@") ? findByEmail(account.toLowerCase(Locale.ROOT)) : findByUsername(account);
+        if (user != null && isLocked(user)) {
+            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, "account locked");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号已暂时锁定，请 15 分钟后再试");
+        }
         if (user == null || !passwordHashService.matches(password, user.getPasswordHash())) {
+            handleFailedCredentialAttempt(user, account, eventType, "bad credentials");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
         if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, "account disabled");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号已被禁用，请联系管理员");
         }
         return user;
@@ -195,6 +225,69 @@ public class AuthServiceImpl implements AuthService {
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
         userRefreshTokenMapper.updateById(storedToken);
+    }
+
+    private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {
+        if (user == null) {
+            recordAudit(null, account, eventType, AUDIT_FAILURE, reason);
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        int failedCount = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;
+        user.setFailedLoginCount(failedCount);
+        if (failedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
+            user.setLockedUntil(now.plusMinutes(ACCOUNT_LOCK_MINUTES));
+        }
+        user.setUpdatedAt(now);
+        userAccountMapper.updateById(user);
+        recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, reason);
+    }
+
+    private boolean isLocked(UserAccount user) {
+        return user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
+    }
+
+    private void recordAudit(Long userId, String account, String eventType, String result, String failureReason) {
+        UserLoginAudit audit = new UserLoginAudit();
+        audit.setUserId(userId);
+        audit.setAccount(account);
+        audit.setEventType(eventType);
+        audit.setResult(result);
+        audit.setFailureReason(failureReason);
+        audit.setCreatedAt(LocalDateTime.now());
+
+        HttpServletRequest request = currentRequest();
+        if (request != null) {
+            audit.setClientIp(resolveClientIp(request));
+            audit.setUserAgent(truncate(request.getHeader("User-Agent"), 512));
+        }
+        userLoginAuditMapper.insert(audit);
+    }
+
+    private HttpServletRequest currentRequest() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+            return attributes.getRequest();
+        }
+        return null;
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwardedFor)) {
+            return truncate(forwardedFor.split(",")[0].trim(), 64);
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (StringUtils.hasText(realIp)) {
+            return truncate(realIp, 64);
+        }
+        return truncate(request.getRemoteAddr(), 64);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private UserAccount findByUsername(String username) {
