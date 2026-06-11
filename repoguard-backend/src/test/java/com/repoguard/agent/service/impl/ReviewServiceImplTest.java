@@ -41,6 +41,7 @@ import java.util.List;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 
 class ReviewServiceImplTest {
 
@@ -454,6 +455,37 @@ class ReviewServiceImplTest {
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
+    void triggerManualReviewReturnsExistingTaskWhenConcurrentInsertWins() {
+        ReviewTask existing = task();
+        existing.setStatus("QUEUED");
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null, existing);
+        org.mockito.Mockito.doThrow(new DuplicateKeyException("uk_review_task_pr_commit"))
+            .when(reviewTaskMapper)
+            .insert(any(ReviewTask.class));
+
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            1,
+            "Smoke review",
+            "public-pr-1-llm-string-response",
+            "master",
+            "github_pr_picker"
+        ));
+
+        assertThat(result.taskId()).isEqualTo(521L);
+        assertThat(result.existing()).isTrue();
+        assertThat(result.status()).isEqualTo("queued");
+        assertThat(result.triggerSource()).isEqualTo("existing_reused");
+        verify(reviewTaskMapper).insert(any(ReviewTask.class));
+        verify(reviewTaskMapper).updateById(org.mockito.ArgumentMatchers.<ReviewTask>argThat(task ->
+            "EXISTING_REUSED".equals(task.getTriggerSource())
+        ));
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
     @Test

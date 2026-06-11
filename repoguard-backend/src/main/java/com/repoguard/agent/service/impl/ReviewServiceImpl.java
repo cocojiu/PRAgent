@@ -63,6 +63,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -393,17 +394,7 @@ public class ReviewServiceImpl implements ReviewService {
         String source = resolveTaskSource(request.source());
         ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
         if (existingTask != null) {
-            // 同一 PR/commit 已有任务时不重复入队，只记录这次触发来自复用链路。
-            existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
-            reviewTaskMapper.updateById(existingTask);
-            return new ManualReviewResponse(
-                existingTask.getId(),
-                lower(existingTask.getStatus()),
-                "Review task already exists",
-                true,
-                lower(resolveStoredSource(existingTask.getSource())),
-                lower(SOURCE_EXISTING_REUSED)
-            );
+            return reuseExistingTask(existingTask);
         }
 
         LocalDateTime createdAt = LocalDateTime.now();
@@ -425,7 +416,15 @@ public class ReviewServiceImpl implements ReviewService {
         task.setCreatedAt(createdAt);
         task.setDurationSeconds(0);
 
-        reviewTaskMapper.insert(task);
+        try {
+            reviewTaskMapper.insert(task);
+        } catch (DuplicateKeyException ex) {
+            ReviewTask concurrentTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
+            if (concurrentTask != null) {
+                return reuseExistingTask(concurrentTask);
+            }
+            throw ex;
+        }
         insertInitialTimeline(task.getId(), createdAt);
         try {
             reviewTaskPublisher.publish(new ReviewTaskMessage(
@@ -448,6 +447,20 @@ public class ReviewServiceImpl implements ReviewService {
                 lower(source)
             );
         }
+    }
+
+    private ManualReviewResponse reuseExistingTask(ReviewTask existingTask) {
+        // 同一 PR/commit 已有任务时不重复入队，只记录这次触发来自复用链路。
+        existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
+        reviewTaskMapper.updateById(existingTask);
+        return new ManualReviewResponse(
+            existingTask.getId(),
+            lower(existingTask.getStatus()),
+            "Review task already exists",
+            true,
+            lower(resolveStoredSource(existingTask.getSource())),
+            lower(SOURCE_EXISTING_REUSED)
+        );
     }
 
     @Override
