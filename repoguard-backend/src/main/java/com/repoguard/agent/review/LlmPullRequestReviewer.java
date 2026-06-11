@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
@@ -98,15 +99,19 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             )
         );
 
-        String response = restClient.post()
-            .uri("/chat/completions")
-            .header("Authorization", "Bearer " + apiKey.trim())
-            .contentType(MediaType.APPLICATION_JSON)
-            .accept(MediaType.APPLICATION_JSON)
-            .body(payload)
-            .retrieve()
-            .body(String.class);
-        return extractMessageContent(response);
+        try {
+            String response = restClient.post()
+                .uri("/chat/completions")
+                .header("Authorization", "Bearer " + apiKey.trim())
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .body(String.class);
+            return extractMessageContent(response);
+        } catch (RuntimeException ex) {
+            throw ExternalCallErrorClassifier.llm(ex);
+        }
     }
 
     private String extractMessageContent(String response) {

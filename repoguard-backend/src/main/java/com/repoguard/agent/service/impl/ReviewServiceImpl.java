@@ -871,6 +871,84 @@ public class ReviewServiceImpl implements ReviewService {
         String normalized = StringUtils.hasText(detail) ? detail.trim() : "";
         String lowerDetail = normalized.toLowerCase(Locale.ROOT);
 
+        if (lowerDetail.contains("category=github_token_invalid")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 鏃犳晥鎴栧凡杩囨湡",
+                "璇峰埌闆嗘垚閰嶇疆椤垫洿鏂?GitHub Token锛岀‘璁や繚瀛樻垚鍔熷悗鍐嶉噸璇曞鏌ャ€?"
+            );
+        }
+        if (lowerDetail.contains("category=github_permission_denied")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 鏉冮檺涓嶈冻",
+                "璇风‘璁?Token 瀵圭洰鏍囦粨搴撳拰 PR 鍏峰璇诲彇鏉冮檺锛屽繀瑕佹椂琛ュ厖 repo 鏉冮檺鍚庨噸璇曘€?"
+            );
+        }
+        if (lowerDetail.contains("category=github_target_not_found")) {
+            return new FailureSummary(
+                "github_target_not_found",
+                "PR 鎴栦粨搴撲笉瀛樺湪/涓嶅彲璁块棶",
+                "璇风‘璁や粨搴撳悕绉般€佺粍缁囥€丳R 缂栧彿鍜?Token 鍙闂寖鍥达紝鐒跺悗閲嶆柊瑙﹀彂瀹℃煡銆?"
+            );
+        }
+        if (lowerDetail.contains("category=github_rate_limited")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 璁块棶鍙楅檺",
+                "璇风◢鍚庨噸璇曪紝鎴栨洿鎹㈠墿浣欓搴﹀厖瓒崇殑 GitHub Token銆?"
+            );
+        }
+        if (lowerDetail.contains("category=github_service_unavailable")) {
+            return new FailureSummary(
+                "github_service_unavailable",
+                "GitHub API 暂时不可用",
+                "请稍后重试，并关注 GitHub 服务状态或企业代理网络状态。"
+            );
+        }
+        if (lowerDetail.contains("category=github_timeout")) {
+            return new FailureSummary(
+                "github_timeout",
+                "GitHub API 响应超时",
+                "请检查网络、GitHub 服务状态和代理配置，稍后再重试审查。"
+            );
+        }
+        if (lowerDetail.contains("category=llm_auth_failed")) {
+            return new FailureSummary(
+                "llm_auth_failed",
+                "LLM 鉴权失败",
+                "请检查 LLM API Key、Provider 和 Base URL 配置，保存成功后再重试。"
+            );
+        }
+        if (lowerDetail.contains("category=llm_rate_limited")) {
+            return new FailureSummary(
+                "llm_rate_limited",
+                "LLM 调用受限",
+                "请稍后重试，或调整供应商额度、并发与限流配置。"
+            );
+        }
+        if (lowerDetail.contains("category=llm_service_unavailable")) {
+            return new FailureSummary(
+                "llm_service_unavailable",
+                "LLM 服务暂时不可用",
+                "请稍后重试，必要时切换模型或启用规则兜底。"
+            );
+        }
+        if (lowerDetail.contains("category=llm_timeout")) {
+            return new FailureSummary(
+                "llm_timeout",
+                "LLM 响应超时",
+                "请检查模型服务状态、网络和超时配置，稍后再重试。"
+            );
+        }
+        if (lowerDetail.contains("category=llm_request_invalid")
+            || lowerDetail.contains("category=llm_model_or_endpoint_not_found")) {
+            return new FailureSummary(
+                "llm_request_invalid",
+                "LLM 请求配置无效",
+                "请检查模型名称、Base URL、请求参数和供应商兼容性配置。"
+            );
+        }
         if (lowerDetail.contains("401") || lowerDetail.contains("bad credentials")
             || lowerDetail.contains("unauthorized") || lowerDetail.contains("requires authentication")) {
             return new FailureSummary(
@@ -941,6 +1019,48 @@ public class ReviewServiceImpl implements ReviewService {
         String normalized = StringUtils.hasText(message) ? message.trim() : "";
         String lowerMessage = normalized.toLowerCase(Locale.ROOT);
 
+        if (lowerMessage.contains("category=github_token_invalid")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 鏃犳晥鎴栧凡杩囨湡",
+                "璇峰埌闆嗘垚閰嶇疆椤垫洿鏂?GitHub Token锛岀‘璁よ繛鎺ユ祴璇曢€氳繃鍚庨噸鏂板洖鍐欍€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_permission_denied")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 鏉冮檺涓嶈冻",
+                "璇风‘璁?Token 瀵圭洰鏍囦粨搴撳叿澶?Pull Request/Issue 璇勮鏉冮檺鍚庨噸鏂板洖鍐欍€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_target_not_found")) {
+            return new FailureSummary(
+                "github_target_not_found",
+                "GitHub PR 鎴栦粨搴撲笉鍙闂?",
+                "璇风‘璁や换鍔′粨搴撱€丳R 缂栧彿鍜?Token 鍙闂寖鍥达紝鍐嶉噸鏂板洖鍐欒瘎璁恒€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_rate_limited")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 璁块棶鍙楅檺",
+                "璇风◢鍚庨噸璇曪紝鎴栨洿鎹㈠墿浣欓搴﹀厖瓒崇殑 GitHub Token銆?"
+            );
+        }
+        if (lowerMessage.contains("category=github_timeout")) {
+            return new FailureSummary(
+                "github_writeback_timeout",
+                "GitHub 回写请求超时",
+                "请检查网络和 GitHub 服务状态，稍后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("category=github_service_unavailable")) {
+            return new FailureSummary(
+                "github_service_unavailable",
+                "GitHub API 暂时不可用",
+                "请稍后重试，并关注 GitHub 服务状态或企业代理网络状态。"
+            );
+        }
         if (lowerMessage.contains("token is not configured")) {
             return new FailureSummary(
                 "github_token_missing",

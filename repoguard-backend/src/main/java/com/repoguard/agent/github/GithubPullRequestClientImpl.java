@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
@@ -91,8 +92,9 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 ))
                 .toList();
         } catch (RuntimeException ex) {
-            markGithubChecked(config, conciseError(ex));
-            throw ex;
+            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            markGithubChecked(config, conciseError(classified));
+            throw classified;
         }
     }
 
@@ -125,8 +127,9 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             List<GithubChangedFile> changedFiles = files == null ? List.of() : Arrays.asList(files);
             return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
         } catch (RuntimeException ex) {
-            markGithubChecked(config, ex.getMessage());
-            throw ex;
+            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            markGithubChecked(config, conciseError(classified));
+            throw classified;
         }
     }
 
@@ -196,7 +199,8 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 ));
                 markGithubChecked(config, null);
             } catch (RuntimeException ex) {
-                String message = conciseError(ex);
+                RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+                String message = conciseError(classified);
                 results.add(new GithubReviewCommentResult(
                     draft.findingId(),
                     draft.path(),

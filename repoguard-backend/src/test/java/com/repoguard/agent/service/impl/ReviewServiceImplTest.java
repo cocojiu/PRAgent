@@ -349,6 +349,27 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void listReviewsAddsReadableFailureSummaryFromExternalCallCategory() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        ReviewTask failedTask = task();
+        failedTask.setStatus("FAILED");
+        failedTask.setRiskLevel("HIGH");
+        failedTask.setLlmStatus("FAILED");
+        Page<ReviewTask> page = Page.of(1, 20);
+        page.setRecords(List.of(failedTask));
+        page.setTotal(1);
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline(
+            "Review failed: GitHub external call failed: category=github_rate_limited retryable=true status=429"
+        )));
+
+        var result = service.listReviews(new ReviewQuery(1, 20, null, null, null, null, null, null));
+
+        assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_rate_limited");
+        assertThat(result.items().getFirst().failureReason()).contains("GitHub API");
+    }
+
+    @Test
     void getReviewDetailAddsReadableFailureSummaryFromTimeline() {
         ReviewTask failedTask = task();
         failedTask.setStatus("FAILED");
@@ -367,6 +388,26 @@ class ReviewServiceImplTest {
         assertThat(result.failureCategory()).isEqualTo("github_permission_denied");
         assertThat(result.failureReason()).isEqualTo("GitHub Token 权限不足");
         assertThat(result.failureSuggestion()).contains("目标仓库和 PR");
+    }
+
+    @Test
+    void getReviewDetailAddsReadableLlmFailureSummaryFromExternalCallCategory() {
+        ReviewTask failedTask = task();
+        failedTask.setStatus("FAILED");
+        failedTask.setRiskLevel("HIGH");
+        failedTask.setLlmStatus("FAILED");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
+            timeline("Task queued"),
+            timeline("Review failed: LLM external call failed: category=llm_service_unavailable retryable=true status=503")
+        ));
+
+        var result = service.getReviewDetail(521L);
+
+        assertThat(result.failureCategory()).isEqualTo("llm_service_unavailable");
+        assertThat(result.failureReason()).isEqualTo("LLM 服务暂时不可用");
     }
 
     @Test
