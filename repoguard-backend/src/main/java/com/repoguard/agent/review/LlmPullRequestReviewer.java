@@ -76,6 +76,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     }
 
     private ReviewResult fallbackReview(GithubPullRequestDiff diff, String reason) {
+        if (metrics != null) {
+            metrics.llmFallback(reasonCategory(reason));
+        }
         ReviewResult fallback = ruleBasedReviewer.review(diff);
         return ReviewResult.fallback(fallback.riskLevel(), normalizeReason(reason), fallback.findings());
     }
@@ -97,6 +100,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     }
 
     private String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+        long startedAt = System.nanoTime();
         RestClient restClient = restClientBuilder
             .baseUrl(config.getBaseUrl().trim())
             .requestFactory(requestFactory(config.getTimeoutSeconds()))
@@ -122,14 +126,32 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 .body(payload)
                 .retrieve()
                 .body(String.class);
+            if (metrics != null) {
+                metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
+            }
             return extractMessageContent(response);
         } catch (RuntimeException ex) {
             var classified = ExternalCallErrorClassifier.llm(ex);
             if (metrics != null) {
                 metrics.externalCallFailed(classified);
+                metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "failed");
             }
             throw classified;
         }
+    }
+
+    private String reasonCategory(String reason) {
+        String normalized = normalizeReason(reason).toLowerCase();
+        int markerIndex = normalized.indexOf("category=");
+        if (markerIndex >= 0) {
+            int valueStart = markerIndex + "category=".length();
+            int valueEnd = normalized.indexOf(' ', valueStart);
+            return valueEnd < 0 ? normalized.substring(valueStart) : normalized.substring(valueStart, valueEnd);
+        }
+        if (normalized.contains("config")) {
+            return "config_incomplete";
+        }
+        return "llm_unavailable";
     }
 
     private String extractMessageContent(String response) {

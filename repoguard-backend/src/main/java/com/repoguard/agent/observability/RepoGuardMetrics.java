@@ -3,6 +3,8 @@ package com.repoguard.agent.observability;
 import com.repoguard.agent.external.ExternalCallException;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.time.Duration;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -29,6 +31,11 @@ public class RepoGuardMetrics {
         ).increment();
     }
 
+    public void reviewTaskDuration(Duration duration, String result) {
+        timer("repoguard.review.task.duration", "result", normalize(result))
+            .record(nonNegative(duration));
+    }
+
     public void reviewTaskFailed(RuntimeException ex) {
         counter(
             "repoguard.review.task.failed",
@@ -45,6 +52,24 @@ public class RepoGuardMetrics {
             "retryable", Boolean.toString(ex.isRetryable()),
             "status", ex.getStatusCode() == null ? "none" : ex.getStatusCode().toString()
         ).increment();
+    }
+
+    public void githubDiffDuration(Duration duration, String result) {
+        timer("repoguard.github.diff.duration", "result", normalize(result))
+            .record(nonNegative(duration));
+    }
+
+    public void llmRequestDuration(Duration duration, String result) {
+        timer("repoguard.llm.request.duration", "result", normalize(result))
+            .record(nonNegative(duration));
+    }
+
+    public void llmFallback(String reason) {
+        counter("repoguard.llm.fallback", "reason", normalize(reason)).increment();
+    }
+
+    public void githubCommentPublished(String status) {
+        counter("repoguard.github.comment.publish", "status", normalize(status)).increment();
     }
 
     public void rabbitPublishFailed(String reason) {
@@ -67,6 +92,19 @@ public class RepoGuardMetrics {
         return Counter.builder(name)
             .tags(tags)
             .register(meterRegistry);
+    }
+
+    private Timer timer(String name, String... tags) {
+        return Timer.builder(name)
+            .tags(tags)
+            .register(meterRegistry);
+    }
+
+    private Duration nonNegative(Duration duration) {
+        if (duration == null || duration.isNegative()) {
+            return Duration.ZERO;
+        }
+        return duration;
     }
 
     private String failureCategory(RuntimeException ex) {

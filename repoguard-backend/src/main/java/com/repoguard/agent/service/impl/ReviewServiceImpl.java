@@ -202,6 +202,7 @@ public class ReviewServiceImpl implements ReviewService {
 
         int succeededCount = (int) publishedItems.stream().filter(GithubCommentPublishItem::success).count();
         int failedCount = publishedItems.size() - succeededCount;
+        recordGithubCommentPublishMetrics(succeededCount, failedCount, skippedItems.size());
         GithubCommentPublishResponse response = new GithubCommentPublishResponse(
             task.getId(),
             preview.totalFindings(),
@@ -214,6 +215,21 @@ public class ReviewServiceImpl implements ReviewService {
         // 幂等表只保留审查发现当前发布状态；批次表保留本次点击回写按钮的完整审计轨迹。
         savePublicationBatch(response);
         return response;
+    }
+
+    private void recordGithubCommentPublishMetrics(int succeededCount, int failedCount, int skippedCount) {
+        if (metrics == null) {
+            return;
+        }
+        for (int i = 0; i < succeededCount; i++) {
+            metrics.githubCommentPublished("success");
+        }
+        for (int i = 0; i < failedCount; i++) {
+            metrics.githubCommentPublished("failed");
+        }
+        for (int i = 0; i < skippedCount; i++) {
+            metrics.githubCommentPublished("skipped");
+        }
     }
 
     @Override

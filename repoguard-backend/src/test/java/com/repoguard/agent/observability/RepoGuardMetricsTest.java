@@ -3,6 +3,7 @@ package com.repoguard.agent.observability;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.external.ExternalCallException;
+import java.time.Duration;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -71,7 +72,37 @@ class RepoGuardMetricsTest {
         )).isEqualTo(1.0);
     }
 
+    @Test
+    void recordsDurationTimersAndFallbackCounters() {
+        metrics.reviewTaskDuration(Duration.ofMillis(120), "COMPLETED");
+        metrics.githubDiffDuration(Duration.ofMillis(45), "SUCCESS");
+        metrics.llmRequestDuration(Duration.ofMillis(80), "FAILED");
+        metrics.llmFallback("category=llm_timeout retryable=true");
+        metrics.githubCommentPublished("success");
+
+        assertThat(timerCount("repoguard.review.task.duration", "result", "completed")).isEqualTo(1);
+        assertThat(timerTotalSeconds("repoguard.review.task.duration", "result", "completed")).isPositive();
+        assertThat(timerCount("repoguard.github.diff.duration", "result", "success")).isEqualTo(1);
+        assertThat(timerCount("repoguard.llm.request.duration", "result", "failed")).isEqualTo(1);
+        assertThat(counter(
+            "repoguard.llm.fallback",
+            "reason", "category_llm_timeout_retryable_true"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.github.comment.publish",
+            "status", "success"
+        )).isEqualTo(1.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
+    }
+
+    private long timerCount(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).timer().count();
+    }
+
+    private double timerTotalSeconds(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).timer().totalTime(java.util.concurrent.TimeUnit.SECONDS);
     }
 }

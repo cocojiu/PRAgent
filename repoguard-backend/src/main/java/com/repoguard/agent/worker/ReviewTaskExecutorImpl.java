@@ -91,7 +91,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         }
 
         try {
-            GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
+            GithubPullRequestDiff diff = fetchPullRequestDiff(task);
             replaceChangedFiles(task.getId(), diff);
             ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
             completeReview(task, reviewResult, startedAt);
@@ -100,6 +100,22 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             if (metrics != null) {
                 metrics.reviewTaskFailed(ex);
             }
+        }
+    }
+
+    private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
+        LocalDateTime startedAt = LocalDateTime.now();
+        try {
+            GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
+            if (metrics != null) {
+                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "success");
+            }
+            return diff;
+        } catch (RuntimeException ex) {
+            if (metrics != null) {
+                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "failed");
+            }
+            throw ex;
         }
     }
 
@@ -152,6 +168,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             appendTimeline(task.getId(), "Review completed", finishedAt, "DONE", 5);
             if (metrics != null) {
                 metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
+                metrics.reviewTaskDuration(Duration.between(startedAt, finishedAt), "completed");
             }
         });
     }
@@ -184,6 +201,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
             reviewTaskMapper.updateById(task);
             appendTimeline(task.getId(), failureLabel(ex), failedAt, "FAILED", 5);
+            if (metrics != null) {
+                metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
+            }
         });
     }
 
