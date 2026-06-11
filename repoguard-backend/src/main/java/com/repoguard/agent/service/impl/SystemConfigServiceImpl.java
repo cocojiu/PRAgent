@@ -389,6 +389,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         boolean transientConfig = configRequest != null;
         IntegrationConfig config = transientConfig ? serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig) : savedConfig;
         if (config != null) {
+            ProbeResult runtimeProbe = runtimeMysqlProbe();
             try (Connection connection = DriverManager.getConnection(
                 config.getBaseUrl(),
                 config.getDefaultOwner(),
@@ -399,25 +400,31 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 if (!transientConfig) {
                     markServiceIntegrationChecked(config, error);
                 }
+                String source = transientConfig ? "submitted_config" : "saved_config";
+                Boolean savedConfigProbe = transientConfig ? null : valid;
                 return valid
-                    ? connectionResult(true, "connected", "MySQL connection test succeeded")
-                    : connectionResult(false, "failed", error);
+                    ? serviceConnectionResult(true, "connected", "MySQL connection test succeeded", source, runtimeProbe, savedConfig, savedConfigProbe)
+                    : serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, savedConfigProbe);
             } catch (Exception ex) {
                 String error = conciseError(ex);
                 if (!transientConfig) {
                     markServiceIntegrationChecked(config, error);
                 }
-                return connectionResult(false, "failed", error);
+                String source = transientConfig ? "submitted_config" : "saved_config";
+                return serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, transientConfig ? null : false);
             }
         }
-        try (Connection connection = dataSource.getConnection()) {
-            boolean valid = connection.isValid(2);
-            return valid
-                ? connectionResult(true, "connected", "MySQL connection test succeeded")
-                : connectionResult(false, "failed", "MySQL connection is not valid");
-        } catch (Exception ex) {
-            return connectionResult(false, "failed", conciseError(ex));
-        }
+        ProbeResult runtimeProbe = runtimeMysqlProbe();
+        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
+        return serviceConnectionResult(
+            success,
+            success ? "connected" : "failed",
+            success ? "MySQL runtime connection test succeeded" : runtimeProbe.message(),
+            "runtime_config",
+            runtimeProbe,
+            savedConfig,
+            null
+        );
     }
 
     @Override
@@ -426,30 +433,62 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         boolean transientConfig = configRequest != null;
         IntegrationConfig config = transientConfig ? serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig) : savedConfig;
         if (config != null) {
+            ProbeResult runtimeProbe = runtimeRabbitMqProbe();
             try (com.rabbitmq.client.Connection connection = rabbitMqConnectionFactory(config).newConnection()) {
                 boolean open = connection.isOpen();
                 String error = open ? null : "RabbitMQ connection is not open";
                 if (!transientConfig) {
                     markServiceIntegrationChecked(config, error);
                 }
+                String source = transientConfig ? "submitted_config" : "saved_config";
+                Boolean savedConfigProbe = transientConfig ? null : open;
                 return open
-                    ? connectionResult(true, "connected", "RabbitMQ connection test succeeded")
-                    : connectionResult(false, "failed", error);
+                    ? serviceConnectionResult(true, "connected", "RabbitMQ connection test succeeded", source, runtimeProbe, savedConfig, savedConfigProbe)
+                    : serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, savedConfigProbe);
             } catch (Exception ex) {
                 String error = conciseError(ex);
                 if (!transientConfig) {
                     markServiceIntegrationChecked(config, error);
                 }
-                return connectionResult(false, "failed", error);
+                String source = transientConfig ? "submitted_config" : "saved_config";
+                return serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, transientConfig ? null : false);
             }
+        }
+        ProbeResult runtimeProbe = runtimeRabbitMqProbe();
+        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
+        return serviceConnectionResult(
+            success,
+            success ? "connected" : "failed",
+            success ? "RabbitMQ runtime connection test succeeded" : runtimeProbe.message(),
+            "runtime_config",
+            runtimeProbe,
+            savedConfig,
+            null
+        );
+    }
+
+    private ProbeResult runtimeMysqlProbe() {
+        if (dataSource == null) {
+            return new ProbeResult(null, "unavailable", "Runtime DataSource is not available in this context");
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            boolean valid = connection.isValid(2);
+            return new ProbeResult(valid, valid ? "connected" : "failed", valid ? "MySQL runtime connection is valid" : "MySQL runtime connection is not valid");
+        } catch (Exception ex) {
+            return new ProbeResult(false, "failed", conciseError(ex));
+        }
+    }
+
+    private ProbeResult runtimeRabbitMqProbe() {
+        if (rabbitTemplate == null) {
+            return new ProbeResult(null, "unavailable", "Runtime RabbitTemplate is not available in this context");
         }
         try {
             Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            return Boolean.TRUE.equals(open)
-                ? connectionResult(true, "connected", "RabbitMQ connection test succeeded")
-                : connectionResult(false, "failed", "RabbitMQ channel is not open");
+            boolean connected = Boolean.TRUE.equals(open);
+            return new ProbeResult(connected, connected ? "connected" : "failed", connected ? "RabbitMQ runtime channel is open" : "RabbitMQ channel is not open");
         } catch (RuntimeException ex) {
-            return connectionResult(false, "failed", conciseError(ex));
+            return new ProbeResult(false, "failed", conciseError(ex));
         }
     }
 
@@ -953,7 +992,49 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
-        return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()));
+        return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()), null, null, null, null, null, null);
+    }
+
+    private ConnectionTestResultDto serviceConnectionResult(
+        boolean success,
+        String status,
+        String message,
+        String testedConfigSource,
+        ProbeResult runtimeProbe,
+        IntegrationConfig savedConfig,
+        Boolean testedSavedConfigHealthy
+    ) {
+        Boolean runtimeHealthy = runtimeProbe == null ? null : runtimeProbe.healthy();
+        Boolean savedConfigHealthy = resolveSavedConfigHealthy(savedConfig, testedSavedConfigHealthy);
+        return new ConnectionTestResultDto(
+            success,
+            status,
+            message,
+            format(LocalDateTime.now()),
+            testedConfigSource,
+            runtimeHealthy,
+            savedConfigHealthy,
+            mismatch(runtimeHealthy, savedConfigHealthy),
+            runtimeProbe == null ? null : runtimeProbe.status(),
+            savedConfig == null ? "not_configured" : lower(savedConfig.getStatus())
+        );
+    }
+
+    private Boolean resolveSavedConfigHealthy(IntegrationConfig savedConfig, Boolean testedSavedConfigHealthy) {
+        if (savedConfig == null) {
+            return null;
+        }
+        if (testedSavedConfigHealthy != null) {
+            return testedSavedConfigHealthy;
+        }
+        return "CONFIGURED".equals(savedConfig.getStatus()) && !StringUtils.hasText(savedConfig.getLastError());
+    }
+
+    private Boolean mismatch(Boolean runtimeHealthy, Boolean savedConfigHealthy) {
+        if (runtimeHealthy == null || savedConfigHealthy == null) {
+            return null;
+        }
+        return !runtimeHealthy.equals(savedConfigHealthy);
     }
 
     private String conciseError(Exception ex) {
@@ -1086,5 +1167,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private String format(LocalDateTime time) {
         return time == null ? null : time.format(DATE_TIME_FORMATTER);
+    }
+
+    private record ProbeResult(Boolean healthy, String status, String message) {
     }
 }

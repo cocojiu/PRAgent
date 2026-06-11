@@ -517,6 +517,12 @@ export interface ConnectionTestResult {
   status: "connected" | "failed";
   message: string;
   checkedAt: string;
+  testedConfigSource?: "submitted_config" | "saved_config" | "runtime_config" | string;
+  runtimeHealthy?: boolean | null;
+  savedConfigHealthy?: boolean | null;
+  mismatch?: boolean | null;
+  runtimeConnectionStatus?: string | null;
+  savedConfigStatus?: string | null;
 }
 
 export type NotificationLevel = "danger" | "warning" | "success" | "info";

@@ -342,6 +342,46 @@ class SystemConfigServiceImplTest {
     }
 
     @Test
+    void testMysqlConnectionReportsSubmittedConfigDiagnosticsWithoutPersistingStatus() {
+        IntegrationConfig savedConfig = serviceConfig("MYSQL", "mysql-existing-1234");
+        savedConfig.setBaseUrl("jdbc:invalid://saved");
+        savedConfig.setStatus("CONFIGURED");
+        savedConfig.setLastError(null);
+        when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(savedConfig);
+
+        var result = service.testMysqlConnection(new ServiceIntegrationConfigRequest(
+            "jdbc:invalid://submitted",
+            "root",
+            "****1234",
+            "repoguard"
+        ));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.testedConfigSource()).isEqualTo("submitted_config");
+        assertThat(result.runtimeHealthy()).isNull();
+        assertThat(result.runtimeConnectionStatus()).isEqualTo("unavailable");
+        assertThat(result.savedConfigHealthy()).isTrue();
+        assertThat(result.savedConfigStatus()).isEqualTo("configured");
+        assertThat(result.mismatch()).isNull();
+        verify(integrationConfigMapper, org.mockito.Mockito.never()).updateById(org.mockito.ArgumentMatchers.any(IntegrationConfig.class));
+    }
+
+    @Test
+    void testMysqlConnectionReportsRuntimeConfigWhenSavedConfigIsMissing() {
+        when(integrationConfigMapper.selectOne(org.mockito.ArgumentMatchers.any())).thenReturn(null);
+
+        var result = service.testMysqlConnection(null);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.testedConfigSource()).isEqualTo("runtime_config");
+        assertThat(result.runtimeHealthy()).isNull();
+        assertThat(result.savedConfigHealthy()).isNull();
+        assertThat(result.savedConfigStatus()).isEqualTo("not_configured");
+        assertThat(result.runtimeConnectionStatus()).isEqualTo("unavailable");
+        assertThat(result.message()).contains("Runtime DataSource");
+    }
+
+    @Test
     void getReviewRulesReturnsRulesAndMetricsFromDatabase() {
         when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(
             rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88),
