@@ -9,23 +9,35 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 class UserManagementServiceImplTest {
 
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
+    private final UserOperationAuditMapper userOperationAuditMapper = Mockito.mock(UserOperationAuditMapper.class);
     private final UserManagementServiceImpl userManagementService = new UserManagementServiceImpl(
         userAccountMapper,
-        userRefreshTokenMapper
+        userRefreshTokenMapper,
+        userOperationAuditMapper
     );
+
+    @BeforeEach
+    void setUp() {
+        Mockito.reset(userAccountMapper, userRefreshTokenMapper, userOperationAuditMapper);
+    }
 
     @Test
     void listUsersReturnsUserManagementItems() {
@@ -39,16 +51,48 @@ class UserManagementServiceImplTest {
     }
 
     @Test
+    void listOperationAuditsReturnsRecentAuditItems() {
+        UserOperationAudit audit = new UserOperationAudit();
+        audit.setId(9001L);
+        audit.setOperatorUserId(1001L);
+        audit.setOperatorUsername("admin");
+        audit.setTargetUserId(1002L);
+        audit.setTargetUsername("viewer");
+        audit.setAction("ROLE_UPDATE");
+        audit.setBeforeValue("ADMIN");
+        audit.setAfterValue("VIEWER");
+        audit.setClientIp("10.0.0.1");
+        audit.setUserAgent("JUnit");
+        audit.setCreatedAt(LocalDateTime.parse("2026-06-11T10:30:00"));
+        when(userOperationAuditMapper.selectList(any(Wrapper.class))).thenReturn(List.of(audit));
+
+        var audits = userManagementService.listOperationAudits();
+
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).operatorUsername()).isEqualTo("admin");
+        assertThat(audits.get(0).targetUsername()).isEqualTo("viewer");
+        assertThat(audits.get(0).action()).isEqualTo("ROLE_UPDATE");
+    }
+
+    @Test
     void updateRoleDemotesAdminWhenAnotherActiveAdminExists() {
         UserAccount user = user(1001L, "admin", "ADMIN", "ACTIVE");
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.selectById(1002L)).thenReturn(user(1002L, "operator", "ADMIN", "ACTIVE"));
         when(userAccountMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 
-        var updated = userManagementService.updateRole(1002L, 1001L, "VIEWER");
+        var updated = userManagementService.updateRole(new UserOperationAuditContext(1002L, "10.0.0.1", "JUnit"), 1001L, "VIEWER");
 
         assertThat(updated.role()).isEqualTo("VIEWER");
         verify(userAccountMapper).updateById(user);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
+        verify(userOperationAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getAction()).isEqualTo("ROLE_UPDATE");
+        assertThat(auditCaptor.getValue().getBeforeValue()).isEqualTo("ADMIN");
+        assertThat(auditCaptor.getValue().getAfterValue()).isEqualTo("VIEWER");
+        assertThat(auditCaptor.getValue().getOperatorUsername()).isEqualTo("operator");
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("10.0.0.1");
     }
 
     @Test
@@ -56,7 +100,7 @@ class UserManagementServiceImplTest {
         when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
         when(userAccountMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
 
-        assertThatThrownBy(() -> userManagementService.updateRole(1002L, 1001L, "VIEWER"))
+        assertThatThrownBy(() -> userManagementService.updateRole(auditContext(), 1001L, "VIEWER"))
             .isInstanceOf(BusinessException.class)
             .hasMessage("At least one active administrator is required");
     }
@@ -65,7 +109,7 @@ class UserManagementServiceImplTest {
     void updateStatusRejectsDisablingCurrentUser() {
         when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
 
-        assertThatThrownBy(() -> userManagementService.updateStatus(1001L, 1001L, "DISABLED"))
+        assertThatThrownBy(() -> userManagementService.updateStatus(new UserOperationAuditContext(1001L, "10.0.0.1", "JUnit"), 1001L, "DISABLED"))
             .isInstanceOf(BusinessException.class)
             .hasMessage("Cannot disable your own account");
     }
@@ -74,12 +118,18 @@ class UserManagementServiceImplTest {
     void updateStatusDisablesUserAndRevokesRefreshTokens() {
         UserAccount user = user(1003L, "viewer", "VIEWER", "ACTIVE");
         when(userAccountMapper.selectById(1003L)).thenReturn(user);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
 
-        var updated = userManagementService.updateStatus(1001L, 1003L, "DISABLED");
+        var updated = userManagementService.updateStatus(auditContext(), 1003L, "DISABLED");
 
         assertThat(updated.status()).isEqualTo("DISABLED");
         verify(userAccountMapper).updateById(user);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
+        verify(userOperationAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getAction()).isEqualTo("STATUS_UPDATE");
+        assertThat(auditCaptor.getValue().getBeforeValue()).isEqualTo("ACTIVE");
+        assertThat(auditCaptor.getValue().getAfterValue()).isEqualTo("DISABLED");
     }
 
     @Test
@@ -88,14 +138,19 @@ class UserManagementServiceImplTest {
         user.setFailedLoginCount(5);
         user.setLockedUntil(LocalDateTime.now().plusMinutes(5));
         when(userAccountMapper.selectById(1003L)).thenReturn(user);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
 
-        var updated = userManagementService.updateStatus(1001L, 1003L, "ACTIVE");
+        var updated = userManagementService.updateStatus(auditContext(), 1003L, "ACTIVE");
 
         assertThat(updated.status()).isEqualTo("ACTIVE");
         assertThat(updated.failedLoginCount()).isZero();
         assertThat(updated.lockedUntil()).isNull();
         verify(userAccountMapper).updateById(user);
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).update(isNull(), any(Wrapper.class));
+    }
+
+    private UserOperationAuditContext auditContext() {
+        return new UserOperationAuditContext(1001L, "10.0.0.1", "JUnit");
     }
 
     private UserAccount user(Long id, String username, String role, String status) {

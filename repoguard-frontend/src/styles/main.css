@@ -696,6 +696,11 @@ a {
   background: #fef3c7;
 }
 
+.status-pill.info {
+  color: #2563eb;
+  background: #eaf2ff;
+}
+
 .status-pill.pending {
   color: #475569;
   background: #f1f5f9;
@@ -954,6 +959,26 @@ a {
   background: #ffffff;
   box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
   overflow: hidden;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #e5eaf3;
+}
+
+.panel-heading h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 20px;
+}
+
+.panel-heading p {
+  margin: 6px 0 0;
+  color: #64748b;
 }
 
 .user-filter {

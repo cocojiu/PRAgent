@@ -5,9 +5,13 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.UserManagementItemDto;
+import com.repoguard.agent.dto.UserOperationAuditContext;
+import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.service.UserManagementService;
 import java.time.LocalDateTime;
@@ -23,16 +27,22 @@ public class UserManagementServiceImpl implements UserManagementService {
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_DISABLED = "DISABLED";
     private static final String STATUS_REVOKED = "REVOKED";
+    private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
+    private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
+    private static final int AUDIT_LIMIT = 50;
 
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
+    private final UserOperationAuditMapper userOperationAuditMapper;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
-        UserRefreshTokenMapper userRefreshTokenMapper
+        UserRefreshTokenMapper userRefreshTokenMapper,
+        UserOperationAuditMapper userOperationAuditMapper
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
+        this.userOperationAuditMapper = userOperationAuditMapper;
     }
 
     @Override
@@ -46,10 +56,22 @@ public class UserManagementServiceImpl implements UserManagementService {
     }
 
     @Override
+    public List<UserOperationAuditDto> listOperationAudits() {
+        return userOperationAuditMapper.selectList(new LambdaQueryWrapper<UserOperationAudit>()
+                .orderByDesc(UserOperationAudit::getCreatedAt)
+                .orderByDesc(UserOperationAudit::getId)
+                .last("LIMIT " + AUDIT_LIMIT))
+            .stream()
+            .map(this::toAuditDto)
+            .toList();
+    }
+
+    @Override
     @Transactional
-    public UserManagementItemDto updateRole(Long operatorId, Long userId, String role) {
+    public UserManagementItemDto updateRole(UserOperationAuditContext auditContext, Long userId, String role) {
         String normalizedRole = normalizeRole(role);
         UserAccount user = requireUser(userId);
+        String beforeRole = user.getRole();
         if (ROLE_ADMIN.equals(user.getRole()) && ROLE_VIEWER.equals(normalizedRole)) {
             ensureAnotherActiveAdmin(userId);
         }
@@ -57,14 +79,17 @@ public class UserManagementServiceImpl implements UserManagementService {
         user.setUpdatedAt(LocalDateTime.now());
         userAccountMapper.updateById(user);
         revokeActiveRefreshTokens(user.getId());
+        recordAudit(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
         return toDto(user);
     }
 
     @Override
     @Transactional
-    public UserManagementItemDto updateStatus(Long operatorId, Long userId, String status) {
+    public UserManagementItemDto updateStatus(UserOperationAuditContext auditContext, Long userId, String status) {
         String normalizedStatus = normalizeStatus(status);
         UserAccount user = requireUser(userId);
+        String beforeStatus = user.getStatus();
+        Long operatorId = auditContext == null ? null : auditContext.operatorId();
         if (operatorId != null && operatorId.equals(userId) && STATUS_DISABLED.equals(normalizedStatus)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot disable your own account");
         }
@@ -81,7 +106,31 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (STATUS_DISABLED.equals(normalizedStatus)) {
             revokeActiveRefreshTokens(user.getId());
         }
+        recordAudit(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
         return toDto(user);
+    }
+
+    private void recordAudit(
+        UserOperationAuditContext auditContext,
+        UserAccount targetUser,
+        String action,
+        String beforeValue,
+        String afterValue
+    ) {
+        UserOperationAudit audit = new UserOperationAudit();
+        Long operatorId = auditContext == null ? null : auditContext.operatorId();
+        UserAccount operator = operatorId == null ? null : userAccountMapper.selectById(operatorId);
+        audit.setOperatorUserId(operatorId);
+        audit.setOperatorUsername(operator == null ? null : operator.getUsername());
+        audit.setTargetUserId(targetUser.getId());
+        audit.setTargetUsername(targetUser.getUsername());
+        audit.setAction(action);
+        audit.setBeforeValue(beforeValue);
+        audit.setAfterValue(afterValue);
+        audit.setClientIp(auditContext == null ? null : truncate(auditContext.clientIp(), 64));
+        audit.setUserAgent(auditContext == null ? null : truncate(auditContext.userAgent(), 512));
+        audit.setCreatedAt(LocalDateTime.now());
+        userOperationAuditMapper.insert(audit);
     }
 
     private UserAccount requireUser(Long userId) {
@@ -139,5 +188,28 @@ public class UserManagementServiceImpl implements UserManagementService {
             user.getCreatedAt(),
             user.getUpdatedAt()
         );
+    }
+
+    private UserOperationAuditDto toAuditDto(UserOperationAudit audit) {
+        return new UserOperationAuditDto(
+            audit.getId(),
+            audit.getOperatorUserId(),
+            audit.getOperatorUsername(),
+            audit.getTargetUserId(),
+            audit.getTargetUsername(),
+            audit.getAction(),
+            audit.getBeforeValue(),
+            audit.getAfterValue(),
+            audit.getClientIp(),
+            audit.getUserAgent(),
+            audit.getCreatedAt()
+        );
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

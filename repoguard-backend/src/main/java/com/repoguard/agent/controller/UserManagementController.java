@@ -4,6 +4,8 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.UserManagementItemDto;
+import com.repoguard.agent.dto.UserOperationAuditContext;
+import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.dto.UserRoleUpdateRequest;
 import com.repoguard.agent.dto.UserStatusUpdateRequest;
 import com.repoguard.agent.security.AuthTokenFilter;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.util.StringUtils;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -36,13 +39,18 @@ public class UserManagementController {
         return ApiResponse.ok(userManagementService.listUsers());
     }
 
+    @GetMapping("/audits")
+    public ApiResponse<List<UserOperationAuditDto>> listOperationAudits() {
+        return ApiResponse.ok(userManagementService.listOperationAudits());
+    }
+
     @PutMapping("/{id}/role")
     public ApiResponse<UserManagementItemDto> updateRole(
         HttpServletRequest request,
         @PathVariable Long id,
         @Valid @RequestBody UserRoleUpdateRequest updateRequest
     ) {
-        return ApiResponse.ok(userManagementService.updateRole(currentUserId(request), id, updateRequest.role()));
+        return ApiResponse.ok(userManagementService.updateRole(auditContext(request), id, updateRequest.role()));
     }
 
     @PutMapping("/{id}/status")
@@ -51,14 +59,33 @@ public class UserManagementController {
         @PathVariable Long id,
         @Valid @RequestBody UserStatusUpdateRequest updateRequest
     ) {
-        return ApiResponse.ok(userManagementService.updateStatus(currentUserId(request), id, updateRequest.status()));
+        return ApiResponse.ok(userManagementService.updateStatus(auditContext(request), id, updateRequest.status()));
     }
 
-    private Long currentUserId(HttpServletRequest request) {
+    private UserOperationAuditContext auditContext(HttpServletRequest request) {
         Object authenticatedUser = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
         if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
         }
-        return user.id();
+        return new UserOperationAuditContext(user.id(), resolveClientIp(request), truncate(request.getHeader("User-Agent"), 512));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (StringUtils.hasText(forwardedFor)) {
+            return truncate(forwardedFor.split(",")[0].trim(), 64);
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (StringUtils.hasText(realIp)) {
+            return truncate(realIp, 64);
+        }
+        return truncate(request.getRemoteAddr(), 64);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

@@ -1,13 +1,17 @@
 package com.repoguard.agent.service;
 
 import com.repoguard.agent.dto.UserManagementItemDto;
+import com.repoguard.agent.dto.UserOperationAuditContext;
+import com.repoguard.agent.dto.UserOperationAuditDto;
 import java.util.List;
 
 public interface UserManagementService {
 
     List<UserManagementItemDto> listUsers();
 
-    UserManagementItemDto updateRole(Long operatorId, Long userId, String role);
+    List<UserOperationAuditDto> listOperationAudits();
 
-    UserManagementItemDto updateStatus(Long operatorId, Long userId, String status);
+    UserManagementItemDto updateRole(UserOperationAuditContext auditContext, Long userId, String role);
+
+    UserManagementItemDto updateStatus(UserOperationAuditContext auditContext, Long userId, String status);
 }
