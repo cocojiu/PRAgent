@@ -109,16 +109,15 @@ import {
   RadioTower,
   ShieldCheck
 } from "lucide-vue-next";
-import { getCurrentUser, logout } from "@/api/auth";
-import type { CurrentUser } from "@/api/auth";
+import { logout } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
+import { currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
 const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
 const notificationCenter = ref<NotificationCenter>();
-const currentUser = ref<CurrentUser>();
 const loadingNotifications = ref(false);
 const notificationError = ref("");
 const readNotificationIds = ref<Set<string>>(new Set());
@@ -164,11 +163,11 @@ const markNotificationRead = (id: string) => {
 
 const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
 
-const loadCurrentUser = async () => {
+const refreshCurrentUser = async () => {
   try {
-    currentUser.value = await getCurrentUser();
+    await loadCurrentUser();
   } catch {
-    currentUser.value = undefined;
+    resetCurrentUser();
   }
 };
 
@@ -213,6 +212,7 @@ const handleUserCommand = async (command: string) => {
   }
   if (command === "logout") {
     await logout();
+    resetCurrentUser();
     ElMessage.success("已退出登录");
     router.push("/login");
     return;
@@ -226,7 +226,7 @@ const handleUserCommand = async (command: string) => {
 
 onMounted(() => {
   loadReadNotificationIds();
-  void loadCurrentUser();
+  void refreshCurrentUser();
   void loadNotifications();
 });
 </script>

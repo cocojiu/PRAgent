@@ -5,7 +5,7 @@
         <h1>审查任务</h1>
         <p>查看和管理所有代码审查任务</p>
       </div>
-      <el-button type="primary" @click="openCreateDialog">
+      <el-button type="primary" :disabled="!canManage" @click="openCreateDialog">
         <GitPullRequestArrow :size="16" />
         新建审查任务
       </el-button>
@@ -123,7 +123,7 @@
                 <span>
                   <el-button
                     size="small"
-                    :disabled="!canRetryTask(row)"
+                    :disabled="!canManage || !canRetryTask(row)"
                     :loading="retryingTaskId === row.id"
                     @click="retryTask(row)"
                   >
@@ -207,7 +207,7 @@
       </el-table>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creatingTask" :disabled="!selectedPullRequest" @click="createReviewFromSelectedPullRequest">
+        <el-button type="primary" :loading="creatingTask" :disabled="!canManage || !selectedPullRequest" @click="createReviewFromSelectedPullRequest">
           创建审查任务
         </el-button>
       </template>
@@ -219,6 +219,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
+import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchGithubPullRequestOptions, fetchReviews, retryReview, triggerManualReview } from "@/api/reviews";
@@ -403,7 +404,7 @@ const retryTooltip = (task: ReviewTask) => {
 };
 
 const retryTask = async (task: ReviewTask) => {
-  if (!canRetryTask(task) || retryingTaskId.value) {
+  if (!canManage.value || !canRetryTask(task) || retryingTaskId.value) {
     return;
   }
   try {
@@ -434,6 +435,9 @@ const resolvePullRequestHeadSha = (pullRequest: GithubPullRequestOption) => pull
 const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
 const openCreateDialog = () => {
+  if (!canManage.value) {
+    return;
+  }
   createDialogVisible.value = true;
   ensureDefaultPullRequestSelected();
   if (!pullRequestsLoaded.value && !loadingPullRequests.value) {
@@ -487,6 +491,9 @@ const selectPullRequest = (row?: GithubPullRequestOption) => {
 };
 
 const createReviewFromSelectedPullRequest = async () => {
+  if (!canManage.value) {
+    return;
+  }
   const pullRequest = selectedPullRequest.value;
   if (!pullRequest || !pullRequestOrganization.value || !pullRequestRepository.value) {
     ElMessage.warning("请选择一个有效的 GitHub PR");

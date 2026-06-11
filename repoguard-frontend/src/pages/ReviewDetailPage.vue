@@ -49,7 +49,7 @@
               <el-button
                 type="primary"
                 size="large"
-                :disabled="!canRetryTask"
+                :disabled="!canManage || !canRetryTask"
                 :loading="retryingTask"
                 @click="confirmRetryReview"
               >
@@ -72,7 +72,7 @@
         </div>
         <el-button
           type="primary"
-          :disabled="!canRetryTask"
+          :disabled="!canManage || !canRetryTask"
           :loading="retryingTask"
           @click="confirmRetryReview"
         >
@@ -148,7 +148,7 @@
               <h2>GitHub 评论预览</h2>
               <el-button
                 type="primary"
-                :disabled="!canPublishGithubComments"
+                :disabled="!canManage || !canPublishGithubComments"
                 :loading="publishingComments"
                 @click="confirmPublishGithubComments"
               >
@@ -379,6 +379,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw, ShieldAlert } from "lucide-vue-next";
+import { canManage } from "@/stores/authState";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 import {
   fetchGithubCommentPreview,
@@ -428,7 +429,7 @@ const publishedCommentCount = computed(() => githubCommentPreview.value?.items.f
 const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
 const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
 const canPublishGithubComments = computed(() =>
-  Boolean(githubCommentPreview.value?.commentableCount && writebackCheck.value?.tokenConfigured !== false)
+  Boolean(canManage.value && githubCommentPreview.value?.commentableCount && writebackCheck.value?.tokenConfigured !== false)
 );
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -837,7 +838,7 @@ const refreshDetail = () => {
 };
 
 const confirmPublishGithubComments = async () => {
-  if (!selectedTask.value || !githubCommentPreview.value?.commentableCount) {
+  if (!canManage.value || !selectedTask.value || !githubCommentPreview.value?.commentableCount) {
     return;
   }
 
@@ -879,7 +880,7 @@ const confirmPublishGithubComments = async () => {
 };
 
 const confirmRetryReview = async () => {
-  if (!selectedTask.value || !canRetryTask.value || retryingTask.value) {
+  if (!canManage.value || !selectedTask.value || !canRetryTask.value || retryingTask.value) {
     return;
   }
 

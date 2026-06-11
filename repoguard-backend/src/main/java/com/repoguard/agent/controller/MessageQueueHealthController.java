@@ -3,6 +3,7 @@ package com.repoguard.agent.controller;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
+import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -29,6 +30,7 @@ public class MessageQueueHealthController {
     }
 
     @PostMapping("/tasks/{taskId}/requeue")
+    @RequireRole("ADMIN")
     public ApiResponse<MessageQueueRequeueResponse> requeueTask(@PathVariable @Min(1) Long taskId) {
         return ApiResponse.ok(messageQueueHealthService.requeueTask(taskId));
     }

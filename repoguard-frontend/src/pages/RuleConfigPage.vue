@@ -5,7 +5,7 @@
         <h1>规则配置</h1>
         <p>管理代码审查规则、严重级别和启用状态</p>
       </div>
-      <el-button type="primary" size="large" @click="openCreateDialog">新增规则</el-button>
+      <el-button type="primary" size="large" :disabled="!canManage" @click="openCreateDialog">新增规则</el-button>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
@@ -47,6 +47,7 @@
                 v-model="row.status"
                 active-value="enabled"
                 inactive-value="disabled"
+                :disabled="!canManage"
                 :loading="statusSavingId === row.id"
                 @change="toggleRule(row, $event)"
               />
@@ -57,7 +58,7 @@
           <el-table-column prop="updatedAt" label="最近更新" min-width="160" />
           <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" type="primary" plain @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" type="primary" plain :disabled="!canManage" @click="openEditDialog(row)">编辑</el-button>
             </template>
           </el-table-column>
           <template #empty>
@@ -112,7 +113,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveRule">保存</el-button>
+        <el-button type="primary" :disabled="!canManage" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -122,6 +123,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "lucide-vue-next";
+import { canManage } from "@/stores/authState";
 import {
   createReviewRule,
   fetchReviewRules,
@@ -212,18 +214,27 @@ const resetForm = (rule?: ReviewRuleConfig) => {
 };
 
 const openCreateDialog = () => {
+  if (!canManage.value) {
+    return;
+  }
   editingRuleId.value = "";
   resetForm();
   dialogVisible.value = true;
 };
 
 const openEditDialog = (rule: ReviewRuleConfig) => {
+  if (!canManage.value) {
+    return;
+  }
   editingRuleId.value = rule.id;
   resetForm(rule);
   dialogVisible.value = true;
 };
 
 const saveRule = async () => {
+  if (!canManage.value) {
+    return;
+  }
   const validationMessage = validateRuleForm();
   if (validationMessage) {
     ElMessage.warning(validationMessage);
@@ -249,6 +260,10 @@ const saveRule = async () => {
 };
 
 const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boolean) => {
+  if (!canManage.value) {
+    rule.status = value === "enabled" ? "disabled" : "enabled";
+    return;
+  }
   const nextStatus = value === "enabled" ? "enabled" : "disabled";
   const previousStatus: RuleStatus = nextStatus === "enabled" ? "disabled" : "enabled";
   statusSavingId.value = rule.id;

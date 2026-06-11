@@ -4,7 +4,7 @@
       <div>
         <h1>集成配置</h1>
       </div>
-      <el-button type="primary" size="large" :loading="saving" @click="saveConfig">
+      <el-button type="primary" size="large" :disabled="!canManage" :loading="saving" @click="saveConfig">
         <Save :size="17" />
         保存配置
       </el-button>
@@ -38,6 +38,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Database, Github, Hexagon, RadioTower, Save } from "lucide-vue-next";
 import type { Component } from "vue";
+import { canManage } from "@/stores/authState";
 import {
   fetchGithubIntegrationConfig,
   fetchMysqlIntegrationConfig,
@@ -231,6 +232,9 @@ const loadConfig = async () => {
 };
 
 const saveConfig = async () => {
+  if (!canManage.value) {
+    return;
+  }
   saving.value = true;
   try {
     const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([

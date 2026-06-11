@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.ReviewService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -73,6 +74,7 @@ public class ReviewController {
      * 执行真实 GitHub 评论回写，并返回本次操作结果。
      */
     @PostMapping("/{id}/github-comments")
+    @RequireRole("ADMIN")
     public ApiResponse<GithubCommentPublishResponse> publishGithubComments(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.publishGithubComments(id));
     }
@@ -91,11 +93,13 @@ public class ReviewController {
     }
 
     @PostMapping("/manual")
+    @RequireRole("ADMIN")
     public ApiResponse<ManualReviewResponse> triggerManualReview(@Valid @RequestBody ManualReviewRequest request) {
         return ApiResponse.ok(reviewService.triggerManualReview(request));
     }
 
     @PostMapping("/{id}/retry")
+    @RequireRole("ADMIN")
     public ApiResponse<ReviewRetryResponse> retryReview(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.retryReview(id));
     }

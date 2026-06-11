@@ -21,6 +21,7 @@ public class GlobalExceptionHandler {
         HttpStatus status = switch (exception.getErrorCode()) {
             case TASK_NOT_FOUND -> HttpStatus.NOT_FOUND;
             case UNAUTHORIZED -> HttpStatus.UNAUTHORIZED;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status)

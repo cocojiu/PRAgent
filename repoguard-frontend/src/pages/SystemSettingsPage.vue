@@ -7,8 +7,8 @@
       </div>
       <div class="settings-actions">
         <el-button v-if="isEditing" size="large" @click="cancelEdit">取消</el-button>
-        <el-button v-if="!isEditing" type="primary" size="large" @click="startEdit">编辑设置</el-button>
-        <el-button v-else type="primary" size="large" :loading="saving" @click="saveSettings">保存设置</el-button>
+        <el-button v-if="!isEditing" type="primary" size="large" :disabled="!canManage" @click="startEdit">编辑设置</el-button>
+        <el-button v-else type="primary" size="large" :disabled="!canManage" :loading="saving" @click="saveSettings">保存设置</el-button>
       </div>
     </div>
 
@@ -144,6 +144,7 @@ security:
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
+import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import type {
@@ -192,6 +193,9 @@ const { captureSnapshot, restoreSnapshot } = useFormSnapshot({
 });
 
 const startEdit = () => {
+  if (!canManage.value) {
+    return;
+  }
   captureSnapshot();
   isEditing.value = true;
 };
@@ -203,6 +207,9 @@ const cancelEdit = () => {
 };
 
 const saveSettings = () => {
+  if (!canManage.value) {
+    return;
+  }
   void persistSettings();
 };
 
