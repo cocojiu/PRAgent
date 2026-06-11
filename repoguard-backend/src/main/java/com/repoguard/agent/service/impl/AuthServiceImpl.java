@@ -6,6 +6,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
@@ -112,6 +113,22 @@ public class AuthServiceImpl implements AuthService {
         userAccountMapper.updateById(user);
         recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+    }
+
+    @Override
+    public AuthCurrentUserDto currentUser(Long userId) {
+        UserAccount user = userAccountMapper.selectById(userId);
+        if (user == null || !STATUS_ACTIVE.equals(user.getStatus())) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
+        }
+        return new AuthCurrentUserDto(
+            user.getId(),
+            user.getUsername(),
+            user.getEmail(),
+            user.getRole(),
+            user.getStatus(),
+            user.getLastLoginAt()
+        );
     }
 
     @Override

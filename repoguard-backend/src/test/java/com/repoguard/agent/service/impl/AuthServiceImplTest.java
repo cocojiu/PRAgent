@@ -163,6 +163,33 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void currentUserReturnsActiveUserProfile() {
+        UserAccount user = existingUser();
+        user.setLastLoginAt(LocalDateTime.parse("2026-06-11T10:00:00"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        var profile = authService.currentUser(1001L);
+
+        assertThat(profile.id()).isEqualTo(1001L);
+        assertThat(profile.username()).isEqualTo("admin");
+        assertThat(profile.email()).isEqualTo("admin@repoguard.dev");
+        assertThat(profile.role()).isEqualTo("ADMIN");
+        assertThat(profile.status()).isEqualTo("ACTIVE");
+        assertThat(profile.lastLoginAt()).isEqualTo(LocalDateTime.parse("2026-06-11T10:00:00"));
+    }
+
+    @Test
+    void currentUserRejectsDisabledUser() {
+        UserAccount user = existingUser();
+        user.setStatus("DISABLED");
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.currentUser(1001L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("账号不可用，请重新登录");
+    }
+
+    @Test
     void refreshRotatesRefreshTokenAndReturnsNewAccessToken() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));

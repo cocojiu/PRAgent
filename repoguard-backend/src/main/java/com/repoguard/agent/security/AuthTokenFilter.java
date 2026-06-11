@@ -53,6 +53,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
     private boolean requiresAuth(HttpServletRequest request) {
         String path = request.getRequestURI();
+        if (path.equals("/api/v1/auth/me")) {
+            return true;
+        }
         return path.startsWith("/api/v1/")
             && !path.startsWith("/api/v1/auth/");
     }

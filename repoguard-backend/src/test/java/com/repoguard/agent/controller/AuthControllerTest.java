@@ -1,11 +1,13 @@
 package com.repoguard.agent.controller;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
@@ -13,7 +15,10 @@ import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
+import com.repoguard.agent.security.AuthTokenFilter;
+import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -33,6 +38,18 @@ class AuthControllerTest {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
             }
             return authResponse("admin", "admin@repoguard.dev");
+        }
+
+        @Override
+        public AuthCurrentUserDto currentUser(Long userId) {
+            return new AuthCurrentUserDto(
+                userId,
+                "admin",
+                "admin@repoguard.dev",
+                "ADMIN",
+                "ACTIVE",
+                LocalDateTime.parse("2026-06-11T10:00:00")
+            );
         }
 
         @Override
@@ -90,6 +107,29 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
             .andExpect(jsonPath("$.data.accessTokenExpiresInSeconds").value(900))
             .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200));
+    }
+
+    @Test
+    void meReturnsAuthenticatedUserProfile() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me")
+                .requestAttr(
+                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                ))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.id").value(1001))
+            .andExpect(jsonPath("$.data.username").value("admin"))
+            .andExpect(jsonPath("$.data.email").value("admin@repoguard.dev"))
+            .andExpect(jsonPath("$.data.role").value("ADMIN"))
+            .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+            .andExpect(jsonPath("$.data.lastLoginAt").value("2026-06-11T10:00:00"));
+    }
+
+    @Test
+    void meWithoutAuthenticatedUserReturns401() throws Exception {
+        mockMvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test

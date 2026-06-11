@@ -61,7 +61,7 @@
                   </span>
                 </button>
               </div>
-              <RouterLink class="notification-more" to="/repoguard/tasks">查看全部消息 ›</RouterLink>
+              <RouterLink class="notification-more" to="/repoguard/tasks">查看全部消息 →</RouterLink>
             </div>
           </el-popover>
 
@@ -71,8 +71,8 @@
 
           <el-dropdown trigger="click" @command="handleUserCommand">
             <button class="user" type="button">
-              <span class="avatar">A</span>
-              <span>管理员</span>
+              <span class="avatar">{{ currentUserInitial }}</span>
+              <span>{{ currentUserName }}</span>
               <ChevronDown :size="16" />
             </button>
             <template #dropdown>
@@ -109,7 +109,8 @@ import {
   RadioTower,
   ShieldCheck
 } from "lucide-vue-next";
-import { logout } from "@/api/auth";
+import { getCurrentUser, logout } from "@/api/auth";
+import type { CurrentUser } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
@@ -117,6 +118,7 @@ const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
 const notificationCenter = ref<NotificationCenter>();
+const currentUser = ref<CurrentUser>();
 const loadingNotifications = ref(false);
 const notificationError = ref("");
 const readNotificationIds = ref<Set<string>>(new Set());
@@ -135,6 +137,8 @@ const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"
 const notifications = computed(() => notificationCenter.value?.items ?? []);
 const unreadCount = computed(() => notifications.value.filter((item) => !isNotificationRead(item.id)).length);
 const unreadBadgeText = computed(() => (unreadCount.value > 99 ? "99+" : String(unreadCount.value)));
+const currentUserName = computed(() => currentUser.value?.username || "管理员");
+const currentUserInitial = computed(() => (currentUserName.value.trim().charAt(0) || "A").toUpperCase());
 
 const loadReadNotificationIds = () => {
   try {
@@ -159,6 +163,14 @@ const markNotificationRead = (id: string) => {
 };
 
 const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
+
+const loadCurrentUser = async () => {
+  try {
+    currentUser.value = await getCurrentUser();
+  } catch {
+    currentUser.value = undefined;
+  }
+};
 
 const loadNotifications = async () => {
   loadingNotifications.value = true;
@@ -205,11 +217,16 @@ const handleUserCommand = async (command: string) => {
     router.push("/login");
     return;
   }
-  ElMessage.info("个人资料功能暂未接入后端");
+  if (command === "profile") {
+    ElMessage.info(currentUser.value?.email || "个人资料功能暂未开放");
+    return;
+  }
+  ElMessage.info("个人资料功能暂未开放");
 };
 
 onMounted(() => {
   loadReadNotificationIds();
+  void loadCurrentUser();
   void loadNotifications();
 });
 </script>

@@ -7,6 +7,11 @@ export interface AuthUser {
   role: string;
 }
 
+export interface CurrentUser extends AuthUser {
+  status: string;
+  lastLoginAt?: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;
@@ -46,6 +51,8 @@ export const register = async (payload: RegisterRequest) => {
   saveAuthTokens(response.accessToken, response.refreshToken, false);
   return response;
 };
+
+export const getCurrentUser = () => request<CurrentUser>("/api/v1/auth/me");
 
 export const logout = async () => {
   const refreshToken = resolveRefreshToken();

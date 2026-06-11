@@ -30,6 +30,31 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void authMeEndpointRequiresToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void authMeEndpointAllowsValidToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        request.addHeader("Authorization", "Bearer " + authTokenService.issueAccessToken(user()).token());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+        assertThat(request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE))
+            .isInstanceOf(AuthTokenService.AuthenticatedUser.class);
+    }
+
+    @Test
     void protectedApiRejectsMissingToken() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
         MockHttpServletResponse response = new MockHttpServletResponse();
