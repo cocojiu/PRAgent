@@ -109,6 +109,7 @@ import {
   RadioTower,
   ShieldCheck
 } from "lucide-vue-next";
+import { clearAuthToken } from "@/api/client";
 import { fetchNotifications } from "@/api/notifications";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
@@ -199,7 +200,9 @@ const handleUserCommand = (command: string) => {
     return;
   }
   if (command === "logout") {
-    ElMessage.success("已退出登录（模拟）");
+    clearAuthToken();
+    ElMessage.success("已退出登录");
+    router.push("/login");
     return;
   }
   ElMessage.info("个人资料功能暂未接入后端");

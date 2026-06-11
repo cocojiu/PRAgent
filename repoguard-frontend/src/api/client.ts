@@ -75,6 +75,8 @@ export const clearAuthToken = () => {
   window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
 };
 
+export const hasAuthToken = () => Boolean(resolveAuthToken());
+
 const resolveAdminApiKey = () => {
   const envKey = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY;
   if (envKey) {
