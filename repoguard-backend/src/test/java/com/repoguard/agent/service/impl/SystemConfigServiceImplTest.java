@@ -77,7 +77,7 @@ class SystemConfigServiceImplTest {
             "spring-boot-demo"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v1:");
+        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("ghp_new_secret_1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.token()).isEqualTo("****1234");
@@ -102,7 +102,7 @@ class SystemConfigServiceImplTest {
             2
         ));
 
-        assertThat(config.getApiKeyValue()).startsWith("enc:v1:");
+        assertThat(config.getApiKeyValue()).startsWith("enc:v2:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
         assertThat(config.getWorkerConcurrency()).isEqualTo(2);
@@ -165,7 +165,7 @@ class SystemConfigServiceImplTest {
             "repoguard"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v1:");
+        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("mysql-existing-1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.secret()).isEqualTo("****1234");

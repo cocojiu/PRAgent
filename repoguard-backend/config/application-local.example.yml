@@ -3,3 +3,8 @@ spring:
     url: jdbc:mysql://localhost:3306/repoguard?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: your-local-password
+
+repoguard:
+  security:
+    encryption-key: repoguard-local-dev-encryption-key
+    encryption-key-id: local

@@ -11,3 +11,8 @@ spring:
 app:
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
+
+repoguard:
+  security:
+    encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:}
+    encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:}
