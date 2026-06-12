@@ -22,7 +22,7 @@ public class AdminApiKeyConfig {
         FilterRegistrationBean<AdminApiKeyFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new AdminApiKeyFilter(properties, objectMapper));
         registration.addUrlPatterns("/api/v1/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 5);
         return registration;
     }
 }

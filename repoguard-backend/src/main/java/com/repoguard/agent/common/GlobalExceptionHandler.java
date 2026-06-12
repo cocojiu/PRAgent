@@ -3,6 +3,7 @@ package com.repoguard.agent.common;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
@@ -41,7 +42,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception exception) {
         LOGGER.error(
-            "Unhandled application exception type={} message={} location={}",
+            "Unhandled application exception traceId={} type={} message={} location={}",
+            traceId(),
             exception.getClass().getName(),
             sanitizeLogMessage(exception.getMessage()),
             topStackLocation(exception)
@@ -67,5 +69,10 @@ public class GlobalExceptionHandler {
         }
         StackTraceElement first = stackTrace[0];
         return first.getClassName() + "#" + first.getMethodName() + ":" + first.getLineNumber();
+    }
+
+    private String traceId() {
+        String traceId = MDC.get("traceId");
+        return traceId == null || traceId.isBlank() ? "<none>" : traceId;
     }
 }

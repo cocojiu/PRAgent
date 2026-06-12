@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
+import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
@@ -21,12 +22,16 @@ import com.repoguard.agent.review.ReviewResult;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -89,17 +94,39 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         if (!markReviewing(task, startedAt)) {
             return;
         }
+        LOGGER.info(
+            "Review task started taskId={} repository={} prNumber={} operation=review_execute",
+            task.getId(),
+            repositorySlug(task),
+            task.getPrNumber()
+        );
 
         try {
             GithubPullRequestDiff diff = fetchPullRequestDiff(task);
             replaceChangedFiles(task.getId(), diff);
             ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
             completeReview(task, reviewResult, startedAt);
+            LOGGER.info(
+                "Review task completed taskId={} repository={} prNumber={} operation=review_execute riskLevel={} llmStatus={}",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber(),
+                reviewResult.riskLevel(),
+                reviewResult.llmStatus()
+            );
         } catch (RuntimeException ex) {
             failReview(task, startedAt, ex);
             if (metrics != null) {
                 metrics.reviewTaskFailed(ex);
             }
+            LOGGER.warn(
+                "Review task failed taskId={} repository={} prNumber={} operation=review_execute failureCategory={} exceptionType={}",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber(),
+                failureCategory(ex),
+                ex.getClass().getName()
+            );
         }
     }
 
@@ -241,6 +268,21 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private String truncateLabel(String label) {
         return label.length() > 120 ? label.substring(0, 117) + "..." : label;
+    }
+
+    private String repositorySlug(ReviewTask task) {
+        return safePart(task.getOrganization()) + "/" + safePart(task.getRepository());
+    }
+
+    private String safePart(String value) {
+        return value == null || value.isBlank() ? "<unknown>" : value.trim();
+    }
+
+    private String failureCategory(RuntimeException ex) {
+        if (ex instanceof ExternalCallException externalCallException) {
+            return externalCallException.getCategory();
+        }
+        return ex.getClass().getSimpleName();
     }
 
     private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status, int sortOrder) {
