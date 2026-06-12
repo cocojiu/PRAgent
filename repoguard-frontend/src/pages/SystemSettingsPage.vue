@@ -147,6 +147,7 @@ import { ElMessage } from "element-plus";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
+import { getErrorMessage } from "@/utils/errors";
 import type {
   BaseSettings,
   NotificationSettings,
@@ -193,7 +194,7 @@ const { captureSnapshot, restoreSnapshot } = useFormSnapshot({
 });
 
 const startEdit = () => {
-  if (!canManage.value) {
+  if (!canManage.value || saving.value) {
     return;
   }
   captureSnapshot();
@@ -231,13 +232,16 @@ const loadSystemSettings = async () => {
     const settings = await fetchSystemSettings();
     applySettings(settings);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "系统设置加载失败");
+    ElMessage.error(getErrorMessage(error, "系统设置操作失败"));
   } finally {
     loading.value = false;
   }
 };
 
 const persistSettings = async () => {
+  if (saving.value) {
+    return;
+  }
   saving.value = true;
   try {
     const saved = await updateSystemSettings({
@@ -250,7 +254,7 @@ const persistSettings = async () => {
     isEditing.value = false;
     ElMessage.success("系统设置已保存");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "系统设置保存失败");
+    ElMessage.error(getErrorMessage(error, "系统设置操作失败"));
   } finally {
     saving.value = false;
   }

@@ -133,6 +133,7 @@ import {
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import type { ReviewRuleConfig, ReviewRuleConfigRequest, RuleStatus, SimpleMetric } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 
 const severityFilter = ref("");
@@ -196,7 +197,7 @@ const loadRules = async () => {
     metrics.value = response.metrics;
     rules.value = response.rules;
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "规则配置加载失败";
+    errorMessage.value = getErrorMessage(error, "规则加载失败");
     ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
@@ -214,7 +215,7 @@ const resetForm = (rule?: ReviewRuleConfig) => {
 };
 
 const openCreateDialog = () => {
-  if (!canManage.value) {
+  if (!canManage.value || saving.value) {
     return;
   }
   editingRuleId.value = "";
@@ -253,14 +254,14 @@ const saveRule = async () => {
     dialogVisible.value = false;
     await loadRules();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "规则保存失败");
+    ElMessage.error(getErrorMessage(error, "规则操作失败"));
   } finally {
     saving.value = false;
   }
 };
 
 const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boolean) => {
-  if (!canManage.value) {
+  if (!canManage.value || statusSavingId.value) {
     rule.status = value === "enabled" ? "disabled" : "enabled";
     return;
   }
@@ -274,7 +275,7 @@ const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boole
     await loadRules();
   } catch (error) {
     rule.status = previousStatus;
-    ElMessage.error(error instanceof Error ? error.message : "规则状态更新失败");
+    ElMessage.error(getErrorMessage(error, "规则操作失败"));
   } finally {
     statusSavingId.value = "";
   }

@@ -207,7 +207,7 @@
       </el-table>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creatingTask" :disabled="!canManage || !selectedPullRequest" @click="createReviewFromSelectedPullRequest">
+        <el-button type="primary" :loading="creatingTask" :disabled="!canManage || creatingTask || !selectedPullRequest" @click="createReviewFromSelectedPullRequest">
           创建审查任务
         </el-button>
       </template>
@@ -225,6 +225,7 @@ import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchGithubPullRequestOptions, fetchReviews, retryReview, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import type { GithubPullRequestOption, ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
@@ -338,7 +339,7 @@ const loadTasks = async () => {
     if (requestSeq !== taskRequestSeq) {
       return;
     }
-    errorMessage.value = error instanceof Error ? error.message : "审查任务加载失败";
+    errorMessage.value = getErrorMessage(error, "审查任务加载失败");
     reviewTasks.value = [];
     totalTasks.value = 0;
   } finally {
@@ -353,7 +354,7 @@ const loadRepositories = async () => {
     const page = await fetchReviews({ page: 1, pageSize: 100 });
     allRepositories.value = Array.from(new Set(page.items.map((task) => task.repository))).sort();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "仓库筛选项加载失败");
+    ElMessage.error(getErrorMessage(error, "请求失败"));
   }
 };
 
@@ -424,7 +425,7 @@ const retryTask = async (task: ReviewTask) => {
     ElMessage.success(response.message || "审查任务已重新入队");
     await loadTasks();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "审查任务重试失败");
+    ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
     retryingTaskId.value = undefined;
   }
@@ -435,7 +436,7 @@ const resolvePullRequestHeadSha = (pullRequest: GithubPullRequestOption) => pull
 const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
 const openCreateDialog = () => {
-  if (!canManage.value) {
+  if (!canManage.value || creatingTask.value) {
     return;
   }
   createDialogVisible.value = true;
@@ -473,7 +474,7 @@ const loadPullRequests = async (options: { preselect?: boolean } = {}) => {
     }
     pullRequestOptions.value = [];
     pullRequestsLoaded.value = false;
-    pullRequestError.value = error instanceof Error ? error.message : "GitHub PR 列表加载失败";
+    pullRequestError.value = getErrorMessage(error, "GitHub PR 列表加载失败");
   } finally {
     if (requestSeq === pullRequestSeq) {
       loadingPullRequests.value = false;
@@ -518,7 +519,7 @@ const createReviewFromSelectedPullRequest = async () => {
     }
     await router.push({ name: "task-detail", params: { id: response.taskId } });
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "审查任务创建失败");
+    ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
     creatingTask.value = false;
   }

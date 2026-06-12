@@ -206,6 +206,7 @@ import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQ
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { routeNames } from "@/router/names";
 import type { MessageQueueExceptionTask, MessageQueueHealth, MessageQueueMetric } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 
 const router = useRouter();
 const loading = ref(false);
@@ -293,7 +294,7 @@ const loadHealth = async () => {
   try {
     health.value = await fetchMessageQueueHealth();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "消息队列健康状态加载失败";
+    errorMessage.value = getErrorMessage(error, "消息队列健康数据加载失败");
     ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
@@ -396,7 +397,7 @@ const requeueTask = async (task: MessageQueueExceptionTask) => {
     }
     await loadHealth();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "重新入队失败");
+    ElMessage.error(getErrorMessage(error, "消息队列操作失败"));
   } finally {
     requeueingTaskId.value = undefined;
   }

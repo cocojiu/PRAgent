@@ -401,6 +401,7 @@ import type {
   RiskLevel,
   TimelineItem
 } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
@@ -772,7 +773,7 @@ const loadGithubCommentPreview = async (id: number) => {
     githubCommentPreview.value = await fetchGithubCommentPreview(id);
   } catch (error) {
     githubCommentPreview.value = null;
-    previewError.value = error instanceof Error ? error.message : "GitHub 评论预览加载失败";
+    previewError.value = getErrorMessage(error, "请求失败");
   }
 };
 
@@ -782,7 +783,7 @@ const loadGithubCommentPublicationHistory = async (id: number) => {
     githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id);
   } catch (error) {
     githubCommentPublicationHistory.value = null;
-    historyError.value = error instanceof Error ? error.message : "GitHub 回写历史加载失败";
+    historyError.value = getErrorMessage(error, "请求失败");
   }
 };
 
@@ -862,7 +863,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     if (!options.silent) {
       selectedTask.value = null;
     }
-    errorMessage.value = error instanceof Error ? error.message : "审查详情加载失败";
+    errorMessage.value = getErrorMessage(error, "请求失败");
     if (!options.silent) {
       ElMessage.error(errorMessage.value);
     } else {
@@ -904,7 +905,7 @@ const pollReviewStatus = async () => {
     syncPolling();
   } catch (error) {
     pollFailureCount.value += 1;
-    const message = error instanceof Error ? error.message : "Review status refresh failed";
+    const message = getErrorMessage(error, "请求失败");
     if (pollFailureCount.value >= MAX_POLL_FAILURES) {
       stopPolling();
       pollErrorMessage.value = `Automatic refresh failed ${MAX_POLL_FAILURES} times and has paused. Please refresh manually.`;
@@ -924,7 +925,7 @@ const refreshDetail = () => {
 };
 
 const confirmPublishGithubComments = async () => {
-  if (!canManage.value || !selectedTask.value || !githubCommentPreview.value?.commentableCount) {
+  if (!canManage.value || !selectedTask.value || publishingComments.value || !githubCommentPreview.value?.commentableCount) {
     return;
   }
 
@@ -959,7 +960,7 @@ const confirmPublishGithubComments = async () => {
       loadGithubCommentPublicationHistory(selectedTask.value.id)
     ]);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "GitHub 评论回写失败");
+    ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
     publishingComments.value = false;
   }
@@ -996,7 +997,7 @@ const confirmRetryReview = async () => {
     pollErrorMessage.value = "";
     await loadDetail({ silent: true, resetPublishResult: true });
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "审查任务重试失败");
+    ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
     retryingTask.value = false;
   }

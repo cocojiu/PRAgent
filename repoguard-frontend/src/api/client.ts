@@ -1,3 +1,5 @@
+import { RequestError } from "@/utils/errors";
+
 interface ApiResponse<T> {
   success: boolean;
   code: string;
@@ -38,7 +40,7 @@ export const request = async <T>(
   params?: Record<string, string | number | undefined>,
   options: RequestInit = {}
 ): Promise<T> => {
-  const response = await doRequest(path, params, options);
+  const response = await safeDoRequest(path, params, options);
   if (response.ok || response.status !== 401 || isAuthPath(path)) {
     return unwrapResponse(response);
   }
@@ -49,7 +51,7 @@ export const request = async <T>(
     redirectToLogin();
     return unwrapResponse(response);
   }
-  return unwrapResponse(await doRequest(path, params, options));
+  return unwrapResponse(await safeDoRequest(path, params, options));
 };
 
 export const saveAuthTokens = (accessToken: string, refreshToken: string, remember: boolean) => {
@@ -107,6 +109,24 @@ const doRequest = async (
   }) as Promise<Response>;
 };
 
+const safeDoRequest = async (
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  options: RequestInit = {}
+) => {
+  try {
+    return await doRequest(path, params, options);
+  } catch (error) {
+    if (error instanceof RequestError) {
+      throw error;
+    }
+    throw new RequestError("Network request failed. Please check your connection and retry.", {
+      status: 0,
+      code: "NETWORK_ERROR"
+    });
+  }
+};
+
 const unwrapResponse = async <T>(response: Response): Promise<T> => {
   let body: ApiResponse<T> | undefined;
   try {
@@ -116,10 +136,18 @@ const unwrapResponse = async <T>(response: Response): Promise<T> => {
   }
 
   if (!response.ok) {
-    throw new Error(body?.message || body?.code || `请求失败：HTTP ${response.status}`);
+    throw new RequestError(body?.message || body?.code || `HTTP ${response.status}`, {
+      status: response.status,
+      code: body?.code,
+      timestamp: body?.timestamp
+    });
   }
   if (!body?.success) {
-    throw new Error(body?.message || body?.code || "请求失败");
+    throw new RequestError(body?.message || body?.code || "Request failed", {
+      status: response.status,
+      code: body?.code,
+      timestamp: body?.timestamp
+    });
   }
   return body.data;
 };

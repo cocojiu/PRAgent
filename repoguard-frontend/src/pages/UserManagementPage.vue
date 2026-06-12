@@ -141,6 +141,7 @@ import type { ManagedUser, UserOperationAudit, UserStatus } from "@/api/users";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { canManage, currentUser } from "@/stores/authState";
+import { getErrorMessage } from "@/utils/errors";
 
 const loading = ref(false);
 const auditLoading = ref(false);
@@ -193,7 +194,7 @@ const loadAudits = async () => {
   try {
     audits.value = await fetchUserOperationAudits();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "操作记录加载失败");
+    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
   } finally {
     auditLoading.value = false;
   }
@@ -204,7 +205,7 @@ const loadAll = async () => {
   try {
     await Promise.all([loadUsers(), loadAudits()]);
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "用户管理数据加载失败");
+    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
   } finally {
     loading.value = false;
   }
@@ -223,6 +224,10 @@ const setSaving = (id: number, saving: boolean) => {
 };
 
 const changeRole = async (user: ManagedUser) => {
+  if (isSaving(user.id)) {
+    await loadUsers();
+    return;
+  }
   if (!canManage.value) {
     await loadUsers();
     return;
@@ -235,7 +240,7 @@ const changeRole = async (user: ManagedUser) => {
     await loadAudits();
     ElMessage.success("用户角色已更新");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "用户角色更新失败");
+    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
     await loadUsers();
   } finally {
     setSaving(user.id, false);
@@ -243,7 +248,7 @@ const changeRole = async (user: ManagedUser) => {
 };
 
 const toggleStatus = async (user: ManagedUser) => {
-  if (!canManage.value) {
+  if (!canManage.value || isSaving(user.id)) {
     return;
   }
   const nextStatus: UserStatus = user.status === "ACTIVE" ? "DISABLED" : "ACTIVE";
@@ -254,7 +259,7 @@ const toggleStatus = async (user: ManagedUser) => {
     await loadAudits();
     ElMessage.success(nextStatus === "ACTIVE" ? "账号已启用" : "账号已禁用");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "账号状态更新失败");
+    ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
   } finally {
     setSaving(user.id, false);
   }

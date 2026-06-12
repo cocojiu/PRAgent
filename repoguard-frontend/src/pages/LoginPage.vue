@@ -146,6 +146,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { ArrowLeft, LockKeyhole, Mail, Shield, UserRound } from "lucide-vue-next";
 import { login, register } from "@/api/auth";
+import { getErrorMessage } from "@/utils/errors";
 
 type AuthMode = "login" | "register";
 
@@ -190,6 +191,9 @@ const handleForgotPassword = () => {
 };
 
 const handleLogin = async () => {
+  if (submitting.value) {
+    return;
+  }
   if (!loginForm.account.trim() || !loginForm.password) {
     ElMessage.warning("请输入账号和密码");
     return;
@@ -204,13 +208,16 @@ const handleLogin = async () => {
     ElMessage.success("登录成功");
     void router.push("/repoguard/overview");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "登录失败");
+    ElMessage.error(getErrorMessage(error, "登录失败"));
   } finally {
     submitting.value = false;
   }
 };
 
 const handleRegister = async () => {
+  if (submitting.value) {
+    return;
+  }
   if (!registerForm.username.trim() || !registerForm.email.trim() || !registerForm.password || !registerForm.confirmPassword) {
     ElMessage.warning("请完整填写注册信息");
     return;
@@ -230,7 +237,7 @@ const handleRegister = async () => {
     ElMessage.success("注册成功");
     void router.push("/repoguard/overview");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "注册失败");
+    ElMessage.error(getErrorMessage(error, "注册失败"));
   } finally {
     submitting.value = false;
   }

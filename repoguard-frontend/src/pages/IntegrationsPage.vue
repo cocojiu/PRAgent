@@ -66,6 +66,7 @@ import type {
   ServiceIntegrationConfig,
   ServiceIntegrationConfigRequest
 } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 
 type IntegrationId = "github" | "mysql" | "rabbitmq" | "spring-ai";
 
@@ -185,6 +186,9 @@ const testConnection = async (id: string) => {
     ElMessage.warning("Connection test is not available");
     return;
   }
+  if (testingConnections[id]) {
+    return;
+  }
   testingConnections[id] = true;
   try {
     const result = await action();
@@ -195,7 +199,7 @@ const testConnection = async (id: string) => {
       ElMessage.error(result.message);
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Connection test failed";
+    const message = getErrorMessage(error, "Connection test failed");
     applyConnectionTestResult(id, {
       success: false,
       status: "failed",
@@ -226,14 +230,14 @@ const loadConfig = async () => {
     applyServiceConfig("rabbitmq", rabbitMq);
     applyReviewPolicyConfig(reviewPolicy);
   } catch (error) {
-    ElMessage.warning(error instanceof Error ? error.message : "Config load failed, using local defaults");
+    ElMessage.warning(getErrorMessage(error, "Config load failed, using local defaults"));
   } finally {
     loading.value = false;
   }
 };
 
 const saveConfig = async () => {
-  if (!canManage.value) {
+  if (!canManage.value || saving.value) {
     return;
   }
   saving.value = true;
@@ -254,7 +258,7 @@ const saveConfig = async () => {
     applyReviewPolicyConfig(reviewPolicy);
     ElMessage.success("Config saved");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "Config save failed");
+    ElMessage.error(getErrorMessage(error, "Config save failed"));
   } finally {
     saving.value = false;
   }

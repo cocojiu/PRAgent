@@ -109,6 +109,7 @@ import EChartPanel from "@/components/EChartPanel.vue";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchDashboardOverview } from "@/api/dashboard";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import type { DashboardOverview } from "@/types";
 
@@ -160,7 +161,7 @@ const loadOverview = async () => {
     overview.value = await fetchDashboardOverview();
     lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "仪表盘数据加载失败";
+    errorMessage.value = getErrorMessage(error, "仪表盘数据加载失败");
     ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
