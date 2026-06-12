@@ -9,6 +9,10 @@ import java.util.List;
  */
 public record GithubCommentPublicationHistoryResponse(
     Long taskId,
+    long total,
+    int page,
+    int pageSize,
+    String status,
     List<GithubCommentPublicationBatchDto> batches
 ) {
 }

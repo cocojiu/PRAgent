@@ -34,7 +34,11 @@ public interface ReviewService {
     /**
      * 查询某个任务的 GitHub 评论回写历史，用于任务详情页追踪每次操作结果。
      */
-    GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id);
+    default GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id) {
+        return getGithubCommentPublicationHistory(id, 1, 20, null);
+    }
+
+    GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status);
 
     GithubPullRequestOptionsResponse listConfiguredGithubPullRequests();
 

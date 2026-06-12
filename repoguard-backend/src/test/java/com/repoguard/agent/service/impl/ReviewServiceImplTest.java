@@ -251,12 +251,19 @@ class ReviewServiceImplTest {
         item.setGithubUrl("https://github.com/comment/1");
         item.setGithubCommentId(101L);
         item.setPublishedAt(LocalDateTime.of(2026, 6, 9, 12, 0, 1));
-        when(githubCommentPublicationBatchMapper.selectList(any())).thenReturn(List.of(batch));
+        Page<GithubCommentPublicationBatch> batchPage = Page.of(1, 20);
+        batchPage.setRecords(List.of(batch));
+        batchPage.setTotal(1);
+        when(githubCommentPublicationBatchMapper.selectPage(any(), any())).thenReturn(batchPage);
         when(githubCommentPublicationBatchItemMapper.selectList(any())).thenReturn(List.of(item));
 
-        var history = service.getGithubCommentPublicationHistory(521L);
+        var history = service.getGithubCommentPublicationHistory(521L, 1, 20, "completed");
 
         assertThat(history.taskId()).isEqualTo(521L);
+        assertThat(history.total()).isEqualTo(1);
+        assertThat(history.page()).isEqualTo(1);
+        assertThat(history.pageSize()).isEqualTo(20);
+        assertThat(history.status()).isEqualTo("completed");
         assertThat(history.batches()).hasSize(1);
         assertThat(history.batches().getFirst().batchId()).isEqualTo(10L);
         assertThat(history.batches().getFirst().items()).hasSize(1);
@@ -288,7 +295,10 @@ class ReviewServiceImplTest {
         item.setSuccess(false);
         item.setStatus("failed");
         item.setMessage("401 Bad credentials");
-        when(githubCommentPublicationBatchMapper.selectList(any())).thenReturn(List.of(batch));
+        Page<GithubCommentPublicationBatch> batchPage = Page.of(1, 20);
+        batchPage.setRecords(List.of(batch));
+        batchPage.setTotal(1);
+        when(githubCommentPublicationBatchMapper.selectPage(any(), any())).thenReturn(batchPage);
         when(githubCommentPublicationBatchItemMapper.selectList(any())).thenReturn(List.of(item));
 
         var history = service.getGithubCommentPublicationHistory(521L);

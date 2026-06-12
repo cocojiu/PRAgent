@@ -410,22 +410,38 @@ public class ReviewServiceImpl implements ReviewService {
         };
     }
 
+    private String normalizeOptionalStatus(String status) {
+        return StringUtils.hasText(status) ? status.trim().toLowerCase(Locale.ROOT) : null;
+    }
+
     @Override
-    public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id) {
+    public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status) {
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
 
         // 批次倒序展示，用户先看到最近一次回写结果。
-        List<GithubCommentPublicationBatch> batches = githubCommentPublicationBatchMapper.selectList(
-            new LambdaQueryWrapper<GithubCommentPublicationBatch>()
-                .eq(GithubCommentPublicationBatch::getTaskId, id)
-                .orderByDesc(GithubCommentPublicationBatch::getCreatedAt)
-                .orderByDesc(GithubCommentPublicationBatch::getId)
+        String normalizedStatus = normalizeOptionalStatus(status);
+        LambdaQueryWrapper<GithubCommentPublicationBatch> batchQuery = new LambdaQueryWrapper<GithubCommentPublicationBatch>()
+            .eq(GithubCommentPublicationBatch::getTaskId, id)
+            .eq(normalizedStatus != null, GithubCommentPublicationBatch::getStatus, normalizedStatus)
+            .orderByDesc(GithubCommentPublicationBatch::getCreatedAt)
+            .orderByDesc(GithubCommentPublicationBatch::getId);
+        Page<GithubCommentPublicationBatch> batchPage = githubCommentPublicationBatchMapper.selectPage(
+            Page.of(page, pageSize),
+            batchQuery
         );
+        List<GithubCommentPublicationBatch> batches = batchPage.getRecords();
         if (batches == null || batches.isEmpty()) {
-            return new GithubCommentPublicationHistoryResponse(task.getId(), List.of());
+            return new GithubCommentPublicationHistoryResponse(
+                task.getId(),
+                batchPage.getTotal(),
+                page,
+                pageSize,
+                normalizedStatus,
+                List.of()
+            );
         }
 
         List<Long> batchIds = batches.stream().map(GithubCommentPublicationBatch::getId).toList();
@@ -438,7 +454,14 @@ public class ReviewServiceImpl implements ReviewService {
         List<GithubCommentPublicationBatchDto> batchDtos = batches.stream()
             .map(batch -> toGithubCommentPublicationBatchDto(batch, itemsByBatchId.getOrDefault(batch.getId(), List.of())))
             .toList();
-        return new GithubCommentPublicationHistoryResponse(task.getId(), batchDtos);
+        return new GithubCommentPublicationHistoryResponse(
+            task.getId(),
+            batchPage.getTotal(),
+            page,
+            pageSize,
+            normalizedStatus,
+            batchDtos
+        );
     }
 
     @Override

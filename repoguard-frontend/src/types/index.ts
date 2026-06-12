@@ -114,6 +114,10 @@ export interface GithubCommentPublishItem {
 
 export interface GithubCommentPublicationHistory {
   taskId: number;
+  total: number;
+  page: number;
+  pageSize: number;
+  status?: string;
   batches: GithubCommentPublicationBatch[];
 }
 

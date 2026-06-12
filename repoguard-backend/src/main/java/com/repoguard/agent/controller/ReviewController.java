@@ -83,8 +83,13 @@ public class ReviewController {
      * 返回历史回写批次，辅助前端展示成功、失败、跳过和降级为 PR 总评评论等状态。
      */
     @GetMapping("/{id}/github-comments/publications")
-    public ApiResponse<GithubCommentPublicationHistoryResponse> getGithubCommentPublicationHistory(@PathVariable @Min(1) Long id) {
-        return ApiResponse.ok(reviewService.getGithubCommentPublicationHistory(id));
+    public ApiResponse<GithubCommentPublicationHistoryResponse> getGithubCommentPublicationHistory(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
+        @RequestParam(required = false) String status
+    ) {
+        return ApiResponse.ok(reviewService.getGithubCommentPublicationHistory(id, page, pageSize, status));
     }
 
     @GetMapping("/github/pull-requests")

@@ -165,9 +165,13 @@ class ReviewControllerTest {
         }
 
         @Override
-        public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id) {
+        public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status) {
             return new GithubCommentPublicationHistoryResponse(
                 id,
+                1,
+                page,
+                pageSize,
+                status,
                 List.of(new GithubCommentPublicationBatchDto(
                     10L,
                     "completed",

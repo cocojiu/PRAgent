@@ -36,8 +36,25 @@ export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api
 export const fetchGithubCommentPreview = (id: number) =>
   request<GithubCommentPreview>(`/api/v1/reviews/${id}/github-comments/preview`);
 
-export const fetchGithubCommentPublicationHistory = (id: number) =>
-  request<GithubCommentPublicationHistory>(`/api/v1/reviews/${id}/github-comments/publications`);
+export const fetchGithubCommentPublicationHistory = (
+  id: number,
+  params?: { page?: number; pageSize?: number; status?: string }
+) => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params?.pageSize) {
+    searchParams.set("pageSize", String(params.pageSize));
+  }
+  if (params?.status) {
+    searchParams.set("status", params.status);
+  }
+  const query = searchParams.toString();
+  return request<GithubCommentPublicationHistory>(
+    `/api/v1/reviews/${id}/github-comments/publications${query ? `?${query}` : ""}`
+  );
+};
 
 export const publishGithubComments = (id: number) =>
   request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
