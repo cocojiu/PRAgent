@@ -5,9 +5,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
+import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -63,6 +65,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     @Override
     public List<GithubPullRequestSummary> listOpenPullRequests() {
+        LocalDateTime startedAt = LocalDateTime.now();
         IntegrationConfig config = loadGithubConfig();
         GithubRepositoryRef repositoryRef = getConfiguredRepository();
         String owner = repositoryRef.owner();
@@ -89,6 +92,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 .headers(headers -> applyGithubHeaders(headers, config))
                 .retrieve()
                 .body(GithubPullRequestListItem[].class);
+            recordGithubApiRequest(startedAt, "list_open_pull_requests", "success", null, null);
             markGithubChecked(config, null);
             return items == null ? List.of() : Arrays.stream(items)
                 .map(item -> new GithubPullRequestSummary(
@@ -105,6 +109,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 .toList();
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            recordGithubApiRequest(startedAt, "list_open_pull_requests", "failed", classified);
             recordExternalFailure(classified);
             markGithubChecked(config, conciseError(classified));
             throw classified;
@@ -113,6 +118,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     @Override
     public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
+        LocalDateTime startedAt = LocalDateTime.now();
         IntegrationConfig config = loadGithubConfig();
         String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
         String repository = choose(task.getRepository(), config == null ? null : config.getDefaultRepo());
@@ -137,10 +143,12 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 .body(GithubChangedFile[].class);
 
             markGithubChecked(config, null);
+            recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "success", null, null);
             List<GithubChangedFile> changedFiles = files == null ? List.of() : Arrays.asList(files);
             return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "failed", classified);
             recordExternalFailure(classified);
             markGithubChecked(config, conciseError(classified));
             throw classified;
@@ -149,6 +157,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
     @Override
     public List<GithubReviewCommentResult> publishPullRequestComments(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
+        LocalDateTime startedAt = LocalDateTime.now();
         IntegrationConfig config = loadGithubConfig();
         String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
         String repository = choose(task.getRepository(), config == null ? null : config.getDefaultRepo());
@@ -177,6 +186,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String commitSha = null;
 
         List<GithubReviewCommentResult> results = new ArrayList<>();
+        int failedCount = 0;
         for (GithubReviewCommentDraft draft : drafts) {
             try {
                 GithubReviewCommentResponse response;
@@ -214,6 +224,8 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 markGithubChecked(config, null);
             } catch (RuntimeException ex) {
                 RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+                failedCount++;
+                recordGithubApiRequest(startedAt, "publish_pull_request_comments", "failed", classified);
                 recordExternalFailure(classified);
                 String message = conciseError(classified);
                 results.add(new GithubReviewCommentResult(
@@ -230,12 +242,50 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 markGithubChecked(config, message);
             }
         }
+        recordGithubApiRequest(
+            startedAt,
+            "publish_pull_request_comments",
+            failedCount > 0 ? "partial" : "success",
+            null,
+            null
+        );
         return results;
     }
 
     private void recordExternalFailure(RuntimeException ex) {
-        if (metrics != null && ex instanceof com.repoguard.agent.external.ExternalCallException externalCallException) {
+        if (metrics != null && ex instanceof ExternalCallException externalCallException) {
             metrics.externalCallFailed(externalCallException);
+        }
+    }
+
+    private void recordGithubApiRequest(
+        LocalDateTime startedAt,
+        String operation,
+        String result,
+        RuntimeException ex
+    ) {
+        if (ex instanceof ExternalCallException externalCallException) {
+            recordGithubApiRequest(
+                startedAt,
+                operation,
+                result,
+                externalCallException.getCategory(),
+                externalCallException.getStatusCode() == null ? null : externalCallException.getStatusCode().toString()
+            );
+            return;
+        }
+        recordGithubApiRequest(startedAt, operation, result, null, null);
+    }
+
+    private void recordGithubApiRequest(
+        LocalDateTime startedAt,
+        String operation,
+        String result,
+        String category,
+        String status
+    ) {
+        if (metrics != null) {
+            metrics.githubApiRequest(Duration.between(startedAt, LocalDateTime.now()), operation, result, category, status);
         }
     }
 

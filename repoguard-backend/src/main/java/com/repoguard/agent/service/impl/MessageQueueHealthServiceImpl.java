@@ -23,6 +23,7 @@ import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -49,6 +50,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final RabbitReviewQueueProperties properties;
     private final RabbitTemplate rabbitTemplate;
     private final ReviewTaskPublisher reviewTaskPublisher;
+    private final RepoGuardMetrics metrics;
 
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -59,6 +61,28 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher
     ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            integrationConfigMapper,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            null
+        );
+    }
+
+    public MessageQueueHealthServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        IntegrationConfigMapper integrationConfigMapper,
+        RabbitReviewQueueProperties properties,
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RepoGuardMetrics metrics
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
@@ -66,6 +90,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
         this.reviewTaskPublisher = reviewTaskPublisher;
+        this.metrics = metrics;
     }
 
     @Override
@@ -187,6 +212,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         long claimed = tasks.stream().filter(task -> task.getPublishClaimedAt() != null).count();
         long dlqBacklog = tasks.stream().filter(task -> STATUS_DLQ.equals(task.getStatus())).count();
         long publishSucceeded = Math.max(0, tasks.size() - publishFailed - dlqBacklog);
+        recordQueueDepth(publishFailed, claimed, dlqBacklog);
 
         return List.of(
             new MessageQueueMetricDto("Publish succeeded", String.valueOf(publishSucceeded), "Current active config", "trend", "blue"),
@@ -194,6 +220,15 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             new MessageQueueMetricDto("Compensating", String.valueOf(claimed), "Claimed by workers", claimed > 0 ? "trend danger" : "trend", "orange"),
             new MessageQueueMetricDto("DLQ backlog", String.valueOf(dlqBacklog), "Database observed status", dlqBacklog > 0 ? "trend danger" : "trend", "red")
         );
+    }
+
+    private void recordQueueDepth(long publishFailed, long claimed, long dlqBacklog) {
+        if (metrics == null) {
+            return;
+        }
+        metrics.rabbitQueueDepth(properties.getQueue(), "publish_failed", publishFailed);
+        metrics.rabbitQueueDepth(properties.getQueue(), "claimed", claimed);
+        metrics.rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", dlqBacklog);
     }
 
     private RetryCompensationStatusDto retryCompensation(List<ReviewTask> tasks) {

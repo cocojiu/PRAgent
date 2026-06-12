@@ -54,6 +54,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.ReviewService;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
@@ -166,6 +167,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public GithubCommentPublishResponse publishGithubComments(Long id) {
+        LocalDateTime startedAt = LocalDateTime.now();
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
@@ -214,7 +216,14 @@ public class ReviewServiceImpl implements ReviewService {
         );
         // 幂等表只保留审查发现当前发布状态；批次表保留本次点击回写按钮的完整审计轨迹。
         savePublicationBatch(response);
+        recordGithubCommentPublishDuration(startedAt, failedCount > 0 ? "failed" : "success");
         return response;
+    }
+
+    private void recordGithubCommentPublishDuration(LocalDateTime startedAt, String result) {
+        if (metrics != null) {
+            metrics.githubCommentPublishDuration(Duration.between(startedAt, LocalDateTime.now()), result);
+        }
     }
 
     private void recordGithubCommentPublishMetrics(int succeededCount, int failedCount, int skippedCount) {

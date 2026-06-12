@@ -52,6 +52,27 @@ class RepoGuardMetricsTest {
     }
 
     @Test
+    void recordsGithubApiRequestsWithOperationAndResultTags() {
+        metrics.githubApiRequest(Duration.ofMillis(55), "FETCH_DIFF", "SUCCESS", null, null);
+        metrics.githubApiRequest(Duration.ofMillis(20), "PUBLISH_COMMENTS", "FAILED", "github_rate_limited", "429");
+
+        assertThat(counter(
+            "repoguard.github.api.request",
+            "operation", "fetch_diff",
+            "result", "success",
+            "category", "unknown",
+            "status", "unknown"
+        )).isEqualTo(1.0);
+        assertThat(timerCount(
+            "repoguard.github.api.request.duration",
+            "operation", "publish_comments",
+            "result", "failed",
+            "category", "github_rate_limited",
+            "status", "429"
+        )).isEqualTo(1);
+    }
+
+    @Test
     void recordsRabbitPublishAndCompensationCounters() {
         metrics.rabbitPublishFailed("Confirm timed out");
         metrics.rabbitPublishCompensationSucceeded();
@@ -79,6 +100,9 @@ class RepoGuardMetricsTest {
         metrics.llmRequestDuration(Duration.ofMillis(80), "FAILED");
         metrics.llmFallback("category=llm_timeout retryable=true");
         metrics.githubCommentPublished("success");
+        metrics.githubCommentPublishDuration(Duration.ofMillis(66), "success");
+        metrics.rabbitMessageConsumed(Duration.ofMillis(35), "success");
+        metrics.rabbitQueueDepth("review.queue", "dlq", 7);
 
         assertThat(timerCount("repoguard.review.task.duration", "result", "completed")).isEqualTo(1);
         assertThat(timerTotalSeconds("repoguard.review.task.duration", "result", "completed")).isPositive();
@@ -92,6 +116,14 @@ class RepoGuardMetricsTest {
             "repoguard.github.comment.publish",
             "status", "success"
         )).isEqualTo(1.0);
+        assertThat(timerCount("repoguard.github.comment.publish.duration", "result", "success")).isEqualTo(1);
+        assertThat(counter("repoguard.rabbit.consume", "result", "success")).isEqualTo(1.0);
+        assertThat(timerCount("repoguard.rabbit.consume.duration", "result", "success")).isEqualTo(1);
+        assertThat(meterRegistry.find("repoguard.rabbit.queue.depth")
+            .tag("queue", "review.queue")
+            .tag("state", "dlq")
+            .gauge()
+            .value()).isEqualTo(7.0);
     }
 
     private double counter(String name, String... tags) {
