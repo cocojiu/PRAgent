@@ -20,7 +20,7 @@ spring:
       mandatory: true
     listener:
       simple:
-        acknowledge-mode: auto
+        acknowledge-mode: manual
         prefetch: 1
         concurrency: 1
         max-concurrency: 1
