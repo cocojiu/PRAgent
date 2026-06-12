@@ -27,6 +27,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
@@ -277,6 +278,37 @@ public class ReviewServiceImpl implements ReviewService {
         ).stream().map(this::toTimelineItem).toList();
 
         return toDetail(task, findingDtos, missingTests, changedFiles, timeline);
+    }
+
+    @Override
+    public ReviewTaskStatusResponse getReviewStatus(Long id) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+
+        List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .eq(ReviewTimeline::getTaskId, id)
+                .orderByAsc(ReviewTimeline::getSortOrder)
+        );
+        ReviewTimelineItem latestTimeline = timelines == null || timelines.isEmpty()
+            ? null
+            : toTimelineItem(timelines.getLast());
+        ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timelineLabels(timelines)));
+
+        return new ReviewTaskStatusResponse(
+            item.id(),
+            item.status(),
+            item.riskLevel(),
+            item.llmStatus(),
+            item.duration(),
+            formatDateTimeOrNull(resolveTaskUpdatedAt(task)),
+            item.failureCategory(),
+            item.failureReason(),
+            item.failureSuggestion(),
+            latestTimeline
+        );
     }
 
     @Override
@@ -1305,6 +1337,16 @@ public class ReviewServiceImpl implements ReviewService {
 
     private String formatDateTimeOrNull(LocalDateTime value) {
         return value == null ? null : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private LocalDateTime resolveTaskUpdatedAt(ReviewTask task) {
+        if (task.getFinishedAt() != null) {
+            return task.getFinishedAt();
+        }
+        if (task.getStartedAt() != null) {
+            return task.getStartedAt();
+        }
+        return task.getCreatedAt();
     }
 
     private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {

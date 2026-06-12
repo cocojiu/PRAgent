@@ -7,6 +7,7 @@ import type {
   ReviewRetryResponse,
   ReviewTask,
   ReviewTaskDetail,
+  ReviewTaskStatus,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
@@ -32,6 +33,8 @@ export const fetchReviews = (query: ReviewQuery) =>
  * 查询单个评审任务详情。
  */
 export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api/v1/reviews/${id}`);
+
+export const fetchReviewStatus = (id: number) => request<ReviewTaskStatus>(`/api/v1/reviews/${id}/status`);
 
 export const fetchGithubCommentPreview = (id: number) =>
   request<GithubCommentPreview>(`/api/v1/reviews/${id}/github-comments/preview`);

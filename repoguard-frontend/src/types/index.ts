@@ -37,6 +37,19 @@ export interface ReviewTaskDetail extends ReviewTask {
   rabbitMq: RabbitMqStatus;
 }
 
+export interface ReviewTaskStatus {
+  id: number;
+  status: ReviewStatus;
+  riskLevel: RiskLevel;
+  llmStatus: ReviewStatus;
+  duration: string;
+  updatedAt?: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
+  latestTimeline?: TimelineItem;
+}
+
 export interface GithubCommentPreview {
   taskId: number;
   prNumber: number;

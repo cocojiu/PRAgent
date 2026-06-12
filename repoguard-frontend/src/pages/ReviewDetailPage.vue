@@ -385,6 +385,7 @@ import {
   fetchGithubCommentPreview,
   fetchGithubCommentPublicationHistory,
   fetchReviewDetail,
+  fetchReviewStatus,
   publishGithubComments,
   retryReview
 } from "@/api/reviews";
@@ -396,6 +397,7 @@ import type {
   GithubCommentPublish,
   ReviewStatus,
   ReviewTaskDetail,
+  ReviewTaskStatus,
   RiskLevel,
   TimelineItem
 } from "@/types";
@@ -403,7 +405,7 @@ import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
-type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean };
+type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
@@ -708,6 +710,54 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
   }
 });
 
+const normalizeTimelineItem = (item: TimelineItem): TimelineItem => ({
+  ...item,
+  status: item.status as TimelineItem["status"]
+});
+
+const mergeLatestTimeline = (timeline: TimelineItem[], latestTimeline?: TimelineItem): TimelineItem[] => {
+  if (!latestTimeline) {
+    return timeline;
+  }
+  const latest = normalizeTimelineItem(latestTimeline);
+  const normalizedTimeline = timeline.map((item) =>
+    latest.status === "current" && item.status === "current" && item.label !== latest.label
+      ? { ...item, status: "done" as TimelineItem["status"] }
+      : item
+  );
+  const existingIndex = normalizedTimeline.findIndex((item) => item.label === latest.label && item.time === latest.time);
+  if (existingIndex >= 0) {
+    return normalizedTimeline.map((item, index) => (index === existingIndex ? latest : item));
+  }
+  return [...normalizedTimeline, latest];
+};
+
+const applyStatusSnapshot = (status: ReviewTaskStatus) => {
+  if (!selectedTask.value) {
+    return;
+  }
+  const normalizedStatus = status.status as ReviewStatus;
+  const normalizedLlmStatus = status.llmStatus as ReviewStatus;
+  const normalizedRiskLevel = status.riskLevel as RiskLevel;
+  selectedTask.value = {
+    ...selectedTask.value,
+    status: normalizedStatus,
+    riskLevel: normalizedRiskLevel,
+    llmStatus: normalizedLlmStatus,
+    duration: status.duration,
+    failureCategory: status.failureCategory,
+    failureReason: status.failureReason,
+    failureSuggestion: status.failureSuggestion,
+    timeline: mergeLatestTimeline(selectedTask.value.timeline, status.latestTimeline),
+    llm: {
+      ...selectedTask.value.llm,
+      status: normalizedLlmStatus,
+      duration: status.duration,
+      riskLevel: normalizedRiskLevel
+    }
+  };
+};
+
 const formatRefreshTime = () =>
   new Intl.DateTimeFormat("zh-CN", {
     hour12: false,
@@ -758,7 +808,7 @@ const startPolling = () => {
   }
   pollTimer = setTimeout(() => {
     pollTimer = undefined;
-    void loadDetail({ silent: true, resetPublishResult: false });
+    void pollReviewStatus();
   }, currentPollIntervalMs.value);
 };
 
@@ -777,7 +827,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     return;
   }
 
-  if (options.silent && silentRefreshing.value) {
+  if (options.silent && silentRefreshing.value && !options.force) {
     return;
   }
 
@@ -827,6 +877,42 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     }
   } finally {
     loading.value = false;
+    silentRefreshing.value = false;
+  }
+};
+
+const pollReviewStatus = async () => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id)) {
+    return;
+  }
+  if (silentRefreshing.value) {
+    return;
+  }
+
+  silentRefreshing.value = true;
+  try {
+    const status = await fetchReviewStatus(id);
+    applyStatusSnapshot(status);
+    pollErrorMessage.value = "";
+    pollFailureCount.value = 0;
+    lastRefreshedAt.value = formatRefreshTime();
+    if (status.status === "completed" || status.status === "failed") {
+      await loadDetail({ silent: true, resetPublishResult: false, force: true });
+      return;
+    }
+    syncPolling();
+  } catch (error) {
+    pollFailureCount.value += 1;
+    const message = error instanceof Error ? error.message : "Review status refresh failed";
+    if (pollFailureCount.value >= MAX_POLL_FAILURES) {
+      stopPolling();
+      pollErrorMessage.value = `Automatic refresh failed ${MAX_POLL_FAILURES} times and has paused. Please refresh manually.`;
+    } else {
+      pollErrorMessage.value = `Automatic refresh failed: ${message}`;
+      syncPolling();
+    }
+  } finally {
     silentRefreshing.value = false;
   }
 };

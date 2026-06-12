@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.ReviewService;
 import jakarta.validation.Valid;
@@ -63,6 +64,11 @@ public class ReviewController {
     @GetMapping("/{id}")
     public ApiResponse<ReviewTaskDetail> getReviewDetail(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.getReviewDetail(id));
+    }
+
+    @GetMapping("/{id}/status")
+    public ApiResponse<ReviewTaskStatusResponse> getReviewStatus(@PathVariable @Min(1) Long id) {
+        return ApiResponse.ok(reviewService.getReviewStatus(id));
     }
 
     @GetMapping("/{id}/github-comments/preview")

@@ -422,6 +422,43 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void getReviewStatusReturnsLatestTimelineAndFailureSummary() {
+        ReviewTask failedTask = task();
+        failedTask.setStatus("FAILED");
+        failedTask.setRiskLevel("HIGH");
+        failedTask.setLlmStatus("FAILED");
+        failedTask.setStartedAt(LocalDateTime.of(2026, 6, 12, 10, 0));
+        failedTask.setFinishedAt(LocalDateTime.of(2026, 6, 12, 10, 1, 12));
+        when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
+            timeline("Task queued"),
+            timeline("Review failed: 403 Resource not accessible by integration")
+        ));
+
+        var result = service.getReviewStatus(521L);
+
+        assertThat(result.id()).isEqualTo(521L);
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.riskLevel()).isEqualTo("high");
+        assertThat(result.llmStatus()).isEqualTo("failed");
+        assertThat(result.updatedAt()).isEqualTo("2026-06-12 10:01:12");
+        assertThat(result.latestTimeline().label()).startsWith("Review failed:");
+        assertThat(result.latestTimeline().status()).isEqualTo("done");
+        assertThat(result.failureCategory()).isEqualTo("github_permission_denied");
+    }
+
+    @Test
+    void getReviewStatusRejectsMissingTask() {
+        when(reviewTaskMapper.selectById(404L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getReviewStatus(404L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Review task not found: 404");
+
+        verify(reviewTimelineMapper, never()).selectList(any());
+    }
+
+    @Test
     void triggerManualReviewReturnsExistingTaskWithoutPublishingDuplicateMessage() {
         when(reviewTaskMapper.selectOne(any())).thenReturn(task());
 

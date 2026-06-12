@@ -26,6 +26,8 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.service.ReviewService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -92,6 +94,22 @@ class ReviewControllerTest {
                 List.of(),
                 new LlmStatusDto("completed", "2 分 48 秒", "high"),
                 new RabbitMqStatusDto(1, 0, "confirmed")
+            );
+        }
+
+        @Override
+        public ReviewTaskStatusResponse getReviewStatus(Long id) {
+            return new ReviewTaskStatusResponse(
+                id,
+                "reviewing",
+                "medium",
+                "reviewing",
+                "72s",
+                "2026-06-12 10:20:30",
+                null,
+                null,
+                null,
+                new ReviewTimelineItem("GitHub diff fetched", "10:20:30", "current")
             );
         }
 
@@ -261,6 +279,19 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
             .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"));
+    }
+
+    @Test
+    void getReviewStatusReturnsLightweightSnapshot() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/status"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.id").value(512))
+            .andExpect(jsonPath("$.data.status").value("reviewing"))
+            .andExpect(jsonPath("$.data.llmStatus").value("reviewing"))
+            .andExpect(jsonPath("$.data.updatedAt").value("2026-06-12 10:20:30"))
+            .andExpect(jsonPath("$.data.latestTimeline.label").value("GitHub diff fetched"))
+            .andExpect(jsonPath("$.data.latestTimeline.status").value("current"));
     }
 
     @Test
