@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
+import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
@@ -29,24 +30,16 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final SecretCryptoService secretCryptoService;
     private final LlmReviewResultParser reviewResultParser;
     private final RepoGuardMetrics metrics;
+    private final ExternalCallResilience resilience;
 
     public LlmPullRequestReviewer(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
         RuleBasedPullRequestReviewer ruleBasedReviewer,
         RestClient.Builder restClientBuilder,
         ObjectMapper objectMapper,
-        SecretCryptoService secretCryptoService
-    ) {
-        this(reviewPolicyConfigMapper, ruleBasedReviewer, restClientBuilder, objectMapper, secretCryptoService, null);
-    }
-
-    LlmPullRequestReviewer(
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
         SecretCryptoService secretCryptoService,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience
     ) {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.ruleBasedReviewer = ruleBasedReviewer;
@@ -54,6 +47,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         this.objectMapper = objectMapper;
         this.secretCryptoService = secretCryptoService;
         this.metrics = metrics;
+        this.resilience = resilience;
         this.reviewResultParser = new LlmReviewResultParser(objectMapper);
     }
 
@@ -118,14 +112,14 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         );
 
         try {
-            String response = restClient.post()
+            String response = executeLlm("chat_completions", () -> restClient.post()
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + apiKey.trim())
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
                 .retrieve()
-                .body(String.class);
+                .body(String.class));
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
@@ -169,6 +163,10 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         requestFactory.setConnectTimeout(timeout);
         requestFactory.setReadTimeout(timeout);
         return requestFactory;
+    }
+
+    private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {
+        return resilience == null ? supplier.get() : resilience.llm(operation, supplier);
     }
 
     private String buildPrompt(ReviewTask task, GithubPullRequestDiff diff) {

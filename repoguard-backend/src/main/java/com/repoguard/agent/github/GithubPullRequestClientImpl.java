@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
@@ -31,25 +32,28 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private final RestClient restClient;
     private final SecretCryptoService secretCryptoService;
     private final RepoGuardMetrics metrics;
+    private final ExternalCallResilience resilience;
 
     GithubPullRequestClientImpl(
         IntegrationConfigMapper integrationConfigMapper,
         RestClient.Builder restClientBuilder,
         SecretCryptoService secretCryptoService
     ) {
-        this(integrationConfigMapper, restClientBuilder, secretCryptoService, null);
+        this(integrationConfigMapper, restClientBuilder, secretCryptoService, null, null);
     }
 
     public GithubPullRequestClientImpl(
         IntegrationConfigMapper integrationConfigMapper,
         RestClient.Builder restClientBuilder,
         SecretCryptoService secretCryptoService,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.restClient = restClientBuilder.build();
         this.secretCryptoService = secretCryptoService;
         this.metrics = metrics;
+        this.resilience = resilience;
     }
 
     @Override
@@ -87,11 +91,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             .toString();
 
         try {
-            GithubPullRequestListItem[] items = restClient.get()
+            GithubPullRequestListItem[] items = executeGithub("list_open_pull_requests", () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, config))
                 .retrieve()
-                .body(GithubPullRequestListItem[].class);
+                .body(GithubPullRequestListItem[].class));
             recordGithubApiRequest(startedAt, "list_open_pull_requests", "success", null, null);
             markGithubChecked(config, null);
             return items == null ? List.of() : Arrays.stream(items)
@@ -136,11 +140,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             .toString();
 
         try {
-            GithubChangedFile[] files = restClient.get()
+            GithubChangedFile[] files = executeGithub("fetch_pull_request_diff", () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, config))
                 .retrieve()
-                .body(GithubChangedFile[].class);
+                .body(GithubChangedFile[].class));
 
             markGithubChecked(config, null);
             recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "success", null, null);
@@ -294,12 +298,12 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String body,
         IntegrationConfig config
     ) {
-        return restClient.post()
+        return executeGithub("publish_pull_request_comment", () -> restClient.post()
             .uri(prCommentUrl)
             .headers(headers -> applyGithubHeaders(headers, config))
             .body(Map.of("body", body))
             .retrieve()
-            .body(GithubReviewCommentResponse.class);
+            .body(GithubReviewCommentResponse.class));
     }
 
     private GithubReviewCommentResponse publishLineComment(
@@ -308,7 +312,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String commitSha,
         IntegrationConfig config
     ) {
-        return restClient.post()
+        return executeGithub("publish_line_comment", () -> restClient.post()
             .uri(lineCommentUrl)
             .headers(headers -> applyGithubHeaders(headers, config))
             .body(Map.of(
@@ -319,7 +323,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 "side", "RIGHT"
             ))
             .retrieve()
-            .body(GithubReviewCommentResponse.class);
+            .body(GithubReviewCommentResponse.class));
     }
 
     private boolean isUnresolvableLineComment(RuntimeException ex) {
@@ -344,11 +348,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             .path("/repos/{owner}/{repo}/pulls/{pullNumber}")
             .build(owner, repository, task.getPrNumber())
             .toString();
-        GithubPullRequestResponse response = restClient.get()
+        GithubPullRequestResponse response = executeGithub("resolve_pull_request_head", () -> restClient.get()
             .uri(url)
             .headers(headers -> applyGithubHeaders(headers, config))
             .retrieve()
-            .body(GithubPullRequestResponse.class);
+            .body(GithubPullRequestResponse.class));
         String sha = response == null || response.head() == null ? null : response.head().sha();
         if (!StringUtils.hasText(sha)) {
             throw new IllegalStateException("GitHub pull request head SHA is unavailable");
@@ -363,6 +367,10 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         if (StringUtils.hasText(token)) {
             headers.setBearerAuth(token.trim());
         }
+    }
+
+    private <T> T executeGithub(String operation, java.util.function.Supplier<T> supplier) {
+        return resilience == null ? supplier.get() : resilience.github(operation, supplier);
     }
 
     private IntegrationConfig loadGithubConfig() {

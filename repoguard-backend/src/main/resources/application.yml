@@ -69,6 +69,30 @@ app:
   cors:
     allowed-origins:
       - http://localhost:5173
+  external-call:
+    resilience:
+      github:
+        circuit-breaker-failure-rate-threshold: ${REPOGUARD_GITHUB_CB_FAILURE_RATE_THRESHOLD:50}
+        circuit-breaker-sliding-window-size: ${REPOGUARD_GITHUB_CB_SLIDING_WINDOW_SIZE:20}
+        circuit-breaker-minimum-calls: ${REPOGUARD_GITHUB_CB_MINIMUM_CALLS:5}
+        circuit-breaker-wait-open-seconds: ${REPOGUARD_GITHUB_CB_WAIT_OPEN_SECONDS:30}
+        retry-max-attempts: ${REPOGUARD_GITHUB_RETRY_MAX_ATTEMPTS:2}
+        retry-wait-millis: ${REPOGUARD_GITHUB_RETRY_WAIT_MILLIS:300}
+        rate-limit-for-period: ${REPOGUARD_GITHUB_RATE_LIMIT_FOR_PERIOD:30}
+        rate-limit-refresh-millis: ${REPOGUARD_GITHUB_RATE_LIMIT_REFRESH_MILLIS:1000}
+        rate-limit-timeout-millis: ${REPOGUARD_GITHUB_RATE_LIMIT_TIMEOUT_MILLIS:0}
+      llm:
+        circuit-breaker-failure-rate-threshold: ${REPOGUARD_LLM_CB_FAILURE_RATE_THRESHOLD:50}
+        circuit-breaker-sliding-window-size: ${REPOGUARD_LLM_CB_SLIDING_WINDOW_SIZE:10}
+        circuit-breaker-minimum-calls: ${REPOGUARD_LLM_CB_MINIMUM_CALLS:3}
+        circuit-breaker-wait-open-seconds: ${REPOGUARD_LLM_CB_WAIT_OPEN_SECONDS:30}
+        retry-max-attempts: ${REPOGUARD_LLM_RETRY_MAX_ATTEMPTS:1}
+        retry-wait-millis: ${REPOGUARD_LLM_RETRY_WAIT_MILLIS:0}
+        rate-limit-for-period: ${REPOGUARD_LLM_RATE_LIMIT_FOR_PERIOD:10}
+        rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
+        rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}
+        bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:4}
+        bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:0}
   rabbit:
     review:
       exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v2}
