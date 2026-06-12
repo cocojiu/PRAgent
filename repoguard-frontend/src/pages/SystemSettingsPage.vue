@@ -143,7 +143,7 @@ security:
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";

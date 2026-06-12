@@ -102,7 +102,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { RouterLink } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import type { EChartsOption } from "echarts";
 import EChartPanel from "@/components/EChartPanel.vue";

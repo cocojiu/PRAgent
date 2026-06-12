@@ -218,7 +218,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";

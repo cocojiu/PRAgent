@@ -143,7 +143,7 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ArrowLeft, LockKeyhole, Mail, Shield, UserRound } from "lucide-vue-next";
 import { login, register } from "@/api/auth";
 import { getErrorMessage } from "@/utils/errors";

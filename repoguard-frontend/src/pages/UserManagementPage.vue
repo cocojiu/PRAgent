@@ -134,7 +134,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserX, Users } from "lucide-vue-next";
 import { fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
 import type { ManagedUser, UserOperationAudit, UserStatus } from "@/api/users";
