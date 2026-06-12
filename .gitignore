@@ -1,6 +1,7 @@
 # Ignore all .md files except README.md
 *.md
 !README.md
+docs/**/*.md
 
 node_modules/
 dist/
