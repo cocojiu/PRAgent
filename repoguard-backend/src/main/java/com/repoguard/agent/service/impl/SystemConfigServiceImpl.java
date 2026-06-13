@@ -507,10 +507,14 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         rule.setId(id);
         rule.setRuleName(request.name().trim());
         rule.setScope(request.scope().trim());
+        rule.setApplicableLanguages(cleanOptional(request.applicableLanguages()));
+        rule.setFilePatterns(cleanOptional(request.filePatterns()));
         rule.setSeverity(normalizeSeverity(request.severity()));
         rule.setStatus(normalizeStatus(request.status()));
         rule.setConfidence(request.confidence() == null ? 90 : request.confidence());
         rule.setDescription(request.description().trim());
+        rule.setPositiveExample(cleanOptional(request.positiveExample()));
+        rule.setFalsePositiveGuidance(cleanOptional(request.falsePositiveGuidance()));
     }
 
     private int nextRuleSortOrder() {
@@ -556,13 +560,25 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             rule.getId(),
             rule.getRuleName(),
             rule.getScope(),
+            defaultString(rule.getApplicableLanguages()),
+            defaultString(rule.getFilePatterns()),
             lower(rule.getSeverity()),
             lower(rule.getStatus()),
             hitCount,
             (rule.getConfidence() == null ? 0 : rule.getConfidence()) + "%",
             format(rule.getUpdatedAt()),
-            rule.getDescription()
+            rule.getDescription(),
+            defaultString(rule.getPositiveExample()),
+            defaultString(rule.getFalsePositiveGuidance())
         );
+    }
+
+    private String cleanOptional(String value) {
+        return StringUtils.hasText(value) ? value.trim() : "";
+    }
+
+    private String defaultString(String value) {
+        return value == null ? "" : value;
     }
 
     private String normalizeRuleId(String value) {

@@ -111,6 +111,8 @@ class SystemConfigControllerTest {
                 id.toUpperCase(),
                 "异常捕获过宽",
                 "Java Patch",
+                "Java",
+                "*.java",
                 "medium",
                 status,
                 3,
@@ -290,7 +292,9 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.metrics[0].label").value("启用规则"))
             .andExpect(jsonPath("$.data.rules[0].id").value("RG-JAVA-001"))
-            .andExpect(jsonPath("$.data.rules[0].status").value("enabled"));
+            .andExpect(jsonPath("$.data.rules[0].status").value("enabled"))
+            .andExpect(jsonPath("$.data.rules[0].applicableLanguages").value("Java"))
+            .andExpect(jsonPath("$.data.rules[0].filePatterns").value("*.java"));
     }
 
     @Test
@@ -431,6 +435,8 @@ class SystemConfigControllerTest {
             "RG-JAVA-001",
             "异常捕获过宽",
             "Java Patch",
+            "Java",
+            "*.java",
             "medium",
             "enabled",
             3,

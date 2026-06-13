@@ -36,6 +36,8 @@
           <el-table-column prop="id" label="规则 ID" min-width="140" />
           <el-table-column prop="name" label="规则名称" min-width="190" />
           <el-table-column prop="scope" label="适用范围" min-width="190" />
+          <el-table-column prop="applicableLanguages" label="适用语言" min-width="150" />
+          <el-table-column prop="filePatterns" label="文件匹配" min-width="190" show-overflow-tooltip />
           <el-table-column label="严重级别" width="120">
             <template #default="{ row }">
               <span :class="`risk-pill ${row.severity}`">{{ riskText(row.severity) }}</span>
@@ -72,6 +74,7 @@
         <div v-for="rule in topRuleDocs" :key="rule.id" class="rule-doc-item">
           <strong>{{ rule.id }} · {{ rule.name }}</strong>
           <p>{{ rule.description }}</p>
+          <p v-if="rule.falsePositiveGuidance">误报说明：{{ rule.falsePositiveGuidance }}</p>
         </div>
         <el-empty v-if="!topRuleDocs.length" description="暂无规则说明" />
       </aside>
@@ -87,6 +90,12 @@
         </el-form-item>
         <el-form-item label="适用范围">
           <el-input v-model="ruleForm.scope" placeholder="例如 Java Patch" />
+        </el-form-item>
+        <el-form-item label="适用语言">
+          <el-input v-model="ruleForm.applicableLanguages" placeholder="例如 Java,YAML,Properties" />
+        </el-form-item>
+        <el-form-item label="文件匹配">
+          <el-input v-model="ruleForm.filePatterns" placeholder="例如 *.java,application*.yml" />
         </el-form-item>
         <div class="rule-form-grid">
           <el-form-item label="严重级别">
@@ -109,6 +118,12 @@
         </el-form-item>
         <el-form-item label="规则说明">
           <el-input v-model="ruleForm.description" type="textarea" :rows="4" placeholder="描述规则命中的场景和建议" />
+        </el-form-item>
+        <el-form-item label="命中示例">
+          <el-input v-model="ruleForm.positiveExample" type="textarea" :rows="3" placeholder="记录一个典型命中示例" />
+        </el-form-item>
+        <el-form-item label="误报说明">
+          <el-input v-model="ruleForm.falsePositiveGuidance" type="textarea" :rows="3" placeholder="说明哪些场景可以标记为误报" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -152,10 +167,14 @@ const ruleForm = reactive<ReviewRuleConfigRequest>({
   id: "",
   name: "",
   scope: "",
+  applicableLanguages: "",
+  filePatterns: "",
   severity: "low",
   status: "disabled",
   confidence: 90,
-  description: ""
+  description: "",
+  positiveExample: "",
+  falsePositiveGuidance: ""
 });
 
 const metricIconMap = {
@@ -182,7 +201,12 @@ const filteredRules = computed(() => {
     const matchesSeverity = !severityFilter.value || rule.severity === severityFilter.value;
     const matchesStatus = !statusFilter.value || rule.status === statusFilter.value;
     const matchesKeyword =
-      !query || rule.id.toLowerCase().includes(query) || rule.name.toLowerCase().includes(query) || rule.scope.toLowerCase().includes(query);
+      !query
+        || rule.id.toLowerCase().includes(query)
+        || rule.name.toLowerCase().includes(query)
+        || rule.scope.toLowerCase().includes(query)
+        || (rule.applicableLanguages ?? "").toLowerCase().includes(query)
+        || (rule.filePatterns ?? "").toLowerCase().includes(query);
     return matchesSeverity && matchesStatus && matchesKeyword;
   });
 });
@@ -208,10 +232,14 @@ const resetForm = (rule?: ReviewRuleConfig) => {
   ruleForm.id = rule?.id ?? "";
   ruleForm.name = rule?.name ?? "";
   ruleForm.scope = rule?.scope ?? "Java Patch";
+  ruleForm.applicableLanguages = rule?.applicableLanguages ?? "";
+  ruleForm.filePatterns = rule?.filePatterns ?? "";
   ruleForm.severity = rule?.severity ?? "low";
   ruleForm.status = rule?.status ?? "disabled";
   ruleForm.confidence = Number.parseInt(rule?.confidence ?? "90", 10);
   ruleForm.description = rule?.description ?? "";
+  ruleForm.positiveExample = rule?.positiveExample ?? "";
+  ruleForm.falsePositiveGuidance = rule?.falsePositiveGuidance ?? "";
 };
 
 const openCreateDialog = () => {
@@ -297,6 +325,12 @@ const validateRuleForm = () => {
   if (!ruleForm.description.trim()) {
     return "请输入规则说明";
   }
+  if (!ruleForm.applicableLanguages.trim()) {
+    return "请输入适用语言";
+  }
+  if (!ruleForm.filePatterns.trim()) {
+    return "请输入文件匹配规则";
+  }
   return "";
 };
 
@@ -304,10 +338,14 @@ const normalizedPayload = (): ReviewRuleConfigRequest => ({
   id: ruleForm.id.trim().toUpperCase(),
   name: ruleForm.name.trim(),
   scope: ruleForm.scope.trim(),
+  applicableLanguages: ruleForm.applicableLanguages.trim(),
+  filePatterns: ruleForm.filePatterns.trim(),
   severity: ruleForm.severity,
   status: ruleForm.status,
   confidence: ruleForm.confidence,
-  description: ruleForm.description.trim()
+  description: ruleForm.description.trim(),
+  positiveExample: ruleForm.positiveExample.trim(),
+  falsePositiveGuidance: ruleForm.falsePositiveGuidance.trim()
 });
 
 onMounted(loadRules);

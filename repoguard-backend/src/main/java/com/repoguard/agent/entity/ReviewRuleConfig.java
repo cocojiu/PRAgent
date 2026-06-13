@@ -11,10 +11,14 @@ public class ReviewRuleConfig {
     private String id;
     private String ruleName;
     private String scope;
+    private String applicableLanguages;
+    private String filePatterns;
     private String severity;
     private String status;
     private Integer confidence;
     private String description;
+    private String positiveExample;
+    private String falsePositiveGuidance;
     private Integer sortOrder;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -41,6 +45,22 @@ public class ReviewRuleConfig {
 
     public void setScope(String scope) {
         this.scope = scope;
+    }
+
+    public String getApplicableLanguages() {
+        return applicableLanguages;
+    }
+
+    public void setApplicableLanguages(String applicableLanguages) {
+        this.applicableLanguages = applicableLanguages;
+    }
+
+    public String getFilePatterns() {
+        return filePatterns;
+    }
+
+    public void setFilePatterns(String filePatterns) {
+        this.filePatterns = filePatterns;
     }
 
     public String getSeverity() {
@@ -73,6 +93,22 @@ public class ReviewRuleConfig {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getPositiveExample() {
+        return positiveExample;
+    }
+
+    public void setPositiveExample(String positiveExample) {
+        this.positiveExample = positiveExample;
+    }
+
+    public String getFalsePositiveGuidance() {
+        return falsePositiveGuidance;
+    }
+
+    public void setFalsePositiveGuidance(String falsePositiveGuidance) {
+        this.falsePositiveGuidance = falsePositiveGuidance;
     }
 
     public Integer getSortOrder() {

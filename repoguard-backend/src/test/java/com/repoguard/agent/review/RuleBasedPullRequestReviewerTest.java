@@ -44,10 +44,40 @@ class RuleBasedPullRequestReviewerTest {
             .doesNotContain("RG-JAVA-002");
     }
 
+    @Test
+    void skipsRulesWhenFilePatternDoesNotMatch() {
+        when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(rule("RG-JAVA-002", "ENABLED", "*.java")));
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(new GithubChangedFile(
+                "docs/README.md",
+                "modified",
+                1,
+                0,
+                """
+                    @@ -1,1 +1,2 @@
+                     # Demo
+                    +System.out.println("debug");
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .doesNotContain("RG-JAVA-002");
+    }
+
     private ReviewRuleConfig disabledRule(String id) {
+        return rule(id, "DISABLED", "");
+    }
+
+    private ReviewRuleConfig rule(String id, String status, String filePatterns) {
         ReviewRuleConfig rule = new ReviewRuleConfig();
         rule.setId(id);
-        rule.setStatus("DISABLED");
+        rule.setStatus(status);
+        rule.setFilePatterns(filePatterns);
         return rule;
     }
 }

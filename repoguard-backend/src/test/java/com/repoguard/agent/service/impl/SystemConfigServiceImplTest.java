@@ -399,6 +399,9 @@ class SystemConfigServiceImplTest {
         assertThat(result.rules().getFirst().id()).isEqualTo("RG-JAVA-001");
         assertThat(result.rules().getFirst().status()).isEqualTo("enabled");
         assertThat(result.rules().getFirst().hitCount()).isEqualTo(2);
+        assertThat(result.rules().getFirst().applicableLanguages()).isEqualTo("Java");
+        assertThat(result.rules().getFirst().filePatterns()).isEqualTo("*.java");
+        assertThat(result.rules().getFirst().falsePositiveGuidance()).contains("false positive");
         assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
     }
 
@@ -497,10 +500,14 @@ class SystemConfigServiceImplTest {
         rule.setId(id);
         rule.setRuleName(name);
         rule.setScope("Java Patch");
+        rule.setApplicableLanguages("Java");
+        rule.setFilePatterns("*.java");
         rule.setSeverity(severity);
         rule.setStatus(status);
         rule.setConfidence(confidence);
         rule.setDescription(name + " description");
+        rule.setPositiveExample("catch (IOException ex)");
+        rule.setFalsePositiveGuidance("Mark as false positive for framework boundaries.");
         rule.setSortOrder(10);
         rule.setCreatedAt(LocalDateTime.now());
         rule.setUpdatedAt(LocalDateTime.of(2026, 6, 9, 12, 0));

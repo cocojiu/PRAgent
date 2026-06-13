@@ -7,9 +7,11 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class RuleBasedPullRequestReviewer {
@@ -21,19 +23,19 @@ public class RuleBasedPullRequestReviewer {
     }
 
     public ReviewResult review(GithubPullRequestDiff diff) {
-        Set<String> disabledRuleIds = loadDisabledRuleIds();
+        Map<String, ReviewRuleConfig> configuredRules = loadConfiguredRules();
         List<ReviewFindingResult> findings = new ArrayList<>();
         for (GithubChangedFile file : diff.files()) {
             String patch = file.patch();
             if (patch == null || patch.isBlank()) {
                 continue;
             }
-            scanPatch(file.filename(), patch, disabledRuleIds, findings);
+            scanPatch(file.filename(), patch, configuredRules, findings);
         }
         return ReviewResult.completed(resolveRisk(findings), findings);
     }
 
-    private void scanPatch(String filePath, String patch, Set<String> disabledRuleIds, List<ReviewFindingResult> findings) {
+    private void scanPatch(String filePath, String patch, Map<String, ReviewRuleConfig> configuredRules, List<ReviewFindingResult> findings) {
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         for (String line : lines) {
@@ -43,7 +45,7 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                addFindingIfMatches(filePath, currentLine, added, disabledRuleIds, findings);
+                addFindingIfMatches(filePath, currentLine, added, configuredRules, findings);
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -51,34 +53,63 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private void addFindingIfMatches(String filePath, int lineNumber, String line, Set<String> disabledRuleIds, List<ReviewFindingResult> findings) {
+    private void addFindingIfMatches(String filePath, int lineNumber, String line, Map<String, ReviewRuleConfig> configuredRules, List<ReviewFindingResult> findings) {
         String trimmed = line.trim();
-        if (isEnabled("RG-JAVA-001", disabledRuleIds)
+        if (isApplicable("RG-JAVA-001", filePath, configuredRules)
             && (trimmed.contains("catch (Exception") || trimmed.contains("catch(Throwable") || trimmed.contains("catch (Throwable"))) {
             findings.add(finding("MEDIUM", "RG-JAVA-001", filePath, lineNumber, "新增代码捕获了过宽的异常类型", "请捕获更具体的异常类型，并保留必要的错误上下文。"));
         }
-        if (isEnabled("RG-JAVA-002", disabledRuleIds) && trimmed.contains("System.out.print")) {
+        if (isApplicable("RG-JAVA-002", filePath, configuredRules) && trimmed.contains("System.out.print")) {
             findings.add(finding("LOW", "RG-JAVA-002", filePath, lineNumber, "新增代码使用了标准输出日志", "请改用项目日志组件，避免生产日志不可控。"));
         }
-        if (isEnabled("RG-JAVA-003", disabledRuleIds) && trimmed.contains("Thread.sleep(")) {
+        if (isApplicable("RG-JAVA-003", filePath, configuredRules) && trimmed.contains("Thread.sleep(")) {
             findings.add(finding("MEDIUM", "RG-JAVA-003", filePath, lineNumber, "新增代码包含固定休眠", "请使用可测试的等待条件、重试策略或调度机制。"));
         }
-        if (isEnabled("RG-GEN-001", disabledRuleIds) && (trimmed.contains("TODO") || trimmed.contains("FIXME"))) {
+        if (isApplicable("RG-GEN-001", filePath, configuredRules) && (trimmed.contains("TODO") || trimmed.contains("FIXME"))) {
             findings.add(finding("LOW", "RG-GEN-001", filePath, lineNumber, "新增代码包含未收敛的 TODO/FIXME", "请在合并前补充实现或明确跟踪任务。"));
         }
     }
 
-    private boolean isEnabled(String ruleId, Set<String> disabledRuleIds) {
-        return !disabledRuleIds.contains(ruleId);
+    private boolean isApplicable(String ruleId, String filePath, Map<String, ReviewRuleConfig> configuredRules) {
+        ReviewRuleConfig rule = configuredRules.get(ruleId);
+        if (rule == null) {
+            return true;
+        }
+        if ("DISABLED".equalsIgnoreCase(rule.getStatus())) {
+            return false;
+        }
+        if (!StringUtils.hasText(rule.getFilePatterns())) {
+            return true;
+        }
+        return List.of(rule.getFilePatterns().split("[,\\n]")).stream()
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .anyMatch(pattern -> matchesPattern(filePath, pattern));
     }
 
-    private Set<String> loadDisabledRuleIds() {
+    private Map<String, ReviewRuleConfig> loadConfiguredRules() {
         return reviewRuleConfigMapper.selectList(
-                new LambdaQueryWrapper<ReviewRuleConfig>().eq(ReviewRuleConfig::getStatus, "DISABLED")
+                new LambdaQueryWrapper<ReviewRuleConfig>()
             )
             .stream()
-            .map(ReviewRuleConfig::getId)
-            .collect(Collectors.toSet());
+            .collect(Collectors.toMap(ReviewRuleConfig::getId, rule -> rule, (first, ignored) -> first));
+    }
+
+    private boolean matchesPattern(String filePath, String pattern) {
+        String normalizedFilePath = normalizePath(filePath);
+        String normalizedPattern = normalizePath(pattern);
+        if ("*".equals(normalizedPattern)) {
+            return true;
+        }
+        String regex = normalizedPattern
+            .replace(".", "\\.")
+            .replace("*", ".*")
+            .replace("?", ".");
+        return normalizedFilePath.matches(".*" + regex);
+    }
+
+    private String normalizePath(String value) {
+        return value == null ? "" : value.replace('\\', '/').toLowerCase(Locale.ROOT);
     }
 
     private ReviewFindingResult finding(String severity, String ruleId, String filePath, Integer lineNumber, String message, String recommendation) {
