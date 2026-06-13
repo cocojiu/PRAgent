@@ -114,6 +114,32 @@
               <div class="summary-stat low"><span>低风险</span><strong>{{ findingCounts.low }}</strong></div>
               <div class="summary-stat info"><span>提示</span><strong>{{ findingCounts.info }}</strong></div>
             </div>
+            <div v-if="riskProfile" class="risk-profile">
+              <div class="risk-profile-head">
+                <div>
+                  <span class="risk-profile-eyebrow">PR 风险画像</span>
+                  <strong>{{ riskProfile.score }}/100</strong>
+                </div>
+                <span :class="`risk-pill ${riskProfile.level}`">{{ riskText(riskProfile.level) }}</span>
+              </div>
+              <p>{{ riskProfile.summary }}</p>
+              <p class="risk-profile-review">{{ riskProfile.humanReviewReason }}</p>
+              <div class="risk-profile-signals">
+                <span v-for="signal in riskProfile.signals" :key="signal">{{ signal }}</span>
+              </div>
+              <div v-if="riskProfile.highRiskFiles.length" class="risk-file-list">
+                <div v-for="file in riskProfile.highRiskFiles" :key="file.file" class="risk-file-item">
+                  <div>
+                    <code>{{ file.file }}</code>
+                    <small>{{ changeTypeText(file.changeType) }} · +{{ file.additions }} -{{ file.deletions }} · {{ file.findingCount }} 条问题</small>
+                  </div>
+                  <div class="risk-file-meta">
+                    <span>{{ file.score }}</span>
+                    <em v-for="reason in file.reasons" :key="`${file.file}-${reason}`">{{ reason }}</em>
+                  </div>
+                </div>
+              </div>
+            </div>
           </article>
 
           <article v-if="selectedTask.humanReviewRequired" class="dashboard-card human-review-card">
@@ -568,6 +594,7 @@ const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
 const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
 const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
+const riskProfile = computed(() => selectedTask.value?.riskProfile);
 const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
 const isTerminalTask = computed(() => {
   return isTerminalReviewStatus(selectedTask.value?.status);
@@ -746,8 +773,8 @@ const timelineLabelText = (label: string) => {
   return label;
 };
 
-const changeTypeText = (type: ChangedFile["changeType"]) => {
-  const labels: Record<ChangedFile["changeType"], string> = {
+const changeTypeText = (type: ChangedFile["changeType"] | string) => {
+  const labels: Record<string, string> = {
     A: "新增",
     M: "修改",
     D: "删除",
@@ -964,6 +991,15 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
   llmStatus: task.llmStatus as ReviewStatus,
   humanReviewRequired: Boolean(task.humanReviewRequired),
   humanReviewStatus: task.humanReviewStatus ?? "not_required",
+  riskProfile: {
+    score: task.riskProfile?.score ?? 0,
+    level: (task.riskProfile?.level ?? "info") as RiskLevel,
+    summary: task.riskProfile?.summary ?? "暂无风险画像数据。",
+    recommendHumanReview: Boolean(task.riskProfile?.recommendHumanReview),
+    humanReviewReason: task.riskProfile?.humanReviewReason ?? "可按常规流程推进。",
+    signals: task.riskProfile?.signals ?? [],
+    highRiskFiles: task.riskProfile?.highRiskFiles ?? []
+  },
   llm: {
     ...task.llm,
     status: task.llm.status as ReviewStatus

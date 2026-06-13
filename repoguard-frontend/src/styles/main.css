@@ -1449,6 +1449,127 @@ a {
   background: #f8fafc;
 }
 
+.risk-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5eaf3;
+}
+
+.risk-profile-head,
+.risk-file-item,
+.risk-file-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.risk-profile-head {
+  justify-content: space-between;
+}
+
+.risk-profile-head > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.risk-profile-eyebrow {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.risk-profile-head strong {
+  color: #0f172a;
+  font-size: 24px;
+}
+
+.risk-profile p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.risk-profile-review {
+  font-weight: 700;
+}
+
+.risk-profile-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.risk-profile-signals span,
+.risk-file-meta em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  color: #334155;
+  background: #f1f5f9;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.risk-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.risk-file-item {
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #fbfdff;
+}
+
+.risk-file-item > div:first-child {
+  min-width: 0;
+}
+
+.risk-file-item code,
+.risk-file-item small {
+  display: block;
+}
+
+.risk-file-item code {
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.risk-file-item small {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.risk-file-meta {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.risk-file-meta span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 28px;
+  border-radius: 7px;
+  color: #ffffff;
+  background: #0f172a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .card-title-row {
   display: flex;
   align-items: center;
@@ -2385,12 +2506,15 @@ a {
   .detail-header,
   .detail-actions,
   .finding-feedback,
-  .failure-banner {
+  .failure-banner,
+  .risk-profile-head,
+  .risk-file-item {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .finding-feedback-actions {
+  .finding-feedback-actions,
+  .risk-file-meta {
     justify-content: flex-start;
   }
 

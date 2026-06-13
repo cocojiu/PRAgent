@@ -539,6 +539,31 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void getReviewDetailBuildsPrRiskProfileFromFindingsAndChangedFiles() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(
+            changedFile("repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", "ADD", 180, 20),
+            changedFile("repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", "MODIFY", 90, 15),
+            changedFile("README.md", "MODIFY", 3, 1)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "HIGH", "repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", 4, "DDL risk", "Add rollback plan"),
+            finding(2L, "MEDIUM", "repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", 42, "Auth bypass risk", "Add guard")
+        ));
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
+
+        var result = service.getReviewDetail(521L);
+
+        assertThat(result.riskProfile().score()).isGreaterThanOrEqualTo(55);
+        assertThat(result.riskProfile().level()).isEqualTo("high");
+        assertThat(result.riskProfile().recommendHumanReview()).isTrue();
+        assertThat(result.riskProfile().signals()).contains("包含 1 条高危以上发现");
+        assertThat(result.riskProfile().summary()).contains("3 个变更文件");
+        assertThat(result.riskProfile().highRiskFiles()).hasSize(2);
+        assertThat(result.riskProfile().highRiskFiles().getFirst().reasons()).contains("数据库迁移");
+    }
+
+    @Test
     void getReviewStatusReturnsLatestTimelineAndFailureSummary() {
         ReviewTask failedTask = task();
         failedTask.setStatus("FAILED");
@@ -780,12 +805,16 @@ class ReviewServiceImplTest {
     }
 
     private ChangedFile changedFile(String path, String changeType) {
+        return changedFile(path, changeType, 6, 1);
+    }
+
+    private ChangedFile changedFile(String path, String changeType, int additions, int deletions) {
         ChangedFile file = new ChangedFile();
         file.setTaskId(521L);
         file.setFilePath(path);
         file.setChangeType(changeType);
-        file.setAdditions(6);
-        file.setDeletions(1);
+        file.setAdditions(additions);
+        file.setDeletions(deletions);
         return file;
     }
 

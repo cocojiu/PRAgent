@@ -50,6 +50,7 @@ export interface ReviewTaskDetail extends ReviewTask {
   missingTests: MissingTest[];
   changedFiles: ChangedFile[];
   timeline: TimelineItem[];
+  riskProfile: PrRiskProfile;
   llm: LlmStatus;
   rabbitMq: RabbitMqStatus;
 }
@@ -227,6 +228,26 @@ export interface ChangedFile {
   changeType: "A" | "M" | "D" | "ADD" | "MODIFY" | "DELETE" | "RENAMED";
   additions: number;
   deletions: number;
+}
+
+export interface PrRiskProfile {
+  score: number;
+  level: RiskLevel;
+  summary: string;
+  recommendHumanReview: boolean;
+  humanReviewReason: string;
+  signals: string[];
+  highRiskFiles: PrRiskFile[];
+}
+
+export interface PrRiskFile {
+  file: string;
+  changeType: string;
+  additions: number;
+  deletions: number;
+  findingCount: number;
+  score: number;
+  reasons: string[];
 }
 
 export interface TimelineItem {

@@ -29,6 +29,7 @@ public record ReviewTaskDetail(
     List<MissingTestDto> missingTests,
     List<ChangedFileDto> changedFiles,
     List<ReviewTimelineItem> timeline,
+    PrRiskProfileDto riskProfile,
     LlmStatusDto llm,
     RabbitMqStatusDto rabbitMq,
     Boolean humanReviewRequired,
@@ -37,6 +38,69 @@ public record ReviewTaskDetail(
     String humanReviewBy,
     String humanReviewedAt
 ) {
+    public ReviewTaskDetail(
+        Long id,
+        Integer prNumber,
+        String title,
+        String repository,
+        String organization,
+        String commit,
+        String branch,
+        String status,
+        String riskLevel,
+        Integer mqRetries,
+        String llmStatus,
+        String source,
+        String triggerSource,
+        String createdAt,
+        String duration,
+        String failureCategory,
+        String failureReason,
+        String failureSuggestion,
+        String prUrl,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        List<ReviewTimelineItem> timeline,
+        PrRiskProfileDto riskProfile,
+        LlmStatusDto llm,
+        RabbitMqStatusDto rabbitMq
+    ) {
+        this(
+            id,
+            prNumber,
+            title,
+            repository,
+            organization,
+            commit,
+            branch,
+            status,
+            riskLevel,
+            mqRetries,
+            llmStatus,
+            source,
+            triggerSource,
+            createdAt,
+            duration,
+            failureCategory,
+            failureReason,
+            failureSuggestion,
+            prUrl,
+            findings,
+            missingTests,
+            changedFiles,
+            timeline,
+            riskProfile,
+            llm,
+            rabbitMq,
+            false,
+            "not_required",
+            null,
+            null,
+            null
+        );
+    }
+
     public ReviewTaskDetail(
         Long id,
         Integer prNumber,
@@ -88,13 +152,9 @@ public record ReviewTaskDetail(
             missingTests,
             changedFiles,
             timeline,
+            new PrRiskProfileDto(0, "info", "暂无风险画像数据。", false, "可按常规流程推进。", List.of(), List.of()),
             llm,
-            rabbitMq,
-            false,
-            "not_required",
-            null,
-            null,
-            null
+            rabbitMq
         );
     }
 }
