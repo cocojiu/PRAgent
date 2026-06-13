@@ -6,6 +6,9 @@ import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
+import com.repoguard.agent.dto.LlmQualityByModelDto;
+import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
+import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.entity.IntegrationConfig;
@@ -18,11 +21,13 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.DashboardService;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -75,7 +80,10 @@ public class DashboardServiceImpl implements DashboardService {
             buildRuleHits(findings),
             buildHighRiskReviews(tasks, findings),
             buildFailedRules(findings),
-            buildSystemHealth()
+            buildSystemHealth(),
+            buildLlmQualityByModel(tasks, findings),
+            buildLlmQualityByRepository(tasks, findings),
+            buildLlmQualityTrend(tasks)
         );
     }
 
@@ -214,6 +222,162 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
+    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<ReviewTask> tasks, List<ReviewFinding> findings) {
+        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
+        return llmQualityTasks(tasks).stream()
+            .collect(Collectors.groupingBy(this::llmModelLabel))
+            .entrySet()
+            .stream()
+            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
+            .limit(6)
+            .map(entry -> {
+                List<ReviewTask> modelTasks = entry.getValue();
+                Set<Long> taskIds = taskIds(modelTasks);
+                List<ReviewFinding> modelFindings = findingsForTasks(findingsByTask, taskIds);
+                long reviewedCount = reviewedFeedbackCount(modelFindings);
+                return new LlmQualityByModelDto(
+                    entry.getKey(),
+                    modelTasks.size(),
+                    formatMilliseconds(averageLlmDuration(modelTasks)),
+                    percentage(parseSuccessCount(modelTasks), modelTasks.size()),
+                    percentage(fallbackCount(modelTasks), modelTasks.size()),
+                    percentage(feedbackCount(modelFindings, "VALID"), reviewedCount),
+                    percentage(feedbackCount(modelFindings, "FALSE_POSITIVE"), reviewedCount)
+                );
+            })
+            .toList();
+    }
+
+    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<ReviewTask> tasks, List<ReviewFinding> findings) {
+        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
+        return llmQualityTasks(tasks).stream()
+            .collect(Collectors.groupingBy(this::repositoryLabel))
+            .entrySet()
+            .stream()
+            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
+            .limit(6)
+            .map(entry -> {
+                List<ReviewTask> repositoryTasks = entry.getValue();
+                Set<Long> taskIds = taskIds(repositoryTasks);
+                List<ReviewFinding> repositoryFindings = findingsForTasks(findingsByTask, taskIds);
+                long reviewedCount = reviewedFeedbackCount(repositoryFindings);
+                return new LlmQualityByRepositoryDto(
+                    entry.getKey(),
+                    repositoryTasks.size(),
+                    percentage(fallbackCount(repositoryTasks), repositoryTasks.size()),
+                    percentage(feedbackCount(repositoryFindings, "VALID"), reviewedCount),
+                    percentage(feedbackCount(repositoryFindings, "FALSE_POSITIVE"), reviewedCount)
+                );
+            })
+            .toList();
+    }
+
+    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<ReviewTask> tasks) {
+        LocalDate today = LocalDate.now();
+        Map<LocalDate, List<ReviewTask>> tasksByDate = llmQualityTasks(tasks).stream()
+            .filter(task -> task.getCreatedAt() != null)
+            .collect(Collectors.groupingBy(task -> task.getCreatedAt().toLocalDate()));
+        return java.util.stream.IntStream.rangeClosed(0, 6)
+            .mapToObj(today.minusDays(6)::plusDays)
+            .map(date -> {
+                List<ReviewTask> dateTasks = tasksByDate.getOrDefault(date, List.of());
+                return new LlmQualityTrendPointDto(
+                    date.format(TREND_DATE_FORMATTER),
+                    dateTasks.size(),
+                    percentage(parseSuccessCount(dateTasks), dateTasks.size()),
+                    percentage(fallbackCount(dateTasks), dateTasks.size())
+                );
+            })
+            .toList();
+    }
+
+    private List<ReviewTask> llmQualityTasks(List<ReviewTask> tasks) {
+        return tasks.stream()
+            .filter(task -> StringUtils.hasText(task.getLlmStatus()))
+            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "PENDING"))
+            .toList();
+    }
+
+    private String llmModelLabel(ReviewTask task) {
+        String provider = StringUtils.hasText(task.getLlmProvider()) ? task.getLlmProvider().trim() : "unknown";
+        String model = StringUtils.hasText(task.getLlmModel()) ? task.getLlmModel().trim() : "unknown";
+        return provider + " / " + model;
+    }
+
+    private String repositoryLabel(ReviewTask task) {
+        if (!StringUtils.hasText(task.getOrganization())) {
+            return StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown";
+        }
+        return task.getOrganization().trim() + "/" + (StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown");
+    }
+
+    private Set<Long> taskIds(List<ReviewTask> tasks) {
+        return tasks.stream()
+            .map(ReviewTask::getId)
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toSet());
+    }
+
+    private Map<Long, List<ReviewFinding>> findingsByTask(List<ReviewFinding> findings) {
+        return findings.stream()
+            .filter(finding -> finding.getTaskId() != null)
+            .collect(Collectors.groupingBy(ReviewFinding::getTaskId));
+    }
+
+    private List<ReviewFinding> findingsForTasks(Map<Long, List<ReviewFinding>> findingsByTask, Set<Long> taskIds) {
+        return taskIds.stream()
+            .flatMap(taskId -> findingsByTask.getOrDefault(taskId, List.of()).stream())
+            .toList();
+    }
+
+    private long parseSuccessCount(List<ReviewTask> tasks) {
+        return tasks.stream()
+            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARSED")
+                || (!StringUtils.hasText(task.getLlmParseStatus()) && equalsIgnoreCase(task.getLlmStatus(), "COMPLETED")))
+            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "FALLBACK"))
+            .count();
+    }
+
+    private long fallbackCount(List<ReviewTask> tasks) {
+        return tasks.stream()
+            .filter(task -> equalsIgnoreCase(task.getLlmStatus(), "FALLBACK") || equalsIgnoreCase(task.getLlmParseStatus(), "FALLBACK"))
+            .count();
+    }
+
+    private int averageLlmDuration(List<ReviewTask> tasks) {
+        return tasks.isEmpty()
+            ? 0
+            : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getLlmDurationMs())).average().orElse(0));
+    }
+
+    private long reviewedFeedbackCount(List<ReviewFinding> findings) {
+        return findings.stream()
+            .filter(finding -> StringUtils.hasText(finding.getFeedbackStatus()))
+            .filter(finding -> !equalsIgnoreCase(finding.getFeedbackStatus(), "UNREVIEWED"))
+            .count();
+    }
+
+    private long feedbackCount(List<ReviewFinding> findings, String status) {
+        return findings.stream().filter(finding -> equalsIgnoreCase(finding.getFeedbackStatus(), status)).count();
+    }
+
+    private String percentage(long value, long total) {
+        if (total <= 0) {
+            return "0.0%";
+        }
+        return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
+    }
+
+    private String formatMilliseconds(int durationMs) {
+        if (durationMs <= 0) {
+            return "0 ms";
+        }
+        if (durationMs < 1000) {
+            return durationMs + " ms";
+        }
+        return String.format(Locale.ROOT, "%.1f s", durationMs / 1000.0);
+    }
+
     private ChartSliceDto riskSlice(String name, long value, long total, String color) {
         return new ChartSliceDto(name, value, color, percent(value, total));
     }
@@ -257,6 +421,10 @@ public class DashboardServiceImpl implements DashboardService {
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private boolean equalsIgnoreCase(String first, String second) {
+        return first != null && second != null && first.equalsIgnoreCase(second);
     }
 
     private String percent(long value, long total) {

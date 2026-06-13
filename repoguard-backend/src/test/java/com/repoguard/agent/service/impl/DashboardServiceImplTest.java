@@ -6,13 +6,16 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -69,8 +72,81 @@ class DashboardServiceImplTest {
         assertThat(health).containsEntry("Spring AI", "未接入");
     }
 
+    @Test
+    void overviewReportsLlmQualityByModelAndRepository() {
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
+            task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
+            task(2L, "octocat", "api", "dashscope", "qwen-plus", "FALLBACK", "FALLBACK", 2200),
+            task(3L, "octocat", "web", "openai", "gpt-test", "COMPLETED", "PARSED", 800)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "VALID"),
+            finding(1L, "FALSE_POSITIVE"),
+            finding(2L, "VALID"),
+            finding(3L, "UNREVIEWED")
+        ));
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var overview = service.getOverview();
+
+        assertThat(overview.llmQualityByModel()).hasSize(2);
+        var qwen = overview.llmQualityByModel().stream()
+            .filter(item -> "dashscope / qwen-plus".equals(item.model()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(qwen.taskCount()).isEqualTo(2);
+        assertThat(qwen.parseSuccessRate()).isEqualTo("50.0%");
+        assertThat(qwen.fallbackRate()).isEqualTo("50.0%");
+        assertThat(qwen.validRate()).isEqualTo("66.7%");
+        assertThat(qwen.falsePositiveRate()).isEqualTo("33.3%");
+
+        var api = overview.llmQualityByRepository().stream()
+            .filter(item -> "octocat/api".equals(item.repository()))
+            .findFirst()
+            .orElseThrow();
+        assertThat(api.taskCount()).isEqualTo(2);
+        assertThat(api.fallbackRate()).isEqualTo("50.0%");
+        assertThat(api.validRate()).isEqualTo("66.7%");
+        assertThat(overview.llmQualityTrend()).hasSize(7);
+    }
+
     private Map<String, String> healthByName(List<SystemHealthItemDto> healthItems) {
         return healthItems.stream().collect(Collectors.toMap(SystemHealthItemDto::name, SystemHealthItemDto::status));
+    }
+
+    private ReviewTask task(
+        Long id,
+        String organization,
+        String repository,
+        String provider,
+        String model,
+        String llmStatus,
+        String parseStatus,
+        Integer durationMs
+    ) {
+        ReviewTask task = new ReviewTask();
+        task.setId(id);
+        task.setOrganization(organization);
+        task.setRepository(repository);
+        task.setCreatedAt(LocalDateTime.now().minusDays(id));
+        task.setStatus("COMPLETED");
+        task.setRiskLevel("LOW");
+        task.setLlmStatus(llmStatus);
+        task.setLlmParseStatus(parseStatus);
+        task.setLlmProvider(provider);
+        task.setLlmModel(model);
+        task.setLlmDurationMs(durationMs);
+        return task;
+    }
+
+    private ReviewFinding finding(Long taskId, String feedbackStatus) {
+        ReviewFinding finding = new ReviewFinding();
+        finding.setTaskId(taskId);
+        finding.setCategory("FINDING");
+        finding.setFeedbackStatus(feedbackStatus);
+        return finding;
     }
 
     private IntegrationConfig githubConfig(String status, String token) {

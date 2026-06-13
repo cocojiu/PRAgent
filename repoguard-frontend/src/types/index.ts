@@ -361,6 +361,31 @@ export interface SystemHealthItem {
   status: string;
 }
 
+export interface LlmQualityByModel {
+  model: string;
+  taskCount: number;
+  averageDuration: string;
+  parseSuccessRate: string;
+  fallbackRate: string;
+  validRate: string;
+  falsePositiveRate: string;
+}
+
+export interface LlmQualityByRepository {
+  repository: string;
+  taskCount: number;
+  fallbackRate: string;
+  validRate: string;
+  falsePositiveRate: string;
+}
+
+export interface LlmQualityTrendPoint {
+  date: string;
+  taskCount: number;
+  parseSuccessRate: string;
+  fallbackRate: string;
+}
+
 export interface DashboardOverview {
   overviewMetrics: DashboardMetric[];
   reviewTrend: ReviewTrendPoint[];
@@ -369,6 +394,9 @@ export interface DashboardOverview {
   highRiskReviews: HighRiskReview[];
   failedRules: FailedRuleStat[];
   systemHealth: SystemHealthItem[];
+  llmQualityByModel: LlmQualityByModel[];
+  llmQualityByRepository: LlmQualityByRepository[];
+  llmQualityTrend: LlmQualityTrendPoint[];
 }
 
 export interface ActiveRabbitMqConfig {

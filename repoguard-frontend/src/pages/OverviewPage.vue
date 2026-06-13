@@ -31,6 +31,42 @@
       </article>
     </section>
 
+    <section class="dashboard-grid llm-quality-grid">
+      <article class="dashboard-card chart-card chart-card--wide">
+        <h2>LLM 质量趋势</h2>
+        <EChartPanel v-if="llmQualityTrend.length" :option="llmQualityTrendOption" />
+        <el-empty v-else description="暂无 LLM 质量趋势数据" />
+      </article>
+      <article class="dashboard-card">
+        <h2>模型质量</h2>
+        <el-table :data="llmQualityByModel" class="rg-table" size="large" aria-label="模型质量统计">
+          <el-table-column prop="model" label="模型" min-width="180" />
+          <el-table-column prop="taskCount" label="任务" width="80" />
+          <el-table-column prop="averageDuration" label="均耗时" width="100" />
+          <el-table-column prop="parseSuccessRate" label="解析率" width="100" />
+          <el-table-column prop="fallbackRate" label="兜底率" width="100" />
+          <el-table-column prop="validRate" label="有效率" width="100" />
+          <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
+          <template #empty>
+            <el-empty description="暂无模型质量数据" />
+          </template>
+        </el-table>
+      </article>
+      <article class="dashboard-card">
+        <h2>仓库质量</h2>
+        <el-table :data="llmQualityByRepository" class="rg-table" size="large" aria-label="仓库质量统计">
+          <el-table-column prop="repository" label="仓库" min-width="180" />
+          <el-table-column prop="taskCount" label="任务" width="80" />
+          <el-table-column prop="fallbackRate" label="兜底率" width="100" />
+          <el-table-column prop="validRate" label="有效率" width="100" />
+          <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
+          <template #empty>
+            <el-empty description="暂无仓库质量数据" />
+          </template>
+        </el-table>
+      </article>
+    </section>
+
     <section class="bottom-grid">
       <article class="dashboard-card">
         <h2>近期高风险审查</h2>
@@ -131,7 +167,10 @@ const overview = ref<DashboardOverview>({
   ruleHits: [],
   highRiskReviews: [],
   failedRules: [],
-  systemHealth: []
+  systemHealth: [],
+  llmQualityByModel: [],
+  llmQualityByRepository: [],
+  llmQualityTrend: []
 });
 
 const overviewMetrics = computed(() => overview.value.overviewMetrics);
@@ -141,6 +180,9 @@ const ruleHits = computed(() => overview.value.ruleHits);
 const highRiskReviews = computed(() => overview.value.highRiskReviews);
 const failedRules = computed(() => overview.value.failedRules);
 const systemHealth = computed(() => overview.value.systemHealth);
+const llmQualityByModel = computed(() => overview.value.llmQualityByModel ?? []);
+const llmQualityByRepository = computed(() => overview.value.llmQualityByRepository ?? []);
+const llmQualityTrend = computed(() => overview.value.llmQualityTrend ?? []);
 
 const overviewMetricItems = computed<MetricGridItem[]>(() =>
   overviewMetrics.value.map((metric) => ({
@@ -153,6 +195,8 @@ const overviewMetricItems = computed<MetricGridItem[]>(() =>
 );
 
 const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => total + item.value, 0));
+
+const percentNumber = (value: string) => Number.parseFloat(value.replace("%", "")) || 0;
 
 const loadOverview = async () => {
   loading.value = true;
@@ -223,5 +267,42 @@ const ruleOption = computed<EChartsOption>(() => ({
     top: "center",
     style: { text: `总计\n${totalRuleHits.value}`, textAlign: "center", fill: "#0f172a", fontSize: 18, fontWeight: 700 }
   }
+}));
+const llmQualityTrendOption = computed<EChartsOption>(() => ({
+  grid: { left: 38, right: 18, top: 42, bottom: 32 },
+  tooltip: { trigger: "axis" },
+  legend: { top: 6, right: 12 },
+  xAxis: { type: "category", data: llmQualityTrend.value.map((item) => item.date), boundaryGap: false },
+  yAxis: [
+    { type: "value", name: "任务", splitLine: { lineStyle: { color: "#e8eef6" } } },
+    { type: "value", name: "比例", min: 0, max: 100, axisLabel: { formatter: "{value}%" } }
+  ],
+  series: [
+    {
+      name: "任务数",
+      type: "bar",
+      data: llmQualityTrend.value.map((item) => item.taskCount),
+      barWidth: 24,
+      itemStyle: { color: "#2563eb" }
+    },
+    {
+      name: "解析率",
+      type: "line",
+      yAxisIndex: 1,
+      smooth: true,
+      data: llmQualityTrend.value.map((item) => percentNumber(item.parseSuccessRate)),
+      lineStyle: { color: "#22c55e", width: 3 },
+      itemStyle: { color: "#22c55e" }
+    },
+    {
+      name: "兜底率",
+      type: "line",
+      yAxisIndex: 1,
+      smooth: true,
+      data: llmQualityTrend.value.map((item) => percentNumber(item.fallbackRate)),
+      lineStyle: { color: "#f59e0b", width: 3 },
+      itemStyle: { color: "#f59e0b" }
+    }
+  ]
 }));
 </script>

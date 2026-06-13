@@ -12,6 +12,31 @@ public record DashboardOverviewResponse(
     List<ChartSliceDto> ruleHits,
     List<HighRiskReviewDto> highRiskReviews,
     List<FailedRuleStatDto> failedRules,
-    List<SystemHealthItemDto> systemHealth
+    List<SystemHealthItemDto> systemHealth,
+    List<LlmQualityByModelDto> llmQualityByModel,
+    List<LlmQualityByRepositoryDto> llmQualityByRepository,
+    List<LlmQualityTrendPointDto> llmQualityTrend
 ) {
+    public DashboardOverviewResponse(
+        List<DashboardMetricDto> overviewMetrics,
+        List<ReviewTrendPointDto> reviewTrend,
+        List<ChartSliceDto> riskDistribution,
+        List<ChartSliceDto> ruleHits,
+        List<HighRiskReviewDto> highRiskReviews,
+        List<FailedRuleStatDto> failedRules,
+        List<SystemHealthItemDto> systemHealth
+    ) {
+        this(
+            overviewMetrics,
+            reviewTrend,
+            riskDistribution,
+            ruleHits,
+            highRiskReviews,
+            failedRules,
+            systemHealth,
+            List.of(),
+            List.of(),
+            List.of()
+        );
+    }
 }
