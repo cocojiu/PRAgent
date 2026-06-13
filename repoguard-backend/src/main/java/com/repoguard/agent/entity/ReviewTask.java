@@ -24,6 +24,12 @@ public class ReviewTask {
     private LocalDateTime publishClaimedAt;
     private String publishClaimedBy;
     private String llmStatus;
+    private String llmProvider;
+    private String llmModel;
+    private Integer llmDurationMs;
+    private String llmParseStatus;
+    private String llmFallbackReason;
+    private String llmPromptSummary;
     private String prUrl;
     /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
     private String source;
@@ -165,6 +171,54 @@ public class ReviewTask {
 
     public void setLlmStatus(String llmStatus) {
         this.llmStatus = llmStatus;
+    }
+
+    public String getLlmProvider() {
+        return llmProvider;
+    }
+
+    public void setLlmProvider(String llmProvider) {
+        this.llmProvider = llmProvider;
+    }
+
+    public String getLlmModel() {
+        return llmModel;
+    }
+
+    public void setLlmModel(String llmModel) {
+        this.llmModel = llmModel;
+    }
+
+    public Integer getLlmDurationMs() {
+        return llmDurationMs;
+    }
+
+    public void setLlmDurationMs(Integer llmDurationMs) {
+        this.llmDurationMs = llmDurationMs;
+    }
+
+    public String getLlmParseStatus() {
+        return llmParseStatus;
+    }
+
+    public void setLlmParseStatus(String llmParseStatus) {
+        this.llmParseStatus = llmParseStatus;
+    }
+
+    public String getLlmFallbackReason() {
+        return llmFallbackReason;
+    }
+
+    public void setLlmFallbackReason(String llmFallbackReason) {
+        this.llmFallbackReason = llmFallbackReason;
+    }
+
+    public String getLlmPromptSummary() {
+        return llmPromptSummary;
+    }
+
+    public void setLlmPromptSummary(String llmPromptSummary) {
+        this.llmPromptSummary = llmPromptSummary;
     }
 
     public String getPrUrl() {

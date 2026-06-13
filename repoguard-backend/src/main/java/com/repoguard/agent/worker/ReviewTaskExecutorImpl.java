@@ -191,6 +191,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             task.setStatus(humanReviewRequired ? "PENDING_HUMAN_REVIEW" : "COMPLETED");
             task.setRiskLevel(reviewResult.riskLevel());
             task.setLlmStatus(reviewResult.llmStatus());
+            task.setLlmProvider(reviewResult.llmProvider());
+            task.setLlmModel(reviewResult.llmModel());
+            task.setLlmDurationMs(reviewResult.llmDurationMs());
+            task.setLlmParseStatus(reviewResult.llmParseStatus());
+            task.setLlmFallbackReason(reviewResult.statusDetail());
+            task.setLlmPromptSummary(reviewResult.llmPromptSummary());
             task.setHumanReviewRequired(humanReviewRequired);
             task.setHumanReviewStatus(humanReviewRequired ? "PENDING" : "NOT_REQUIRED");
             task.setHumanReviewNote(null);

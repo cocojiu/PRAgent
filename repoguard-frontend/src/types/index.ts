@@ -239,6 +239,12 @@ export interface LlmStatus {
   status: ReviewStatus;
   duration: string;
   riskLevel: RiskLevel;
+  provider?: string;
+  model?: string;
+  durationMs?: number;
+  parseStatus?: string;
+  fallbackReason?: string;
+  promptSummary?: string;
 }
 
 export interface RabbitMqStatus {

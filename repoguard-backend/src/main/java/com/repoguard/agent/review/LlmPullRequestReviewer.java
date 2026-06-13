@@ -53,28 +53,53 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
 
     @Override
     public ReviewResult review(ReviewTask task, GithubPullRequestDiff diff) {
+        long startedAt = System.nanoTime();
         ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
+        String promptSummary = promptSummary(diff);
         if (!isLlmReady(config)) {
-            return fallbackReview(diff, "LLM config is incomplete");
+            return fallbackReview(diff, "LLM config is incomplete", config, startedAt, promptSummary);
         }
 
         try {
             String content = callLlm(config, task, diff);
-            return reviewResultParser.parse(content);
+            ReviewResult parsed = reviewResultParser.parse(content);
+            return ReviewResult.completed(
+                parsed.riskLevel(),
+                parsed.findings(),
+                config.getLlmProvider(),
+                config.getModelName(),
+                elapsedMillis(startedAt),
+                "parsed",
+                promptSummary
+            );
         } catch (RuntimeException ex) {
             if (Boolean.TRUE.equals(config.getFallbackToRules())) {
-                return fallbackReview(diff, ex.getMessage());
+                return fallbackReview(diff, ex.getMessage(), config, startedAt, promptSummary);
             }
             throw ex;
         }
     }
 
-    private ReviewResult fallbackReview(GithubPullRequestDiff diff, String reason) {
+    private ReviewResult fallbackReview(
+        GithubPullRequestDiff diff,
+        String reason,
+        ReviewPolicyConfig config,
+        long startedAt,
+        String promptSummary
+    ) {
         if (metrics != null) {
             metrics.llmFallback(reasonCategory(reason));
         }
         ReviewResult fallback = ruleBasedReviewer.review(diff);
-        return ReviewResult.fallback(fallback.riskLevel(), normalizeReason(reason), fallback.findings());
+        return ReviewResult.fallback(
+            fallback.riskLevel(),
+            normalizeReason(reason),
+            fallback.findings(),
+            config == null ? null : config.getLlmProvider(),
+            config == null ? null : config.getModelName(),
+            elapsedMillis(startedAt),
+            promptSummary
+        );
     }
 
     private String normalizeReason(String reason) {
@@ -204,6 +229,39 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             }
         }
         return builder.toString();
+    }
+
+    private String promptSummary(GithubPullRequestDiff diff) {
+        int fileCount = diff.files() == null ? 0 : diff.files().size();
+        int additions = 0;
+        int deletions = 0;
+        StringBuilder files = new StringBuilder();
+        if (diff.files() != null) {
+            for (int i = 0; i < diff.files().size(); i++) {
+                GithubChangedFile file = diff.files().get(i);
+                additions += file.additions() == null ? 0 : file.additions();
+                deletions += file.deletions() == null ? 0 : file.deletions();
+                if (i < 5) {
+                    if (!files.isEmpty()) {
+                        files.append(", ");
+                    }
+                    files.append(file.filename());
+                }
+            }
+        }
+        if (fileCount > 5) {
+            files.append(", ...");
+        }
+        return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; files=" + fileCount
+            + "; additions=" + additions
+            + "; deletions=" + deletions
+            + "; sampleFiles=" + files;
+    }
+
+    private Integer elapsedMillis(long startedAt) {
+        long elapsed = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
+        return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
     }
 
 }

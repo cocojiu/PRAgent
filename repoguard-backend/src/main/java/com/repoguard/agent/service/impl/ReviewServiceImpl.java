@@ -677,6 +677,7 @@ public class ReviewServiceImpl implements ReviewService {
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);
         task.setLlmStatus("PENDING");
+        clearLlmQuality(task);
         task.setHumanReviewRequired(false);
         task.setHumanReviewStatus(HUMAN_REVIEW_NOT_REQUIRED);
         task.setHumanReviewNote(null);
@@ -809,7 +810,17 @@ public class ReviewServiceImpl implements ReviewService {
             missingTests,
             changedFiles,
             timeline,
-            new LlmStatusDto(item.llmStatus(), item.duration(), item.riskLevel()),
+            new LlmStatusDto(
+                item.llmStatus(),
+                item.duration(),
+                item.riskLevel(),
+                lower(task.getLlmProvider()),
+                task.getLlmModel(),
+                task.getLlmDurationMs(),
+                lower(task.getLlmParseStatus()),
+                task.getLlmFallbackReason(),
+                task.getLlmPromptSummary()
+            ),
             new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed"),
             item.humanReviewRequired(),
             item.humanReviewStatus(),
@@ -1608,6 +1619,7 @@ public class ReviewServiceImpl implements ReviewService {
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
         task.setStatus(STATUS_PUBLISH_FAILED);
         task.setLlmStatus("PENDING");
+        clearLlmQuality(task);
         task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
         task.setNextPublishRetryAt(failedAt.plusSeconds(60));
         task.setLastPublishError(truncate(errorMessage(ex)));
@@ -1634,6 +1646,15 @@ public class ReviewServiceImpl implements ReviewService {
             ErrorCode.BAD_REQUEST,
             "Human review approval or changes request is required before publishing GitHub comments"
         );
+    }
+
+    private void clearLlmQuality(ReviewTask task) {
+        task.setLlmProvider(null);
+        task.setLlmModel(null);
+        task.setLlmDurationMs(null);
+        task.setLlmParseStatus(null);
+        task.setLlmFallbackReason(null);
+        task.setLlmPromptSummary(null);
     }
 
     private FindingFeedbackResponse findingFeedbackResponse(ReviewFinding finding) {

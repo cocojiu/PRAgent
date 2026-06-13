@@ -6,6 +6,15 @@ package com.repoguard.agent.dto;
 public record LlmStatusDto(
     String status,
     String duration,
-    String riskLevel
+    String riskLevel,
+    String provider,
+    String model,
+    Integer durationMs,
+    String parseStatus,
+    String fallbackReason,
+    String promptSummary
 ) {
+    public LlmStatusDto(String status, String duration, String riskLevel) {
+        this(status, duration, riskLevel, null, null, null, null, null, null);
+    }
 }

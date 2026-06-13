@@ -57,6 +57,11 @@ class LlmPullRequestReviewerTest {
         assertThat(result.llmStatus()).isEqualTo("FALLBACK");
         assertThat(result.statusDetail()).contains("llm_circuit_open");
         assertThat(result.riskLevel()).isEqualTo("LOW");
+        assertThat(result.llmProvider()).isEqualTo("openai");
+        assertThat(result.llmModel()).isEqualTo("gpt-test");
+        assertThat(result.llmDurationMs()).isNotNull();
+        assertThat(result.llmParseStatus()).isEqualTo("fallback");
+        assertThat(result.llmPromptSummary()).contains("files=0");
         verify(metrics).llmFallback("llm_circuit_open");
     }
 

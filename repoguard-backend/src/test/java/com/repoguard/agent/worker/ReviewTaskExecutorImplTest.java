@@ -110,6 +110,43 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeStoresLlmQualityMetadata() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
+            "LOW",
+            List.of(),
+            "openai",
+            "gpt-test",
+            1234,
+            "parsed",
+            "PR repo-guard-demo/spring-boot-demo#512; files=1"
+        ));
+
+        executor.execute(message());
+
+        assertThat(task.getStatus()).isEqualTo("COMPLETED");
+        assertThat(task.getLlmProvider()).isEqualTo("openai");
+        assertThat(task.getLlmModel()).isEqualTo("gpt-test");
+        assertThat(task.getLlmDurationMs()).isEqualTo(1234);
+        assertThat(task.getLlmParseStatus()).isEqualTo("parsed");
+        assertThat(task.getLlmPromptSummary()).contains("files=1");
+        verify(reviewTaskMapper).updateById(task);
+    }
+
+    @Test
     void executeIgnoresCompletedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
