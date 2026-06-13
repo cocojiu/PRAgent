@@ -29,6 +29,11 @@ public class ReviewTask {
     private String source;
     /** 本次触发来源，用于标记复用已有任务等再次触发场景。 */
     private String triggerSource;
+    private Boolean humanReviewRequired;
+    private String humanReviewStatus;
+    private String humanReviewNote;
+    private String humanReviewBy;
+    private LocalDateTime humanReviewedAt;
     private LocalDateTime createdAt;
     private LocalDateTime startedAt;
     private LocalDateTime finishedAt;
@@ -184,6 +189,46 @@ public class ReviewTask {
 
     public void setTriggerSource(String triggerSource) {
         this.triggerSource = triggerSource;
+    }
+
+    public Boolean getHumanReviewRequired() {
+        return humanReviewRequired;
+    }
+
+    public void setHumanReviewRequired(Boolean humanReviewRequired) {
+        this.humanReviewRequired = humanReviewRequired;
+    }
+
+    public String getHumanReviewStatus() {
+        return humanReviewStatus;
+    }
+
+    public void setHumanReviewStatus(String humanReviewStatus) {
+        this.humanReviewStatus = humanReviewStatus;
+    }
+
+    public String getHumanReviewNote() {
+        return humanReviewNote;
+    }
+
+    public void setHumanReviewNote(String humanReviewNote) {
+        this.humanReviewNote = humanReviewNote;
+    }
+
+    public String getHumanReviewBy() {
+        return humanReviewBy;
+    }
+
+    public void setHumanReviewBy(String humanReviewBy) {
+        this.humanReviewBy = humanReviewBy;
+    }
+
+    public LocalDateTime getHumanReviewedAt() {
+        return humanReviewedAt;
+    }
+
+    public void setHumanReviewedAt(LocalDateTime humanReviewedAt) {
+        this.humanReviewedAt = humanReviewedAt;
     }
 
     public LocalDateTime getCreatedAt() {

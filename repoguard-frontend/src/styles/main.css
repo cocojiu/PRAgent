@@ -1614,6 +1614,38 @@ a {
   gap: 8px;
 }
 
+.human-review-card {
+  border-left: 4px solid #f59e0b;
+}
+
+.human-review-note {
+  margin: 0 0 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.human-review-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 14px;
+  margin: 0 0 16px;
+}
+
+.human-review-meta dt {
+  color: var(--text-secondary);
+}
+
+.human-review-meta dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.human-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .comment-preview-summary span,
 .comment-publish-summary span {
   display: inline-flex;

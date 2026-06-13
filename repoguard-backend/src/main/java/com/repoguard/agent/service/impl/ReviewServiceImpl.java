@@ -16,6 +16,8 @@ import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
+import com.repoguard.agent.dto.HumanReviewRequest;
+import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -83,6 +85,15 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
+    private static final String STATUS_PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW";
+    private static final String STATUS_APPROVED = "APPROVED";
+    private static final String STATUS_CHANGES_REQUESTED = "CHANGES_REQUESTED";
+    private static final String STATUS_REJECTED = "REJECTED";
+    private static final String HUMAN_REVIEW_PENDING = "PENDING";
+    private static final String HUMAN_REVIEW_APPROVED = "APPROVED";
+    private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
+    private static final String HUMAN_REVIEW_REJECTED = "REJECTED";
+    private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
     private static final FailureSummary NO_FAILURE_SUMMARY = new FailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -173,6 +184,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
+        ensureGithubCommentPublishAllowed(task);
 
         GithubCommentPreviewResponse preview = getGithubCommentPreview(id);
         List<GithubCommentPublishItem> skippedItems = preview.items().stream()
@@ -307,7 +319,12 @@ public class ReviewServiceImpl implements ReviewService {
             item.failureCategory(),
             item.failureReason(),
             item.failureSuggestion(),
-            latestTimeline
+            latestTimeline,
+            item.humanReviewRequired(),
+            item.humanReviewStatus(),
+            item.humanReviewNote(),
+            item.humanReviewBy(),
+            item.humanReviewedAt()
         );
     }
 
@@ -579,6 +596,34 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
+    public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
+        }
+        if (!HUMAN_REVIEW_PENDING.equals(resolveHumanReviewStatus(task))) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
+        }
+
+        String action = normalizeHumanReviewAction(request.action());
+        LocalDateTime reviewedAt = LocalDateTime.now();
+        String note = cleanHumanReviewNote(request.note());
+        String humanReviewStatus = humanReviewStatusForAction(action);
+        task.setStatus(taskStatusForHumanReview(humanReviewStatus));
+        task.setHumanReviewStatus(humanReviewStatus);
+        task.setHumanReviewNote(note);
+        task.setHumanReviewBy("admin");
+        task.setHumanReviewedAt(reviewedAt);
+        reviewTaskMapper.updateById(task);
+        appendReviewTimeline(task.getId(), humanReviewTimelineLabel(humanReviewStatus, note), reviewedAt, "DONE");
+        return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
+    }
+
+    @Override
+    @Transactional
     public ReviewRetryResponse retryReview(Long id) {
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
@@ -598,6 +643,11 @@ public class ReviewServiceImpl implements ReviewService {
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);
         task.setLlmStatus("PENDING");
+        task.setHumanReviewRequired(false);
+        task.setHumanReviewStatus(HUMAN_REVIEW_NOT_REQUIRED);
+        task.setHumanReviewNote(null);
+        task.setHumanReviewBy(null);
+        task.setHumanReviewedAt(null);
         task.setDurationSeconds(0);
         reviewTaskMapper.updateById(task);
 
@@ -726,7 +776,12 @@ public class ReviewServiceImpl implements ReviewService {
             changedFiles,
             timeline,
             new LlmStatusDto(item.llmStatus(), item.duration(), item.riskLevel()),
-            new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed")
+            new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed"),
+            item.humanReviewRequired(),
+            item.humanReviewStatus(),
+            item.humanReviewNote(),
+            item.humanReviewBy(),
+            item.humanReviewedAt()
         );
     }
 
@@ -937,7 +992,12 @@ public class ReviewServiceImpl implements ReviewService {
             formatDuration(task.getDurationSeconds()),
             failureSummary.category(),
             failureSummary.reason(),
-            failureSummary.suggestion()
+            failureSummary.suggestion(),
+            Boolean.TRUE.equals(task.getHumanReviewRequired()),
+            lower(resolveHumanReviewStatus(task)),
+            task.getHumanReviewNote(),
+            task.getHumanReviewBy(),
+            formatDateTimeOrNull(task.getHumanReviewedAt())
         );
     }
 
@@ -1518,6 +1578,102 @@ public class ReviewServiceImpl implements ReviewService {
         timeline.setEventTime(failedAt);
         timeline.setStatus("FAILED");
         timeline.setSortOrder(nextTimelineSortOrder(task.getId()));
+        reviewTimelineMapper.insert(timeline);
+    }
+
+    private void ensureGithubCommentPublishAllowed(ReviewTask task) {
+        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
+            return;
+        }
+        String humanReviewStatus = resolveHumanReviewStatus(task);
+        if (HUMAN_REVIEW_APPROVED.equals(humanReviewStatus) || HUMAN_REVIEW_CHANGES_REQUESTED.equals(humanReviewStatus)) {
+            return;
+        }
+        throw new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "Human review approval or changes request is required before publishing GitHub comments"
+        );
+    }
+
+    private HumanReviewResponse humanReviewResponse(ReviewTask task, String message) {
+        return new HumanReviewResponse(
+            task.getId(),
+            lower(task.getStatus()),
+            Boolean.TRUE.equals(task.getHumanReviewRequired()),
+            lower(resolveHumanReviewStatus(task)),
+            task.getHumanReviewNote(),
+            task.getHumanReviewBy(),
+            formatDateTimeOrNull(task.getHumanReviewedAt()),
+            message
+        );
+    }
+
+    private String normalizeHumanReviewAction(String action) {
+        return action == null ? "" : action.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String cleanHumanReviewNote(String note) {
+        return StringUtils.hasText(note) ? note.trim() : null;
+    }
+
+    private String humanReviewStatusForAction(String action) {
+        return switch (action) {
+            case "APPROVE" -> HUMAN_REVIEW_APPROVED;
+            case "CHANGES_REQUESTED" -> HUMAN_REVIEW_CHANGES_REQUESTED;
+            case "REJECT" -> HUMAN_REVIEW_REJECTED;
+            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported human review action: " + action);
+        };
+    }
+
+    private String taskStatusForHumanReview(String humanReviewStatus) {
+        return switch (humanReviewStatus) {
+            case HUMAN_REVIEW_APPROVED -> STATUS_APPROVED;
+            case HUMAN_REVIEW_CHANGES_REQUESTED -> STATUS_CHANGES_REQUESTED;
+            case HUMAN_REVIEW_REJECTED -> STATUS_REJECTED;
+            default -> STATUS_PENDING_HUMAN_REVIEW;
+        };
+    }
+
+    private String resolveHumanReviewStatus(ReviewTask task) {
+        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
+            return HUMAN_REVIEW_NOT_REQUIRED;
+        }
+        return StringUtils.hasText(task.getHumanReviewStatus()) ? task.getHumanReviewStatus() : HUMAN_REVIEW_PENDING;
+    }
+
+    private String humanReviewTimelineLabel(String humanReviewStatus, String note) {
+        String base = switch (humanReviewStatus) {
+            case HUMAN_REVIEW_APPROVED -> "Human review approved";
+            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
+            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
+            default -> "Human review updated";
+        };
+        return StringUtils.hasText(note) ? truncate(base + ": " + note) : base;
+    }
+
+    private String humanReviewMessage(String humanReviewStatus) {
+        return switch (humanReviewStatus) {
+            case HUMAN_REVIEW_APPROVED -> "Human review approved";
+            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
+            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
+            default -> "Human review updated";
+        };
+    }
+
+    private void appendReviewTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
+        reviewTimelineMapper.update(
+            new UpdateWrapper<ReviewTimeline>()
+                .eq("task_id", taskId)
+                .eq("status", "CURRENT")
+                .set("status", "DONE")
+        );
+
+        ReviewTimeline timeline = new ReviewTimeline();
+        timeline.setTaskId(taskId);
+        timeline.setLabel(label);
+        timeline.setEventTime(eventTime);
+        timeline.setStatus(status);
+        timeline.setSortOrder(nextTimelineSortOrder(taskId));
         reviewTimelineMapper.insert(timeline);
     }
 

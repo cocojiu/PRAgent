@@ -31,6 +31,7 @@ import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.messaging.MessagePublishException;
@@ -222,6 +223,40 @@ class ReviewServiceImplTest {
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
         verify(githubCommentPublicationBatchItemMapper).insert(any(GithubCommentPublicationBatchItem.class));
+    }
+
+    @Test
+    void publishGithubCommentsRejectsPendingHumanReviewTask() {
+        ReviewTask task = task();
+        task.setHumanReviewRequired(true);
+        task.setHumanReviewStatus("PENDING");
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+
+        assertThatThrownBy(() -> service.publishGithubComments(521L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Human review");
+
+        verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
+    }
+
+    @Test
+    void submitHumanReviewChangesRequestedUpdatesTaskAndTimeline() {
+        ReviewTask task = task();
+        task.setHumanReviewRequired(true);
+        task.setHumanReviewStatus("PENDING");
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+
+        var response = service.submitHumanReview(521L, new HumanReviewRequest("changes_requested", "修复高风险问题后重新审查"));
+
+        assertThat(response.status()).isEqualTo("changes_requested");
+        assertThat(response.humanReviewStatus()).isEqualTo("changes_requested");
+        assertThat(task.getStatus()).isEqualTo("CHANGES_REQUESTED");
+        assertThat(task.getHumanReviewStatus()).isEqualTo("CHANGES_REQUESTED");
+        assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
+        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
     }
 
     @Test

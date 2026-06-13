@@ -1,5 +1,7 @@
 import { request } from "@/api/client";
 import type {
+  HumanReviewRequest,
+  HumanReviewResponse,
   ManualReviewRequest,
   ManualReviewResponse,
   PageResponse,
@@ -62,6 +64,12 @@ export const fetchGithubCommentPublicationHistory = (
 export const publishGithubComments = (id: number) =>
   request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
     method: "POST"
+  });
+
+export const submitHumanReview = (id: number, payload: HumanReviewRequest) =>
+  request<HumanReviewResponse>(`/api/v1/reviews/${id}/human-review`, undefined, {
+    method: "POST",
+    body: JSON.stringify(payload)
   });
 
 export const retryReview = (id: number) =>

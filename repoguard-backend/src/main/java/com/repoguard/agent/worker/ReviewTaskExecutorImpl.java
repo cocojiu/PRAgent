@@ -32,6 +32,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
+    private static final String HUMAN_REVIEW_THRESHOLD = "MEDIUM";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -186,13 +187,25 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             replaceFindings(task.getId(), reviewResult);
 
             LocalDateTime finishedAt = LocalDateTime.now();
-            task.setStatus("COMPLETED");
+            boolean humanReviewRequired = requiresHumanReview(reviewResult.riskLevel());
+            task.setStatus(humanReviewRequired ? "PENDING_HUMAN_REVIEW" : "COMPLETED");
             task.setRiskLevel(reviewResult.riskLevel());
             task.setLlmStatus(reviewResult.llmStatus());
+            task.setHumanReviewRequired(humanReviewRequired);
+            task.setHumanReviewStatus(humanReviewRequired ? "PENDING" : "NOT_REQUIRED");
+            task.setHumanReviewNote(null);
+            task.setHumanReviewBy(null);
+            task.setHumanReviewedAt(null);
             task.setFinishedAt(finishedAt);
             task.setDurationSeconds((int) Duration.between(startedAt, finishedAt).toSeconds());
             reviewTaskMapper.updateById(task);
-            appendTimeline(task.getId(), "Review completed", finishedAt, "DONE", 5);
+            appendTimeline(
+                task.getId(),
+                humanReviewRequired ? "Human review required" : "Review completed",
+                finishedAt,
+                humanReviewRequired ? "CURRENT" : "DONE",
+                5
+            );
             if (metrics != null) {
                 metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
                 metrics.reviewTaskDuration(Duration.between(startedAt, finishedAt), "completed");
@@ -243,6 +256,24 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             case "removed" -> "DELETE";
             case "renamed" -> "RENAME";
             default -> "MODIFY";
+        };
+    }
+
+    private boolean requiresHumanReview(String riskLevel) {
+        return riskRank(riskLevel) >= riskRank(HUMAN_REVIEW_THRESHOLD);
+    }
+
+    private int riskRank(String riskLevel) {
+        if (riskLevel == null) {
+            return 0;
+        }
+        return switch (riskLevel.toUpperCase()) {
+            case "CRITICAL" -> 5;
+            case "HIGH" -> 4;
+            case "MEDIUM" -> 3;
+            case "LOW" -> 2;
+            case "INFO" -> 1;
+            default -> 0;
         };
     }
 

@@ -12,6 +12,8 @@ import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
+import com.repoguard.agent.dto.HumanReviewRequest;
+import com.repoguard.agent.dto.HumanReviewResponse;
 
 public interface ReviewService {
 
@@ -46,6 +48,8 @@ public interface ReviewService {
     GithubPullRequestOptionsResponse listConfiguredGithubPullRequests();
 
     ManualReviewResponse triggerManualReview(ManualReviewRequest request);
+
+    HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request);
 
     ReviewRetryResponse retryReview(Long id);
 }

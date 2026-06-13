@@ -21,6 +21,57 @@ public record ReviewTaskListItem(
     String duration,
     String failureCategory,
     String failureReason,
-    String failureSuggestion
+    String failureSuggestion,
+    Boolean humanReviewRequired,
+    String humanReviewStatus,
+    String humanReviewNote,
+    String humanReviewBy,
+    String humanReviewedAt
 ) {
+    public ReviewTaskListItem(
+        Long id,
+        Integer prNumber,
+        String title,
+        String repository,
+        String organization,
+        String commit,
+        String branch,
+        String status,
+        String riskLevel,
+        Integer mqRetries,
+        String llmStatus,
+        String source,
+        String triggerSource,
+        String createdAt,
+        String duration,
+        String failureCategory,
+        String failureReason,
+        String failureSuggestion
+    ) {
+        this(
+            id,
+            prNumber,
+            title,
+            repository,
+            organization,
+            commit,
+            branch,
+            status,
+            riskLevel,
+            mqRetries,
+            llmStatus,
+            source,
+            triggerSource,
+            createdAt,
+            duration,
+            failureCategory,
+            failureReason,
+            failureSuggestion,
+            false,
+            "not_required",
+            null,
+            null,
+            null
+        );
+    }
 }

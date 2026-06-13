@@ -17,6 +17,8 @@ import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
+import com.repoguard.agent.dto.HumanReviewRequest;
+import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
@@ -243,6 +245,20 @@ class ReviewControllerTest {
         }
 
         @Override
+        public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request) {
+            return new HumanReviewResponse(
+                id,
+                "changes_requested",
+                true,
+                "changes_requested",
+                request.note(),
+                "admin",
+                "2026-06-13 13:45:00",
+                "Human review requested changes"
+            );
+        }
+
+        @Override
         public ReviewRetryResponse retryReview(Long id) {
             return new ReviewRetryResponse(id, "queued", "Review task queued for retry", 2);
         }
@@ -370,5 +386,23 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.taskId").value(512))
             .andExpect(jsonPath("$.data.status").value("queued"))
             .andExpect(jsonPath("$.data.retryCount").value(2));
+    }
+
+    @Test
+    void submitHumanReviewReturnsDecision() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/512/human-review")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "action": "changes_requested",
+                      "note": "请先修复高风险 finding"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.status").value("changes_requested"))
+            .andExpect(jsonPath("$.data.humanReviewStatus").value("changes_requested"))
+            .andExpect(jsonPath("$.data.humanReviewNote").value("请先修复高风险 finding"));
     }
 }

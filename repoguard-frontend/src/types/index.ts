@@ -1,5 +1,16 @@
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "info";
-export type ReviewStatus = "completed" | "reviewing" | "failed" | "queued" | "fallback" | "pending";
+export type ReviewStatus =
+  | "completed"
+  | "reviewing"
+  | "failed"
+  | "queued"
+  | "fallback"
+  | "pending"
+  | "pending_human_review"
+  | "approved"
+  | "changes_requested"
+  | "rejected";
+export type HumanReviewStatus = "not_required" | "pending" | "approved" | "changes_requested" | "rejected";
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
 export type RuleStatus = "enabled" | "disabled";
 export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
@@ -25,6 +36,11 @@ export interface ReviewTask {
   failureCategory?: string;
   failureReason?: string;
   failureSuggestion?: string;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
 }
 
 export interface ReviewTaskDetail extends ReviewTask {
@@ -48,6 +64,27 @@ export interface ReviewTaskStatus {
   failureReason?: string;
   failureSuggestion?: string;
   latestTimeline?: TimelineItem;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
+}
+
+export interface HumanReviewRequest {
+  action: "approve" | "changes_requested" | "reject";
+  note?: string;
+}
+
+export interface HumanReviewResponse {
+  taskId: number;
+  status: ReviewStatus | string;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
+  message: string;
 }
 
 export interface GithubCommentPreview {

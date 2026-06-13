@@ -81,6 +81,35 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeMovesMediumRiskTaskToPendingHumanReview() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
+            "MEDIUM",
+            List.of(new ReviewFindingResult("MEDIUM", "RULE", "RG-JAVA-003", "src/App.java", 10, "固定休眠", "改用可测试等待"))
+        ));
+
+        executor.execute(message());
+
+        assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
+        assertThat(task.getHumanReviewRequired()).isTrue();
+        assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
+        verify(reviewTaskMapper).updateById(task);
+    }
+
+    @Test
     void executeIgnoresCompletedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);

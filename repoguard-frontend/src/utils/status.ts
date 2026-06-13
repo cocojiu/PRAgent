@@ -6,7 +6,11 @@ const statusLabelMap: Record<ReviewStatus, string> = {
   failed: "失败",
   queued: "已入队",
   fallback: "规则兜底",
-  pending: "等待中"
+  pending: "等待中",
+  pending_human_review: "待人工审查",
+  approved: "人工通过",
+  changes_requested: "要求修改",
+  rejected: "已拒绝"
 };
 
 const statusClassMap: Record<ReviewStatus, string> = {
@@ -15,7 +19,11 @@ const statusClassMap: Record<ReviewStatus, string> = {
   failed: "danger",
   queued: "processing",
   fallback: "warning",
-  pending: "processing"
+  pending: "processing",
+  pending_human_review: "warning",
+  approved: "success",
+  changes_requested: "warning",
+  rejected: "danger"
 };
 
 export const statusText = (status: ReviewStatus) => statusLabelMap[status] ?? status;

@@ -116,6 +116,47 @@
             </div>
           </article>
 
+          <article v-if="selectedTask.humanReviewRequired" class="dashboard-card human-review-card">
+            <div class="card-title-row">
+              <h2>人工审查门禁</h2>
+              <span :class="`status-pill ${humanReviewStatusClass}`">{{ humanReviewStatusText }}</span>
+            </div>
+            <p class="human-review-note">
+              {{ selectedTask.humanReviewNote || "中高风险审查结果需要人工确认后才能回写 GitHub 评论。" }}
+            </p>
+            <dl v-if="selectedTask.humanReviewBy || selectedTask.humanReviewedAt" class="human-review-meta">
+              <dt>审查人</dt><dd>{{ selectedTask.humanReviewBy || "-" }}</dd>
+              <dt>审查时间</dt><dd>{{ selectedTask.humanReviewedAt || "-" }}</dd>
+            </dl>
+            <div class="human-review-actions">
+              <el-button
+                type="success"
+                :disabled="!canManage || !canSubmitHumanReview"
+                :loading="submittingHumanReview"
+                @click="submitHumanReviewDecision('approve')"
+              >
+                通过审查
+              </el-button>
+              <el-button
+                type="warning"
+                :disabled="!canManage || !canSubmitHumanReview"
+                :loading="submittingHumanReview"
+                @click="submitHumanReviewDecision('changes_requested')"
+              >
+                要求修改
+              </el-button>
+              <el-button
+                type="danger"
+                plain
+                :disabled="!canManage || !canSubmitHumanReview"
+                :loading="submittingHumanReview"
+                @click="submitHumanReviewDecision('reject')"
+              >
+                拒绝
+              </el-button>
+            </div>
+          </article>
+
           <article class="dashboard-card findings-card">
             <div class="card-title-row">
               <h2>LLM Findings</h2>
@@ -156,6 +197,14 @@
                 回写到 GitHub
               </el-button>
             </div>
+            <el-alert
+              v-if="humanReviewPublishBlockReason"
+              class="preview-alert"
+              type="warning"
+              :title="humanReviewPublishBlockReason"
+              show-icon
+              :closable="false"
+            />
             <el-alert
               v-if="previewError"
               class="preview-alert"
@@ -388,7 +437,8 @@ import {
   fetchReviewDetail,
   fetchReviewStatus,
   publishGithubComments,
-  retryReview
+  retryReview,
+  submitHumanReview
 } from "@/api/reviews";
 import type {
   ChangedFile,
@@ -396,6 +446,8 @@ import type {
   GithubCommentPublicationBatch,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  HumanReviewRequest,
+  HumanReviewStatus,
   ReviewStatus,
   ReviewTaskDetail,
   ReviewTaskStatus,
@@ -418,6 +470,7 @@ const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
 const publishingComments = ref(false);
+const submittingHumanReview = ref(false);
 const retryingTask = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
@@ -433,9 +486,22 @@ const publishedCommentCount = computed(() => githubCommentPreview.value?.items.f
 const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
 const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
 const canPublishGithubComments = computed(() =>
-  Boolean(canManage.value && githubCommentPreview.value?.commentableCount && writebackCheck.value?.tokenConfigured !== false)
+  Boolean(
+    canManage.value
+      && githubCommentPreview.value?.commentableCount
+      && writebackCheck.value?.tokenConfigured !== false
+      && isHumanReviewPublishAllowed.value
+  )
 );
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
+  status === "completed"
+    || status === "failed"
+    || status === "pending_human_review"
+    || status === "approved"
+    || status === "changes_requested"
+    || status === "rejected";
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
@@ -443,8 +509,7 @@ const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
 const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
 const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
 const isTerminalTask = computed(() => {
-  const status = selectedTask.value?.status;
-  return status === "completed" || status === "failed";
+  return isTerminalReviewStatus(selectedTask.value?.status);
 });
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
 const canRetryTask = computed(() => selectedTask.value?.status === "failed");
@@ -455,6 +520,28 @@ const retryTooltip = computed(() => {
     return "仅失败任务支持重试";
   }
   return failureSuggestion.value || "重新入队执行审查";
+});
+const humanReviewStatus = computed<HumanReviewStatus | string>(() => selectedTask.value?.humanReviewStatus ?? "not_required");
+const isHumanReviewPublishAllowed = computed(() => {
+  if (!selectedTask.value?.humanReviewRequired) {
+    return true;
+  }
+  return humanReviewStatus.value === "approved" || humanReviewStatus.value === "changes_requested";
+});
+const canSubmitHumanReview = computed(() =>
+  Boolean(selectedTask.value?.humanReviewRequired && humanReviewStatus.value === "pending")
+);
+const humanReviewPublishBlockReason = computed(() => {
+  if (!selectedTask.value?.humanReviewRequired || isHumanReviewPublishAllowed.value) {
+    return "";
+  }
+  if (humanReviewStatus.value === "pending") {
+    return "当前任务等待人工审查，完成通过或要求修改后才能回写 GitHub 评论。";
+  }
+  if (humanReviewStatus.value === "rejected") {
+    return "当前任务已被人工拒绝，不能回写 GitHub 评论。";
+  }
+  return "当前任务需要人工审查确认后才能回写 GitHub 评论。";
 });
 const refreshStatusText = computed(() => {
   if (shouldPollTask.value) {
@@ -636,6 +723,37 @@ const writebackCheckStatusClass = computed(() => {
   return "danger";
 });
 
+const humanReviewStatusText = computed(() => {
+  const labels: Record<string, string> = {
+    not_required: "无需人工审查",
+    pending: "待人工审查",
+    approved: "人工通过",
+    changes_requested: "要求修改",
+    rejected: "已拒绝"
+  };
+  return labels[humanReviewStatus.value] ?? humanReviewStatus.value;
+});
+
+const humanReviewStatusClass = computed(() => {
+  const classes: Record<string, string> = {
+    not_required: "success",
+    pending: "warning",
+    approved: "success",
+    changes_requested: "warning",
+    rejected: "danger"
+  };
+  return classes[humanReviewStatus.value] ?? "pending";
+});
+
+const humanReviewActionText = (action: HumanReviewRequest["action"]) => {
+  const labels: Record<HumanReviewRequest["action"], string> = {
+    approve: "通过审查",
+    changes_requested: "要求修改",
+    reject: "拒绝"
+  };
+  return labels[action];
+};
+
 const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
     published: "已发布",
@@ -706,6 +824,8 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
   ...task,
   status: task.status as ReviewStatus,
   llmStatus: task.llmStatus as ReviewStatus,
+  humanReviewRequired: Boolean(task.humanReviewRequired),
+  humanReviewStatus: task.humanReviewStatus ?? "not_required",
   llm: {
     ...task.llm,
     status: task.llm.status as ReviewStatus
@@ -750,6 +870,11 @@ const applyStatusSnapshot = (status: ReviewTaskStatus) => {
     failureCategory: status.failureCategory,
     failureReason: status.failureReason,
     failureSuggestion: status.failureSuggestion,
+    humanReviewRequired: status.humanReviewRequired,
+    humanReviewStatus: status.humanReviewStatus,
+    humanReviewNote: status.humanReviewNote,
+    humanReviewBy: status.humanReviewBy,
+    humanReviewedAt: status.humanReviewedAt,
     timeline: mergeLatestTimeline(selectedTask.value.timeline, status.latestTimeline),
     llm: {
       ...selectedTask.value.llm,
@@ -848,7 +973,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
     pollErrorMessage.value = "";
     pollFailureCount.value = 0;
     lastRefreshedAt.value = formatRefreshTime();
-    if (task.status === "completed" || task.status === "failed") {
+    if (isTerminalReviewStatus(task.status)) {
       await Promise.all([
         loadGithubCommentPreview(id),
         loadGithubCommentPublicationHistory(id)
@@ -899,7 +1024,7 @@ const pollReviewStatus = async () => {
     pollErrorMessage.value = "";
     pollFailureCount.value = 0;
     lastRefreshedAt.value = formatRefreshTime();
-    if (status.status === "completed" || status.status === "failed") {
+    if (isTerminalReviewStatus(status.status as ReviewStatus)) {
       await loadDetail({ silent: true, resetPublishResult: false, force: true });
       return;
     }
@@ -926,7 +1051,8 @@ const refreshDetail = () => {
 };
 
 const confirmPublishGithubComments = async () => {
-  if (!canManage.value || !selectedTask.value || publishingComments.value || !githubCommentPreview.value?.commentableCount) {
+  const preview = githubCommentPreview.value;
+  if (!canManage.value || !selectedTask.value || publishingComments.value || !canPublishGithubComments.value || !preview) {
     return;
   }
 
@@ -935,7 +1061,7 @@ const confirmPublishGithubComments = async () => {
       ? `\n\n提示：${writebackCheck.value.messages.join(" ")}`
       : "";
     await ElMessageBox.confirm(
-      `将向 GitHub PR #${selectedTask.value.prNumber} 回写 ${githubCommentPreview.value.commentableCount} 条评论。确认继续？${warningText}`,
+      `将向 GitHub PR #${selectedTask.value.prNumber} 回写 ${preview.commentableCount} 条评论。确认继续？${warningText}`,
       "确认回写 GitHub 评论",
       {
         confirmButtonText: "确认回写",
@@ -964,6 +1090,53 @@ const confirmPublishGithubComments = async () => {
     ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
     publishingComments.value = false;
+  }
+};
+
+const submitHumanReviewDecision = async (action: HumanReviewRequest["action"]) => {
+  if (!selectedTask.value || !canSubmitHumanReview.value || submittingHumanReview.value) {
+    return;
+  }
+  try {
+    const promptResult = await ElMessageBox.prompt(
+      "请输入人工审查意见",
+      humanReviewActionText(action),
+      {
+        confirmButtonText: "提交",
+        cancelButtonText: "取消",
+        inputType: "textarea",
+        inputPlaceholder: action === "approve" ? "可选：记录通过原因" : "请说明需要修改或拒绝的原因",
+        inputValidator: (value) => {
+          if (action === "approve") {
+            return true;
+          }
+          return Boolean(value?.trim()) || "请填写审查意见";
+        }
+      }
+    );
+    submittingHumanReview.value = true;
+    const response = await submitHumanReview(selectedTask.value.id, {
+      action,
+      note: promptResult.value?.trim()
+    });
+    selectedTask.value = {
+      ...selectedTask.value,
+      status: response.status as ReviewStatus,
+      humanReviewRequired: response.humanReviewRequired,
+      humanReviewStatus: response.humanReviewStatus,
+      humanReviewNote: response.humanReviewNote,
+      humanReviewBy: response.humanReviewBy,
+      humanReviewedAt: response.humanReviewedAt
+    };
+    ElMessage.success(humanReviewActionText(action));
+    await loadDetail({ silent: true, resetPublishResult: true, force: true });
+  } catch (error) {
+    if (error === "cancel" || error === "close") {
+      return;
+    }
+    ElMessage.error(getErrorMessage(error, "人工审查提交失败"));
+  } finally {
+    submittingHumanReview.value = false;
   }
 };
 

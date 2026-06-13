@@ -5,6 +5,8 @@ import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
+import com.repoguard.agent.dto.HumanReviewRequest;
+import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.PageResponse;
@@ -107,6 +109,15 @@ public class ReviewController {
     @RequireRole("ADMIN")
     public ApiResponse<ManualReviewResponse> triggerManualReview(@Valid @RequestBody ManualReviewRequest request) {
         return ApiResponse.ok(reviewService.triggerManualReview(request));
+    }
+
+    @PostMapping("/{id}/human-review")
+    @RequireRole("ADMIN")
+    public ApiResponse<HumanReviewResponse> submitHumanReview(
+        @PathVariable @Min(1) Long id,
+        @Valid @RequestBody HumanReviewRequest request
+    ) {
+        return ApiResponse.ok(reviewService.submitHumanReview(id, request));
     }
 
     @PostMapping("/{id}/retry")
