@@ -2,6 +2,7 @@ package com.repoguard.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.LocalDateTime;
 
 @TableName("review_finding")
 public class ReviewFinding {
@@ -19,6 +20,10 @@ public class ReviewFinding {
     private String recommendation;
     private String methodName;
     private String testType;
+    private String feedbackStatus;
+    private String feedbackNote;
+    private String feedbackBy;
+    private LocalDateTime feedbackAt;
 
     public Long getId() {
         return id;
@@ -114,5 +119,37 @@ public class ReviewFinding {
 
     public void setTestType(String testType) {
         this.testType = testType;
+    }
+
+    public String getFeedbackStatus() {
+        return feedbackStatus;
+    }
+
+    public void setFeedbackStatus(String feedbackStatus) {
+        this.feedbackStatus = feedbackStatus;
+    }
+
+    public String getFeedbackNote() {
+        return feedbackNote;
+    }
+
+    public void setFeedbackNote(String feedbackNote) {
+        this.feedbackNote = feedbackNote;
+    }
+
+    public String getFeedbackBy() {
+        return feedbackBy;
+    }
+
+    public void setFeedbackBy(String feedbackBy) {
+        this.feedbackBy = feedbackBy;
+    }
+
+    public LocalDateTime getFeedbackAt() {
+        return feedbackAt;
+    }
+
+    public void setFeedbackAt(LocalDateTime feedbackAt) {
+        this.feedbackAt = feedbackAt;
     }
 }

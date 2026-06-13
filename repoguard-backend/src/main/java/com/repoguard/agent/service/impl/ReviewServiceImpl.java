@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingFeedbackRequest;
+import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
@@ -94,6 +96,11 @@ public class ReviewServiceImpl implements ReviewService {
     private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
     private static final String HUMAN_REVIEW_REJECTED = "REJECTED";
     private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
+    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
+    private static final String FEEDBACK_VALID = "VALID";
+    private static final String FEEDBACK_FALSE_POSITIVE = "FALSE_POSITIVE";
+    private static final String FEEDBACK_FIXED = "FIXED";
+    private static final String FEEDBACK_IGNORED = "IGNORED";
     private static final FailureSummary NO_FAILURE_SUMMARY = new FailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -620,6 +627,33 @@ public class ReviewServiceImpl implements ReviewService {
         reviewTaskMapper.updateById(task);
         appendReviewTimeline(task.getId(), humanReviewTimelineLabel(humanReviewStatus, note), reviewedAt, "DONE");
         return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
+    }
+
+    @Override
+    @Transactional
+    public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request) {
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        ReviewFinding finding = reviewFindingMapper.selectById(findingId);
+        if (finding == null || !id.equals(finding.getTaskId()) || !"FINDING".equals(finding.getCategory())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Review finding not found: " + findingId);
+        }
+        String status = normalizeFindingFeedbackStatus(request.status());
+        LocalDateTime feedbackAt = LocalDateTime.now();
+        finding.setFeedbackStatus(status);
+        finding.setFeedbackNote(cleanHumanReviewNote(request.note()));
+        finding.setFeedbackBy("admin");
+        finding.setFeedbackAt(feedbackAt);
+        reviewFindingMapper.updateById(finding);
+        appendReviewTimeline(
+            task.getId(),
+            findingFeedbackTimelineLabel(finding, status),
+            feedbackAt,
+            "DONE"
+        );
+        return findingFeedbackResponse(finding);
     }
 
     @Override
@@ -1331,11 +1365,16 @@ public class ReviewServiceImpl implements ReviewService {
 
     private ReviewFindingDto toFindingDto(ReviewFinding finding) {
         return new ReviewFindingDto(
+            finding.getId(),
             lower(finding.getSeverity()),
             finding.getFilePath(),
             finding.getLineNumber(),
             finding.getMessage(),
-            finding.getRecommendation()
+            finding.getRecommendation(),
+            lower(resolveFindingFeedbackStatus(finding)),
+            finding.getFeedbackNote(),
+            finding.getFeedbackBy(),
+            formatDateTimeOrNull(finding.getFeedbackAt())
         );
     }
 
@@ -1356,6 +1395,7 @@ public class ReviewServiceImpl implements ReviewService {
         String targetType = resolveCommentTargetType(finding, changedFile);
         String reason = resolveCommentReason(targetType, finding, changedFile);
         boolean published = isPublished(publication);
+        boolean actionable = isActionableFinding(finding);
         return new GithubCommentPreviewItem(
             finding.getId(),
             lower(finding.getSeverity()),
@@ -1364,16 +1404,17 @@ public class ReviewServiceImpl implements ReviewService {
             finding.getMessage(),
             finding.getRecommendation(),
             buildGithubCommentBody(finding),
-            !published,
+            !published && actionable,
             targetType,
-            published ? "GitHub comment already published" : reason,
+            published ? "GitHub comment already published" : actionable ? reason : feedbackSkipReason(finding),
             published,
             publication == null ? null : publication.getStatus(),
             publication == null ? null : publication.getGithubUrl(),
             publication == null ? null : publication.getMessage(),
             publication == null || publication.getPublishedAt() == null
                 ? null
-                : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
+                : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
+            lower(resolveFindingFeedbackStatus(finding))
         );
     }
 
@@ -1593,6 +1634,54 @@ public class ReviewServiceImpl implements ReviewService {
             ErrorCode.BAD_REQUEST,
             "Human review approval or changes request is required before publishing GitHub comments"
         );
+    }
+
+    private FindingFeedbackResponse findingFeedbackResponse(ReviewFinding finding) {
+        return new FindingFeedbackResponse(
+            finding.getId(),
+            finding.getTaskId(),
+            lower(resolveFindingFeedbackStatus(finding)),
+            finding.getFeedbackNote(),
+            finding.getFeedbackBy(),
+            formatDateTimeOrNull(finding.getFeedbackAt())
+        );
+    }
+
+    private String normalizeFindingFeedbackStatus(String status) {
+        if (!StringUtils.hasText(status)) {
+            return FEEDBACK_UNREVIEWED;
+        }
+        return switch (status.trim().toUpperCase(Locale.ROOT)) {
+            case "VALID" -> FEEDBACK_VALID;
+            case "FALSE_POSITIVE" -> FEEDBACK_FALSE_POSITIVE;
+            case "FIXED" -> FEEDBACK_FIXED;
+            case "IGNORED" -> FEEDBACK_IGNORED;
+            case "UNREVIEWED" -> FEEDBACK_UNREVIEWED;
+            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported finding feedback status: " + status);
+        };
+    }
+
+    private String resolveFindingFeedbackStatus(ReviewFinding finding) {
+        return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
+    }
+
+    private boolean isActionableFinding(ReviewFinding finding) {
+        String feedbackStatus = resolveFindingFeedbackStatus(finding);
+        return FEEDBACK_UNREVIEWED.equals(feedbackStatus) || FEEDBACK_VALID.equals(feedbackStatus);
+    }
+
+    private String feedbackSkipReason(ReviewFinding finding) {
+        return switch (resolveFindingFeedbackStatus(finding)) {
+            case FEEDBACK_FALSE_POSITIVE -> "Finding marked as false positive and will not be published";
+            case FEEDBACK_FIXED -> "Finding marked as fixed and will not be published";
+            case FEEDBACK_IGNORED -> "Finding marked as ignored and will not be published";
+            default -> "Finding is not actionable and will not be published";
+        };
+    }
+
+    private String findingFeedbackTimelineLabel(ReviewFinding finding, String status) {
+        String file = StringUtils.hasText(finding.getFilePath()) ? finding.getFilePath() : "unknown file";
+        return truncate("Finding feedback updated: " + lower(status) + " for " + file);
     }
 
     private HumanReviewResponse humanReviewResponse(ReviewTask task, String message) {

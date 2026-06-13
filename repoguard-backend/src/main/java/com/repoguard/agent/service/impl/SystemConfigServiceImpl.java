@@ -246,11 +246,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .orderByAsc(ReviewRuleConfig::getSortOrder)
                 .orderByAsc(ReviewRuleConfig::getId)
         );
-        Map<String, Long> hitCountByRule = loadRuleHitCounts();
+        List<ReviewFinding> ruleFindings = loadRuleFindings();
+        Map<String, Long> hitCountByRule = buildRuleHitCounts(ruleFindings);
         List<ReviewRuleConfigDto> ruleDtos = rules.stream()
             .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
             .toList();
-        return new ReviewRulesResponse(buildRuleMetrics(rules, hitCountByRule), ruleDtos);
+        return new ReviewRulesResponse(buildRuleMetrics(rules, ruleFindings, hitCountByRule), ruleDtos);
     }
 
     @Override
@@ -527,19 +528,32 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     private Map<String, Long> loadRuleHitCounts() {
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
+        return buildRuleHitCounts(loadRuleFindings());
+    }
+
+    private List<ReviewFinding> loadRuleFindings() {
+        return reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
         );
+    }
+
+    private Map<String, Long> buildRuleHitCounts(List<ReviewFinding> findings) {
         return findings.stream()
             .map(ReviewFinding::getRuleId)
             .filter(StringUtils::hasText)
             .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
     }
 
-    private List<ReviewRuleMetricDto> buildRuleMetrics(List<ReviewRuleConfig> rules, Map<String, Long> hitCountByRule) {
+    private List<ReviewRuleMetricDto> buildRuleMetrics(List<ReviewRuleConfig> rules, List<ReviewFinding> findings, Map<String, Long> hitCountByRule) {
         long enabledCount = rules.stream().filter(rule -> "ENABLED".equals(rule.getStatus())).count();
         long highRiskCount = rules.stream().filter(rule -> isHighSeverity(rule.getSeverity())).count();
         long totalHits = hitCountByRule.values().stream().mapToLong(Long::longValue).sum();
+        long validCount = feedbackCount(findings, "VALID");
+        long falsePositiveCount = feedbackCount(findings, "FALSE_POSITIVE");
+        long reviewedCount = findings.stream()
+            .filter(finding -> StringUtils.hasText(finding.getFeedbackStatus()))
+            .filter(finding -> !"UNREVIEWED".equals(finding.getFeedbackStatus()))
+            .count();
         int averageConfidence = rules.isEmpty()
             ? 0
             : (int) Math.round(rules.stream().mapToInt(rule -> rule.getConfidence() == null ? 0 : rule.getConfidence()).average().orElse(0));
@@ -547,8 +561,21 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             new ReviewRuleMetricDto("启用规则", String.valueOf(enabledCount), "共 " + rules.size() + " 条规则", "blue"),
             new ReviewRuleMetricDto("高风险规则", String.valueOf(highRiskCount), "包含 high / critical", "red"),
             new ReviewRuleMetricDto("累计命中", String.valueOf(totalHits), "来自历史审查结果", "orange"),
-            new ReviewRuleMetricDto("平均置信度", averageConfidence + "%", "规则配置均值", "green")
+            new ReviewRuleMetricDto("平均置信度", averageConfidence + "%", "规则配置均值", "green"),
+            new ReviewRuleMetricDto("有效率", percentage(validCount, reviewedCount), "人工判定有效 / 已判定", "green"),
+            new ReviewRuleMetricDto("误报率", percentage(falsePositiveCount, reviewedCount), "人工判定误报 / 已判定", "red")
         );
+    }
+
+    private long feedbackCount(List<ReviewFinding> findings, String status) {
+        return findings.stream().filter(finding -> status.equals(finding.getFeedbackStatus())).count();
+    }
+
+    private String percentage(long numerator, long denominator) {
+        if (denominator <= 0) {
+            return "0%";
+        }
+        return Math.round(numerator * 100.0 / denominator) + "%";
     }
 
     private boolean isHighSeverity(String severity) {

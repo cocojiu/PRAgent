@@ -168,6 +168,9 @@
                   <span :class="`risk-pill ${finding.severity}`">{{ riskText(finding.severity) }}</span>
                   <code>{{ finding.file }}</code>
                   <span class="line-badge">L{{ finding.line ?? "-" }}</span>
+                  <span :class="`status-pill ${findingFeedbackStatusClass(finding.feedbackStatus)}`">
+                    {{ findingFeedbackStatusText(finding.feedbackStatus) }}
+                  </span>
                 </div>
                 <div class="finding-body">
                   <div>
@@ -177,6 +180,53 @@
                   <div>
                     <h3>修复建议</h3>
                     <p>{{ finding.recommendation || "暂无修复建议" }}</p>
+                  </div>
+                </div>
+                <div class="finding-feedback">
+                  <p v-if="finding.feedbackNote || finding.feedbackBy || finding.feedbackAt" class="finding-feedback-meta">
+                    {{ finding.feedbackBy || "admin" }} · {{ finding.feedbackAt || "刚刚" }}
+                    <span v-if="finding.feedbackNote"> · {{ finding.feedbackNote }}</span>
+                  </p>
+                  <div class="finding-feedback-actions">
+                    <el-button
+                      size="small"
+                      type="success"
+                      plain
+                      :disabled="!canManage || !finding.id"
+                      :loading="feedbackSavingId === finding.id"
+                      @click="submitFindingFeedback(finding.id, 'valid')"
+                    >
+                      有效
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="warning"
+                      plain
+                      :disabled="!canManage || !finding.id"
+                      :loading="feedbackSavingId === finding.id"
+                      @click="submitFindingFeedback(finding.id, 'false_positive')"
+                    >
+                      误报
+                    </el-button>
+                    <el-button
+                      size="small"
+                      plain
+                      :disabled="!canManage || !finding.id"
+                      :loading="feedbackSavingId === finding.id"
+                      @click="submitFindingFeedback(finding.id, 'fixed')"
+                    >
+                      已修复
+                    </el-button>
+                    <el-button
+                      size="small"
+                      type="info"
+                      plain
+                      :disabled="!canManage || !finding.id"
+                      :loading="feedbackSavingId === finding.id"
+                      @click="submitFindingFeedback(finding.id, 'ignored')"
+                    >
+                      忽略
+                    </el-button>
                   </div>
                 </div>
               </section>
@@ -252,6 +302,9 @@
                     <code>{{ item.file }}</code>
                     <span class="line-badge">L{{ item.line ?? "-" }}</span>
                     <span class="count-badge">{{ commentTargetText(item.targetType) }}</span>
+                    <span :class="`status-pill ${findingFeedbackStatusClass(item.feedbackStatus)}`">
+                      {{ findingFeedbackStatusText(item.feedbackStatus) }}
+                    </span>
                     <span :class="`status-pill ${item.published ? 'success' : item.commentable ? 'success' : 'warning'}`">
                       {{ item.published ? "已发布" : item.commentable ? "可回写" : "需处理" }}
                     </span>
@@ -438,10 +491,13 @@ import {
   fetchReviewStatus,
   publishGithubComments,
   retryReview,
-  submitHumanReview
+  submitHumanReview,
+  updateFindingFeedback
 } from "@/api/reviews";
 import type {
   ChangedFile,
+  FindingFeedbackResponse,
+  FindingFeedbackStatus,
   GithubCommentPreview,
   GithubCommentPublicationBatch,
   GithubCommentPublicationHistory,
@@ -471,6 +527,7 @@ const loading = ref(false);
 const silentRefreshing = ref(false);
 const publishingComments = ref(false);
 const submittingHumanReview = ref(false);
+const feedbackSavingId = ref<number | null>(null);
 const retryingTask = ref(false);
 const errorMessage = ref("");
 const previewError = ref("");
@@ -672,7 +729,11 @@ const commentBlockReasonText = (reason?: string) => {
     "Finding is missing file path and will be posted as a PR comment": "缺少文件路径，将作为 PR 总评评论回写。",
     "Finding is missing a valid line number and will be posted as a PR comment": "缺少有效行号，将作为 PR 总评评论回写。",
     "Finding file is not in the changed files list and will be posted as a PR comment": "该文件不在本次 PR 变更文件列表中，将作为 PR 总评评论回写。",
-    "Deleted files will be posted as PR comments": "删除文件将作为 PR 总评评论回写。"
+    "Deleted files will be posted as PR comments": "删除文件将作为 PR 总评评论回写。",
+    "Finding marked as false positive and will not be published": "已标记为误报，不会回写。",
+    "Finding marked as fixed and will not be published": "已标记为已修复，不会回写。",
+    "Finding marked as ignored and will not be published": "已标记为忽略，不会回写。",
+    "Finding is not actionable and will not be published": "该问题当前不可处理，不会回写。"
   };
   return reason ? labels[reason] ?? reason : "";
 };
@@ -752,6 +813,39 @@ const humanReviewActionText = (action: HumanReviewRequest["action"]) => {
     reject: "拒绝"
   };
   return labels[action];
+};
+
+const findingFeedbackStatusText = (status?: FindingFeedbackStatus | string) => {
+  const labels: Record<string, string> = {
+    unreviewed: "未判定",
+    valid: "有效",
+    false_positive: "误报",
+    fixed: "已修复",
+    ignored: "忽略"
+  };
+  return status ? labels[String(status).toLowerCase()] ?? String(status) : labels.unreviewed;
+};
+
+const findingFeedbackStatusClass = (status?: FindingFeedbackStatus | string) => {
+  const classes: Record<string, string> = {
+    unreviewed: "pending",
+    valid: "success",
+    false_positive: "warning",
+    fixed: "success",
+    ignored: "pending"
+  };
+  return status ? classes[String(status).toLowerCase()] ?? "pending" : "pending";
+};
+
+const findingFeedbackPromptTitle = (status: FindingFeedbackStatus) => {
+  const labels: Record<FindingFeedbackStatus, string> = {
+    unreviewed: "重置判定",
+    valid: "标记为有效",
+    false_positive: "标记为误报",
+    fixed: "标记为已修复",
+    ignored: "标记为忽略"
+  };
+  return labels[status];
 };
 
 const publishStatusText = (status: string) => {
@@ -1137,6 +1231,68 @@ const submitHumanReviewDecision = async (action: HumanReviewRequest["action"]) =
     ElMessage.error(getErrorMessage(error, "人工审查提交失败"));
   } finally {
     submittingHumanReview.value = false;
+  }
+};
+
+const applyFindingFeedback = (response: FindingFeedbackResponse) => {
+  if (!selectedTask.value) {
+    return;
+  }
+  selectedTask.value = {
+    ...selectedTask.value,
+    findings: selectedTask.value.findings.map((finding) =>
+      finding.id === response.findingId
+        ? {
+            ...finding,
+            feedbackStatus: response.feedbackStatus,
+            feedbackNote: response.feedbackNote,
+            feedbackBy: response.feedbackBy,
+            feedbackAt: response.feedbackAt
+          }
+        : finding
+    )
+  };
+};
+
+const submitFindingFeedback = async (findingId: number, status: FindingFeedbackStatus) => {
+  if (!selectedTask.value || !canManage.value || feedbackSavingId.value) {
+    return;
+  }
+  try {
+    const promptResult = await ElMessageBox.prompt(
+      "请输入判定备注",
+      findingFeedbackPromptTitle(status),
+      {
+        confirmButtonText: "提交",
+        cancelButtonText: "取消",
+        inputType: "textarea",
+        inputPlaceholder: status === "valid" || status === "fixed" ? "可选：记录确认依据" : "请说明判定原因",
+        inputValidator: (value) => {
+          if (status === "valid" || status === "fixed") {
+            return true;
+          }
+          return Boolean(value?.trim()) || "请填写判定原因";
+        }
+      }
+    );
+    feedbackSavingId.value = findingId;
+    const response = await updateFindingFeedback(selectedTask.value.id, findingId, {
+      status,
+      note: promptResult.value?.trim()
+    });
+    applyFindingFeedback(response);
+    githubCommentPublishResult.value = null;
+    if (isTerminalTask.value) {
+      await loadGithubCommentPreview(selectedTask.value.id);
+    }
+    ElMessage.success(findingFeedbackPromptTitle(status));
+  } catch (error) {
+    if (error === "cancel" || error === "close") {
+      return;
+    }
+    ElMessage.error(getErrorMessage(error, "判定提交失败"));
+  } finally {
+    feedbackSavingId.value = null;
   }
 };
 

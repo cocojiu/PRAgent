@@ -31,6 +31,7 @@ import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -257,6 +258,79 @@ class ReviewServiceImplTest {
         assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
         verify(reviewTaskMapper).updateById(task);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
+    void updateFindingFeedbackStoresDecisionAndTimeline() {
+        ReviewTask task = task();
+        ReviewFinding finding = finding(9L, "MEDIUM", "src/App.java", 42, "Use logger", "Replace stdout");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(reviewFindingMapper.selectById(9L)).thenReturn(finding);
+
+        var response = service.updateFindingFeedback(
+            521L,
+            9L,
+            new FindingFeedbackRequest("false_positive", "Covered by framework")
+        );
+
+        assertThat(response.findingId()).isEqualTo(9L);
+        assertThat(response.taskId()).isEqualTo(521L);
+        assertThat(response.feedbackStatus()).isEqualTo("false_positive");
+        assertThat(response.feedbackNote()).isEqualTo("Covered by framework");
+        assertThat(finding.getFeedbackStatus()).isEqualTo("FALSE_POSITIVE");
+        assertThat(finding.getFeedbackBy()).isEqualTo("admin");
+        assertThat(finding.getFeedbackAt()).isNotNull();
+        verify(reviewFindingMapper).updateById(finding);
+        verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
+    void getGithubCommentPreviewSkipsNonActionableFeedback() {
+        ReviewFinding validFinding = finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger");
+        validFinding.setFeedbackStatus("VALID");
+        ReviewFinding falsePositive = finding(2L, "LOW", "README", 3, "Known safe", "No change needed");
+        falsePositive.setFeedbackStatus("FALSE_POSITIVE");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "CONFIGURED", "enc:v1:test", null));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, falsePositive));
+
+        var preview = service.getGithubCommentPreview(521L);
+
+        assertThat(preview.totalFindings()).isEqualTo(2);
+        assertThat(preview.commentableCount()).isEqualTo(1);
+        assertThat(preview.blockedCount()).isEqualTo(1);
+        assertThat(preview.items().getFirst().feedbackStatus()).isEqualTo("valid");
+        assertThat(preview.items().getLast().commentable()).isFalse();
+        assertThat(preview.items().getLast().feedbackStatus()).isEqualTo("false_positive");
+        assertThat(preview.items().getLast().reason()).isEqualTo("Finding marked as false positive and will not be published");
+    }
+
+    @Test
+    void publishGithubCommentsSkipsNonActionableFeedback() {
+        ReviewFinding validFinding = finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger");
+        validFinding.setFeedbackStatus("VALID");
+        ReviewFinding ignoredFinding = finding(2L, "LOW", "README", 3, "Known issue", "Track separately");
+        ignoredFinding.setFeedbackStatus("IGNORED");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, ignoredFinding));
+        when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
+            new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L)
+        ));
+
+        var result = service.publishGithubComments(521L);
+
+        assertThat(result.totalFindings()).isEqualTo(2);
+        assertThat(result.attemptedCount()).isEqualTo(1);
+        assertThat(result.succeededCount()).isEqualTo(1);
+        assertThat(result.skippedCount()).isEqualTo(1);
+        assertThat(result.items()).extracting("findingId").containsExactly(1L, 2L);
+        assertThat(result.items().getLast().status()).isEqualTo("skipped");
+        assertThat(result.items().getLast().message()).isEqualTo("Finding marked as ignored and will not be published");
     }
 
     @Test

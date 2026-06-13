@@ -11,6 +11,7 @@ export type ReviewStatus =
   | "changes_requested"
   | "rejected";
 export type HumanReviewStatus = "not_required" | "pending" | "approved" | "changes_requested" | "rejected";
+export type FindingFeedbackStatus = "unreviewed" | "valid" | "false_positive" | "fixed" | "ignored";
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
 export type RuleStatus = "enabled" | "disabled";
 export type MetricColor = "blue" | "red" | "green" | "orange" | "purple";
@@ -134,6 +135,21 @@ export interface GithubCommentPreviewItem {
   publicationUrl?: string;
   publicationMessage?: string;
   publishedAt?: string;
+  feedbackStatus?: FindingFeedbackStatus | string;
+}
+
+export interface FindingFeedbackRequest {
+  status: FindingFeedbackStatus;
+  note?: string;
+}
+
+export interface FindingFeedbackResponse {
+  findingId: number;
+  taskId: number;
+  feedbackStatus: FindingFeedbackStatus | string;
+  feedbackNote?: string;
+  feedbackBy?: string;
+  feedbackAt?: string;
 }
 
 export interface GithubCommentPublish {
@@ -187,11 +203,16 @@ export interface GithubCommentPublicationBatch {
 export interface GithubCommentPublicationHistoryItem extends GithubCommentPublishItem {}
 
 export interface ReviewFinding {
+  id: number;
   severity: RiskLevel;
   file: string;
   line: number;
   message: string;
   recommendation: string;
+  feedbackStatus: FindingFeedbackStatus | string;
+  feedbackNote?: string;
+  feedbackBy?: string;
+  feedbackAt?: string;
 }
 
 export interface MissingTest {

@@ -1,5 +1,7 @@
 import { request } from "@/api/client";
 import type {
+  FindingFeedbackRequest,
+  FindingFeedbackResponse,
   HumanReviewRequest,
   HumanReviewResponse,
   ManualReviewRequest,
@@ -68,6 +70,12 @@ export const publishGithubComments = (id: number) =>
 
 export const submitHumanReview = (id: number, payload: HumanReviewRequest) =>
   request<HumanReviewResponse>(`/api/v1/reviews/${id}/human-review`, undefined, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+export const updateFindingFeedback = (id: number, findingId: number, payload: FindingFeedbackRequest) =>
+  request<FindingFeedbackResponse>(`/api/v1/reviews/${id}/findings/${findingId}/feedback`, undefined, {
     method: "POST",
     body: JSON.stringify(payload)
   });

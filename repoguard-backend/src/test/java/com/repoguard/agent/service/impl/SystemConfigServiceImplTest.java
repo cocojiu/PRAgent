@@ -388,9 +388,9 @@ class SystemConfigServiceImplTest {
             rule("RG-SECRET-001", "硬编码密钥检测", "HIGH", "DISABLED", 96)
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
-            finding("RG-JAVA-001"),
-            finding("RG-JAVA-001"),
-            finding("RG-SECRET-001")
+            finding("RG-JAVA-001", "VALID"),
+            finding("RG-JAVA-001", "FALSE_POSITIVE"),
+            finding("RG-SECRET-001", "UNREVIEWED")
         ));
 
         var result = service.getReviewRules();
@@ -402,6 +402,9 @@ class SystemConfigServiceImplTest {
         assertThat(result.rules().getFirst().applicableLanguages()).isEqualTo("Java");
         assertThat(result.rules().getFirst().filePatterns()).isEqualTo("*.java");
         assertThat(result.rules().getFirst().falsePositiveGuidance()).contains("false positive");
+        assertThat(result.metrics()).hasSize(6);
+        assertThat(result.metrics().get(4).value()).isEqualTo("50%");
+        assertThat(result.metrics().get(5).value()).isEqualTo("50%");
         assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
     }
 
@@ -518,6 +521,12 @@ class SystemConfigServiceImplTest {
         ReviewFinding finding = new ReviewFinding();
         finding.setCategory("FINDING");
         finding.setRuleId(ruleId);
+        return finding;
+    }
+
+    private ReviewFinding finding(String ruleId, String feedbackStatus) {
+        ReviewFinding finding = finding(ruleId);
+        finding.setFeedbackStatus(feedbackStatus);
         return finding;
     }
 

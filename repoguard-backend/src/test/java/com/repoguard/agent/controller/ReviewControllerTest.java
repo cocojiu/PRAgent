@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.dto.FindingFeedbackRequest;
+import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
@@ -259,6 +261,18 @@ class ReviewControllerTest {
         }
 
         @Override
+        public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request) {
+            return new FindingFeedbackResponse(
+                findingId,
+                id,
+                request.status(),
+                request.note(),
+                "admin",
+                "2026-06-13 14:20:00"
+            );
+        }
+
+        @Override
         public ReviewRetryResponse retryReview(Long id) {
             return new ReviewRetryResponse(id, "queued", "Review task queued for retry", 2);
         }
@@ -404,5 +418,23 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.status").value("changes_requested"))
             .andExpect(jsonPath("$.data.humanReviewStatus").value("changes_requested"))
             .andExpect(jsonPath("$.data.humanReviewNote").value("请先修复高风险 finding"));
+    }
+
+    @Test
+    void updateFindingFeedbackReturnsDecision() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/512/findings/1/feedback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "status": "false_positive",
+                      "note": "Confirmed by owner"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.findingId").value(1))
+            .andExpect(jsonPath("$.data.feedbackStatus").value("false_positive"))
+            .andExpect(jsonPath("$.data.feedbackNote").value("Confirmed by owner"));
     }
 }

@@ -1536,6 +1536,30 @@ a {
   overflow-wrap: anywhere;
 }
 
+.finding-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px dashed #dbe4f0;
+}
+
+.finding-feedback-meta {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.finding-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .changed-file-cell {
   display: flex;
   align-items: center;
@@ -2360,9 +2384,14 @@ a {
 
   .detail-header,
   .detail-actions,
+  .finding-feedback,
   .failure-banner {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .finding-feedback-actions {
+    justify-content: flex-start;
   }
 
   .failure-banner .el-button {

@@ -1,6 +1,8 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.dto.FindingFeedbackRequest;
+import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
@@ -118,6 +120,16 @@ public class ReviewController {
         @Valid @RequestBody HumanReviewRequest request
     ) {
         return ApiResponse.ok(reviewService.submitHumanReview(id, request));
+    }
+
+    @PostMapping("/{id}/findings/{findingId}/feedback")
+    @RequireRole("ADMIN")
+    public ApiResponse<FindingFeedbackResponse> updateFindingFeedback(
+        @PathVariable @Min(1) Long id,
+        @PathVariable @Min(1) Long findingId,
+        @Valid @RequestBody FindingFeedbackRequest request
+    ) {
+        return ApiResponse.ok(reviewService.updateFindingFeedback(id, findingId, request));
     }
 
     @PostMapping("/{id}/retry")
