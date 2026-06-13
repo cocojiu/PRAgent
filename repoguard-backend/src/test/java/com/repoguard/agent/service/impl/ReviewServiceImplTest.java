@@ -249,13 +249,19 @@ class ReviewServiceImplTest {
         task.setStatus("PENDING_HUMAN_REVIEW");
         when(reviewTaskMapper.selectById(521L)).thenReturn(task);
 
-        var response = service.submitHumanReview(521L, new HumanReviewRequest("changes_requested", "修复高风险问题后重新审查"));
+        var response = service.submitHumanReview(
+            521L,
+            new HumanReviewRequest("changes_requested", "修复高风险问题后重新审查"),
+            "review-lead"
+        );
 
         assertThat(response.status()).isEqualTo("changes_requested");
         assertThat(response.humanReviewStatus()).isEqualTo("changes_requested");
+        assertThat(response.humanReviewBy()).isEqualTo("review-lead");
         assertThat(task.getStatus()).isEqualTo("CHANGES_REQUESTED");
         assertThat(task.getHumanReviewStatus()).isEqualTo("CHANGES_REQUESTED");
         assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
+        assertThat(task.getHumanReviewBy()).isEqualTo("review-lead");
         verify(reviewTaskMapper).updateById(task);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
     }
@@ -270,15 +276,17 @@ class ReviewServiceImplTest {
         var response = service.updateFindingFeedback(
             521L,
             9L,
-            new FindingFeedbackRequest("false_positive", "Covered by framework")
+            new FindingFeedbackRequest("false_positive", "Covered by framework"),
+            "review-lead"
         );
 
         assertThat(response.findingId()).isEqualTo(9L);
         assertThat(response.taskId()).isEqualTo(521L);
         assertThat(response.feedbackStatus()).isEqualTo("false_positive");
         assertThat(response.feedbackNote()).isEqualTo("Covered by framework");
+        assertThat(response.feedbackBy()).isEqualTo("review-lead");
         assertThat(finding.getFeedbackStatus()).isEqualTo("FALSE_POSITIVE");
-        assertThat(finding.getFeedbackBy()).isEqualTo("admin");
+        assertThat(finding.getFeedbackBy()).isEqualTo("review-lead");
         assertThat(finding.getFeedbackAt()).isNotNull();
         verify(reviewFindingMapper).updateById(finding);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));

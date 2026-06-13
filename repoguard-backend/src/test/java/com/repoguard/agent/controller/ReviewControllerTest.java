@@ -32,6 +32,8 @@ import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
+import com.repoguard.agent.security.AuthTokenFilter;
+import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.ReviewService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -247,27 +249,27 @@ class ReviewControllerTest {
         }
 
         @Override
-        public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request) {
+        public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator) {
             return new HumanReviewResponse(
                 id,
                 "changes_requested",
                 true,
                 "changes_requested",
                 request.note(),
-                "admin",
+                operator,
                 "2026-06-13 13:45:00",
                 "Human review requested changes"
             );
         }
 
         @Override
-        public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request) {
+        public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request, String operator) {
             return new FindingFeedbackResponse(
                 findingId,
                 id,
                 request.status(),
                 request.note(),
-                "admin",
+                operator,
                 "2026-06-13 14:20:00"
             );
         }
@@ -405,6 +407,7 @@ class ReviewControllerTest {
     @Test
     void submitHumanReviewReturnsDecision() throws Exception {
         mockMvc.perform(post("/api/v1/reviews/512/human-review")
+                .requestAttr(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE, authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -417,12 +420,14 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.taskId").value(512))
             .andExpect(jsonPath("$.data.status").value("changes_requested"))
             .andExpect(jsonPath("$.data.humanReviewStatus").value("changes_requested"))
-            .andExpect(jsonPath("$.data.humanReviewNote").value("请先修复高风险 finding"));
+            .andExpect(jsonPath("$.data.humanReviewNote").value("请先修复高风险 finding"))
+            .andExpect(jsonPath("$.data.humanReviewBy").value("review-lead"));
     }
 
     @Test
     void updateFindingFeedbackReturnsDecision() throws Exception {
         mockMvc.perform(post("/api/v1/reviews/512/findings/1/feedback")
+                .requestAttr(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE, authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -435,6 +440,11 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.taskId").value(512))
             .andExpect(jsonPath("$.data.findingId").value(1))
             .andExpect(jsonPath("$.data.feedbackStatus").value("false_positive"))
-            .andExpect(jsonPath("$.data.feedbackNote").value("Confirmed by owner"));
+            .andExpect(jsonPath("$.data.feedbackNote").value("Confirmed by owner"))
+            .andExpect(jsonPath("$.data.feedbackBy").value("review-lead"));
+    }
+
+    private AuthTokenService.AuthenticatedUser authenticatedUser() {
+        return new AuthTokenService.AuthenticatedUser(1001L, "review-lead", "ADMIN", 9999999999L);
     }
 }

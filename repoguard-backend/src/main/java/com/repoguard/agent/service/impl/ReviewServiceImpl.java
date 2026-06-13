@@ -603,7 +603,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
-    public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request) {
+    public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator) {
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
@@ -622,7 +622,7 @@ public class ReviewServiceImpl implements ReviewService {
         task.setStatus(taskStatusForHumanReview(humanReviewStatus));
         task.setHumanReviewStatus(humanReviewStatus);
         task.setHumanReviewNote(note);
-        task.setHumanReviewBy("admin");
+        task.setHumanReviewBy(cleanOperator(operator));
         task.setHumanReviewedAt(reviewedAt);
         reviewTaskMapper.updateById(task);
         appendReviewTimeline(task.getId(), humanReviewTimelineLabel(humanReviewStatus, note), reviewedAt, "DONE");
@@ -631,7 +631,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional
-    public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request) {
+    public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request, String operator) {
         ReviewTask task = reviewTaskMapper.selectById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
@@ -644,7 +644,7 @@ public class ReviewServiceImpl implements ReviewService {
         LocalDateTime feedbackAt = LocalDateTime.now();
         finding.setFeedbackStatus(status);
         finding.setFeedbackNote(cleanHumanReviewNote(request.note()));
-        finding.setFeedbackBy("admin");
+        finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
         reviewFindingMapper.updateById(finding);
         appendReviewTimeline(
@@ -1703,6 +1703,10 @@ public class ReviewServiceImpl implements ReviewService {
 
     private String cleanHumanReviewNote(String note) {
         return StringUtils.hasText(note) ? note.trim() : null;
+    }
+
+    private String cleanOperator(String operator) {
+        return StringUtils.hasText(operator) ? truncate(operator.trim()) : "unknown";
     }
 
     private String humanReviewStatusForAction(String action) {

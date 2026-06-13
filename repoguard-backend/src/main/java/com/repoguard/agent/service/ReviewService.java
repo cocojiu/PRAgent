@@ -51,9 +51,9 @@ public interface ReviewService {
 
     ManualReviewResponse triggerManualReview(ManualReviewRequest request);
 
-    HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request);
+    HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator);
 
-    FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request);
+    FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request, String operator);
 
     ReviewRetryResponse retryReview(Long id);
 }

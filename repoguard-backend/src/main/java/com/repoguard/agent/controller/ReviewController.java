@@ -17,8 +17,13 @@ import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.security.AuthTokenFilter;
+import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.ReviewService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -116,25 +121,35 @@ public class ReviewController {
     @PostMapping("/{id}/human-review")
     @RequireRole("ADMIN")
     public ApiResponse<HumanReviewResponse> submitHumanReview(
+        HttpServletRequest httpRequest,
         @PathVariable @Min(1) Long id,
         @Valid @RequestBody HumanReviewRequest request
     ) {
-        return ApiResponse.ok(reviewService.submitHumanReview(id, request));
+        return ApiResponse.ok(reviewService.submitHumanReview(id, request, authenticatedUsername(httpRequest)));
     }
 
     @PostMapping("/{id}/findings/{findingId}/feedback")
     @RequireRole("ADMIN")
     public ApiResponse<FindingFeedbackResponse> updateFindingFeedback(
+        HttpServletRequest httpRequest,
         @PathVariable @Min(1) Long id,
         @PathVariable @Min(1) Long findingId,
         @Valid @RequestBody FindingFeedbackRequest request
     ) {
-        return ApiResponse.ok(reviewService.updateFindingFeedback(id, findingId, request));
+        return ApiResponse.ok(reviewService.updateFindingFeedback(id, findingId, request, authenticatedUsername(httpRequest)));
     }
 
     @PostMapping("/{id}/retry")
     @RequireRole("ADMIN")
     public ApiResponse<ReviewRetryResponse> retryReview(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.retryReview(id));
+    }
+
+    private String authenticatedUsername(HttpServletRequest request) {
+        Object authenticatedUser = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
+        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
+        }
+        return user.username();
     }
 }
