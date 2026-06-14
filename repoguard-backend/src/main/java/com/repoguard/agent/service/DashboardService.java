@@ -7,5 +7,5 @@ public interface DashboardService {
     /**
      * 基于已持久化的评审任务和问题记录构建仪表盘概览。
      */
-    DashboardOverviewResponse getOverview();
+    DashboardOverviewResponse getOverview(Integer llmTrendDays);
 }

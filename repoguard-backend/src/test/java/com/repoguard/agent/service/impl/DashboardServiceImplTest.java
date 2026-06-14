@@ -48,7 +48,7 @@ class DashboardServiceImplTest {
         when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
-        Map<String, String> health = healthByName(service.getOverview().systemHealth());
+        Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
 
         assertThat(health).containsEntry("MySQL", "正常");
         assertThat(health).containsEntry("RabbitMQ", "正常");
@@ -65,7 +65,7 @@ class DashboardServiceImplTest {
         when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("FAILED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(null);
 
-        Map<String, String> health = healthByName(service.getOverview().systemHealth());
+        Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
 
         assertThat(health).containsEntry("RabbitMQ", "异常");
         assertThat(health).containsEntry("GitHub", "异常");
@@ -89,7 +89,7 @@ class DashboardServiceImplTest {
         when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
-        var overview = service.getOverview();
+        var overview = service.getOverview(30);
 
         assertThat(overview.llmQualityByModel()).hasSize(2);
         var qwen = overview.llmQualityByModel().stream()
@@ -109,7 +109,7 @@ class DashboardServiceImplTest {
         assertThat(api.taskCount()).isEqualTo(2);
         assertThat(api.fallbackRate()).isEqualTo("50.0%");
         assertThat(api.validRate()).isEqualTo("66.7%");
-        assertThat(overview.llmQualityTrend()).hasSize(7);
+        assertThat(overview.llmQualityTrend()).hasSize(30);
     }
 
     private Map<String, String> healthByName(List<SystemHealthItemDto> healthItems) {

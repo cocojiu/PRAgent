@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class DashboardControllerTest {
 
-    private final DashboardService dashboardService = () -> new DashboardOverviewResponse(
+    private final DashboardService dashboardService = llmTrendDays -> new DashboardOverviewResponse(
         List.of(new DashboardMetricDto("本周审查", "8", "0.0%", "up", "blue")),
         List.of(new ReviewTrendPointDto("05-31", 1)),
         List.of(new ChartSliceDto("高风险", 1, "#ef4444", "12.5%")),

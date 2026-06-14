@@ -33,7 +33,16 @@
 
     <section class="dashboard-grid llm-quality-grid">
       <article class="dashboard-card chart-card chart-card--wide">
-        <h2>LLM 质量趋势</h2>
+        <div class="quality-card-head">
+          <h2>LLM 质量趋势</h2>
+          <el-segmented
+            v-model="llmTrendDays"
+            :options="llmTrendWindowOptions"
+            size="small"
+            :disabled="loading"
+            @change="() => loadOverview()"
+          />
+        </div>
         <EChartPanel v-if="llmQualityTrend.length" :option="llmQualityTrendOption" />
         <el-empty v-else description="暂无 LLM 质量趋势数据" />
       </article>
@@ -162,6 +171,12 @@ const getMetricIcon = useMetricIcon(metricIconMap, FileText);
 const loading = ref(false);
 const errorMessage = ref("");
 const lastHealthCheckAt = ref("-");
+const llmTrendDays = ref(7);
+const llmTrendWindowOptions = [
+  { label: "7 天", value: 7 },
+  { label: "30 天", value: 30 },
+  { label: "90 天", value: 90 }
+];
 const overview = ref<DashboardOverview>({
   overviewMetrics: [],
   reviewTrend: [],
@@ -204,7 +219,7 @@ const loadOverview = async () => {
   loading.value = true;
   errorMessage.value = "";
   try {
-    overview.value = await fetchDashboardOverview();
+    overview.value = await fetchDashboardOverview(llmTrendDays.value);
     lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
   } catch (error) {
     errorMessage.value = getErrorMessage(error, "仪表盘数据加载失败");

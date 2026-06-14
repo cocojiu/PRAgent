@@ -67,7 +67,8 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardOverviewResponse getOverview() {
+    public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
+        int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>().orderByAsc(ReviewTask::getCreatedAt)
         );
@@ -85,8 +86,19 @@ public class DashboardServiceImpl implements DashboardService {
             buildSystemHealth(),
             buildLlmQualityByModel(tasks, findings),
             buildLlmQualityByRepository(tasks, findings),
-            buildLlmQualityTrend(tasks)
+            buildLlmQualityTrend(tasks, normalizedLlmTrendDays)
         );
+    }
+
+    private int normalizeLlmTrendDays(Integer days) {
+        if (days == null) {
+            return 7;
+        }
+        return switch (days) {
+            case 30 -> 30;
+            case 90 -> 90;
+            default -> 7;
+        };
     }
 
     private List<SystemHealthItemDto> buildSystemHealth() {
@@ -276,13 +288,13 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<ReviewTask> tasks) {
+    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<ReviewTask> tasks, int days) {
         LocalDate today = LocalDate.now();
         Map<LocalDate, List<ReviewTask>> tasksByDate = llmQualityTasks(tasks).stream()
             .filter(task -> task.getCreatedAt() != null)
             .collect(Collectors.groupingBy(task -> task.getCreatedAt().toLocalDate()));
-        return java.util.stream.IntStream.rangeClosed(0, 6)
-            .mapToObj(today.minusDays(6)::plusDays)
+        return java.util.stream.IntStream.rangeClosed(0, days - 1)
+            .mapToObj(today.minusDays(days - 1L)::plusDays)
             .map(date -> {
                 List<ReviewTask> dateTasks = tasksByDate.getOrDefault(date, List.of());
                 return new LlmQualityTrendPointDto(
