@@ -270,13 +270,33 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewFindingResult stronger = riskRank(second.severity()) > riskRank(first.severity()) ? second : first;
         return new ReviewFindingResult(
             stronger.severity(),
-            mergeText(first.source(), second.source()),
+            mergeSource(first.source(), second.source()),
             mergeText(first.ruleId(), second.ruleId()),
             stronger.filePath(),
             stronger.lineNumber(),
             stronger.message(),
             mergeText(first.recommendation(), second.recommendation())
         );
+    }
+
+    private String mergeSource(String first, String second) {
+        String left = trimToNull(first);
+        String right = trimToNull(second);
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.equalsIgnoreCase(right)) {
+            return left;
+        }
+        if (containsSource(left, "LLM") && containsSource(right, "RULE")
+            || containsSource(left, "RULE") && containsSource(right, "LLM")) {
+            return "LLM+RULE";
+        }
+        return left + " / " + right;
+    }
+
+    private boolean containsSource(String value, String source) {
+        return value != null && value.toUpperCase(Locale.ROOT).contains(source);
     }
 
     private String mergeText(String first, String second) {

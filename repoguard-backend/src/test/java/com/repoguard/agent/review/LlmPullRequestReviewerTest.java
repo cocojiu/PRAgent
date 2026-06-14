@@ -86,6 +86,7 @@ class LlmPullRequestReviewerTest {
 
         when(configMapper.selectById(1L)).thenReturn(config);
         when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
 
         ReviewResult result = new TestableLlmPullRequestReviewer(
             configMapper,
@@ -101,10 +102,43 @@ class LlmPullRequestReviewerTest {
         assertThat(result.findings()).hasSize(reviewedChunks.size());
         assertThat(result.llmParseStatus()).isEqualTo("parsed");
         assertThat(result.llmPromptSummary()).contains("chunked=true", "aggregateRisk=HIGH");
+        assertThat(result.llmPromptSummary()).contains("rulesApplied=true", "ruleFindings=0");
         assertThat(result.llmPromptTokens()).isEqualTo(reviewedChunks.size() * 100);
         assertThat(result.llmCompletionTokens()).isEqualTo(reviewedChunks.size() * 20);
         assertThat(result.llmTotalTokens()).isEqualTo(reviewedChunks.size() * 120);
         assertThat(result.llmEstimatedCost()).isEqualByComparingTo(BigDecimal.valueOf(reviewedChunks.size() * 80).movePointLeft(6));
+    }
+
+    @Test
+    void reviewCombinesLlmAndRuleFindingsWhenLlmSucceeds() {
+        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
+        ReviewPolicyConfig config = llmConfig();
+        config.setChunkFileThreshold(99);
+        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
+        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+            file("src/main/java/com/repoguard/agent/service/A.java", 10, 2)
+        ));
+
+        when(configMapper.selectById(1L)).thenReturn(config);
+        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed(
+            "HIGH",
+            List.of(new ReviewFindingResult("HIGH", "RULE", "RG-JAVA-002", "src/main/java/com/repoguard/agent/service/A.java", 12, "Rule finding", "Use logger"))
+        ));
+
+        ReviewResult result = new TestableLlmPullRequestReviewer(
+            configMapper,
+            ruleBasedReviewer,
+            secretCryptoService,
+            reviewedChunks
+        ).review(new ReviewTask(), diff);
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "RULE");
+        assertThat(result.llmPromptSummary()).contains("rulesApplied=true", "ruleFindings=1", "mergedFindings=2");
     }
 
     private ReviewPolicyConfig llmConfig() {

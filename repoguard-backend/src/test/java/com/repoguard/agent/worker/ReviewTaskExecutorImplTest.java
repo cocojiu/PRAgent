@@ -139,7 +139,7 @@ class ReviewTaskExecutorImplTest {
         verify(reviewFindingMapper).insert(findingCaptor.capture());
         ReviewFinding finding = findingCaptor.getValue();
         assertThat(finding.getSeverity()).isEqualTo("HIGH");
-        assertThat(finding.getSource()).isEqualTo("LLM / RULE");
+        assertThat(finding.getSource()).isEqualTo("LLM+RULE");
         assertThat(finding.getRuleId()).isEqualTo("LLM / RG-JAVA-002");
         assertThat(finding.getRecommendation()).isEqualTo("Replace stdout / Use structured logger");
     }

@@ -88,14 +88,16 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
 
         try {
             ReviewResult parsed = reviewWithOptionalChunks(config, task, diff);
+            ReviewResult ruleReview = ruleBasedReviewer.review(diff);
+            ReviewResult merged = mergeWithRuleReview(parsed, ruleReview);
             return ReviewResult.completed(
-                parsed.riskLevel(),
-                parsed.findings(),
+                merged.riskLevel(),
+                merged.findings(),
                 config.getLlmProvider(),
                 config.getModelName(),
                 elapsedMillis(startedAt),
                 "parsed",
-                parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(),
+                hybridPromptSummary(parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(), ruleReview, merged),
                 parsed.llmPromptTokens(),
                 parsed.llmCompletionTokens(),
                 parsed.llmTotalTokens(),
@@ -107,6 +109,27 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             }
             throw ex;
         }
+    }
+
+    private ReviewResult mergeWithRuleReview(ReviewResult llmReview, ReviewResult ruleReview) {
+        if (ruleReview == null || ruleReview.findings() == null || ruleReview.findings().isEmpty()) {
+            return llmReview;
+        }
+        List<ReviewFindingResult> findings = new java.util.ArrayList<>();
+        if (llmReview.findings() != null) {
+            findings.addAll(llmReview.findings());
+        }
+        findings.addAll(ruleReview.findings());
+        return ReviewResult.completed(maxRisk(llmReview.riskLevel(), ruleReview.riskLevel()), findings);
+    }
+
+    private String hybridPromptSummary(String promptSummary, ReviewResult ruleReview, ReviewResult merged) {
+        int ruleFindings = ruleReview == null || ruleReview.findings() == null ? 0 : ruleReview.findings().size();
+        int mergedFindings = merged == null || merged.findings() == null ? 0 : merged.findings().size();
+        return promptSummary
+            + "; rulesApplied=true"
+            + "; ruleFindings=" + ruleFindings
+            + "; mergedFindings=" + mergedFindings;
     }
 
     private ReviewResult reviewWithOptionalChunks(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
