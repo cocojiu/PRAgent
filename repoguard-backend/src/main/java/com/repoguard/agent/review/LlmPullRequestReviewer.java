@@ -16,6 +16,7 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final ExternalCallResilience resilience;
     private final PullRequestDiffChunker diffChunker;
 
+    @Autowired
     public LlmPullRequestReviewer(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
         RuleBasedPullRequestReviewer ruleBasedReviewer,

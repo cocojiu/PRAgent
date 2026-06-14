@@ -75,6 +75,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -147,7 +148,8 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    ReviewServiceImpl(
+    @Autowired
+    public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
