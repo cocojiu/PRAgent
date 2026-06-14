@@ -31,6 +31,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final LlmReviewResultParser reviewResultParser;
     private final RepoGuardMetrics metrics;
     private final ExternalCallResilience resilience;
+    private final PullRequestDiffChunker diffChunker;
 
     public LlmPullRequestReviewer(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
@@ -41,6 +42,28 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         RepoGuardMetrics metrics,
         ExternalCallResilience resilience
     ) {
+        this(
+            reviewPolicyConfigMapper,
+            ruleBasedReviewer,
+            restClientBuilder,
+            objectMapper,
+            secretCryptoService,
+            metrics,
+            resilience,
+            new PullRequestDiffChunker()
+        );
+    }
+
+    LlmPullRequestReviewer(
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        SecretCryptoService secretCryptoService,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience,
+        PullRequestDiffChunker diffChunker
+    ) {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.restClientBuilder = restClientBuilder;
@@ -48,6 +71,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         this.secretCryptoService = secretCryptoService;
         this.metrics = metrics;
         this.resilience = resilience;
+        this.diffChunker = diffChunker;
         this.reviewResultParser = new LlmReviewResultParser(objectMapper);
     }
 
@@ -61,8 +85,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         }
 
         try {
-            String content = callLlm(config, task, diff);
-            ReviewResult parsed = reviewResultParser.parse(content);
+            ReviewResult parsed = reviewWithOptionalChunks(config, task, diff);
             return ReviewResult.completed(
                 parsed.riskLevel(),
                 parsed.findings(),
@@ -70,7 +93,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 config.getModelName(),
                 elapsedMillis(startedAt),
                 "parsed",
-                promptSummary
+                parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary()
             );
         } catch (RuntimeException ex) {
             if (Boolean.TRUE.equals(config.getFallbackToRules())) {
@@ -78,6 +101,35 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             }
             throw ex;
         }
+    }
+
+    private ReviewResult reviewWithOptionalChunks(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+        List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff);
+        if (chunks.size() == 1) {
+            String content = callLlm(config, task, diff);
+            ReviewResult parsed = reviewResultParser.parse(content);
+            return ReviewResult.completed(parsed.riskLevel(), parsed.findings(), null, null, null, null, promptSummary(diff));
+        }
+
+        List<ReviewFindingResult> findings = new java.util.ArrayList<>();
+        String riskLevel = "INFO";
+        for (PullRequestDiffChunk chunk : chunks) {
+            String content = callLlm(config, task, chunk.diff());
+            ReviewResult parsed = reviewResultParser.parse(content);
+            riskLevel = maxRisk(riskLevel, parsed.riskLevel());
+            if (parsed.findings() != null) {
+                findings.addAll(parsed.findings());
+            }
+        }
+        return ReviewResult.completed(
+            riskLevel,
+            findings,
+            null,
+            null,
+            null,
+            null,
+            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel)
+        );
     }
 
     private ReviewResult fallbackReview(
@@ -118,7 +170,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             && !"mock".equalsIgnoreCase(config.getLlmProvider());
     }
 
-    private String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+    protected String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
         long startedAt = System.nanoTime();
         RestClient restClient = restClientBuilder
             .baseUrl(config.getBaseUrl().trim())
@@ -257,6 +309,48 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             + "; additions=" + additions
             + "; deletions=" + deletions
             + "; sampleFiles=" + files;
+    }
+
+    private String chunkedPromptSummary(
+        GithubPullRequestDiff diff,
+        List<PullRequestDiffChunk> chunks,
+        int findingCount,
+        String riskLevel
+    ) {
+        int additions = chunks.stream().mapToInt(chunk -> chunk.additions() == null ? 0 : chunk.additions()).sum();
+        int deletions = chunks.stream().mapToInt(chunk -> chunk.deletions() == null ? 0 : chunk.deletions()).sum();
+        String reasons = chunks.stream()
+            .flatMap(chunk -> chunk.reasons().stream())
+            .distinct()
+            .limit(6)
+            .reduce((first, second) -> first + "," + second)
+            .orElse("standard");
+        return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; chunked=true"
+            + "; chunks=" + chunks.size()
+            + "; files=" + (diff.files() == null ? 0 : diff.files().size())
+            + "; additions=" + additions
+            + "; deletions=" + deletions
+            + "; aggregateRisk=" + riskLevel
+            + "; aggregateFindings=" + findingCount
+            + "; chunkReasons=" + reasons;
+    }
+
+    private String maxRisk(String current, String candidate) {
+        return riskRank(candidate) > riskRank(current) ? candidate : current;
+    }
+
+    private int riskRank(String riskLevel) {
+        if (riskLevel == null) {
+            return 0;
+        }
+        return switch (riskLevel.trim().toUpperCase()) {
+            case "CRITICAL" -> 4;
+            case "HIGH" -> 3;
+            case "MEDIUM" -> 2;
+            case "LOW" -> 1;
+            default -> 0;
+        };
     }
 
     private Integer elapsedMillis(long startedAt) {

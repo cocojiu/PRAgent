@@ -11,11 +11,13 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -65,6 +67,42 @@ class LlmPullRequestReviewerTest {
         verify(metrics).llmFallback("llm_circuit_open");
     }
 
+    @Test
+    void reviewSplitsLargeDiffAndAggregatesFindings() {
+        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
+        ReviewPolicyConfig config = llmConfig();
+        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
+        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+            file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
+            file("src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", 140, 30),
+            file("src/main/resources/application-prod.yml", 20, 5),
+            file(".github/workflows/deploy.yml", 35, 6),
+            file("package.json", 12, 3),
+            file("src/main/java/com/repoguard/agent/service/A.java", 110, 30),
+            file("src/main/java/com/repoguard/agent/service/B.java", 120, 30)
+        ));
+
+        when(configMapper.selectById(1L)).thenReturn(config);
+        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+
+        ReviewResult result = new TestableLlmPullRequestReviewer(
+            configMapper,
+            ruleBasedReviewer,
+            secretCryptoService,
+            reviewedChunks
+        ).review(new ReviewTask(), diff);
+
+        assertThat(reviewedChunks).hasSizeGreaterThan(1);
+        assertThat(reviewedChunks)
+            .allSatisfy(chunk -> assertThat(chunk.files()).hasSizeLessThanOrEqualTo(4));
+        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.findings()).hasSize(reviewedChunks.size());
+        assertThat(result.llmParseStatus()).isEqualTo("parsed");
+        assertThat(result.llmPromptSummary()).contains("chunked=true", "aggregateRisk=HIGH");
+    }
+
     private ReviewPolicyConfig llmConfig() {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         config.setId(1L);
@@ -78,5 +116,54 @@ class LlmPullRequestReviewerTest {
         config.setTimeoutSeconds(30);
         config.setFallbackToRules(true);
         return config;
+    }
+
+    private GithubChangedFile file(String path, int additions, int deletions) {
+        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
+    }
+
+    private static class TestableLlmPullRequestReviewer extends LlmPullRequestReviewer {
+
+        private final List<GithubPullRequestDiff> reviewedChunks;
+
+        TestableLlmPullRequestReviewer(
+            ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+            RuleBasedPullRequestReviewer ruleBasedReviewer,
+            SecretCryptoService secretCryptoService,
+            List<GithubPullRequestDiff> reviewedChunks
+        ) {
+            super(
+                reviewPolicyConfigMapper,
+                ruleBasedReviewer,
+                RestClient.builder(),
+                new ObjectMapper(),
+                secretCryptoService,
+                null,
+                null,
+                new PullRequestDiffChunker()
+            );
+            this.reviewedChunks = reviewedChunks;
+        }
+
+        @Override
+        protected String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+            reviewedChunks.add(diff);
+            String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
+            String riskLevel = firstFile.contains("security") || firstFile.endsWith(".sql") ? "HIGH" : "LOW";
+            return """
+                {
+                  "riskLevel": "%s",
+                  "findings": [
+                    {
+                      "severity": "%s",
+                      "filePath": "%s",
+                      "lineNumber": 12,
+                      "message": "Chunk finding",
+                      "recommendation": "Review this chunk"
+                    }
+                  ]
+                }
+                """.formatted(riskLevel, riskLevel, firstFile);
+        }
     }
 }
