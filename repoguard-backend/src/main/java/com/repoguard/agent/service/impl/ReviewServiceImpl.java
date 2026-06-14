@@ -417,9 +417,9 @@ public class ReviewServiceImpl implements ReviewService {
         boolean repositoryMatched = repositoryConfigured
             && equalsIgnoreCase(taskOwner, configuredOwner)
             && equalsIgnoreCase(taskRepository, configuredRepository);
-        boolean connectionHealthy = config != null
-            && "CONFIGURED".equals(config.getStatus())
-            && !StringUtils.hasText(config.getLastError());
+        boolean connectionHealthy = tokenConfigured
+            && repositoryConfigured
+            && repositoryMatched;
 
         List<String> messages = new java.util.ArrayList<>();
         if (!tokenConfigured) {
@@ -470,14 +470,14 @@ public class ReviewServiceImpl implements ReviewService {
         if (!tokenConfigured) {
             return "token_missing";
         }
-        if (!connectionHealthy) {
-            return "connection_failed";
-        }
         if (!repositoryConfigured) {
             return "repository_not_configured";
         }
         if (!repositoryMatched) {
             return "repository_mismatch";
+        }
+        if (!connectionHealthy) {
+            return "connection_failed";
         }
         return "ready";
     }
@@ -1973,7 +1973,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {
-        if (!StringUtils.hasText(commit) || "pending".equals(commit)) {
+        if (!StringUtils.hasText(commit)) {
             return null;
         }
         return reviewTaskMapper.selectOne(

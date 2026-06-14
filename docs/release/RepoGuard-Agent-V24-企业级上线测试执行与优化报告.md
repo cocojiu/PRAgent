@@ -193,9 +193,24 @@ V24 demo 任务概要：
 | ISS-V24-005 | Minor | Vite 构建存在第三方 PURE annotation warning | `@vueuse/core` warning | 不影响构建，但影响构建日志清洁度 | 后续升级依赖或忽略已知 warning | 不阻塞 |
 | ISS-V24-006 | Minor | 真实 PR 未触发 chunked review | `chunkedReview.enabled=false` | 分片能力仅通过 seed 验证 | 准备大 PR 或专用 fixture 触发 chunked review | 不阻塞 demo |
 
-## 12. 上线结论
+## 12. V25 修复验证追加
 
-结论：**有条件通过，建议上线到服务器 demo/staging**。
+追加验证时间：2026-06-14 19:16 - 19:18  
+追加提交范围：V25 legacy 数据清理、pending commit 幂等复用、GitHub preview 写回状态判断优化。
+
+| 测试编号 | 测试项 | 测试标准 | 实际结果 | 结论 |
+| --- | --- | --- | --- | --- |
+| FIX-001 | V25 migration 应用 | 验证库从 V24 升级到 V25 | Flyway `V25__remove_legacy_v2_demo_data.sql` 执行成功，schema now at version v25 | 通过 |
+| FIX-002 | V2 legacy 数据清理 | `505-512` 不再出现在演示库 | `legacy_v2_task_count=0` | 通过 |
+| FIX-003 | GitHub preview 误报修复 | owner/repo/token 匹配时不因历史连接错误显示 `connection_failed` | `previewStatus=ready`，`previewLevel=success`，`connectionHealthy=true` | 通过 |
+| FIX-004 | 不存在 PR 重复提交幂等 | 重复提交不返回 500 | 重复提交 PR `999999` 返回 existing task `9006`，message 为 `Review task already exists` | 通过 |
+| FIX-005 | 后端回归测试 | 全量测试 0 failures / 0 errors | `mvn test`：211 tests，0 failures，0 errors，0 skipped | 通过 |
+
+本节修复后，`ISS-V24-001`、`ISS-V24-002`、`ISS-V24-003` 已关闭。`ISS-V24-004` RabbitMQ 配置态和运行态展示不一致仍建议在服务器部署前优化，但不阻塞 demo/staging 上线。
+
+## 13. 上线结论
+
+结论：**通过 demo/staging 上线门槛，建议上线到服务器 demo/staging**。
 
 允许事项：
 
@@ -205,9 +220,6 @@ V24 demo 任务概要：
 
 上线前建议先处理：
 
-- 新增 V25 清理或隔离 V2 legacy 数据，让演示数据只展示 V24。
-- 修复不存在 PR 重复提交返回 500 的异常处理。
-- 修正 GitHub preview 写回检查误报。
 - 调整 RabbitMQ 配置页状态表达，区分配置测试失败和运行态连接成功。
 
 生产化前仍需补充：

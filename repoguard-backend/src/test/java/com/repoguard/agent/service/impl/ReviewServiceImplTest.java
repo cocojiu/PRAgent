@@ -140,6 +140,28 @@ class ReviewServiceImplTest {
     }
 
     @Test
+    void getGithubCommentPreviewKeepsReadyWhenOnlyStaleGithubConnectionErrorExists() {
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig(
+            "octocat",
+            "Hello-World",
+            "FAILED",
+            "enc:v1:test",
+            "404 Not Found"
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+
+        var preview = service.getGithubCommentPreview(521L);
+
+        assertThat(preview.writebackCheck().status()).isEqualTo("ready");
+        assertThat(preview.writebackCheck().level()).isEqualTo("success");
+        assertThat(preview.writebackCheck().connectionHealthy()).isTrue();
+        assertThat(preview.writebackCheck().lastError()).contains("404 Not Found");
+    }
+
+    @Test
     void publishGithubCommentsSendsOnlyCommentableDrafts() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
@@ -728,6 +750,30 @@ class ReviewServiceImplTest {
             "EXISTING_REUSED".equals(task.getTriggerSource())
         ));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
+    void triggerManualReviewReusesExistingPendingCommitTask() {
+        ReviewTask existing = task();
+        existing.setCommitSha("pending");
+        existing.setStatus("QUEUED");
+        when(reviewTaskMapper.selectOne(any())).thenReturn(existing);
+
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            1,
+            "Smoke review",
+            "",
+            "master",
+            "github_pr_picker"
+        ));
+
+        assertThat(result.taskId()).isEqualTo(521L);
+        assertThat(result.existing()).isTrue();
+        assertThat(result.status()).isEqualTo("queued");
+        verify(reviewTaskMapper, never()).insert(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
