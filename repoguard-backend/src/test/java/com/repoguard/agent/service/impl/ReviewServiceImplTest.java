@@ -583,7 +583,7 @@ class ReviewServiceImplTest {
         ReviewTask task = task();
         task.setLlmPromptSummary(
             "PR octocat/Hello-World#1; chunked=true; chunks=3; files=12; additions=240; deletions=18; "
-                + "aggregateRisk=HIGH; aggregateFindings=7; chunkReasons=security,config,build"
+                + "aggregateRisk=HIGH; aggregateFindings=7; failedChunks=1; chunkReasons=security,config,build"
         );
         when(reviewTaskMapper.selectById(521L)).thenReturn(task);
         when(changedFileMapper.selectList(any())).thenReturn(List.of());
@@ -596,6 +596,7 @@ class ReviewServiceImplTest {
         assertThat(result.chunkedReview().chunkCount()).isEqualTo(3);
         assertThat(result.chunkedReview().aggregateRisk()).isEqualTo("high");
         assertThat(result.chunkedReview().aggregateFindings()).isEqualTo(7);
+        assertThat(result.chunkedReview().failedChunks()).isEqualTo(1);
         assertThat(result.chunkedReview().reasons()).containsExactly("security", "config", "build");
     }
 
@@ -612,6 +613,7 @@ class ReviewServiceImplTest {
 
         assertThat(result.chunkedReview().enabled()).isFalse();
         assertThat(result.chunkedReview().chunkCount()).isZero();
+        assertThat(result.chunkedReview().failedChunks()).isZero();
         assertThat(result.chunkedReview().reasons()).isEmpty();
     }
 

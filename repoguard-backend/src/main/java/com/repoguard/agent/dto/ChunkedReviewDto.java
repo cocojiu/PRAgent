@@ -10,9 +10,10 @@ public record ChunkedReviewDto(
     Integer chunkCount,
     String aggregateRisk,
     Integer aggregateFindings,
+    Integer failedChunks,
     List<String> reasons
 ) {
     public static ChunkedReviewDto disabled() {
-        return new ChunkedReviewDto(false, 0, null, 0, List.of());
+        return new ChunkedReviewDto(false, 0, null, 0, 0, List.of());
     }
 }

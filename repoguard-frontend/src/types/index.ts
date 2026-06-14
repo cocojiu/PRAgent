@@ -290,6 +290,7 @@ export interface ChunkedReview {
   chunkCount: number;
   aggregateRisk?: RiskLevel | string;
   aggregateFindings: number;
+  failedChunks: number;
   reasons: string[];
 }
 

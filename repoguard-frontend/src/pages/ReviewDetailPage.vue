@@ -505,6 +505,7 @@
               <dt v-if="selectedTask.chunkedReview.enabled">分片数量</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.chunkCount }}</dd>
               <dt v-if="selectedTask.chunkedReview.enabled">聚合风险</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ chunkAggregateRiskText(selectedTask.chunkedReview.aggregateRisk) }}</dd>
               <dt v-if="selectedTask.chunkedReview.enabled">聚合发现</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.aggregateFindings }}</dd>
+              <dt v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.failedChunks > 0">规则补位分片</dt><dd v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.failedChunks > 0">{{ selectedTask.chunkedReview.failedChunks }}</dd>
               <dt v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length">分片原因</dt>
               <dd v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length" class="chunk-reasons">
                 <span v-for="reason in selectedTask.chunkedReview.reasons" :key="reason">{{ chunkReasonText(reason) }}</span>
@@ -1088,6 +1089,7 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
     chunkCount: task.chunkedReview?.chunkCount ?? 0,
     aggregateRisk: task.chunkedReview?.aggregateRisk ?? "info",
     aggregateFindings: task.chunkedReview?.aggregateFindings ?? 0,
+    failedChunks: task.chunkedReview?.failedChunks ?? 0,
     reasons: task.chunkedReview?.reasons ?? []
   }
 });

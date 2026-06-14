@@ -141,6 +141,57 @@ class LlmPullRequestReviewerTest {
         assertThat(result.llmPromptSummary()).contains("rulesApplied=true", "ruleFindings=1", "mergedFindings=2");
     }
 
+    @Test
+    void reviewFallsBackOnlyFailedChunksToRules() {
+        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
+        ReviewPolicyConfig config = llmConfig();
+        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
+        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+            file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
+            file("src/main/resources/application-prod.yml", 20, 5),
+            file("src/main/java/com/repoguard/agent/service/A.java", 110, 30),
+            file("src/main/java/com/repoguard/agent/service/B.java", 120, 30),
+            file("src/main/java/com/repoguard/agent/service/C.java", 130, 30),
+            file("src/main/java/com/repoguard/agent/service/D.java", 140, 30),
+            file("src/main/java/com/repoguard/agent/service/E.java", 150, 30)
+        ));
+
+        when(configMapper.selectById(1L)).thenReturn(config);
+        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenAnswer(invocation -> {
+            GithubPullRequestDiff reviewedDiff = invocation.getArgument(0);
+            String matchedFile = reviewedDiff.files().stream()
+                .map(GithubChangedFile::filename)
+                .filter(file -> file.contains("service/C.java"))
+                .findFirst()
+                .orElse(null);
+            if (matchedFile != null) {
+                return ReviewResult.completed(
+                    "MEDIUM",
+                    List.of(new ReviewFindingResult("MEDIUM", "RULE", "RG-CONFIG-001", matchedFile, 1, "Config fallback finding", "Review production config"))
+                );
+            }
+            return ReviewResult.completed("INFO", List.of());
+        });
+
+        ReviewResult result = new TestableLlmPullRequestReviewer(
+            configMapper,
+            ruleBasedReviewer,
+            secretCryptoService,
+            reviewedChunks,
+            "service/C.java"
+        ).review(new ReviewTask(), diff);
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        assertThat(result.llmParseStatus()).isEqualTo("partial_fallback");
+        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.findings()).extracting(ReviewFindingResult::source).contains("LLM", "RULE");
+        assertThat(result.llmPromptSummary()).contains("chunked=true", "failedChunks=1", "rulesApplied=true");
+        assertThat(result.llmPromptTokens()).isEqualTo((reviewedChunks.size() - 1) * 100);
+    }
+
     private ReviewPolicyConfig llmConfig() {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         config.setId(1L);
@@ -169,12 +220,23 @@ class LlmPullRequestReviewerTest {
     private static class TestableLlmPullRequestReviewer extends LlmPullRequestReviewer {
 
         private final List<GithubPullRequestDiff> reviewedChunks;
+        private final String failingFilePart;
 
         TestableLlmPullRequestReviewer(
             ReviewPolicyConfigMapper reviewPolicyConfigMapper,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
             SecretCryptoService secretCryptoService,
             List<GithubPullRequestDiff> reviewedChunks
+        ) {
+            this(reviewPolicyConfigMapper, ruleBasedReviewer, secretCryptoService, reviewedChunks, null);
+        }
+
+        TestableLlmPullRequestReviewer(
+            ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+            RuleBasedPullRequestReviewer ruleBasedReviewer,
+            SecretCryptoService secretCryptoService,
+            List<GithubPullRequestDiff> reviewedChunks,
+            String failingFilePart
         ) {
             super(
                 reviewPolicyConfigMapper,
@@ -187,12 +249,18 @@ class LlmPullRequestReviewerTest {
                 new PullRequestDiffChunker()
             );
             this.reviewedChunks = reviewedChunks;
+            this.failingFilePart = failingFilePart;
         }
 
         @Override
         protected LlmCallResult callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
             reviewedChunks.add(diff);
             String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
+            boolean shouldFail = failingFilePart != null
+                && diff.files().stream().map(GithubChangedFile::filename).anyMatch(file -> file.contains(failingFilePart));
+            if (shouldFail) {
+                throw new IllegalStateException("chunk llm unavailable");
+            }
             String riskLevel = firstFile.contains("security") || firstFile.endsWith(".sql") ? "HIGH" : "LOW";
             String content = """
                 {

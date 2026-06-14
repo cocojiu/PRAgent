@@ -96,7 +96,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 config.getLlmProvider(),
                 config.getModelName(),
                 elapsedMillis(startedAt),
-                "parsed",
+                parsed.llmParseStatus() == null ? "parsed" : parsed.llmParseStatus(),
                 hybridPromptSummary(parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(), ruleReview, merged),
                 parsed.llmPromptTokens(),
                 parsed.llmCompletionTokens(),
@@ -157,15 +157,28 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         int promptTokens = 0;
         int completionTokens = 0;
         int totalTokens = 0;
+        int failedChunks = 0;
         for (PullRequestDiffChunk chunk : chunks) {
-            LlmCallResult callResult = callLlm(config, task, chunk.diff());
-            ReviewResult parsed = reviewResultParser.parse(callResult.content());
-            riskLevel = maxRisk(riskLevel, parsed.riskLevel());
-            promptTokens += safeInt(callResult.promptTokens());
-            completionTokens += safeInt(callResult.completionTokens());
-            totalTokens += safeInt(callResult.totalTokens());
-            if (parsed.findings() != null) {
-                findings.addAll(parsed.findings());
+            try {
+                LlmCallResult callResult = callLlm(config, task, chunk.diff());
+                ReviewResult parsed = reviewResultParser.parse(callResult.content());
+                riskLevel = maxRisk(riskLevel, parsed.riskLevel());
+                promptTokens += safeInt(callResult.promptTokens());
+                completionTokens += safeInt(callResult.completionTokens());
+                totalTokens += safeInt(callResult.totalTokens());
+                if (parsed.findings() != null) {
+                    findings.addAll(parsed.findings());
+                }
+            } catch (RuntimeException ex) {
+                failedChunks++;
+                if (metrics != null) {
+                    metrics.llmFallback("chunk_partial_failure");
+                }
+                ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
+                riskLevel = maxRisk(riskLevel, ruleReview.riskLevel());
+                if (ruleReview.findings() != null) {
+                    findings.addAll(ruleReview.findings());
+                }
             }
         }
         return ReviewResult.completed(
@@ -174,8 +187,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             null,
             null,
             null,
-            null,
-            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel),
+            failedChunks > 0 ? "partial_fallback" : null,
+            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel, failedChunks),
             zeroToNull(promptTokens),
             zeroToNull(completionTokens),
             zeroToNull(totalTokens),
@@ -375,7 +388,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         GithubPullRequestDiff diff,
         List<PullRequestDiffChunk> chunks,
         int findingCount,
-        String riskLevel
+        String riskLevel,
+        int failedChunks
     ) {
         int additions = chunks.stream().mapToInt(chunk -> chunk.additions() == null ? 0 : chunk.additions()).sum();
         int deletions = chunks.stream().mapToInt(chunk -> chunk.deletions() == null ? 0 : chunk.deletions()).sum();
@@ -393,6 +407,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             + "; deletions=" + deletions
             + "; aggregateRisk=" + riskLevel
             + "; aggregateFindings=" + findingCount
+            + "; failedChunks=" + failedChunks
             + "; chunkReasons=" + reasons;
     }
 

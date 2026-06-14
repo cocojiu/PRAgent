@@ -873,6 +873,7 @@ public class ReviewServiceImpl implements ReviewService {
             parsePositiveInt(summary.get("chunks")),
             lower(summary.get("aggregateRisk")),
             parsePositiveInt(summary.get("aggregateFindings")),
+            parsePositiveInt(summary.get("failedChunks")),
             parseChunkReasons(summary.get("chunkReasons"))
         );
     }
