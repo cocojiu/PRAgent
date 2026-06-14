@@ -4,6 +4,7 @@ public record LlmQualityTrendPointDto(
     String date,
     long taskCount,
     String parseSuccessRate,
-    String fallbackRate
+    String fallbackRate,
+    String partialFallbackRate
 ) {
 }

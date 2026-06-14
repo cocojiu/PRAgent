@@ -8,6 +8,7 @@ public record LlmQualityByModelDto(
     String averageCost,
     String parseSuccessRate,
     String fallbackRate,
+    String partialFallbackRate,
     String validRate,
     String falsePositiveRate
 ) {

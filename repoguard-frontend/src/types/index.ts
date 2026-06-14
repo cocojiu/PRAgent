@@ -416,6 +416,7 @@ export interface LlmQualityByModel {
   averageCost: string;
   parseSuccessRate: string;
   fallbackRate: string;
+  partialFallbackRate: string;
   validRate: string;
   falsePositiveRate: string;
 }
@@ -424,6 +425,7 @@ export interface LlmQualityByRepository {
   repository: string;
   taskCount: number;
   fallbackRate: string;
+  partialFallbackRate: string;
   validRate: string;
   falsePositiveRate: string;
 }
@@ -433,6 +435,7 @@ export interface LlmQualityTrendPoint {
   taskCount: number;
   parseSuccessRate: string;
   fallbackRate: string;
+  partialFallbackRate: string;
 }
 
 export interface DashboardOverview {

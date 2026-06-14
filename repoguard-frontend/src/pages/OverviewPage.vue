@@ -56,6 +56,7 @@
           <el-table-column prop="averageCost" label="均成本" width="120" />
           <el-table-column prop="parseSuccessRate" label="解析率" width="100" />
           <el-table-column prop="fallbackRate" label="兜底率" width="100" />
+          <el-table-column prop="partialFallbackRate" label="补位率" width="100" />
           <el-table-column prop="validRate" label="有效率" width="100" />
           <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
           <template #empty>
@@ -69,6 +70,7 @@
           <el-table-column prop="repository" label="仓库" min-width="180" />
           <el-table-column prop="taskCount" label="任务" width="80" />
           <el-table-column prop="fallbackRate" label="兜底率" width="100" />
+          <el-table-column prop="partialFallbackRate" label="补位率" width="100" />
           <el-table-column prop="validRate" label="有效率" width="100" />
           <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
           <template #empty>
@@ -319,6 +321,15 @@ const llmQualityTrendOption = computed<EChartsOption>(() => ({
       data: llmQualityTrend.value.map((item) => percentNumber(item.fallbackRate)),
       lineStyle: { color: "#f59e0b", width: 3 },
       itemStyle: { color: "#f59e0b" }
+    },
+    {
+      name: "部分补位率",
+      type: "line",
+      yAxisIndex: 1,
+      smooth: true,
+      data: llmQualityTrend.value.map((item) => percentNumber(item.partialFallbackRate)),
+      lineStyle: { color: "#14b8a6", width: 3 },
+      itemStyle: { color: "#14b8a6" }
     }
   ]
 }));

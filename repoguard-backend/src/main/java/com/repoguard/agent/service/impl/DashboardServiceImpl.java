@@ -257,6 +257,7 @@ public class DashboardServiceImpl implements DashboardService {
                     formatAverageCost(modelTasks),
                     percentage(parseSuccessCount(modelTasks), modelTasks.size()),
                     percentage(fallbackCount(modelTasks), modelTasks.size()),
+                    percentage(partialFallbackCount(modelTasks), modelTasks.size()),
                     percentage(feedbackCount(modelFindings, "VALID"), reviewedCount),
                     percentage(feedbackCount(modelFindings, "FALSE_POSITIVE"), reviewedCount)
                 );
@@ -281,6 +282,7 @@ public class DashboardServiceImpl implements DashboardService {
                     entry.getKey(),
                     repositoryTasks.size(),
                     percentage(fallbackCount(repositoryTasks), repositoryTasks.size()),
+                    percentage(partialFallbackCount(repositoryTasks), repositoryTasks.size()),
                     percentage(feedbackCount(repositoryFindings, "VALID"), reviewedCount),
                     percentage(feedbackCount(repositoryFindings, "FALSE_POSITIVE"), reviewedCount)
                 );
@@ -301,7 +303,8 @@ public class DashboardServiceImpl implements DashboardService {
                     date.format(TREND_DATE_FORMATTER),
                     dateTasks.size(),
                     percentage(parseSuccessCount(dateTasks), dateTasks.size()),
-                    percentage(fallbackCount(dateTasks), dateTasks.size())
+                    percentage(fallbackCount(dateTasks), dateTasks.size()),
+                    percentage(partialFallbackCount(dateTasks), dateTasks.size())
                 );
             })
             .toList();
@@ -357,6 +360,12 @@ public class DashboardServiceImpl implements DashboardService {
     private long fallbackCount(List<ReviewTask> tasks) {
         return tasks.stream()
             .filter(task -> equalsIgnoreCase(task.getLlmStatus(), "FALLBACK") || equalsIgnoreCase(task.getLlmParseStatus(), "FALLBACK"))
+            .count();
+    }
+
+    private long partialFallbackCount(List<ReviewTask> tasks) {
+        return tasks.stream()
+            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARTIAL_FALLBACK"))
             .count();
     }
 

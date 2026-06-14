@@ -77,7 +77,8 @@ class DashboardServiceImplTest {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
             task(2L, "octocat", "api", "dashscope", "qwen-plus", "FALLBACK", "FALLBACK", 2200),
-            task(3L, "octocat", "web", "openai", "gpt-test", "COMPLETED", "PARSED", 800)
+            task(3L, "octocat", "web", "openai", "gpt-test", "COMPLETED", "PARSED", 800),
+            task(4L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARTIAL_FALLBACK", 1800)
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "VALID"),
@@ -96,9 +97,10 @@ class DashboardServiceImplTest {
             .filter(item -> "dashscope / qwen-plus".equals(item.model()))
             .findFirst()
             .orElseThrow();
-        assertThat(qwen.taskCount()).isEqualTo(2);
-        assertThat(qwen.parseSuccessRate()).isEqualTo("50.0%");
-        assertThat(qwen.fallbackRate()).isEqualTo("50.0%");
+        assertThat(qwen.taskCount()).isEqualTo(3);
+        assertThat(qwen.parseSuccessRate()).isEqualTo("33.3%");
+        assertThat(qwen.fallbackRate()).isEqualTo("33.3%");
+        assertThat(qwen.partialFallbackRate()).isEqualTo("33.3%");
         assertThat(qwen.validRate()).isEqualTo("66.7%");
         assertThat(qwen.falsePositiveRate()).isEqualTo("33.3%");
 
@@ -106,8 +108,9 @@ class DashboardServiceImplTest {
             .filter(item -> "octocat/api".equals(item.repository()))
             .findFirst()
             .orElseThrow();
-        assertThat(api.taskCount()).isEqualTo(2);
-        assertThat(api.fallbackRate()).isEqualTo("50.0%");
+        assertThat(api.taskCount()).isEqualTo(3);
+        assertThat(api.fallbackRate()).isEqualTo("33.3%");
+        assertThat(api.partialFallbackRate()).isEqualTo("33.3%");
         assertThat(api.validRate()).isEqualTo("66.7%");
         assertThat(overview.llmQualityTrend()).hasSize(30);
     }
