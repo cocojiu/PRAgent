@@ -69,6 +69,10 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int MIN_LLM_TEST_MAX_TOKENS = 512;
     private static final int MAX_LLM_TEST_MAX_TOKENS = 4096;
+    private static final int DEFAULT_CHUNK_FILE_THRESHOLD = 6;
+    private static final int DEFAULT_CHUNK_LINE_THRESHOLD = 700;
+    private static final int DEFAULT_CHUNK_MAX_FILES = 4;
+    private static final int DEFAULT_CHUNK_MAX_LINES = 450;
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
@@ -188,6 +192,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         config.setMaxTokens(request.maxTokens());
         config.setFallbackToRules(request.fallbackToRules());
         config.setWorkerConcurrency(request.workerConcurrency());
+        config.setChunkFileThreshold(request.chunkFileThreshold());
+        config.setChunkLineThreshold(request.chunkLineThreshold());
+        config.setChunkMaxFiles(request.chunkMaxFiles());
+        config.setChunkMaxLines(request.chunkMaxLines());
+        config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
+        config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
         config.setUpdatedAt(LocalDateTime.now());
         reviewPolicyConfigMapper.updateById(config);
         if (config.getApiKeyValue() == null) {
@@ -747,6 +757,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         defaultConfig.setMaxTokens(4096);
         defaultConfig.setFallbackToRules(true);
         defaultConfig.setWorkerConcurrency(1);
+        defaultConfig.setChunkFileThreshold(DEFAULT_CHUNK_FILE_THRESHOLD);
+        defaultConfig.setChunkLineThreshold(DEFAULT_CHUNK_LINE_THRESHOLD);
+        defaultConfig.setChunkMaxFiles(DEFAULT_CHUNK_MAX_FILES);
+        defaultConfig.setChunkMaxLines(DEFAULT_CHUNK_MAX_LINES);
+        defaultConfig.setInputTokenPricePerMillion(BigDecimal.ZERO);
+        defaultConfig.setOutputTokenPricePerMillion(BigDecimal.ZERO);
         defaultConfig.setCreatedAt(now);
         defaultConfig.setUpdatedAt(now);
         reviewPolicyConfigMapper.insert(defaultConfig);
@@ -773,6 +789,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         config.setMaxTokens(request.maxTokens());
         config.setFallbackToRules(request.fallbackToRules());
         config.setWorkerConcurrency(request.workerConcurrency());
+        config.setChunkFileThreshold(request.chunkFileThreshold());
+        config.setChunkLineThreshold(request.chunkLineThreshold());
+        config.setChunkMaxFiles(request.chunkMaxFiles());
+        config.setChunkMaxLines(request.chunkMaxLines());
+        config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
+        config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
         return config;
     }
 
@@ -1132,6 +1154,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             config.getMaxTokens(),
             config.getFallbackToRules(),
             config.getWorkerConcurrency(),
+            valueOrDefault(config.getChunkFileThreshold(), DEFAULT_CHUNK_FILE_THRESHOLD),
+            valueOrDefault(config.getChunkLineThreshold(), DEFAULT_CHUNK_LINE_THRESHOLD),
+            valueOrDefault(config.getChunkMaxFiles(), DEFAULT_CHUNK_MAX_FILES),
+            valueOrDefault(config.getChunkMaxLines(), DEFAULT_CHUNK_MAX_LINES),
+            decimalOrZero(config.getInputTokenPricePerMillion()),
+            decimalOrZero(config.getOutputTokenPricePerMillion()),
             format(config.getUpdatedAt())
         );
     }
@@ -1206,6 +1234,14 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase();
+    }
+
+    private Integer valueOrDefault(Integer value, Integer defaultValue) {
+        return value == null ? defaultValue : value;
+    }
+
+    private BigDecimal decimalOrZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private String format(LocalDateTime time) {

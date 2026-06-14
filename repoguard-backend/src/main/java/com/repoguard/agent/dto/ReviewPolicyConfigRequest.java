@@ -19,6 +19,12 @@ public record ReviewPolicyConfigRequest(
     @NotNull @DecimalMin("0.00") @DecimalMax("2.00") BigDecimal temperature,
     @NotNull @Min(1) @Max(128000) Integer maxTokens,
     @NotNull Boolean fallbackToRules,
-    @NotNull @Min(1) @Max(16) Integer workerConcurrency
+    @NotNull @Min(1) @Max(16) Integer workerConcurrency,
+    @NotNull @Min(1) @Max(200) Integer chunkFileThreshold,
+    @NotNull @Min(1) @Max(50000) Integer chunkLineThreshold,
+    @NotNull @Min(1) @Max(50) Integer chunkMaxFiles,
+    @NotNull @Min(1) @Max(50000) Integer chunkMaxLines,
+    @NotNull @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal inputTokenPricePerMillion,
+    @NotNull @DecimalMin("0.0000") @DecimalMax("9999.0000") BigDecimal outputTokenPricePerMillion
 ) {
 }

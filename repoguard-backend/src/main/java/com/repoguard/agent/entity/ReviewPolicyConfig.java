@@ -20,6 +20,12 @@ public class ReviewPolicyConfig {
     private Integer maxTokens;
     private Boolean fallbackToRules;
     private Integer workerConcurrency;
+    private Integer chunkFileThreshold;
+    private Integer chunkLineThreshold;
+    private Integer chunkMaxFiles;
+    private Integer chunkMaxLines;
+    private BigDecimal inputTokenPricePerMillion;
+    private BigDecimal outputTokenPricePerMillion;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -109,6 +115,54 @@ public class ReviewPolicyConfig {
 
     public void setWorkerConcurrency(Integer workerConcurrency) {
         this.workerConcurrency = workerConcurrency;
+    }
+
+    public Integer getChunkFileThreshold() {
+        return chunkFileThreshold;
+    }
+
+    public void setChunkFileThreshold(Integer chunkFileThreshold) {
+        this.chunkFileThreshold = chunkFileThreshold;
+    }
+
+    public Integer getChunkLineThreshold() {
+        return chunkLineThreshold;
+    }
+
+    public void setChunkLineThreshold(Integer chunkLineThreshold) {
+        this.chunkLineThreshold = chunkLineThreshold;
+    }
+
+    public Integer getChunkMaxFiles() {
+        return chunkMaxFiles;
+    }
+
+    public void setChunkMaxFiles(Integer chunkMaxFiles) {
+        this.chunkMaxFiles = chunkMaxFiles;
+    }
+
+    public Integer getChunkMaxLines() {
+        return chunkMaxLines;
+    }
+
+    public void setChunkMaxLines(Integer chunkMaxLines) {
+        this.chunkMaxLines = chunkMaxLines;
+    }
+
+    public BigDecimal getInputTokenPricePerMillion() {
+        return inputTokenPricePerMillion;
+    }
+
+    public void setInputTokenPricePerMillion(BigDecimal inputTokenPricePerMillion) {
+        this.inputTokenPricePerMillion = inputTokenPricePerMillion;
+    }
+
+    public BigDecimal getOutputTokenPricePerMillion() {
+        return outputTokenPricePerMillion;
+    }
+
+    public void setOutputTokenPricePerMillion(BigDecimal outputTokenPricePerMillion) {
+        this.outputTokenPricePerMillion = outputTokenPricePerMillion;
     }
 
     public LocalDateTime getCreatedAt() {

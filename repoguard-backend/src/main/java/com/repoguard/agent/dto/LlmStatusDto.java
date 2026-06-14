@@ -12,9 +12,13 @@ public record LlmStatusDto(
     Integer durationMs,
     String parseStatus,
     String fallbackReason,
-    String promptSummary
+    String promptSummary,
+    Integer promptTokens,
+    Integer completionTokens,
+    Integer totalTokens,
+    String estimatedCost
 ) {
     public LlmStatusDto(String status, String duration, String riskLevel) {
-        this(status, duration, riskLevel, null, null, null, null, null, null);
+        this(status, duration, riskLevel, null, null, null, null, null, null, null, null, null, null);
     }
 }

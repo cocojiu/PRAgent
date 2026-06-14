@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.ChunkedReviewDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
@@ -27,6 +28,7 @@ import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.PrRiskFileDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
+import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -358,18 +360,35 @@ public class ReviewServiceImpl implements ReviewService {
         List<ReviewFinding> findings = reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>()
                 .eq(ReviewFinding::getTaskId, id)
-                .eq(ReviewFinding::getCategory, "FINDING")
                 .orderByAsc(ReviewFinding::getId)
         );
-        Map<Long, GithubCommentPublication> publicationByFindingId = loadPublicationByFindingId(id, findings);
+        List<ReviewFinding> actionableFindings = findings.stream()
+            .filter(finding -> "FINDING".equals(finding.getCategory()))
+            .toList();
+        List<ReviewFindingDto> findingDtos = actionableFindings.stream().map(this::toFindingDto).toList();
+        List<MissingTestDto> missingTests = findings.stream()
+            .filter(finding -> "MISSING_TEST".equals(finding.getCategory()))
+            .map(this::toMissingTestDto)
+            .toList();
+        List<ChangedFileDto> changedFileDtos = changedFileByPath.values().stream()
+            .sorted(Comparator.comparing(file -> file.getId() == null ? Long.MAX_VALUE : file.getId()))
+            .map(this::toChangedFileDto)
+            .toList();
+        ReviewTaskListItem taskItem = toListItem(task, resolveFailureSummary(task, List.of()));
+        PrRiskProfileDto riskProfile = buildRiskProfile(taskItem, findingDtos, changedFileDtos);
+        PrReviewSummaryDto prSummary = buildPrReviewSummary(taskItem, findingDtos, missingTests, changedFileDtos, riskProfile);
+        Map<Long, GithubCommentPublication> publicationByFindingId = loadPublicationByFindingId(id, actionableFindings);
+        GithubCommentPublication prSummaryPublication = loadPrSummaryPublication(id);
 
-        List<GithubCommentPreviewItem> items = findings.stream()
+        List<GithubCommentPreviewItem> items = new java.util.ArrayList<>();
+        items.add(toPrSummaryCommentPreviewItem(prSummary, prSummaryPublication));
+        items.addAll(actionableFindings.stream()
             .map(finding -> toGithubCommentPreviewItem(
                 finding,
                 changedFileByPath.get(finding.getFilePath()),
                 publicationByFindingId.get(finding.getId())
             ))
-            .toList();
+            .toList());
 
         int commentableCount = (int) items.stream().filter(GithubCommentPreviewItem::commentable).count();
         int publishedCount = (int) items.stream().filter(item -> Boolean.TRUE.equals(item.published())).count();
@@ -378,7 +397,7 @@ public class ReviewServiceImpl implements ReviewService {
             task.getPrNumber(),
             task.getPrUrl(),
             buildGithubCommentWritebackCheck(task),
-            items.size(),
+            actionableFindings.size(),
             commentableCount,
             items.size() - commentableCount - publishedCount,
             items
@@ -789,6 +808,7 @@ public class ReviewServiceImpl implements ReviewService {
         List<ReviewTimelineItem> timeline
     ) {
         ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timeline.stream().map(ReviewTimelineItem::label).toList()));
+        PrRiskProfileDto riskProfile = buildRiskProfile(item, findings, changedFiles);
         return new ReviewTaskDetail(
             item.id(),
             item.prNumber(),
@@ -813,7 +833,8 @@ public class ReviewServiceImpl implements ReviewService {
             missingTests,
             changedFiles,
             timeline,
-            buildRiskProfile(item, findings, changedFiles),
+            riskProfile,
+            buildPrReviewSummary(item, findings, missingTests, changedFiles, riskProfile),
             new LlmStatusDto(
                 item.llmStatus(),
                 item.duration(),
@@ -823,8 +844,13 @@ public class ReviewServiceImpl implements ReviewService {
                 task.getLlmDurationMs(),
                 lower(task.getLlmParseStatus()),
                 task.getLlmFallbackReason(),
-                task.getLlmPromptSummary()
+                task.getLlmPromptSummary(),
+                task.getLlmPromptTokens(),
+                task.getLlmCompletionTokens(),
+                task.getLlmTotalTokens(),
+                task.getLlmEstimatedCost() == null ? null : task.getLlmEstimatedCost().toPlainString()
             ),
+            buildChunkedReview(task.getLlmPromptSummary()),
             new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed"),
             item.humanReviewRequired(),
             item.humanReviewStatus(),
@@ -832,6 +858,197 @@ public class ReviewServiceImpl implements ReviewService {
             item.humanReviewBy(),
             item.humanReviewedAt()
         );
+    }
+
+    private ChunkedReviewDto buildChunkedReview(String promptSummary) {
+        if (!StringUtils.hasText(promptSummary)) {
+            return ChunkedReviewDto.disabled();
+        }
+        Map<String, String> summary = parsePromptSummary(promptSummary);
+        if (!"true".equalsIgnoreCase(summary.get("chunked"))) {
+            return ChunkedReviewDto.disabled();
+        }
+        return new ChunkedReviewDto(
+            true,
+            parsePositiveInt(summary.get("chunks")),
+            lower(summary.get("aggregateRisk")),
+            parsePositiveInt(summary.get("aggregateFindings")),
+            parseChunkReasons(summary.get("chunkReasons"))
+        );
+    }
+
+    private Map<String, String> parsePromptSummary(String promptSummary) {
+        return List.of(promptSummary.split(";")).stream()
+            .map(String::trim)
+            .filter(part -> part.contains("="))
+            .map(part -> part.split("=", 2))
+            .filter(parts -> parts.length == 2 && StringUtils.hasText(parts[0]))
+            .collect(Collectors.toMap(
+                parts -> parts[0].trim(),
+                parts -> parts[1].trim(),
+                (first, second) -> second
+            ));
+    }
+
+    private Integer parsePositiveInt(String value) {
+        if (!StringUtils.hasText(value)) {
+            return 0;
+        }
+        try {
+            return Math.max(Integer.parseInt(value.trim()), 0);
+        } catch (NumberFormatException exception) {
+            return 0;
+        }
+    }
+
+    private List<String> parseChunkReasons(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        return List.of(value.split(",")).stream()
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .distinct()
+            .toList();
+    }
+
+    private PrReviewSummaryDto buildPrReviewSummary(
+        ReviewTaskListItem task,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        PrRiskProfileDto riskProfile
+    ) {
+        int criticalCount = countSeverity(findings, "critical");
+        int highCount = countSeverity(findings, "high");
+        int mediumCount = countSeverity(findings, "medium");
+        int totalFindings = findings.size();
+        String overallRisk = riskProfile == null ? "info" : riskProfile.level();
+        boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
+            || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
+        boolean recommendMerge = criticalCount == 0 && highCount == 0 && !humanReviewRequired;
+        String mergeRecommendation = mergeRecommendation(recommendMerge, criticalCount, highCount, mediumCount, humanReviewRequired);
+        List<String> keyRisks = buildPrSummaryRisks(riskProfile, missingTests, criticalCount, highCount, mediumCount);
+        List<String> focusFiles = buildPrSummaryFocusFiles(riskProfile, changedFiles);
+        String summary = "本次 PR 综合风险为 " + riskText(overallRisk)
+            + "，包含 " + changedFiles.size() + " 个变更文件、" + totalFindings + " 条审查发现"
+            + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
+            + "。";
+        String commentBody = buildPrSummaryCommentBody(task, summary, mergeRecommendation, keyRisks, focusFiles);
+        return new PrReviewSummaryDto(
+            overallRisk,
+            summary,
+            mergeRecommendation,
+            recommendMerge,
+            humanReviewRequired,
+            keyRisks,
+            focusFiles,
+            commentBody
+        );
+    }
+
+    private String mergeRecommendation(
+        boolean recommendMerge,
+        int criticalCount,
+        int highCount,
+        int mediumCount,
+        boolean humanReviewRequired
+    ) {
+        if (criticalCount > 0 || highCount > 0) {
+            return "暂不建议直接合并，请优先处理高风险发现后再评估。";
+        }
+        if (humanReviewRequired || mediumCount > 0) {
+            return "建议完成必要人工复核和中风险确认后再合并。";
+        }
+        return recommendMerge ? "未发现阻塞性风险，可按团队流程合并。" : "建议完成复核后再合并。";
+    }
+
+    private List<String> buildPrSummaryRisks(
+        PrRiskProfileDto riskProfile,
+        List<MissingTestDto> missingTests,
+        int criticalCount,
+        int highCount,
+        int mediumCount
+    ) {
+        List<String> risks = new java.util.ArrayList<>();
+        if (criticalCount > 0) {
+            risks.add("包含 " + criticalCount + " 条严重风险发现");
+        }
+        if (highCount > 0) {
+            risks.add("包含 " + highCount + " 条高风险发现");
+        }
+        if (mediumCount > 0) {
+            risks.add("包含 " + mediumCount + " 条中风险发现");
+        }
+        if (!missingTests.isEmpty()) {
+            risks.add("存在 " + missingTests.size() + " 条缺失测试建议");
+        }
+        if (riskProfile != null && riskProfile.signals() != null) {
+            riskProfile.signals().stream()
+                .filter(StringUtils::hasText)
+                .filter(signal -> risks.stream().noneMatch(existing -> existing.equals(signal)))
+                .limit(Math.max(0, 5 - risks.size()))
+                .forEach(risks::add);
+        }
+        if (risks.isEmpty()) {
+            risks.add("未发现明显阻塞性风险");
+        }
+        return risks.stream().limit(5).toList();
+    }
+
+    private List<String> buildPrSummaryFocusFiles(PrRiskProfileDto riskProfile, List<ChangedFileDto> changedFiles) {
+        List<String> files = new java.util.ArrayList<>();
+        if (riskProfile != null && riskProfile.highRiskFiles() != null) {
+            riskProfile.highRiskFiles().stream()
+                .map(PrRiskFileDto::file)
+                .filter(StringUtils::hasText)
+                .limit(3)
+                .forEach(files::add);
+        }
+        if (files.size() < 3) {
+            changedFiles.stream()
+                .sorted(Comparator.comparingInt(file -> -(safeInt(file.additions()) + safeInt(file.deletions()))))
+                .map(ChangedFileDto::path)
+                .filter(StringUtils::hasText)
+                .filter(file -> !files.contains(file))
+                .limit(3 - files.size())
+                .forEach(files::add);
+        }
+        return files;
+    }
+
+    private String buildPrSummaryCommentBody(
+        ReviewTaskListItem task,
+        String summary,
+        String mergeRecommendation,
+        List<String> keyRisks,
+        List<String> focusFiles
+    ) {
+        StringBuilder body = new StringBuilder();
+        body.append("## RepoGuard PR 总评");
+        body.append("\n\n").append(summary);
+        body.append("\n\n**合并建议**：").append(mergeRecommendation);
+        body.append("\n\n**关键风险**");
+        keyRisks.forEach(risk -> body.append("\n- ").append(risk));
+        if (!focusFiles.isEmpty()) {
+            body.append("\n\n**建议重点查看文件**");
+            focusFiles.forEach(file -> body.append("\n- `").append(file).append("`"));
+        }
+        body.append("\n\n> 任务 #").append(task.id()).append("，风险等级：").append(riskText(task.riskLevel())).append("。");
+        return body.toString();
+    }
+
+    private String riskText(String riskLevel) {
+        if (!StringUtils.hasText(riskLevel)) {
+            return "提示";
+        }
+        return switch (riskLevel.trim().toLowerCase(Locale.ROOT)) {
+            case "critical" -> "严重";
+            case "high" -> "高";
+            case "medium" -> "中";
+            case "low" -> "低";
+            default -> "提示";
+        };
     }
 
     private PrRiskProfileDto buildRiskProfile(
@@ -1122,13 +1339,25 @@ public class ReviewServiceImpl implements ReviewService {
         ));
     }
 
-    private GithubCommentPublication savePublication(Long taskId, GithubReviewCommentResult result) {
-        LocalDateTime now = LocalDateTime.now();
-        GithubCommentPublication publication = githubCommentPublicationMapper.selectOne(
+    private GithubCommentPublication loadPrSummaryPublication(Long taskId) {
+        return githubCommentPublicationMapper.selectOne(
             new LambdaQueryWrapper<GithubCommentPublication>()
-                .eq(GithubCommentPublication::getFindingId, result.findingId())
+                .eq(GithubCommentPublication::getTaskId, taskId)
+                .isNull(GithubCommentPublication::getFindingId)
+                .eq(GithubCommentPublication::getTargetType, "pull_request")
                 .last("limit 1")
         );
+    }
+
+    private GithubCommentPublication savePublication(Long taskId, GithubReviewCommentResult result) {
+        LocalDateTime now = LocalDateTime.now();
+        GithubCommentPublication publication = result.findingId() == null
+            ? loadPrSummaryPublication(taskId)
+            : githubCommentPublicationMapper.selectOne(
+                new LambdaQueryWrapper<GithubCommentPublication>()
+                    .eq(GithubCommentPublication::getFindingId, result.findingId())
+                    .last("limit 1")
+            );
         boolean existing = publication != null;
         if (!existing) {
             publication = new GithubCommentPublication();
@@ -1564,6 +1793,33 @@ public class ReviewServiceImpl implements ReviewService {
                 ? null
                 : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
             lower(resolveFindingFeedbackStatus(finding))
+        );
+    }
+
+    private GithubCommentPreviewItem toPrSummaryCommentPreviewItem(
+        PrReviewSummaryDto summary,
+        GithubCommentPublication publication
+    ) {
+        boolean published = isPublished(publication);
+        return new GithubCommentPreviewItem(
+            null,
+            summary.overallRisk(),
+            "PR 总评",
+            null,
+            summary.summary(),
+            summary.mergeRecommendation(),
+            summary.githubCommentBody(),
+            !published,
+            "pull_request",
+            published ? "GitHub comment already published" : null,
+            published,
+            publication == null ? null : publication.getStatus(),
+            publication == null ? null : publication.getGithubUrl(),
+            publication == null ? null : publication.getMessage(),
+            publication == null || publication.getPublishedAt() == null
+                ? null
+                : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
+            "valid"
         );
     }
 

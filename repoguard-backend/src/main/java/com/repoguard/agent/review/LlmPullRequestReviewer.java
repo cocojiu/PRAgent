@@ -11,6 +11,8 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.SecretCryptoService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +95,11 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 config.getModelName(),
                 elapsedMillis(startedAt),
                 "parsed",
-                parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary()
+                parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(),
+                parsed.llmPromptTokens(),
+                parsed.llmCompletionTokens(),
+                parsed.llmTotalTokens(),
+                parsed.llmEstimatedCost()
             );
         } catch (RuntimeException ex) {
             if (Boolean.TRUE.equals(config.getFallbackToRules())) {
@@ -104,19 +110,37 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     }
 
     private ReviewResult reviewWithOptionalChunks(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
-        List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff);
+        List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, config);
         if (chunks.size() == 1) {
-            String content = callLlm(config, task, diff);
-            ReviewResult parsed = reviewResultParser.parse(content);
-            return ReviewResult.completed(parsed.riskLevel(), parsed.findings(), null, null, null, null, promptSummary(diff));
+            LlmCallResult callResult = callLlm(config, task, diff);
+            ReviewResult parsed = reviewResultParser.parse(callResult.content());
+            return ReviewResult.completed(
+                parsed.riskLevel(),
+                parsed.findings(),
+                null,
+                null,
+                null,
+                null,
+                promptSummary(diff),
+                callResult.promptTokens(),
+                callResult.completionTokens(),
+                callResult.totalTokens(),
+                estimatedCost(config, callResult.promptTokens(), callResult.completionTokens())
+            );
         }
 
         List<ReviewFindingResult> findings = new java.util.ArrayList<>();
         String riskLevel = "INFO";
+        int promptTokens = 0;
+        int completionTokens = 0;
+        int totalTokens = 0;
         for (PullRequestDiffChunk chunk : chunks) {
-            String content = callLlm(config, task, chunk.diff());
-            ReviewResult parsed = reviewResultParser.parse(content);
+            LlmCallResult callResult = callLlm(config, task, chunk.diff());
+            ReviewResult parsed = reviewResultParser.parse(callResult.content());
             riskLevel = maxRisk(riskLevel, parsed.riskLevel());
+            promptTokens += safeInt(callResult.promptTokens());
+            completionTokens += safeInt(callResult.completionTokens());
+            totalTokens += safeInt(callResult.totalTokens());
             if (parsed.findings() != null) {
                 findings.addAll(parsed.findings());
             }
@@ -128,7 +152,11 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             null,
             null,
             null,
-            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel)
+            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel),
+            zeroToNull(promptTokens),
+            zeroToNull(completionTokens),
+            zeroToNull(totalTokens),
+            estimatedCost(config, zeroToNull(promptTokens), zeroToNull(completionTokens))
         );
     }
 
@@ -170,7 +198,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             && !"mock".equalsIgnoreCase(config.getLlmProvider());
     }
 
-    protected String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+    protected LlmCallResult callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
         long startedAt = System.nanoTime();
         RestClient restClient = restClientBuilder
             .baseUrl(config.getBaseUrl().trim())
@@ -200,7 +228,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
-            return extractMessageContent(response);
+            return extractLlmCallResult(response);
         } catch (RuntimeException ex) {
             var classified = ExternalCallErrorClassifier.llm(ex);
             if (metrics != null) {
@@ -225,13 +253,22 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         return "llm_unavailable";
     }
 
-    private String extractMessageContent(String response) {
+    private LlmCallResult extractLlmCallResult(String response) {
         try {
             JsonNode root = objectMapper.readTree(response == null ? "" : response);
-            return root.at("/choices/0/message/content").asText("");
+            return new LlmCallResult(
+                root.at("/choices/0/message/content").asText(""),
+                intValue(root.at("/usage/prompt_tokens")),
+                intValue(root.at("/usage/completion_tokens")),
+                intValue(root.at("/usage/total_tokens"))
+            );
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to parse LLM HTTP response", ex);
         }
+    }
+
+    private Integer intValue(JsonNode node) {
+        return node == null || node.isMissingNode() || node.isNull() || !node.canConvertToInt() ? null : node.asInt();
     }
 
     private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
@@ -356,6 +393,38 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private Integer elapsedMillis(long startedAt) {
         long elapsed = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
         return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private Integer zeroToNull(int value) {
+        return value <= 0 ? null : value;
+    }
+
+    private BigDecimal estimatedCost(ReviewPolicyConfig config, Integer promptTokens, Integer completionTokens) {
+        if (config == null || promptTokens == null && completionTokens == null) {
+            return null;
+        }
+        BigDecimal inputPrice = config.getInputTokenPricePerMillion() == null
+            ? BigDecimal.ZERO
+            : config.getInputTokenPricePerMillion();
+        BigDecimal outputPrice = config.getOutputTokenPricePerMillion() == null
+            ? BigDecimal.ZERO
+            : config.getOutputTokenPricePerMillion();
+        BigDecimal inputCost = BigDecimal.valueOf(safeInt(promptTokens)).multiply(inputPrice);
+        BigDecimal outputCost = BigDecimal.valueOf(safeInt(completionTokens)).multiply(outputPrice);
+        BigDecimal total = inputCost.add(outputCost).divide(BigDecimal.valueOf(1_000_000L), 6, RoundingMode.HALF_UP);
+        return total.compareTo(BigDecimal.ZERO) == 0 ? null : total;
+    }
+
+    protected record LlmCallResult(
+        String content,
+        Integer promptTokens,
+        Integer completionTokens,
+        Integer totalTokens
+    ) {
     }
 
 }

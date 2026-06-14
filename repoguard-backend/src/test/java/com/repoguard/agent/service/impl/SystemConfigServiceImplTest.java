@@ -99,14 +99,24 @@ class SystemConfigServiceImplTest {
             BigDecimal.valueOf(0.30),
             8192,
             true,
-            2
+            2,
+            6,
+            700,
+            4,
+            450,
+            BigDecimal.valueOf(0.50),
+            BigDecimal.valueOf(1.50)
         ));
 
         assertThat(config.getApiKeyValue()).startsWith("enc:v2:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
         assertThat(config.getWorkerConcurrency()).isEqualTo(2);
+        assertThat(config.getChunkFileThreshold()).isEqualTo(6);
+        assertThat(config.getInputTokenPricePerMillion()).isEqualByComparingTo("0.50");
         assertThat(result.apiKey()).isEqualTo("****5678");
+        assertThat(result.chunkLineThreshold()).isEqualTo(700);
+        assertThat(result.outputTokenPricePerMillion()).isEqualByComparingTo("1.50");
         verify(reviewPolicyConfigMapper).updateById(config);
     }
 
@@ -144,7 +154,13 @@ class SystemConfigServiceImplTest {
             BigDecimal.valueOf(0.30),
             8192,
             true,
-            2
+            2,
+            6,
+            700,
+            4,
+            450,
+            BigDecimal.valueOf(0.50),
+            BigDecimal.valueOf(1.50)
         ));
 
         assertThat(config.getApiKeyValue()).isNull();

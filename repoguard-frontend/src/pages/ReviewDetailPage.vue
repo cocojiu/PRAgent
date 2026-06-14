@@ -140,6 +140,22 @@
                 </div>
               </div>
             </div>
+            <div v-if="selectedTask.prSummary" class="pr-summary">
+              <div class="pr-summary-head">
+                <span class="risk-profile-eyebrow">PR 总评</span>
+                <span :class="`status-pill ${selectedTask.prSummary.recommendMerge ? 'success' : 'warning'}`">
+                  {{ selectedTask.prSummary.recommendMerge ? "可按流程合并" : "建议复核后合并" }}
+                </span>
+              </div>
+              <p>{{ selectedTask.prSummary.summary }}</p>
+              <p class="risk-profile-review">{{ selectedTask.prSummary.mergeRecommendation }}</p>
+              <div class="risk-profile-signals">
+                <span v-for="risk in selectedTask.prSummary.keyRisks" :key="risk">{{ risk }}</span>
+              </div>
+              <div v-if="selectedTask.prSummary.focusFiles.length" class="pr-summary-files">
+                <code v-for="file in selectedTask.prSummary.focusFiles" :key="file">{{ file }}</code>
+              </div>
+            </div>
           </article>
 
           <article v-if="selectedTask.humanReviewRequired" class="dashboard-card human-review-card">
@@ -320,13 +336,13 @@
               <div v-if="githubCommentPreview.items.length" class="comment-preview-list">
                 <section
                   v-for="item in githubCommentPreview.items"
-                  :key="item.findingId"
+                  :key="commentPreviewKey(item)"
                   :class="['comment-preview-item', { blocked: !item.commentable }]"
                 >
                   <div class="comment-preview-head">
                     <span :class="`risk-pill ${item.severity}`">{{ riskText(item.severity) }}</span>
                     <code>{{ item.file }}</code>
-                    <span class="line-badge">L{{ item.line ?? "-" }}</span>
+                    <span v-if="item.line" class="line-badge">L{{ item.line }}</span>
                     <span class="count-badge">{{ commentTargetText(item.targetType) }}</span>
                     <span :class="`status-pill ${findingFeedbackStatusClass(item.feedbackStatus)}`">
                       {{ findingFeedbackStatusText(item.feedbackStatus) }}
@@ -352,7 +368,7 @@
               <div v-if="githubCommentPublishResult?.items.length" class="comment-result-list">
                 <section
                   v-for="item in githubCommentPublishResult.items"
-                  :key="`${item.findingId}-${item.status}`"
+                  :key="`${item.findingId ?? item.targetType}-${item.status}`"
                   :class="['comment-result-item', publicationItemStatusClass(item.status)]"
                 >
                   <div>
@@ -483,6 +499,16 @@
               <dt>规则兜底</dt><dd>{{ selectedTask.llm.status === "fallback" ? "已启用" : "未触发" }}</dd>
               <dt>耗时</dt><dd>{{ llmDurationText }}</dd>
               <dt>风险级别</dt><dd>{{ riskText(selectedTask.llm.riskLevel) }}</dd>
+              <dt>Token 用量</dt><dd>{{ llmTokenUsageText }}</dd>
+              <dt>成本估算</dt><dd>{{ llmCostText }}</dd>
+              <dt>分片审查</dt><dd>{{ selectedTask.chunkedReview.enabled ? "已启用" : "未启用" }}</dd>
+              <dt v-if="selectedTask.chunkedReview.enabled">分片数量</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.chunkCount }}</dd>
+              <dt v-if="selectedTask.chunkedReview.enabled">聚合风险</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ chunkAggregateRiskText(selectedTask.chunkedReview.aggregateRisk) }}</dd>
+              <dt v-if="selectedTask.chunkedReview.enabled">聚合发现</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.aggregateFindings }}</dd>
+              <dt v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length">分片原因</dt>
+              <dd v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length" class="chunk-reasons">
+                <span v-for="reason in selectedTask.chunkedReview.reasons" :key="reason">{{ chunkReasonText(reason) }}</span>
+              </dd>
               <dt v-if="selectedTask.llm.fallbackReason">兜底原因</dt><dd v-if="selectedTask.llm.fallbackReason" class="status-reason">{{ selectedTask.llm.fallbackReason }}</dd>
               <dt v-if="selectedTask.llm.promptSummary">Prompt 摘要</dt><dd v-if="selectedTask.llm.promptSummary" class="status-reason">{{ selectedTask.llm.promptSummary }}</dd>
               <dt v-if="statusReason">原因</dt><dd v-if="statusReason" class="status-reason">{{ statusReason }}</dd>
@@ -717,6 +743,19 @@ const llmDurationText = computed(() => {
   return selectedTask.value?.llm.duration ?? "-";
 });
 
+const llmTokenUsageText = computed(() => {
+  const llm = selectedTask.value?.llm;
+  if (!llm || !llm.totalTokens) {
+    return "未记录";
+  }
+  return `${llm.totalTokens} total / ${llm.promptTokens ?? 0} prompt / ${llm.completionTokens ?? 0} completion`;
+});
+
+const llmCostText = computed(() => {
+  const cost = selectedTask.value?.llm.estimatedCost;
+  return cost ? `$${cost}` : "未配置单价";
+});
+
 const llmParseStatusText = computed(() => {
   const labels: Record<string, string> = {
     parsed: "解析成功",
@@ -741,6 +780,29 @@ const llmParseStatusClass = computed(() => {
   }
   return "pending";
 });
+
+const chunkAggregateRiskText = (risk?: RiskLevel | string) => riskText((risk || "info") as RiskLevel);
+
+const chunkReasonText = (reason: string) => {
+  const labels: Record<string, string> = {
+    sensitive_path: "敏感路径",
+    large_pr: "大 PR",
+    file_count: "文件数较多",
+    line_count: "变更行数较多",
+    security: "认证权限",
+    config: "运行配置",
+    build: "构建发布",
+    database: "数据库变更",
+    database_migration: "数据库迁移",
+    security_sensitive: "认证权限",
+    runtime_config: "运行配置",
+    delivery_pipeline: "构建发布",
+    multi_file: "多文件变更",
+    large_churn: "变更规模较大",
+    standard: "常规分片"
+  };
+  return labels[reason] ?? reason;
+};
 
 const timelineLabelText = (label: string) => {
   if (label === "Task queued") {
@@ -816,6 +878,9 @@ const commentTargetText = (targetType: string) => {
   };
   return labels[targetType] ?? targetType;
 };
+
+const commentPreviewKey = (item: GithubCommentPreview["items"][number]) =>
+  item.findingId ?? `${item.targetType}-${item.file}-${item.publicationStatus ?? "draft"}`;
 
 const sourceText = (source?: string) => {
   const labels: Record<string, string> = {
@@ -1000,9 +1065,30 @@ const normalizeStatusFields = (task: ReviewTaskDetail): ReviewTaskDetail => ({
     signals: task.riskProfile?.signals ?? [],
     highRiskFiles: task.riskProfile?.highRiskFiles ?? []
   },
+  prSummary: {
+    overallRisk: task.prSummary?.overallRisk ?? task.riskProfile?.level ?? "info",
+    summary: task.prSummary?.summary ?? "暂无 PR 总评数据。",
+    mergeRecommendation: task.prSummary?.mergeRecommendation ?? "可按团队流程继续复核。",
+    recommendMerge: Boolean(task.prSummary?.recommendMerge),
+    humanReviewRequired: Boolean(task.prSummary?.humanReviewRequired),
+    keyRisks: task.prSummary?.keyRisks ?? [],
+    focusFiles: task.prSummary?.focusFiles ?? [],
+    githubCommentBody: task.prSummary?.githubCommentBody ?? ""
+  },
   llm: {
     ...task.llm,
-    status: task.llm.status as ReviewStatus
+    status: task.llm.status as ReviewStatus,
+    promptTokens: task.llm.promptTokens ?? 0,
+    completionTokens: task.llm.completionTokens ?? 0,
+    totalTokens: task.llm.totalTokens ?? 0,
+    estimatedCost: task.llm.estimatedCost ?? ""
+  },
+  chunkedReview: {
+    enabled: Boolean(task.chunkedReview?.enabled),
+    chunkCount: task.chunkedReview?.chunkCount ?? 0,
+    aggregateRisk: task.chunkedReview?.aggregateRisk ?? "info",
+    aggregateFindings: task.chunkedReview?.aggregateFindings ?? 0,
+    reasons: task.chunkedReview?.reasons ?? []
   }
 });
 

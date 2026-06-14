@@ -86,11 +86,13 @@ class ReviewServiceImplTest {
         var preview = service.getGithubCommentPreview(521L);
 
         assertThat(preview.totalFindings()).isEqualTo(4);
-        assertThat(preview.commentableCount()).isEqualTo(4);
+        assertThat(preview.commentableCount()).isEqualTo(5);
         assertThat(preview.blockedCount()).isZero();
         assertThat(preview.writebackCheck().status()).isEqualTo("ready");
         assertThat(preview.writebackCheck().repositoryMatched()).isTrue();
-        assertThat(preview.items().getFirst().commentBody())
+        assertThat(preview.items().getFirst().findingId()).isNull();
+        assertThat(preview.items().getFirst().commentBody()).contains("## RepoGuard PR 总评");
+        assertThat(preview.items().get(1).commentBody())
             .contains("**RepoGuard LOW finding**")
             .contains("命令与描述未正确分隔")
             .contains("**建议**：添加空格或换行");
@@ -148,6 +150,7 @@ class ReviewServiceImplTest {
             finding(2L, "LOW", "README", null, "文件末尾缺少换行符", "添加换行符")
         ));
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
+            new GithubReviewCommentResult(null, "PR 总评", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/summary", 100L),
             new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L),
             new GithubReviewCommentResult(2L, "README", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/2", 102L)
         ));
@@ -155,14 +158,14 @@ class ReviewServiceImplTest {
         var result = service.publishGithubComments(521L);
 
         assertThat(result.totalFindings()).isEqualTo(2);
-        assertThat(result.attemptedCount()).isEqualTo(2);
-        assertThat(result.succeededCount()).isEqualTo(2);
+        assertThat(result.attemptedCount()).isEqualTo(3);
+        assertThat(result.succeededCount()).isEqualTo(3);
         assertThat(result.failedCount()).isZero();
         assertThat(result.skippedCount()).isZero();
-        assertThat(result.items()).extracting("status").containsExactly("published", "published");
-        verify(githubCommentPublicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
+        assertThat(result.items()).extracting("status").containsExactly("published", "published", "published");
+        verify(githubCommentPublicationMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublication.class));
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
+        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
     }
 
     @Test
@@ -213,17 +216,27 @@ class ReviewServiceImplTest {
         publication.setMessage("GitHub comment published");
         publication.setPublishedAt(LocalDateTime.of(2026, 6, 7, 10, 0));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of(publication));
+        GithubCommentPublication summaryPublication = new GithubCommentPublication();
+        summaryPublication.setTaskId(521L);
+        summaryPublication.setFindingId(null);
+        summaryPublication.setTargetType("pull_request");
+        summaryPublication.setSuccess(true);
+        summaryPublication.setStatus("published");
+        summaryPublication.setGithubUrl("https://github.com/comment/summary");
+        summaryPublication.setMessage("GitHub comment published");
+        summaryPublication.setPublishedAt(LocalDateTime.of(2026, 6, 7, 10, 1));
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(summaryPublication);
 
         var result = service.publishGithubComments(521L);
 
         assertThat(result.attemptedCount()).isZero();
         assertThat(result.succeededCount()).isZero();
-        assertThat(result.skippedCount()).isEqualTo(1);
-        assertThat(result.items()).extracting("status").containsExactly("already_published");
-        assertThat(result.items().getFirst().url()).isEqualTo("https://github.com/comment/1");
+        assertThat(result.skippedCount()).isEqualTo(2);
+        assertThat(result.items()).extracting("status").containsExactly("already_published", "already_published");
+        assertThat(result.items()).extracting("url").contains("https://github.com/comment/summary", "https://github.com/comment/1");
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(githubCommentPublicationBatchItemMapper).insert(any(GithubCommentPublicationBatchItem.class));
+        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
     }
 
     @Test
@@ -307,9 +320,10 @@ class ReviewServiceImplTest {
         var preview = service.getGithubCommentPreview(521L);
 
         assertThat(preview.totalFindings()).isEqualTo(2);
-        assertThat(preview.commentableCount()).isEqualTo(1);
+        assertThat(preview.commentableCount()).isEqualTo(2);
         assertThat(preview.blockedCount()).isEqualTo(1);
-        assertThat(preview.items().getFirst().feedbackStatus()).isEqualTo("valid");
+        assertThat(preview.items().getFirst().findingId()).isNull();
+        assertThat(preview.items().get(1).feedbackStatus()).isEqualTo("valid");
         assertThat(preview.items().getLast().commentable()).isFalse();
         assertThat(preview.items().getLast().feedbackStatus()).isEqualTo("false_positive");
         assertThat(preview.items().getLast().reason()).isEqualTo("Finding marked as false positive and will not be published");
@@ -327,16 +341,17 @@ class ReviewServiceImplTest {
         when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, ignoredFinding));
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
+            new GithubReviewCommentResult(null, "PR 总评", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/summary", 100L),
             new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L)
         ));
 
         var result = service.publishGithubComments(521L);
 
         assertThat(result.totalFindings()).isEqualTo(2);
-        assertThat(result.attemptedCount()).isEqualTo(1);
-        assertThat(result.succeededCount()).isEqualTo(1);
+        assertThat(result.attemptedCount()).isEqualTo(2);
+        assertThat(result.succeededCount()).isEqualTo(2);
         assertThat(result.skippedCount()).isEqualTo(1);
-        assertThat(result.items()).extracting("findingId").containsExactly(1L, 2L);
+        assertThat(result.items()).extracting("findingId").containsExactly(null, 1L, 2L);
         assertThat(result.items().getLast().status()).isEqualTo("skipped");
         assertThat(result.items().getLast().message()).isEqualTo("Finding marked as ignored and will not be published");
     }
@@ -561,6 +576,43 @@ class ReviewServiceImplTest {
         assertThat(result.riskProfile().summary()).contains("3 个变更文件");
         assertThat(result.riskProfile().highRiskFiles()).hasSize(2);
         assertThat(result.riskProfile().highRiskFiles().getFirst().reasons()).contains("数据库迁移");
+    }
+
+    @Test
+    void getReviewDetailParsesChunkedReviewSummary() {
+        ReviewTask task = task();
+        task.setLlmPromptSummary(
+            "PR octocat/Hello-World#1; chunked=true; chunks=3; files=12; additions=240; deletions=18; "
+                + "aggregateRisk=HIGH; aggregateFindings=7; chunkReasons=security,config,build"
+        );
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
+
+        var result = service.getReviewDetail(521L);
+
+        assertThat(result.chunkedReview().enabled()).isTrue();
+        assertThat(result.chunkedReview().chunkCount()).isEqualTo(3);
+        assertThat(result.chunkedReview().aggregateRisk()).isEqualTo("high");
+        assertThat(result.chunkedReview().aggregateFindings()).isEqualTo(7);
+        assertThat(result.chunkedReview().reasons()).containsExactly("security", "config", "build");
+    }
+
+    @Test
+    void getReviewDetailDisablesChunkedReviewForPlainPromptSummary() {
+        ReviewTask task = task();
+        task.setLlmPromptSummary("PR octocat/Hello-World#1; files=2; additions=8; deletions=1");
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
+
+        var result = service.getReviewDetail(521L);
+
+        assertThat(result.chunkedReview().enabled()).isFalse();
+        assertThat(result.chunkedReview().chunkCount()).isZero();
+        assertThat(result.chunkedReview().reasons()).isEmpty();
     }
 
     @Test

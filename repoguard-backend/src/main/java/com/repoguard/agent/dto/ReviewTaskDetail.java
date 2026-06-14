@@ -30,7 +30,9 @@ public record ReviewTaskDetail(
     List<ChangedFileDto> changedFiles,
     List<ReviewTimelineItem> timeline,
     PrRiskProfileDto riskProfile,
+    PrReviewSummaryDto prSummary,
     LlmStatusDto llm,
+    ChunkedReviewDto chunkedReview,
     RabbitMqStatusDto rabbitMq,
     Boolean humanReviewRequired,
     String humanReviewStatus,
@@ -91,7 +93,9 @@ public record ReviewTaskDetail(
             changedFiles,
             timeline,
             riskProfile,
+            null,
             llm,
+            ChunkedReviewDto.disabled(),
             rabbitMq,
             false,
             "not_required",
@@ -153,8 +157,15 @@ public record ReviewTaskDetail(
             changedFiles,
             timeline,
             new PrRiskProfileDto(0, "info", "暂无风险画像数据。", false, "可按常规流程推进。", List.of(), List.of()),
+            null,
             llm,
-            rabbitMq
+            ChunkedReviewDto.disabled(),
+            rabbitMq,
+            false,
+            "not_required",
+            null,
+            null,
+            null
         );
     }
 }

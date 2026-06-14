@@ -13,6 +13,12 @@ public record ReviewPolicyConfigDto(
     Integer maxTokens,
     Boolean fallbackToRules,
     Integer workerConcurrency,
+    Integer chunkFileThreshold,
+    Integer chunkLineThreshold,
+    Integer chunkMaxFiles,
+    Integer chunkMaxLines,
+    BigDecimal inputTokenPricePerMillion,
+    BigDecimal outputTokenPricePerMillion,
     String updatedAt
 ) {
 }

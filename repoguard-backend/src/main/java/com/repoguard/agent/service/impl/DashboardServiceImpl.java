@@ -21,6 +21,8 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.DashboardService;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
@@ -239,6 +241,8 @@ public class DashboardServiceImpl implements DashboardService {
                     entry.getKey(),
                     modelTasks.size(),
                     formatMilliseconds(averageLlmDuration(modelTasks)),
+                    formatAverageTokens(modelTasks),
+                    formatAverageCost(modelTasks),
                     percentage(parseSuccessCount(modelTasks), modelTasks.size()),
                     percentage(fallbackCount(modelTasks), modelTasks.size()),
                     percentage(feedbackCount(modelFindings, "VALID"), reviewedCount),
@@ -348,6 +352,28 @@ public class DashboardServiceImpl implements DashboardService {
         return tasks.isEmpty()
             ? 0
             : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getLlmDurationMs())).average().orElse(0));
+    }
+
+    private String formatAverageTokens(List<ReviewTask> tasks) {
+        double average = tasks.stream()
+            .filter(task -> task.getLlmTotalTokens() != null && task.getLlmTotalTokens() > 0)
+            .mapToInt(ReviewTask::getLlmTotalTokens)
+            .average()
+            .orElse(0);
+        return average <= 0 ? "0" : String.format(Locale.ROOT, "%.0f", average);
+    }
+
+    private String formatAverageCost(List<ReviewTask> tasks) {
+        List<BigDecimal> costs = tasks.stream()
+            .map(ReviewTask::getLlmEstimatedCost)
+            .filter(java.util.Objects::nonNull)
+            .toList();
+        if (costs.isEmpty()) {
+            return "$0.000000";
+        }
+        BigDecimal total = costs.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal average = total.divide(BigDecimal.valueOf(costs.size()), 6, RoundingMode.HALF_UP);
+        return "$" + average.toPlainString();
     }
 
     private long reviewedFeedbackCount(List<ReviewFinding> findings) {

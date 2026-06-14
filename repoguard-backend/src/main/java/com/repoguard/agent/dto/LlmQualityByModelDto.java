@@ -4,6 +4,8 @@ public record LlmQualityByModelDto(
     String model,
     long taskCount,
     String averageDuration,
+    String averageTokens,
+    String averageCost,
     String parseSuccessRate,
     String fallbackRate,
     String validRate,

@@ -21,6 +21,11 @@ import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -197,6 +202,10 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             task.setLlmParseStatus(reviewResult.llmParseStatus());
             task.setLlmFallbackReason(reviewResult.statusDetail());
             task.setLlmPromptSummary(reviewResult.llmPromptSummary());
+            task.setLlmPromptTokens(reviewResult.llmPromptTokens());
+            task.setLlmCompletionTokens(reviewResult.llmCompletionTokens());
+            task.setLlmTotalTokens(reviewResult.llmTotalTokens());
+            task.setLlmEstimatedCost(reviewResult.llmEstimatedCost());
             task.setHumanReviewRequired(humanReviewRequired);
             task.setHumanReviewStatus(humanReviewRequired ? "PENDING" : "NOT_REQUIRED");
             task.setHumanReviewNote(null);
@@ -221,7 +230,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private void replaceFindings(Long taskId, ReviewResult reviewResult) {
         reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
-        for (ReviewFindingResult findingResult : reviewResult.findings()) {
+        List<ReviewFindingResult> findings = deduplicateFindings(reviewResult.findings());
+        for (ReviewFindingResult findingResult : findings) {
             ReviewFinding finding = new ReviewFinding();
             finding.setTaskId(taskId);
             finding.setCategory("FINDING");
@@ -235,6 +245,62 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             reviewFindingMapper.insert(finding);
         }
         appendTimeline(taskId, reviewGeneratedLabel(reviewResult), LocalDateTime.now(), "DONE", 4);
+    }
+
+    private List<ReviewFindingResult> deduplicateFindings(List<ReviewFindingResult> findings) {
+        if (findings == null || findings.isEmpty()) {
+            return List.of();
+        }
+        Map<String, ReviewFindingResult> byKey = new LinkedHashMap<>();
+        for (ReviewFindingResult finding : findings) {
+            String key = findingKey(finding);
+            ReviewFindingResult existing = byKey.get(key);
+            byKey.put(key, existing == null ? finding : mergeFinding(existing, finding));
+        }
+        return new ArrayList<>(byKey.values());
+    }
+
+    private String findingKey(ReviewFindingResult finding) {
+        return normalizeKeyPart(finding.filePath())
+            + "|" + (finding.lineNumber() == null ? "" : finding.lineNumber())
+            + "|" + normalizeKeyPart(finding.message());
+    }
+
+    private ReviewFindingResult mergeFinding(ReviewFindingResult first, ReviewFindingResult second) {
+        ReviewFindingResult stronger = riskRank(second.severity()) > riskRank(first.severity()) ? second : first;
+        return new ReviewFindingResult(
+            stronger.severity(),
+            mergeText(first.source(), second.source()),
+            mergeText(first.ruleId(), second.ruleId()),
+            stronger.filePath(),
+            stronger.lineNumber(),
+            stronger.message(),
+            mergeText(first.recommendation(), second.recommendation())
+        );
+    }
+
+    private String mergeText(String first, String second) {
+        String left = trimToNull(first);
+        String right = trimToNull(second);
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.equalsIgnoreCase(right)) {
+            return left;
+        }
+        return left + " / " + right;
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private String normalizeKeyPart(String value) {
+        String trimmed = trimToNull(value);
+        return trimmed == null ? "" : trimmed.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
     private void failReview(ReviewTask task, LocalDateTime startedAt, RuntimeException ex) {

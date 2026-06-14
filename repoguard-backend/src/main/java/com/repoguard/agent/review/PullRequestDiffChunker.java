@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.entity.ReviewPolicyConfig;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -17,8 +18,16 @@ public class PullRequestDiffChunker {
     private static final int LARGE_PR_LINE_THRESHOLD = 700;
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
+        return chunk(diff, ChunkingPolicy.defaults());
+    }
+
+    public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicyConfig config) {
+        return chunk(diff, ChunkingPolicy.from(config));
+    }
+
+    private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ChunkingPolicy policy) {
         List<GithubChangedFile> files = diff.files() == null ? List.of() : diff.files();
-        if (!requiresChunking(files)) {
+        if (!requiresChunking(files, policy)) {
             return List.of(toChunk(diff, files, 1, 1));
         }
 
@@ -28,7 +37,7 @@ public class PullRequestDiffChunker {
         for (GithubChangedFile file : prioritized(files)) {
             int fileLines = changedLines(file);
             boolean currentFull = !current.isEmpty()
-                && (current.size() >= MAX_FILES_PER_CHUNK || currentLines + fileLines > MAX_LINES_PER_CHUNK);
+                && (current.size() >= policy.maxFilesPerChunk() || currentLines + fileLines > policy.maxLinesPerChunk());
             if (currentFull) {
                 groupedFiles.add(current);
                 current = new ArrayList<>();
@@ -43,15 +52,15 @@ public class PullRequestDiffChunker {
 
         List<PullRequestDiffChunk> chunks = new ArrayList<>();
         for (int i = 0; i < groupedFiles.size(); i++) {
-            chunks.add(toChunk(diff, groupedFiles.get(i), i + 1, groupedFiles.size()));
+            chunks.add(toChunk(diff, groupedFiles.get(i), i + 1, groupedFiles.size(), policy));
         }
         return chunks;
     }
 
-    private boolean requiresChunking(List<GithubChangedFile> files) {
+    private boolean requiresChunking(List<GithubChangedFile> files, ChunkingPolicy policy) {
         int totalLines = files.stream().mapToInt(this::changedLines).sum();
-        return files.size() > LARGE_PR_FILE_THRESHOLD
-            || totalLines > LARGE_PR_LINE_THRESHOLD
+        return files.size() > policy.largePrFileThreshold()
+            || totalLines > policy.largePrLineThreshold()
             || (files.stream().anyMatch(file -> !riskReasons(file).isEmpty()) && files.size() > 1);
     }
 
@@ -81,6 +90,16 @@ public class PullRequestDiffChunker {
     }
 
     private PullRequestDiffChunk toChunk(GithubPullRequestDiff source, List<GithubChangedFile> files, int index, int total) {
+        return toChunk(source, files, index, total, ChunkingPolicy.defaults());
+    }
+
+    private PullRequestDiffChunk toChunk(
+        GithubPullRequestDiff source,
+        List<GithubChangedFile> files,
+        int index,
+        int total,
+        ChunkingPolicy policy
+    ) {
         int additions = files.stream().mapToInt(file -> safeInt(file.additions())).sum();
         int deletions = files.stream().mapToInt(file -> safeInt(file.deletions())).sum();
         return new PullRequestDiffChunk(
@@ -90,17 +109,17 @@ public class PullRequestDiffChunker {
             files.size(),
             additions,
             deletions,
-            chunkReasons(files)
+            chunkReasons(files, policy)
         );
     }
 
-    private List<String> chunkReasons(List<GithubChangedFile> files) {
+    private List<String> chunkReasons(List<GithubChangedFile> files, ChunkingPolicy policy) {
         List<String> reasons = new ArrayList<>();
         int changedLines = files.stream().mapToInt(this::changedLines).sum();
         if (files.size() > 1) {
             reasons.add("multi_file");
         }
-        if (changedLines > MAX_LINES_PER_CHUNK / 2) {
+        if (changedLines > policy.maxLinesPerChunk() / 2) {
             reasons.add("large_churn");
         }
         files.stream()
@@ -134,5 +153,37 @@ public class PullRequestDiffChunker {
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record ChunkingPolicy(
+        int maxFilesPerChunk,
+        int maxLinesPerChunk,
+        int largePrFileThreshold,
+        int largePrLineThreshold
+    ) {
+        static ChunkingPolicy defaults() {
+            return new ChunkingPolicy(
+                MAX_FILES_PER_CHUNK,
+                MAX_LINES_PER_CHUNK,
+                LARGE_PR_FILE_THRESHOLD,
+                LARGE_PR_LINE_THRESHOLD
+            );
+        }
+
+        static ChunkingPolicy from(ReviewPolicyConfig config) {
+            if (config == null) {
+                return defaults();
+            }
+            return new ChunkingPolicy(
+                positive(config.getChunkMaxFiles(), MAX_FILES_PER_CHUNK),
+                positive(config.getChunkMaxLines(), MAX_LINES_PER_CHUNK),
+                positive(config.getChunkFileThreshold(), LARGE_PR_FILE_THRESHOLD),
+                positive(config.getChunkLineThreshold(), LARGE_PR_LINE_THRESHOLD)
+            );
+        }
+
+        private static int positive(Integer value, int fallback) {
+            return value == null || value < 1 ? fallback : value;
+        }
     }
 }

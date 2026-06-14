@@ -101,6 +101,10 @@ class LlmPullRequestReviewerTest {
         assertThat(result.findings()).hasSize(reviewedChunks.size());
         assertThat(result.llmParseStatus()).isEqualTo("parsed");
         assertThat(result.llmPromptSummary()).contains("chunked=true", "aggregateRisk=HIGH");
+        assertThat(result.llmPromptTokens()).isEqualTo(reviewedChunks.size() * 100);
+        assertThat(result.llmCompletionTokens()).isEqualTo(reviewedChunks.size() * 20);
+        assertThat(result.llmTotalTokens()).isEqualTo(reviewedChunks.size() * 120);
+        assertThat(result.llmEstimatedCost()).isEqualByComparingTo(BigDecimal.valueOf(reviewedChunks.size() * 80).movePointLeft(6));
     }
 
     private ReviewPolicyConfig llmConfig() {
@@ -115,6 +119,12 @@ class LlmPullRequestReviewerTest {
         config.setMaxTokens(1024);
         config.setTimeoutSeconds(30);
         config.setFallbackToRules(true);
+        config.setChunkFileThreshold(6);
+        config.setChunkLineThreshold(700);
+        config.setChunkMaxFiles(4);
+        config.setChunkMaxLines(450);
+        config.setInputTokenPricePerMillion(BigDecimal.valueOf(0.5));
+        config.setOutputTokenPricePerMillion(BigDecimal.valueOf(1.5));
         return config;
     }
 
@@ -146,11 +156,11 @@ class LlmPullRequestReviewerTest {
         }
 
         @Override
-        protected String callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+        protected LlmCallResult callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
             reviewedChunks.add(diff);
             String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
             String riskLevel = firstFile.contains("security") || firstFile.endsWith(".sql") ? "HIGH" : "LOW";
-            return """
+            String content = """
                 {
                   "riskLevel": "%s",
                   "findings": [
@@ -164,6 +174,7 @@ class LlmPullRequestReviewerTest {
                   ]
                 }
                 """.formatted(riskLevel, riskLevel, firstFile);
+            return new LlmCallResult(content, 100, 20, 120);
         }
     }
 }

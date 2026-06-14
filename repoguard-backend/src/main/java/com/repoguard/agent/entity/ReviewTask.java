@@ -2,6 +2,7 @@ package com.repoguard.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @TableName("review_task")
@@ -30,6 +31,10 @@ public class ReviewTask {
     private String llmParseStatus;
     private String llmFallbackReason;
     private String llmPromptSummary;
+    private Integer llmPromptTokens;
+    private Integer llmCompletionTokens;
+    private Integer llmTotalTokens;
+    private BigDecimal llmEstimatedCost;
     private String prUrl;
     /** 任务首次创建来源，例如手动输入或 GitHub PR 选择器。 */
     private String source;
@@ -219,6 +224,38 @@ public class ReviewTask {
 
     public void setLlmPromptSummary(String llmPromptSummary) {
         this.llmPromptSummary = llmPromptSummary;
+    }
+
+    public Integer getLlmPromptTokens() {
+        return llmPromptTokens;
+    }
+
+    public void setLlmPromptTokens(Integer llmPromptTokens) {
+        this.llmPromptTokens = llmPromptTokens;
+    }
+
+    public Integer getLlmCompletionTokens() {
+        return llmCompletionTokens;
+    }
+
+    public void setLlmCompletionTokens(Integer llmCompletionTokens) {
+        this.llmCompletionTokens = llmCompletionTokens;
+    }
+
+    public Integer getLlmTotalTokens() {
+        return llmTotalTokens;
+    }
+
+    public void setLlmTotalTokens(Integer llmTotalTokens) {
+        this.llmTotalTokens = llmTotalTokens;
+    }
+
+    public BigDecimal getLlmEstimatedCost() {
+        return llmEstimatedCost;
+    }
+
+    public void setLlmEstimatedCost(BigDecimal llmEstimatedCost) {
+        this.llmEstimatedCost = llmEstimatedCost;
     }
 
     public String getPrUrl() {

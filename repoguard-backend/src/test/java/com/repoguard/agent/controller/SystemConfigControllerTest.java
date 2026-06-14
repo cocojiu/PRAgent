@@ -200,7 +200,13 @@ class SystemConfigControllerTest {
                       "temperature": 0.2,
                       "maxTokens": 4096,
                       "fallbackToRules": true,
-                      "workerConcurrency": 1
+                      "workerConcurrency": 1,
+                      "chunkFileThreshold": 6,
+                      "chunkLineThreshold": 700,
+                      "chunkMaxFiles": 4,
+                      "chunkMaxLines": 450,
+                      "inputTokenPricePerMillion": 0.5,
+                      "outputTokenPricePerMillion": 1.5
                     }
                     """))
             .andExpect(status().isOk())
@@ -377,6 +383,12 @@ class SystemConfigControllerTest {
             4096,
             true,
             1,
+            6,
+            700,
+            4,
+            450,
+            BigDecimal.valueOf(0.50),
+            BigDecimal.valueOf(1.50),
             "2026-06-06 01:30:00"
         );
     }

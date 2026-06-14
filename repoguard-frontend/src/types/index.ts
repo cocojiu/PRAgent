@@ -51,7 +51,9 @@ export interface ReviewTaskDetail extends ReviewTask {
   changedFiles: ChangedFile[];
   timeline: TimelineItem[];
   riskProfile: PrRiskProfile;
+  prSummary: PrReviewSummary;
   llm: LlmStatus;
+  chunkedReview: ChunkedReview;
   rabbitMq: RabbitMqStatus;
 }
 
@@ -121,7 +123,7 @@ export interface GithubCommentWritebackCheck {
 }
 
 export interface GithubCommentPreviewItem {
-  findingId: number;
+  findingId?: number | null;
   severity: RiskLevel;
   file: string;
   line?: number;
@@ -164,7 +166,7 @@ export interface GithubCommentPublish {
 }
 
 export interface GithubCommentPublishItem {
-  findingId: number;
+  findingId?: number | null;
   file: string;
   line?: number;
   targetType: "line" | "pull_request" | string;
@@ -250,6 +252,17 @@ export interface PrRiskFile {
   reasons: string[];
 }
 
+export interface PrReviewSummary {
+  overallRisk: RiskLevel | string;
+  summary: string;
+  mergeRecommendation: string;
+  recommendMerge: boolean;
+  humanReviewRequired: boolean;
+  keyRisks: string[];
+  focusFiles: string[];
+  githubCommentBody: string;
+}
+
 export interface TimelineItem {
   label: string;
   time: string;
@@ -266,6 +279,18 @@ export interface LlmStatus {
   parseStatus?: string;
   fallbackReason?: string;
   promptSummary?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: string;
+}
+
+export interface ChunkedReview {
+  enabled: boolean;
+  chunkCount: number;
+  aggregateRisk?: RiskLevel | string;
+  aggregateFindings: number;
+  reasons: string[];
 }
 
 export interface RabbitMqStatus {
@@ -386,6 +411,8 @@ export interface LlmQualityByModel {
   model: string;
   taskCount: number;
   averageDuration: string;
+  averageTokens: string;
+  averageCost: string;
   parseSuccessRate: string;
   fallbackRate: string;
   validRate: string;
@@ -652,6 +679,12 @@ export interface ReviewPolicyConfig {
   maxTokens: number;
   fallbackToRules: boolean;
   workerConcurrency: number;
+  chunkFileThreshold: number;
+  chunkLineThreshold: number;
+  chunkMaxFiles: number;
+  chunkMaxLines: number;
+  inputTokenPricePerMillion: number;
+  outputTokenPricePerMillion: number;
   updatedAt?: string;
 }
 

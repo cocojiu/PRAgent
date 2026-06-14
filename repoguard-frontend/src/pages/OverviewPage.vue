@@ -43,6 +43,8 @@
           <el-table-column prop="model" label="模型" min-width="180" />
           <el-table-column prop="taskCount" label="任务" width="80" />
           <el-table-column prop="averageDuration" label="均耗时" width="100" />
+          <el-table-column prop="averageTokens" label="均 Token" width="110" />
+          <el-table-column prop="averageCost" label="均成本" width="120" />
           <el-table-column prop="parseSuccessRate" label="解析率" width="100" />
           <el-table-column prop="fallbackRate" label="兜底率" width="100" />
           <el-table-column prop="validRate" label="有效率" width="100" />

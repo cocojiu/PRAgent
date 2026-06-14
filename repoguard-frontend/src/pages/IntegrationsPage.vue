@@ -139,7 +139,13 @@ const defaultIntegrationItems: IntegrationConfig[] = [
       { label: "Provider", value: "DashScope", type: "select", options: ["DashScope", "OpenAI Compatible", "Mock"] },
       { label: "API Key", value: "", type: "password", placeholder: "LLM API key" },
       { label: "Model", value: "qwen-plus", type: "text" },
-      { label: "Base URL", value: "https://dashscope.aliyuncs.com/compatible-mode/v1", type: "text" }
+      { label: "Base URL", value: "https://dashscope.aliyuncs.com/compatible-mode/v1", type: "text" },
+      { label: "Chunk File Threshold", value: "6", type: "text" },
+      { label: "Chunk Line Threshold", value: "700", type: "text" },
+      { label: "Chunk Max Files", value: "4", type: "text" },
+      { label: "Chunk Max Lines", value: "450", type: "text" },
+      { label: "Input $/1M Tokens", value: "0", type: "text" },
+      { label: "Output $/1M Tokens", value: "0", type: "text" }
     ]
   }
 ];
@@ -266,6 +272,11 @@ const saveConfig = async () => {
 
 const fieldValue = (id: IntegrationId, label: string) => formState[id]?.[label] ?? "";
 
+const numberFieldValue = (id: IntegrationId, label: string, fallback: number) => {
+  const parsed = Number(fieldValue(id, label));
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 const githubPayload = (): GithubIntegrationConfigRequest => ({
   baseUrl: fieldValue("github", "API Base URL").trim() || "https://api.github.com",
   token: fieldValue("github", "Token"),
@@ -297,7 +308,21 @@ const springAiPayload = (): ReviewPolicyConfigRequest => ({
   temperature: reviewPolicyConfig.value?.temperature ?? 0.2,
   maxTokens: reviewPolicyConfig.value?.maxTokens ?? 4096,
   fallbackToRules: reviewPolicyConfig.value?.fallbackToRules ?? true,
-  workerConcurrency: reviewPolicyConfig.value?.workerConcurrency ?? 1
+  workerConcurrency: reviewPolicyConfig.value?.workerConcurrency ?? 1,
+  chunkFileThreshold: numberFieldValue("spring-ai", "Chunk File Threshold", reviewPolicyConfig.value?.chunkFileThreshold ?? 6),
+  chunkLineThreshold: numberFieldValue("spring-ai", "Chunk Line Threshold", reviewPolicyConfig.value?.chunkLineThreshold ?? 700),
+  chunkMaxFiles: numberFieldValue("spring-ai", "Chunk Max Files", reviewPolicyConfig.value?.chunkMaxFiles ?? 4),
+  chunkMaxLines: numberFieldValue("spring-ai", "Chunk Max Lines", reviewPolicyConfig.value?.chunkMaxLines ?? 450),
+  inputTokenPricePerMillion: numberFieldValue(
+    "spring-ai",
+    "Input $/1M Tokens",
+    reviewPolicyConfig.value?.inputTokenPricePerMillion ?? 0
+  ),
+  outputTokenPricePerMillion: numberFieldValue(
+    "spring-ai",
+    "Output $/1M Tokens",
+    reviewPolicyConfig.value?.outputTokenPricePerMillion ?? 0
+  )
 });
 
 const applyGithubConfig = (config: GithubIntegrationConfig) => {
@@ -381,7 +406,13 @@ const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
     },
     { label: "API Key", value: config.apiKey ?? "", type: "password", placeholder: "LLM API key" },
     { label: "Model", value: config.modelName, type: "text" },
-    { label: "Base URL", value: config.baseUrl ?? "", type: "text" }
+    { label: "Base URL", value: config.baseUrl ?? "", type: "text" },
+    { label: "Chunk File Threshold", value: String(config.chunkFileThreshold ?? 6), type: "text" },
+    { label: "Chunk Line Threshold", value: String(config.chunkLineThreshold ?? 700), type: "text" },
+    { label: "Chunk Max Files", value: String(config.chunkMaxFiles ?? 4), type: "text" },
+    { label: "Chunk Max Lines", value: String(config.chunkMaxLines ?? 450), type: "text" },
+    { label: "Input $/1M Tokens", value: String(config.inputTokenPricePerMillion ?? 0), type: "text" },
+    { label: "Output $/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" }
   ];
   formState["spring-ai"] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
 };

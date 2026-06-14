@@ -110,6 +110,41 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeDeduplicatesFindingsBeforePersisting() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
+            "HIGH",
+            List.of(
+                new ReviewFindingResult("LOW", "LLM", "LLM", "src/App.java", 10, "Use logger", "Replace stdout"),
+                new ReviewFindingResult("HIGH", "RULE", "RG-JAVA-002", "src/App.java", 10, "Use logger", "Use structured logger")
+            )
+        ));
+
+        executor.execute(message());
+
+        ArgumentCaptor<ReviewFinding> findingCaptor = ArgumentCaptor.forClass(ReviewFinding.class);
+        verify(reviewFindingMapper).insert(findingCaptor.capture());
+        ReviewFinding finding = findingCaptor.getValue();
+        assertThat(finding.getSeverity()).isEqualTo("HIGH");
+        assertThat(finding.getSource()).isEqualTo("LLM / RULE");
+        assertThat(finding.getRuleId()).isEqualTo("LLM / RG-JAVA-002");
+        assertThat(finding.getRecommendation()).isEqualTo("Replace stdout / Use structured logger");
+    }
+
+    @Test
     void executeStoresLlmQualityMetadata() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
