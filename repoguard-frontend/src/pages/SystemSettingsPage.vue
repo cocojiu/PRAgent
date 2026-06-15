@@ -81,8 +81,10 @@
           <el-switch v-model="notificationForm.failedTask" :disabled="!isEditing" />
         </div>
         <el-form label-position="top" class="settings-form-gap">
-          <el-form-item label="通知邮箱">
-            <el-input v-model="notificationForm.email" :disabled="!isEditing" />
+          <el-form-item label="消息通知">
+            <el-button type="primary" :disabled="!canManage" @click="notificationDialogVisible = true">
+              添加消息通知
+            </el-button>
           </el-form-item>
         </el-form>
       </article>
@@ -138,6 +140,10 @@ security:
         </el-table>
       </article>
     </section>
+
+    <el-dialog v-model="notificationDialogVisible" title="消息通知" width="960px" class="notification-manager-dialog">
+      <NotificationBindingManager v-if="notificationDialogVisible" />
+    </el-dialog>
   </div>
 </template>
 
@@ -146,6 +152,7 @@ import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
+import NotificationBindingManager from "@/components/NotificationBindingManager.vue";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
 import { getErrorMessage } from "@/utils/errors";
 import type {
@@ -160,6 +167,7 @@ import type {
 const isEditing = ref(false);
 const loading = ref(false);
 const saving = ref(false);
+const notificationDialogVisible = ref(false);
 const settingLogs = ref<SettingLog[]>([]);
 const baseForm = reactive<BaseSettings>({
   systemName: "",
