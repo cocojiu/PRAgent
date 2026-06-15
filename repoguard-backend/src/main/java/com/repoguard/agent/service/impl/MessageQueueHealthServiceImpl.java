@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
 
+    @Autowired
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
