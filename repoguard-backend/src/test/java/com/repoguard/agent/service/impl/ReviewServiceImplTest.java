@@ -44,6 +44,8 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class ReviewServiceImplTest {
 
@@ -724,6 +726,44 @@ class ReviewServiceImplTest {
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
+    void triggerManualReviewPublishesMessageAfterTransactionCommit() {
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setId(522L);
+            return 1;
+        }).when(reviewTaskMapper).insert(any(ReviewTask.class));
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            var result = service.triggerManualReview(new ManualReviewRequest(
+                "octocat",
+                "Hello-World",
+                2,
+                "Smoke review",
+                "public-pr-after-commit",
+                "master",
+                "github_pr_picker"
+            ));
+
+            assertThat(result.status()).isEqualTo("queued");
+            assertThat(result.taskId()).isEqualTo(522L);
+            verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+
+            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
+            assertThat(synchronizations).hasSize(1);
+            synchronizations.getFirst().afterCommit();
+
+            ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
+            verify(reviewTaskPublisher).publish(messageCaptor.capture());
+            assertThat(messageCaptor.getValue().taskId()).isEqualTo(522L);
+            assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-after-commit");
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

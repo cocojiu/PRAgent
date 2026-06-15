@@ -1,0 +1,60 @@
+create table if not exists notification_channel_binding (
+    id bigint primary key auto_increment,
+    name varchar(128) not null,
+    provider varchar(32) not null,
+    organization varchar(128) not null,
+    repository varchar(128) not null,
+    enabled tinyint(1) not null default 1,
+    webhook_url_value text not null,
+    secret_value text,
+    notify_review_completed tinyint(1) not null default 1,
+    notify_review_failed tinyint(1) not null default 1,
+    notify_human_review_required tinyint(1) not null default 1,
+    notify_github_comment tinyint(1) not null default 1,
+    status varchar(32) not null default 'CONFIGURED',
+    last_checked_at datetime,
+    last_error varchar(1024),
+    created_at datetime not null,
+    updated_at datetime not null,
+    key idx_notification_binding_repo (organization, repository),
+    key idx_notification_binding_provider (provider),
+    key idx_notification_binding_enabled (enabled)
+);
+
+create table if not exists notification_event (
+    id bigint primary key auto_increment,
+    event_key varchar(191) not null,
+    event_type varchar(64) not null,
+    task_id bigint not null,
+    batch_id bigint,
+    payload json not null,
+    status varchar(32) not null,
+    retry_count int not null default 0,
+    next_retry_at datetime,
+    last_error varchar(1024),
+    created_at datetime not null,
+    updated_at datetime not null,
+    unique key uk_notification_event_key (event_key),
+    key idx_notification_event_status_retry (status, next_retry_at),
+    key idx_notification_event_task (task_id)
+);
+
+create table if not exists notification_delivery_log (
+    id bigint primary key auto_increment,
+    event_id bigint not null,
+    binding_id bigint,
+    task_id bigint not null,
+    provider varchar(32) not null,
+    status varchar(32) not null,
+    attempt_count int not null default 1,
+    failure_reason varchar(1024),
+    request_id varchar(128),
+    sent_at datetime,
+    created_at datetime not null,
+    key idx_notification_delivery_event (event_id),
+    key idx_notification_delivery_binding (binding_id),
+    key idx_notification_delivery_task (task_id),
+    key idx_notification_delivery_status (status),
+    constraint fk_notification_delivery_event foreign key (event_id) references notification_event(id),
+    constraint fk_notification_delivery_binding foreign key (binding_id) references notification_channel_binding(id)
+);

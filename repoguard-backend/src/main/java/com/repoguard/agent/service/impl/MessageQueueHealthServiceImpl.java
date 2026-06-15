@@ -23,6 +23,7 @@ import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
@@ -150,7 +151,8 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 task.getRepository(),
                 task.getPrNumber(),
                 task.getCommitSha(),
-                queuedAt
+                queuedAt,
+                LogContext.currentTraceId()
             ));
             recordAudit(task.getId(), "SUCCESS", "queued");
             return new MessageQueueRequeueResponse(task.getId(), "queued", "Message task requeued", task.getPublishAttempts());

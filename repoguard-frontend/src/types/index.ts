@@ -672,6 +672,72 @@ export interface ServiceIntegrationConfigRequest {
   resource?: string;
 }
 
+export interface NotificationBinding {
+  id: number;
+  name: string;
+  provider: "DINGTALK" | "WECOM" | string;
+  organization: string;
+  repository: string;
+  enabled: boolean;
+  webhookUrl?: string;
+  secret?: string;
+  notifyReviewCompleted: boolean;
+  notifyReviewFailed: boolean;
+  notifyHumanReviewRequired: boolean;
+  notifyGithubComment: boolean;
+  status: string;
+  lastCheckedAt?: string;
+  lastError?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface NotificationBindingRequest {
+  name: string;
+  provider: string;
+  organization: string;
+  repository: string;
+  enabled: boolean;
+  webhookUrl?: string;
+  secret?: string;
+  notifyReviewCompleted: boolean;
+  notifyReviewFailed: boolean;
+  notifyHumanReviewRequired: boolean;
+  notifyGithubComment: boolean;
+}
+
+export interface NotificationBindingStatusRequest {
+  enabled: boolean;
+}
+
+export interface NotificationEvent {
+  id: number;
+  eventKey: string;
+  eventType: string;
+  taskId: number;
+  batchId?: number;
+  status: string;
+  retryCount: number;
+  nextRetryAt?: string;
+  lastError?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface NotificationDelivery {
+  id: number;
+  eventId: number;
+  bindingId: number;
+  taskId: number;
+  provider: string;
+  status: string;
+  attemptCount: number;
+  failureReason?: string;
+  requestId?: string;
+  sentAt?: string;
+  createdAt?: string;
+}
+
 export interface ReviewPolicyConfig {
   llmEnabled: boolean;
   llmProvider: string;

@@ -7,6 +7,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -152,7 +153,8 @@ public class ReviewTaskPublishCompensator {
             task.getRepository(),
             task.getPrNumber(),
             task.getCommitSha(),
-            queuedAt
+            queuedAt,
+            LogContext.currentTraceId()
         );
     }
 

@@ -2259,6 +2259,60 @@ a {
   gap: 16px;
 }
 
+.notification-bindings {
+  margin-top: 22px;
+  padding: 18px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.notification-ops {
+  margin-top: 0;
+  padding: 18px;
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.notification-bindings__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.notification-bindings__head h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 18px;
+}
+
+.notification-bindings__head p {
+  margin: 6px 0 0;
+  color: #607086;
+  font-size: 13px;
+}
+
+.notification-ops__filter {
+  display: grid;
+  grid-template-columns: 180px 160px auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.notification-ops__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 14px;
+  color: #64748b;
+  font-size: 14px;
+}
+
 .integration-card {
   display: grid;
   grid-template-columns: 290px minmax(0, 1fr) 270px;
@@ -2635,6 +2689,13 @@ a {
   .config-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .notification-ops__filter,
+  .notification-ops__footer {
+    align-items: flex-start;
+    grid-template-columns: minmax(0, 1fr);
+    flex-direction: column;
   }
 
   .connection-message {

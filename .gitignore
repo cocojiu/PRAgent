@@ -9,6 +9,7 @@ target/
 .idea/
 .vscode/
 *.log
+logs/*.txt
 .DS_Store
 *.local
 .npm-cache/

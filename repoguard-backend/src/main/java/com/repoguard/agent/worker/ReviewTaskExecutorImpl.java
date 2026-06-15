@@ -15,6 +15,8 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
@@ -47,6 +49,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final PullRequestReviewer pullRequestReviewer;
     private final PlatformTransactionManager transactionManager;
     private final RepoGuardMetrics metrics;
+    private final NotificationDispatchService notificationDispatchService;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -57,7 +60,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         GithubPullRequestClient githubPullRequestClient,
         PullRequestReviewer pullRequestReviewer,
         PlatformTransactionManager transactionManager,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        NotificationDispatchService notificationDispatchService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
@@ -67,6 +71,30 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         this.pullRequestReviewer = pullRequestReviewer;
         this.transactionManager = transactionManager;
         this.metrics = metrics;
+        this.notificationDispatchService = notificationDispatchService;
+    }
+
+    ReviewTaskExecutorImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ChangedFileMapper changedFileMapper,
+        GithubPullRequestClient githubPullRequestClient,
+        PullRequestReviewer pullRequestReviewer,
+        PlatformTransactionManager transactionManager,
+        RepoGuardMetrics metrics
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewFindingMapper,
+            changedFileMapper,
+            githubPullRequestClient,
+            pullRequestReviewer,
+            transactionManager,
+            metrics,
+            null
+        );
     }
 
     ReviewTaskExecutorImpl(
@@ -85,6 +113,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             githubPullRequestClient,
             pullRequestReviewer,
             null,
+            null,
             null
         );
     }
@@ -92,62 +121,127 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     @Override
     public void execute(ReviewTaskMessage message) {
         ReviewTask task = reviewTaskMapper.selectById(message.taskId());
-        if (task == null || !"QUEUED".equals(task.getStatus())) {
-            return;
-        }
-
-        LocalDateTime startedAt = LocalDateTime.now();
-        if (!markReviewing(task, startedAt)) {
-            return;
-        }
-        LOGGER.info(
-            "Review task started taskId={} repository={} prNumber={} operation=review_execute",
-            task.getId(),
-            repositorySlug(task),
-            task.getPrNumber()
-        );
-
-        try {
-            GithubPullRequestDiff diff = fetchPullRequestDiff(task);
-            replaceChangedFiles(task.getId(), diff);
-            ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
-            completeReview(task, reviewResult, startedAt);
-            LOGGER.info(
-                "Review task completed taskId={} repository={} prNumber={} operation=review_execute riskLevel={} llmStatus={}",
-                task.getId(),
-                repositorySlug(task),
-                task.getPrNumber(),
-                reviewResult.riskLevel(),
-                reviewResult.llmStatus()
-            );
-        } catch (RuntimeException ex) {
-            failReview(task, startedAt, ex);
-            if (metrics != null) {
-                metrics.reviewTaskFailed(ex);
+        try (LogContext.Scope ignored = task == null
+            ? LogContext.withReviewTaskMessage(message)
+            : LogContext.withReviewTask(task)) {
+            if (task == null) {
+                LOGGER.warn(
+                    "Review task skipped taskId={} repository={}/{} prNumber={} operation=review_execute result=task_not_found",
+                    message.taskId(),
+                    safePart(message.organization()),
+                    safePart(message.repository()),
+                    message.prNumber()
+                );
+                return;
             }
-            LOGGER.warn(
-                "Review task failed taskId={} repository={} prNumber={} operation=review_execute failureCategory={} exceptionType={}",
+            if (!"QUEUED".equals(task.getStatus())) {
+                LOGGER.info(
+                    "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=status_not_queued currentStatus={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    task.getStatus()
+                );
+                return;
+            }
+
+            LocalDateTime startedAt = LocalDateTime.now();
+            if (!markReviewing(task, startedAt)) {
+                LOGGER.info(
+                    "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=claim_failed",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber()
+                );
+                return;
+            }
+            LOGGER.info(
+                "Review task started taskId={} repository={} prNumber={} operation=review_execute commit={}",
                 task.getId(),
                 repositorySlug(task),
                 task.getPrNumber(),
-                failureCategory(ex),
-                ex.getClass().getName()
+                safePart(message.commit())
             );
+
+            try {
+                GithubPullRequestDiff diff = fetchPullRequestDiff(task);
+                replaceChangedFiles(task.getId(), diff);
+                LOGGER.info(
+                    "Review task diff persisted taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    diff.files() == null ? 0 : diff.files().size(),
+                    totalAdditions(diff),
+                    totalDeletions(diff)
+                );
+                ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
+                int findingCount = completeReview(task, reviewResult, startedAt);
+                publishReviewNotification(task, findingCount);
+                LOGGER.info(
+                    "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} findingCount={} durationMs={} humanReviewRequired={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    reviewResult.riskLevel(),
+                    reviewResult.llmStatus(),
+                    reviewResult.findings() == null ? 0 : deduplicateFindings(reviewResult.findings()).size(),
+                    Duration.between(startedAt, LocalDateTime.now()).toMillis(),
+                    requiresHumanReview(reviewResult.riskLevel())
+                );
+            } catch (RuntimeException ex) {
+                failReview(task, startedAt, ex);
+                if (metrics != null) {
+                    metrics.reviewTaskFailed(ex);
+                }
+                LOGGER.warn(
+                    "Review task failed taskId={} repository={} prNumber={} operation=review_execute result=failed failureCategory={} exceptionType={} durationMs={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    failureCategory(ex),
+                    ex.getClass().getName(),
+                    Duration.between(startedAt, LocalDateTime.now()).toMillis()
+                );
+            }
         }
     }
 
     private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         LocalDateTime startedAt = LocalDateTime.now();
         try {
+            LOGGER.info(
+                "GitHub diff fetch started taskId={} repository={} prNumber={} operation=github_diff_fetch",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber()
+            );
             GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
             if (metrics != null) {
                 metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "success");
             }
+            LOGGER.info(
+                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber(),
+                Duration.between(startedAt, LocalDateTime.now()).toMillis(),
+                diff.files() == null ? 0 : diff.files().size()
+            );
             return diff;
         } catch (RuntimeException ex) {
             if (metrics != null) {
                 metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "failed");
             }
+            LOGGER.warn(
+                "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber(),
+                failureCategory(ex),
+                ex.getClass().getName(),
+                Duration.between(startedAt, LocalDateTime.now()).toMillis()
+            );
             throw ex;
         }
     }
@@ -187,8 +281,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         });
     }
 
-    private void completeReview(ReviewTask task, ReviewResult reviewResult, LocalDateTime startedAt) {
-        inTransaction(() -> {
+    private int completeReview(ReviewTask task, ReviewResult reviewResult, LocalDateTime startedAt) {
+        return inTransaction(() -> {
+            int findingCount = deduplicateFindings(reviewResult.findings()).size();
             replaceFindings(task.getId(), reviewResult);
 
             LocalDateTime finishedAt = LocalDateTime.now();
@@ -225,6 +320,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
                 metrics.reviewTaskDuration(Duration.between(startedAt, finishedAt), "completed");
             }
+            return findingCount;
         });
     }
 
@@ -337,6 +433,19 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
             }
         });
+        publishReviewFailedNotification(task);
+    }
+
+    private void publishReviewNotification(ReviewTask task, int findingCount) {
+        if (notificationDispatchService != null) {
+            notificationDispatchService.reviewFinished(task, findingCount);
+        }
+    }
+
+    private void publishReviewFailedNotification(ReviewTask task) {
+        if (notificationDispatchService != null) {
+            notificationDispatchService.reviewFailed(task);
+        }
     }
 
     private String normalizeChangeType(String status) {
@@ -406,6 +515,26 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             return externalCallException.getCategory();
         }
         return ex.getClass().getSimpleName();
+    }
+
+    private int totalAdditions(GithubPullRequestDiff diff) {
+        if (diff.files() == null) {
+            return 0;
+        }
+        return diff.files().stream()
+            .map(GithubChangedFile::additions)
+            .mapToInt(value -> value == null ? 0 : value)
+            .sum();
+    }
+
+    private int totalDeletions(GithubPullRequestDiff diff) {
+        if (diff.files() == null) {
+            return 0;
+        }
+        return diff.files().stream()
+            .map(GithubChangedFile::deletions)
+            .mapToInt(value -> value == null ? 0 : value)
+            .sum();
     }
 
     private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status, int sortOrder) {

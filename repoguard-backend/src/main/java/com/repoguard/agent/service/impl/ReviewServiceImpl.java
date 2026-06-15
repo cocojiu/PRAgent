@@ -61,6 +61,8 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.ReviewService;
 import java.time.Duration;
@@ -79,6 +81,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -120,6 +124,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final GithubPullRequestClient githubPullRequestClient;
     private final RepoGuardMetrics metrics;
+    private final NotificationDispatchService notificationDispatchService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -144,6 +149,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTimelineMapper,
             reviewTaskPublisher,
             githubPullRequestClient,
+            null,
             null
         );
     }
@@ -160,7 +166,8 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        NotificationDispatchService notificationDispatchService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -173,6 +180,36 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
         this.metrics = metrics;
+        this.notificationDispatchService = notificationDispatchService;
+    }
+
+    public ReviewServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        IntegrationConfigMapper integrationConfigMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        GithubPullRequestClient githubPullRequestClient,
+        RepoGuardMetrics metrics
+    ) {
+        this(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            integrationConfigMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            githubPullRequestClient,
+            metrics,
+            null
+        );
     }
 
     @Override
@@ -242,7 +279,8 @@ public class ReviewServiceImpl implements ReviewService {
             items
         );
         // 幂等表只保留审查发现当前发布状态；批次表保留本次点击回写按钮的完整审计轨迹。
-        savePublicationBatch(response);
+        Long batchId = savePublicationBatch(response);
+        publishGithubCommentNotification(task, response, batchId);
         recordGithubCommentPublishDuration(startedAt, failedCount > 0 ? "failed" : "success");
         return response;
     }
@@ -588,15 +626,17 @@ public class ReviewServiceImpl implements ReviewService {
         if (metrics != null) {
             metrics.reviewTaskCreated(source);
         }
+        ReviewTaskMessage message = new ReviewTaskMessage(
+            task.getId(),
+            organization,
+            repository,
+            request.prNumber(),
+            commit,
+            createdAt,
+            LogContext.currentTraceId()
+        );
         try {
-            reviewTaskPublisher.publish(new ReviewTaskMessage(
-                task.getId(),
-                organization,
-                repository,
-                request.prNumber(),
-                commit,
-                createdAt
-            ));
+            publishReviewTaskAfterCommit(task, message, createdAt);
             return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
         } catch (MessagePublishException ex) {
             markPublishFailed(task, ex, createdAt);
@@ -609,6 +649,23 @@ public class ReviewServiceImpl implements ReviewService {
                 lower(source)
             );
         }
+    }
+
+    private void publishReviewTaskAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            reviewTaskPublisher.publish(message);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    reviewTaskPublisher.publish(message);
+                } catch (MessagePublishException ex) {
+                    markPublishFailed(task, ex, queuedAt);
+                }
+            }
+        });
     }
 
     private ManualReviewResponse reuseExistingTask(ReviewTask existingTask) {
@@ -711,15 +768,17 @@ public class ReviewServiceImpl implements ReviewService {
         reviewTaskMapper.updateById(task);
 
         insertRetryTimeline(task.getId(), queuedAt);
+        ReviewTaskMessage message = new ReviewTaskMessage(
+            task.getId(),
+            task.getOrganization(),
+            task.getRepository(),
+            task.getPrNumber(),
+            task.getCommitSha(),
+            queuedAt,
+            LogContext.currentTraceId()
+        );
         try {
-            reviewTaskPublisher.publish(new ReviewTaskMessage(
-                task.getId(),
-                task.getOrganization(),
-                task.getRepository(),
-                task.getPrNumber(),
-                task.getCommitSha(),
-                queuedAt
-            ));
+            publishReviewTaskAfterCommit(task, message, queuedAt);
             return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
         } catch (MessagePublishException ex) {
             markPublishFailed(task, ex, queuedAt);
@@ -1246,7 +1305,7 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    private void savePublicationBatch(GithubCommentPublishResponse response) {
+    private Long savePublicationBatch(GithubCommentPublishResponse response) {
         LocalDateTime now = LocalDateTime.now();
         GithubCommentPublicationBatch batch = new GithubCommentPublicationBatch();
         batch.setTaskId(response.taskId());
@@ -1277,6 +1336,13 @@ public class ReviewServiceImpl implements ReviewService {
             historyItem.setPublishedAt(parseDateTimeOrNull(item.publishedAt()));
             historyItem.setCreatedAt(now);
             githubCommentPublicationBatchItemMapper.insert(historyItem);
+        }
+        return batch.getId();
+    }
+
+    private void publishGithubCommentNotification(ReviewTask task, GithubCommentPublishResponse response, Long batchId) {
+        if (notificationDispatchService != null) {
+            notificationDispatchService.githubCommentsPublished(task, response, batchId);
         }
     }
 

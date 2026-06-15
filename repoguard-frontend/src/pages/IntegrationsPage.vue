@@ -30,24 +30,211 @@
         @test-connection="testConnection"
       />
     </section>
+
+    <section class="notification-bindings">
+      <div class="notification-bindings__head">
+        <div>
+          <h2>消息通知绑定</h2>
+          <p>按仓库绑定钉钉或企业微信群机器人，审查结果和评论回写会通过独立通知队列异步发送。</p>
+        </div>
+        <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">
+          新增绑定
+        </el-button>
+      </div>
+
+      <el-table :data="notificationBindings" border>
+        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column label="平台" width="120">
+          <template #default="{ row }">{{ providerText(row.provider) }}</template>
+        </el-table-column>
+        <el-table-column label="仓库" min-width="180">
+          <template #default="{ row }">{{ row.organization }}/{{ row.repository }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="130">
+          <template #default="{ row }">
+            <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "启用" : "停用" }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="lastCheckedAt" label="最近检测" min-width="160" />
+        <el-table-column prop="lastError" label="最近错误" min-width="220" show-overflow-tooltip />
+        <el-table-column label="操作" width="320" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" :disabled="!canManage" @click="openBindingDialog(row)">编辑</el-button>
+            <el-button size="small" :disabled="!canManage" :loading="testingBindingId === row.id" @click="runBindingTest(row.id)">测试</el-button>
+            <el-button size="small" :disabled="!canManage" @click="toggleBinding(row)">
+              {{ row.enabled ? "停用" : "启用" }}
+            </el-button>
+            <el-button size="small" type="danger" :disabled="!canManage" @click="removeBinding(row.id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
+    <el-dialog v-model="bindingDialogVisible" :title="editingBindingId ? '编辑消息通知绑定' : '新增消息通知绑定'" width="640px">
+      <el-form label-width="120px">
+        <el-form-item label="名称">
+          <el-input v-model="bindingForm.name" />
+        </el-form-item>
+        <el-form-item label="平台">
+          <el-select v-model="bindingForm.provider">
+            <el-option label="钉钉" value="DINGTALK" />
+            <el-option label="企业微信" value="WECOM" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="组织">
+          <el-input v-model="bindingForm.organization" />
+        </el-form-item>
+        <el-form-item label="仓库">
+          <el-input v-model="bindingForm.repository" />
+        </el-form-item>
+        <el-form-item label="Webhook">
+          <el-input v-model="bindingForm.webhookUrl" type="password" show-password placeholder="机器人 Webhook URL" />
+        </el-form-item>
+        <el-form-item label="签名 Secret">
+          <el-input v-model="bindingForm.secret" type="password" show-password placeholder="可选；钉钉加签 Secret" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="bindingForm.enabled" />
+        </el-form-item>
+        <el-form-item label="通知事件">
+          <el-checkbox v-model="bindingForm.notifyReviewCompleted">审查完成</el-checkbox>
+          <el-checkbox v-model="bindingForm.notifyReviewFailed">审查失败</el-checkbox>
+          <el-checkbox v-model="bindingForm.notifyHumanReviewRequired">人工复核</el-checkbox>
+          <el-checkbox v-model="bindingForm.notifyGithubComment">评论回写</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bindingDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingBinding" :disabled="!canManage" @click="saveBinding">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <section class="notification-ops">
+      <div class="notification-bindings__head">
+        <div>
+          <h2>通知事件运维</h2>
+          <p>查看 Outbox 事件发布状态和第三方平台投递结果，异常事件可手动重试。</p>
+        </div>
+        <el-button :loading="notificationOpsLoading" @click="refreshNotificationOps">
+          <RefreshCw :size="16" />
+          刷新
+        </el-button>
+      </div>
+
+      <el-tabs v-model="notificationOpsTab">
+        <el-tab-pane label="通知事件" name="events">
+          <div class="notification-ops__filter">
+            <el-select v-model="eventFilter.status" clearable placeholder="事件状态">
+              <el-option label="PENDING" value="PENDING" />
+              <el-option label="PUBLISHED" value="PUBLISHED" />
+              <el-option label="DELIVERING" value="DELIVERING" />
+              <el-option label="DELIVERED" value="DELIVERED" />
+              <el-option label="PUBLISH_FAILED" value="PUBLISH_FAILED" />
+              <el-option label="DELIVERY_FAILED" value="DELIVERY_FAILED" />
+              <el-option label="DEAD" value="DEAD" />
+            </el-select>
+            <el-input-number v-model="eventFilter.taskId" :min="1" :controls="false" placeholder="Task ID" />
+            <el-button @click="loadNotificationEvents">查询</el-button>
+          </div>
+          <el-table :data="notificationEvents" border>
+            <el-table-column prop="id" label="ID" width="86" />
+            <el-table-column prop="eventType" label="事件类型" min-width="190" show-overflow-tooltip />
+            <el-table-column prop="taskId" label="任务" width="96" />
+            <el-table-column label="状态" width="150">
+              <template #default="{ row }">
+                <el-tag :type="notificationStatusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="retryCount" label="重试" width="86" />
+            <el-table-column prop="nextRetryAt" label="下次重试" min-width="160" />
+            <el-table-column prop="lastError" label="最近错误" min-width="240" show-overflow-tooltip />
+            <el-table-column label="操作" width="120" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" :disabled="!canManage" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
+                  重试
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div class="notification-ops__footer">
+            <span>共 {{ notificationEventTotal }} 条</span>
+            <el-pagination
+              v-model:current-page="eventFilter.page"
+              :page-size="eventFilter.pageSize"
+              :total="notificationEventTotal"
+              layout="prev, pager, next"
+              @current-change="loadNotificationEvents"
+            />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="投递记录" name="deliveries">
+          <div class="notification-ops__filter">
+            <el-select v-model="deliveryFilter.status" clearable placeholder="投递状态">
+              <el-option label="SUCCESS" value="SUCCESS" />
+              <el-option label="FAILED" value="FAILED" />
+              <el-option label="SKIPPED" value="SKIPPED" />
+            </el-select>
+            <el-input-number v-model="deliveryFilter.taskId" :min="1" :controls="false" placeholder="Task ID" />
+            <el-button @click="loadNotificationDeliveries">查询</el-button>
+          </div>
+          <el-table :data="notificationDeliveries" border>
+            <el-table-column prop="id" label="ID" width="86" />
+            <el-table-column prop="eventId" label="事件" width="96" />
+            <el-table-column prop="bindingId" label="绑定" width="96" />
+            <el-table-column prop="taskId" label="任务" width="96" />
+            <el-table-column label="平台" width="120">
+              <template #default="{ row }">{{ providerText(row.provider) }}</template>
+            </el-table-column>
+            <el-table-column label="状态" width="130">
+              <template #default="{ row }">
+                <el-tag :type="notificationStatusType(row.status)">{{ row.status }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="attemptCount" label="次数" width="86" />
+            <el-table-column prop="failureReason" label="失败原因" min-width="240" show-overflow-tooltip />
+            <el-table-column prop="sentAt" label="发送时间" min-width="160" />
+          </el-table>
+          <div class="notification-ops__footer">
+            <span>共 {{ notificationDeliveryTotal }} 条</span>
+            <el-pagination
+              v-model:current-page="deliveryFilter.page"
+              :page-size="deliveryFilter.pageSize"
+              :total="notificationDeliveryTotal"
+              layout="prev, pager, next"
+              @current-change="loadNotificationDeliveries"
+            />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { Database, Github, Hexagon, RadioTower, Save } from "lucide-vue-next";
+import { Database, Github, Hexagon, RadioTower, RefreshCw, Save } from "lucide-vue-next";
 import type { Component } from "vue";
 import { canManage } from "@/stores/authState";
 import {
+  createNotificationBinding,
+  deleteNotificationBinding,
   fetchGithubIntegrationConfig,
   fetchMysqlIntegrationConfig,
+  fetchNotificationBindings,
+  fetchNotificationDeliveries,
+  fetchNotificationEvents,
   fetchRabbitMqIntegrationConfig,
   fetchReviewPolicyConfig,
+  retryNotificationEvent,
+  testNotificationBinding,
   testGithubIntegrationConnection,
   testMysqlConnection,
   testRabbitMqConnection,
   testReviewPolicyConnection,
+  updateNotificationBinding,
+  updateNotificationBindingStatus,
   updateGithubIntegrationConfig,
   updateMysqlIntegrationConfig,
   updateRabbitMqIntegrationConfig,
@@ -61,6 +248,10 @@ import type {
   IntegrationConfig,
   IntegrationDiagnosticItem,
   IntegrationField,
+  NotificationBinding,
+  NotificationBindingRequest,
+  NotificationDelivery,
+  NotificationEvent,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
   ServiceIntegrationConfig,
@@ -167,6 +358,43 @@ const formState = reactive<Record<string, Record<string, string>>>(
 
 const visibleSecrets = reactive<Record<string, boolean>>({});
 const testingConnections = reactive<Record<string, boolean>>({});
+const notificationBindings = ref<NotificationBinding[]>([]);
+const bindingDialogVisible = ref(false);
+const savingBinding = ref(false);
+const testingBindingId = ref<number>();
+const editingBindingId = ref<number>();
+const notificationOpsTab = ref("events");
+const notificationOpsLoading = ref(false);
+const retryingEventId = ref<number>();
+const notificationEvents = ref<NotificationEvent[]>([]);
+const notificationDeliveries = ref<NotificationDelivery[]>([]);
+const notificationEventTotal = ref(0);
+const notificationDeliveryTotal = ref(0);
+const eventFilter = reactive<{ page: number; pageSize: number; status?: string; taskId?: number }>({
+  page: 1,
+  pageSize: 10,
+  status: undefined,
+  taskId: undefined
+});
+const deliveryFilter = reactive<{ page: number; pageSize: number; status?: string; taskId?: number }>({
+  page: 1,
+  pageSize: 10,
+  status: undefined,
+  taskId: undefined
+});
+const bindingForm = reactive<NotificationBindingRequest>({
+  name: "",
+  provider: "DINGTALK",
+  organization: "",
+  repository: "",
+  enabled: true,
+  webhookUrl: "",
+  secret: "",
+  notifyReviewCompleted: true,
+  notifyReviewFailed: true,
+  notifyHumanReviewRequired: true,
+  notifyGithubComment: true
+});
 
 const providerMap: Record<string, string> = {
   dashscope: "DashScope",
@@ -221,11 +449,14 @@ const testConnection = async (id: string) => {
 const loadConfig = async () => {
   loading.value = true;
   try {
-    const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
+    const [github, mysql, rabbitMq, reviewPolicy, bindings, events, deliveries] = await Promise.all([
       fetchGithubIntegrationConfig(),
       fetchMysqlIntegrationConfig(),
       fetchRabbitMqIntegrationConfig(),
-      fetchReviewPolicyConfig()
+      fetchReviewPolicyConfig(),
+      fetchNotificationBindings(),
+      fetchNotificationEvents({ page: eventFilter.page, pageSize: eventFilter.pageSize }),
+      fetchNotificationDeliveries({ page: deliveryFilter.page, pageSize: deliveryFilter.pageSize })
     ]);
     githubConfig.value = github;
     mysqlConfig.value = mysql;
@@ -235,11 +466,181 @@ const loadConfig = async () => {
     applyServiceConfig("mysql", mysql);
     applyServiceConfig("rabbitmq", rabbitMq);
     applyReviewPolicyConfig(reviewPolicy);
+    notificationBindings.value = bindings.items;
+    notificationEvents.value = events.items;
+    notificationEventTotal.value = events.total;
+    notificationDeliveries.value = deliveries.items;
+    notificationDeliveryTotal.value = deliveries.total;
   } catch (error) {
     ElMessage.warning(getErrorMessage(error, "Config load failed, using local defaults"));
   } finally {
     loading.value = false;
   }
+};
+
+const openBindingDialog = (binding?: NotificationBinding) => {
+  editingBindingId.value = binding?.id;
+  Object.assign(bindingForm, {
+    name: binding?.name ?? "",
+    provider: binding?.provider ?? "DINGTALK",
+    organization: binding?.organization ?? "",
+    repository: binding?.repository ?? "",
+    enabled: binding?.enabled ?? true,
+    webhookUrl: binding?.webhookUrl ?? "",
+    secret: binding?.secret ?? "",
+    notifyReviewCompleted: binding?.notifyReviewCompleted ?? true,
+    notifyReviewFailed: binding?.notifyReviewFailed ?? true,
+    notifyHumanReviewRequired: binding?.notifyHumanReviewRequired ?? true,
+    notifyGithubComment: binding?.notifyGithubComment ?? true
+  });
+  bindingDialogVisible.value = true;
+};
+
+const saveBinding = async () => {
+  if (!canManage.value || savingBinding.value) {
+    return;
+  }
+  savingBinding.value = true;
+  try {
+    const saved = editingBindingId.value
+      ? await updateNotificationBinding(editingBindingId.value, { ...bindingForm })
+      : await createNotificationBinding({ ...bindingForm });
+    const index = notificationBindings.value.findIndex((item) => item.id === saved.id);
+    if (index >= 0) {
+      notificationBindings.value[index] = saved;
+    } else {
+      notificationBindings.value = [saved, ...notificationBindings.value];
+    }
+    bindingDialogVisible.value = false;
+    ElMessage.success("消息通知绑定已保存");
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "消息通知绑定保存失败"));
+  } finally {
+    savingBinding.value = false;
+  }
+};
+
+const runBindingTest = async (id: number) => {
+  if (testingBindingId.value) {
+    return;
+  }
+  testingBindingId.value = id;
+  try {
+    const result = await testNotificationBinding(id);
+    ElMessage[result.success ? "success" : "error"](result.message);
+    await refreshNotificationBindings();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "消息通知测试失败"));
+  } finally {
+    testingBindingId.value = undefined;
+  }
+};
+
+const toggleBinding = async (binding: NotificationBinding) => {
+  try {
+    const updated = await updateNotificationBindingStatus(binding.id, { enabled: !binding.enabled });
+    const index = notificationBindings.value.findIndex((item) => item.id === updated.id);
+    if (index >= 0) {
+      notificationBindings.value[index] = updated;
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "消息通知状态更新失败"));
+  }
+};
+
+const removeBinding = async (id: number) => {
+  try {
+    await deleteNotificationBinding(id);
+    notificationBindings.value = notificationBindings.value.filter((binding) => binding.id !== id);
+    ElMessage.success("消息通知绑定已删除");
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败"));
+  }
+};
+
+const refreshNotificationBindings = async () => {
+  const bindings = await fetchNotificationBindings();
+  notificationBindings.value = bindings.items;
+};
+
+const loadNotificationEvents = async () => {
+  const result = await fetchNotificationEvents({
+    page: eventFilter.page,
+    pageSize: eventFilter.pageSize,
+    status: eventFilter.status,
+    taskId: eventFilter.taskId
+  });
+  notificationEvents.value = result.items;
+  notificationEventTotal.value = result.total;
+};
+
+const loadNotificationDeliveries = async () => {
+  const result = await fetchNotificationDeliveries({
+    page: deliveryFilter.page,
+    pageSize: deliveryFilter.pageSize,
+    status: deliveryFilter.status,
+    taskId: deliveryFilter.taskId
+  });
+  notificationDeliveries.value = result.items;
+  notificationDeliveryTotal.value = result.total;
+};
+
+const refreshNotificationOps = async () => {
+  if (notificationOpsLoading.value) {
+    return;
+  }
+  notificationOpsLoading.value = true;
+  try {
+    await Promise.all([loadNotificationEvents(), loadNotificationDeliveries()]);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "通知事件刷新失败"));
+  } finally {
+    notificationOpsLoading.value = false;
+  }
+};
+
+const retryEvent = async (id: number) => {
+  if (retryingEventId.value) {
+    return;
+  }
+  retryingEventId.value = id;
+  try {
+    const updated = await retryNotificationEvent(id);
+    const index = notificationEvents.value.findIndex((event) => event.id === updated.id);
+    if (index >= 0) {
+      notificationEvents.value[index] = updated;
+    }
+    ElMessage.success("通知事件已重新入队");
+    await refreshNotificationOps();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "通知事件重试失败"));
+  } finally {
+    retryingEventId.value = undefined;
+  }
+};
+
+const notificationStatusType = (status: string) => {
+  const normalized = status?.toUpperCase();
+  if (["DELIVERED", "SUCCESS", "PUBLISHED"].includes(normalized)) {
+    return "success";
+  }
+  if (["PENDING", "DELIVERING", "SKIPPED"].includes(normalized)) {
+    return "info";
+  }
+  if (["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"].includes(normalized)) {
+    return "danger";
+  }
+  return "warning";
+};
+
+const providerText = (provider: string) => {
+  if (provider === "DINGTALK") {
+    return "钉钉";
+  }
+  if (provider === "WECOM") {
+    return "企业微信";
+  }
+  return provider;
 };
 
 const saveConfig = async () => {

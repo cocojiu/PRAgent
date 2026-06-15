@@ -2,6 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.io.IOException;
 import java.time.Duration;
@@ -32,7 +33,16 @@ public class ReviewTaskWorker {
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
         long startedAt = System.nanoTime();
-        try {
+        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+            LOGGER.info(
+                "Rabbit review message received taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
+                message.taskId(),
+                safePart(message.organization()),
+                safePart(message.repository()),
+                message.prNumber(),
+                deliveryTag,
+                safePart(message.commit())
+            );
             reviewTaskExecutor.execute(message);
             channel.basicAck(deliveryTag, false);
             recordConsumed(startedAt, "success");
@@ -49,14 +59,15 @@ public class ReviewTaskWorker {
             channel.basicReject(deliveryTag, false);
             recordConsumed(startedAt, "rejected");
             LOGGER.warn(
-                "Rabbit review message rejected taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={}",
+                "Rabbit review message rejected taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.taskId(),
                 safePart(message.organization()),
                 safePart(message.repository()),
                 message.prNumber(),
                 elapsedMillis(startedAt),
                 deliveryTag,
-                ex.getClass().getName()
+                ex.getClass().getName(),
+                ex.getClass().getSimpleName()
             );
         }
     }

@@ -9,11 +9,14 @@ import { ElEmpty } from "element-plus/es/components/empty/index.mjs";
 import { ElForm, ElFormItem } from "element-plus/es/components/form/index.mjs";
 import { ElInput } from "element-plus/es/components/input/index.mjs";
 import { ElInputNumber } from "element-plus/es/components/input-number/index.mjs";
+import { ElLoadingDirective } from "element-plus/es/components/loading/index.mjs";
 import { ElOption, ElSelect } from "element-plus/es/components/select/index.mjs";
 import { ElPagination } from "element-plus/es/components/pagination/index.mjs";
 import { ElPopover } from "element-plus/es/components/popover/index.mjs";
 import { ElRadio } from "element-plus/es/components/radio/index.mjs";
 import { ElSwitch } from "element-plus/es/components/switch/index.mjs";
+import { ElTabPane, ElTabs } from "element-plus/es/components/tabs/index.mjs";
+import { ElTag } from "element-plus/es/components/tag/index.mjs";
 import { ElTable, ElTableColumn } from "element-plus/es/components/table/index.mjs";
 import { ElTooltip } from "element-plus/es/components/tooltip/index.mjs";
 import "element-plus/dist/index.css";
@@ -42,6 +45,9 @@ const app = createApp(App);
   ElRadio,
   ElSelect,
   ElSwitch,
+  ElTabPane,
+  ElTabs,
+  ElTag,
   ElTable,
   ElTableColumn,
   ElTooltip
@@ -49,4 +55,5 @@ const app = createApp(App);
   app.component(component.name!, component);
 });
 
+app.directive("loading", ElLoadingDirective);
 app.use(createPinia()).use(router).mount("#app");

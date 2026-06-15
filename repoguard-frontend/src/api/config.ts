@@ -9,6 +9,12 @@ import type {
   ReviewRuleConfigRequest,
   ReviewRuleStatusRequest,
   ReviewRulesResponse,
+  NotificationBinding,
+  NotificationBindingRequest,
+  NotificationBindingStatusRequest,
+  NotificationDelivery,
+  NotificationEvent,
+  PageResponse,
   ServiceIntegrationConfig,
   ServiceIntegrationConfigRequest,
   SystemSettings,
@@ -101,3 +107,59 @@ export const testReviewPolicyConnection = (payload?: ReviewPolicyConfigRequest) 
     method: "POST",
     body: payload ? JSON.stringify(payload) : undefined
   });
+
+export const fetchNotificationBindings = () =>
+  request<PageResponse<NotificationBinding>>("/api/v1/config/notification-bindings?page=1&pageSize=100");
+
+export const createNotificationBinding = (payload: NotificationBindingRequest) =>
+  request<NotificationBinding>("/api/v1/config/notification-bindings", undefined, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+
+export const updateNotificationBinding = (id: number, payload: NotificationBindingRequest) =>
+  request<NotificationBinding>(`/api/v1/config/notification-bindings/${id}`, undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const updateNotificationBindingStatus = (id: number, payload: NotificationBindingStatusRequest) =>
+  request<NotificationBinding>(`/api/v1/config/notification-bindings/${id}/status`, undefined, {
+    method: "PUT",
+    body: JSON.stringify(payload)
+  });
+
+export const deleteNotificationBinding = (id: number) =>
+  request<void>(`/api/v1/config/notification-bindings/${id}`, undefined, {
+    method: "DELETE"
+  });
+
+export const testNotificationBinding = (id: number) =>
+  request<ConnectionTestResult>(`/api/v1/config/notification-bindings/${id}/test`, undefined, {
+    method: "POST"
+  });
+
+const buildNotificationQuery = (params: { page?: number; pageSize?: number; status?: string; taskId?: number }) => {
+  const search = new URLSearchParams({
+    page: String(params.page ?? 1),
+    pageSize: String(params.pageSize ?? 20)
+  });
+  if (params.status) {
+    search.set("status", params.status);
+  }
+  if (params.taskId) {
+    search.set("taskId", String(params.taskId));
+  }
+  return search.toString();
+};
+
+export const fetchNotificationEvents = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
+  request<PageResponse<NotificationEvent>>(`/api/v1/notification-events?${buildNotificationQuery(params)}`);
+
+export const retryNotificationEvent = (id: number) =>
+  request<NotificationEvent>(`/api/v1/notification-events/${id}/retry`, undefined, {
+    method: "POST"
+  });
+
+export const fetchNotificationDeliveries = (params: { page?: number; pageSize?: number; status?: string; taskId?: number } = {}) =>
+  request<PageResponse<NotificationDelivery>>(`/api/v1/notification-deliveries?${buildNotificationQuery(params)}`);

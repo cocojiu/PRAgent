@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(RabbitReviewQueueProperties.class)
+@EnableConfigurationProperties({RabbitReviewQueueProperties.class, RabbitNotificationQueueProperties.class})
 public class RabbitMqConfig {
 
     @Bean
@@ -63,5 +63,49 @@ public class RabbitMqConfig {
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new JacksonJsonMessageConverter();
+    }
+
+    @Bean
+    public DirectExchange notificationExchange(RabbitNotificationQueueProperties properties) {
+        return new DirectExchange(properties.getExchange(), true, false);
+    }
+
+    @Bean
+    public DirectExchange notificationDeadLetterExchange(RabbitNotificationQueueProperties properties) {
+        return new DirectExchange(properties.getDeadLetterExchange(), true, false);
+    }
+
+    @Bean
+    public Queue notificationQueue(RabbitNotificationQueueProperties properties) {
+        return QueueBuilder.durable(properties.getQueue())
+            .withArgument("x-dead-letter-exchange", properties.getDeadLetterExchange())
+            .withArgument("x-dead-letter-routing-key", properties.getDeadLetterRoutingKey())
+            .build();
+    }
+
+    @Bean
+    public Queue notificationDeadLetterQueue(RabbitNotificationQueueProperties properties) {
+        return QueueBuilder.durable(properties.getDeadLetterQueue()).build();
+    }
+
+    @Bean
+    public Binding notificationBinding(
+        @Qualifier("notificationQueue") Queue notificationQueue,
+        @Qualifier("notificationExchange") DirectExchange notificationExchange,
+        RabbitNotificationQueueProperties properties
+    ) {
+        return BindingBuilder.bind(notificationQueue).to(notificationExchange).with(properties.getRoutingKey());
+    }
+
+    @Bean
+    public Binding notificationDeadLetterBinding(
+        @Qualifier("notificationDeadLetterQueue") Queue notificationDeadLetterQueue,
+        @Qualifier("notificationDeadLetterExchange") DirectExchange notificationDeadLetterExchange,
+        RabbitNotificationQueueProperties properties
+    ) {
+        return BindingBuilder
+            .bind(notificationDeadLetterQueue)
+            .to(notificationDeadLetterExchange)
+            .with(properties.getDeadLetterRoutingKey());
     }
 }

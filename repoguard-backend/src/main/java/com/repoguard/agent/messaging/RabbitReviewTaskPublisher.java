@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -11,10 +12,14 @@ import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RabbitReviewTaskPublisher.class);
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitReviewQueueProperties properties;
@@ -37,28 +42,50 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
 
     @Override
     public void publish(ReviewTaskMessage message) {
-        int attempts = Math.max(1, properties.getPublishMaxAttempts());
-        long backoffMs = Math.max(0, properties.getPublishInitialIntervalMs());
-        MessagePublishException lastFailure = null;
-        for (int attempt = 1; attempt <= attempts; attempt++) {
-            try {
-                publishOnce(message, attempt);
-                return;
-            } catch (MessagePublishException ex) {
-                lastFailure = ex;
-                if (attempt == attempts) {
-                    break;
+        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+            int attempts = Math.max(1, properties.getPublishMaxAttempts());
+            long backoffMs = Math.max(0, properties.getPublishInitialIntervalMs());
+            MessagePublishException lastFailure = null;
+            for (int attempt = 1; attempt <= attempts; attempt++) {
+                try {
+                    publishOnce(message, attempt);
+                    LOGGER.info(
+                        "Rabbit review message published taskId={} repository={}/{} prNumber={} operation=rabbit_publish result=success attempt={} exchange={} routingKey={}",
+                        message.taskId(),
+                        safePart(message.organization()),
+                        safePart(message.repository()),
+                        message.prNumber(),
+                        attempt,
+                        properties.getExchange(),
+                        properties.getRoutingKey()
+                    );
+                    return;
+                } catch (MessagePublishException ex) {
+                    lastFailure = ex;
+                    LOGGER.warn(
+                        "Rabbit review message publish attempt failed taskId={} repository={}/{} prNumber={} operation=rabbit_publish result=attempt_failed attempt={} maxAttempts={} failureReason={}",
+                        message.taskId(),
+                        safePart(message.organization()),
+                        safePart(message.repository()),
+                        message.prNumber(),
+                        attempt,
+                        attempts,
+                        failureReason(ex)
+                    );
+                    if (attempt == attempts) {
+                        break;
+                    }
+                    sleepBeforeRetry(backoffMs);
+                    backoffMs = nextBackoff(backoffMs);
                 }
-                sleepBeforeRetry(backoffMs);
-                backoffMs = nextBackoff(backoffMs);
             }
+            if (metrics != null) {
+                metrics.rabbitPublishFailed(failureReason(lastFailure));
+            }
+            throw lastFailure == null
+                ? new MessagePublishException("RabbitMQ message publish failed")
+                : lastFailure;
         }
-        if (metrics != null) {
-            metrics.rabbitPublishFailed(failureReason(lastFailure));
-        }
-        throw lastFailure == null
-            ? new MessagePublishException("RabbitMQ message publish failed")
-            : lastFailure;
     }
 
     private void publishOnce(ReviewTaskMessage message, int attempt) {
@@ -128,5 +155,9 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
             return "interrupted";
         }
         return "publish_failed";
+    }
+
+    private String safePart(String value) {
+        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 }

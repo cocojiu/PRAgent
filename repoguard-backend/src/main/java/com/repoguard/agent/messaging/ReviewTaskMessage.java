@@ -8,6 +8,18 @@ public record ReviewTaskMessage(
     String repository,
     Integer prNumber,
     String commit,
-    LocalDateTime queuedAt
+    LocalDateTime queuedAt,
+    String traceId
 ) {
+
+    public ReviewTaskMessage(
+        Long taskId,
+        String organization,
+        String repository,
+        Integer prNumber,
+        String commit,
+        LocalDateTime queuedAt
+    ) {
+        this(taskId, organization, repository, prNumber, commit, queuedAt, null);
+    }
 }
