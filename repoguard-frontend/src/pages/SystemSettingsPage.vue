@@ -68,25 +68,23 @@
 
       <article class="dashboard-card settings-card">
         <h2>通知设置</h2>
-        <div class="switch-row">
-          <span>GitHub 评论通知</span>
-          <el-switch v-model="notificationForm.githubComment" :disabled="!isEditing" />
+        <div class="settings-handoff">
+          <p>通知策略、渠道绑定、事件投递和失败重试已迁移到通知运维页面统一管理。</p>
+          <div class="settings-handoff-tags">
+            <span :class="`status-pill ${notificationForm.githubComment ? 'success' : 'pending'}`">
+              GitHub 评论通知：{{ notificationForm.githubComment ? "开启" : "关闭" }}
+            </span>
+            <span :class="`status-pill ${notificationForm.highRiskPr ? 'success' : 'pending'}`">
+              高风险通知：{{ notificationForm.highRiskPr ? "开启" : "关闭" }}
+            </span>
+            <span :class="`status-pill ${notificationForm.failedTask ? 'success' : 'pending'}`">
+              失败任务通知：{{ notificationForm.failedTask ? "开启" : "关闭" }}
+            </span>
+          </div>
+          <el-button type="primary" :disabled="!canManage" @click="goNotificationOps">
+            前往通知运维
+          </el-button>
         </div>
-        <div class="switch-row">
-          <span>高风险 PR 通知</span>
-          <el-switch v-model="notificationForm.highRiskPr" :disabled="!isEditing" />
-        </div>
-        <div class="switch-row">
-          <span>失败任务通知</span>
-          <el-switch v-model="notificationForm.failedTask" :disabled="!isEditing" />
-        </div>
-        <el-form label-position="top" class="settings-form-gap">
-          <el-form-item label="消息通知">
-            <el-button type="primary" :disabled="!canManage" @click="notificationDialogVisible = true">
-              添加消息通知
-            </el-button>
-          </el-form-item>
-        </el-form>
       </article>
 
       <article class="dashboard-card settings-card">
@@ -140,20 +138,17 @@ security:
         </el-table>
       </article>
     </section>
-
-    <el-dialog v-model="notificationDialogVisible" title="消息通知" width="960px" class="notification-manager-dialog">
-      <NotificationBindingManager v-if="notificationDialogVisible" />
-    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
-import NotificationBindingManager from "@/components/NotificationBindingManager.vue";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
+import { routeNames } from "@/router/names";
 import { getErrorMessage } from "@/utils/errors";
 import type {
   BaseSettings,
@@ -167,8 +162,8 @@ import type {
 const isEditing = ref(false);
 const loading = ref(false);
 const saving = ref(false);
-const notificationDialogVisible = ref(false);
 const settingLogs = ref<SettingLog[]>([]);
+const router = useRouter();
 const baseForm = reactive<BaseSettings>({
   systemName: "",
   language: "中文",
@@ -220,6 +215,10 @@ const saveSettings = () => {
     return;
   }
   void persistSettings();
+};
+
+const goNotificationOps = () => {
+  router.push({ name: routeNames.notificationOps });
 };
 
 const applySettings = (settings: SystemSettings) => {

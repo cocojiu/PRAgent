@@ -6,6 +6,7 @@ export const routeNames = {
   rules: "rules",
   integrations: "integrations",
   messageQueue: "message-queue",
+  notificationOps: "notification-ops",
   users: "users",
   settings: "settings",
   notFound: "not-found"

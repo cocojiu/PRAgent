@@ -720,8 +720,16 @@ export interface NotificationEvent {
   retryCount: number;
   nextRetryAt?: string;
   lastError?: string;
+  deliverySummary?: NotificationDeliverySummary;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface NotificationDeliverySummary {
+  providers: string[];
+  deliveryCount: number;
+  failedDeliveryCount: number;
+  latestDeliveryStatus?: string;
 }
 
 export interface NotificationDelivery {

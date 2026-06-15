@@ -1087,6 +1087,28 @@ a {
   gap: 10px;
 }
 
+.settings-handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.settings-handoff p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.settings-handoff-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .settings-alert {
   border: 1px solid #bfdbfe;
   border-radius: 8px;

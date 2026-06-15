@@ -59,6 +59,12 @@ export const router = createRouter({
           meta: { title: "消息队列健康状态", requiresAuth: true }
         },
         {
+          path: "notifications",
+          name: routeNames.notificationOps,
+          component: () => import("@/pages/NotificationOpsPage.vue"),
+          meta: { title: "通知运维", requiresAuth: true }
+        },
+        {
           path: "users",
           name: routeNames.users,
           component: () => import("@/pages/UserManagementPage.vue"),

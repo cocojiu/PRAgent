@@ -10,6 +10,7 @@ public record NotificationEventDto(
     Integer retryCount,
     String nextRetryAt,
     String lastError,
+    NotificationDeliverySummaryDto deliverySummary,
     String createdAt,
     String updatedAt
 ) {

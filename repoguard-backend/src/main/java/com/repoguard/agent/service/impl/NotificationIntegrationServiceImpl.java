@@ -7,6 +7,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.NotificationBindingDto;
 import com.repoguard.agent.dto.NotificationBindingRequest;
+import com.repoguard.agent.dto.NotificationDeliverySummaryDto;
 import com.repoguard.agent.dto.NotificationDeliveryDto;
 import com.repoguard.agent.dto.NotificationEventDto;
 import com.repoguard.agent.dto.PageResponse;
@@ -23,7 +24,13 @@ import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.NotificationIntegrationService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -135,7 +142,13 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
                 .eq(taskId != null, NotificationEvent::getTaskId, taskId)
                 .orderByDesc(NotificationEvent::getCreatedAt)
         );
-        return new PageResponse<>(result.getRecords().stream().map(this::toEventDto).toList(), result.getTotal());
+        Map<Long, List<NotificationDeliveryLog>> deliveriesByEventId = loadDeliveriesByEventId(result.getRecords());
+        return new PageResponse<>(
+            result.getRecords().stream()
+                .map(event -> toEventDto(event, deliverySummary(deliveriesByEventId.get(event.getId()))))
+                .toList(),
+            result.getTotal()
+        );
     }
 
     @Override
@@ -149,7 +162,8 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
         event.setUpdatedAt(LocalDateTime.now());
         eventMapper.updateById(event);
         dispatchService.publishExistingEvent(event.getId());
-        return toEventDto(eventMapper.selectById(id));
+        NotificationEvent refreshed = eventMapper.selectById(id);
+        return toEventDto(refreshed, deliverySummary(loadDeliveries(refreshed == null ? null : refreshed.getId())));
     }
 
     @Override
@@ -226,6 +240,10 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
     }
 
     private NotificationEventDto toEventDto(NotificationEvent event) {
+        return toEventDto(event, deliverySummary(loadDeliveries(event == null ? null : event.getId())));
+    }
+
+    private NotificationEventDto toEventDto(NotificationEvent event, NotificationDeliverySummaryDto deliverySummary) {
         return new NotificationEventDto(
             event.getId(),
             event.getEventKey(),
@@ -236,9 +254,63 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
             event.getRetryCount(),
             format(event.getNextRetryAt()),
             event.getLastError(),
+            deliverySummary,
             format(event.getCreatedAt()),
             format(event.getUpdatedAt())
         );
+    }
+
+    private Map<Long, List<NotificationDeliveryLog>> loadDeliveriesByEventId(List<NotificationEvent> events) {
+        if (events == null || events.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> eventIds = events.stream()
+            .map(NotificationEvent::getId)
+            .filter(id -> id != null)
+            .toList();
+        if (eventIds.isEmpty()) {
+            return Map.of();
+        }
+        return deliveryLogMapper.selectList(
+                new LambdaQueryWrapper<NotificationDeliveryLog>()
+                    .in(NotificationDeliveryLog::getEventId, eventIds)
+                    .orderByDesc(NotificationDeliveryLog::getCreatedAt)
+            )
+            .stream()
+            .collect(Collectors.groupingBy(NotificationDeliveryLog::getEventId));
+    }
+
+    private List<NotificationDeliveryLog> loadDeliveries(Long eventId) {
+        if (eventId == null) {
+            return List.of();
+        }
+        return deliveryLogMapper.selectList(
+            new LambdaQueryWrapper<NotificationDeliveryLog>()
+                .eq(NotificationDeliveryLog::getEventId, eventId)
+                .orderByDesc(NotificationDeliveryLog::getCreatedAt)
+        );
+    }
+
+    private NotificationDeliverySummaryDto deliverySummary(List<NotificationDeliveryLog> deliveries) {
+        if (deliveries == null || deliveries.isEmpty()) {
+            return new NotificationDeliverySummaryDto(List.of(), 0, 0, null);
+        }
+        Set<String> providers = deliveries.stream()
+            .map(NotificationDeliveryLog::getProvider)
+            .filter(StringUtils::hasText)
+            .map(provider -> provider.trim().toUpperCase(Locale.ROOT))
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        int failedCount = (int) deliveries.stream()
+            .filter(delivery -> "FAILED".equalsIgnoreCase(delivery.getStatus()))
+            .count();
+        String latestStatus = deliveries.stream()
+            .max(Comparator.comparing(
+                NotificationDeliveryLog::getCreatedAt,
+                Comparator.nullsLast(Comparator.naturalOrder())
+            ))
+            .map(NotificationDeliveryLog::getStatus)
+            .orElse(null);
+        return new NotificationDeliverySummaryDto(List.copyOf(providers), deliveries.size(), failedCount, latestStatus);
     }
 
     private NotificationDeliveryDto toDeliveryDto(NotificationDeliveryLog log) {
