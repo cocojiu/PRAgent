@@ -591,8 +591,12 @@ class ReviewServiceImplTest {
 
         var result = service.getReviewDetail(521L);
 
+        assertThat(result.riskLevel()).isEqualTo("high");
         assertThat(result.riskProfile().score()).isGreaterThanOrEqualTo(55);
         assertThat(result.riskProfile().level()).isEqualTo("high");
+        assertThat(result.llm().riskLevel()).isEqualTo("high");
+        assertThat(result.prSummary().overallRisk()).isEqualTo("high");
+        assertThat(result.prSummary().githubCommentBody()).contains("风险等级：高");
         assertThat(result.riskProfile().recommendHumanReview()).isTrue();
         assertThat(result.riskProfile().signals()).contains("包含 1 条高危以上发现");
         assertThat(result.riskProfile().summary()).contains("3 个变更文件");

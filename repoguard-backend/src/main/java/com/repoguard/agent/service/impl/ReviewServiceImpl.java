@@ -811,6 +811,7 @@ public class ReviewServiceImpl implements ReviewService {
     ) {
         ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timeline.stream().map(ReviewTimelineItem::label).toList()));
         PrRiskProfileDto riskProfile = buildRiskProfile(item, findings, changedFiles);
+        String effectiveRiskLevel = effectiveDetailRiskLevel(item.riskLevel(), riskProfile);
         return new ReviewTaskDetail(
             item.id(),
             item.prNumber(),
@@ -820,7 +821,7 @@ public class ReviewServiceImpl implements ReviewService {
             item.commit(),
             item.branch(),
             item.status(),
-            item.riskLevel(),
+            effectiveRiskLevel,
             item.mqRetries(),
             item.llmStatus(),
             item.source(),
@@ -840,7 +841,7 @@ public class ReviewServiceImpl implements ReviewService {
             new LlmStatusDto(
                 item.llmStatus(),
                 item.duration(),
-                item.riskLevel(),
+                effectiveRiskLevel,
                 lower(task.getLlmProvider()),
                 task.getLlmModel(),
                 task.getLlmDurationMs(),
@@ -860,6 +861,13 @@ public class ReviewServiceImpl implements ReviewService {
             item.humanReviewBy(),
             item.humanReviewedAt()
         );
+    }
+
+    private String effectiveDetailRiskLevel(String taskRiskLevel, PrRiskProfileDto riskProfile) {
+        if (riskProfile != null && StringUtils.hasText(riskProfile.level())) {
+            return riskProfile.level();
+        }
+        return lower(taskRiskLevel);
     }
 
     private ChunkedReviewDto buildChunkedReview(String promptSummary) {
@@ -937,7 +945,7 @@ public class ReviewServiceImpl implements ReviewService {
             + "，包含 " + changedFiles.size() + " 个变更文件、" + totalFindings + " 条审查发现"
             + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
             + "。";
-        String commentBody = buildPrSummaryCommentBody(task, summary, mergeRecommendation, keyRisks, focusFiles);
+        String commentBody = buildPrSummaryCommentBody(task, overallRisk, summary, mergeRecommendation, keyRisks, focusFiles);
         return new PrReviewSummaryDto(
             overallRisk,
             summary,
@@ -1022,6 +1030,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     private String buildPrSummaryCommentBody(
         ReviewTaskListItem task,
+        String overallRisk,
         String summary,
         String mergeRecommendation,
         List<String> keyRisks,
@@ -1037,7 +1046,7 @@ public class ReviewServiceImpl implements ReviewService {
             body.append("\n\n**建议重点查看文件**");
             focusFiles.forEach(file -> body.append("\n- `").append(file).append("`"));
         }
-        body.append("\n\n> 任务 #").append(task.id()).append("，风险等级：").append(riskText(task.riskLevel())).append("。");
+        body.append("\n\n> 任务 #").append(task.id()).append("，风险等级：").append(riskText(overallRisk)).append("。");
         return body.toString();
     }
 
