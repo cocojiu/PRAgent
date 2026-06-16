@@ -1,9 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.common.BusinessException;
-import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
@@ -22,9 +18,6 @@ import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
-import com.repoguard.agent.dto.ReviewTimelineItem;
-import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestSummary;
 import com.repoguard.agent.github.GithubRepositoryRef;
@@ -44,29 +37,13 @@ import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 @Service
 public class ReviewServiceImpl implements ReviewService {
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final String STATUS_PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW";
-    private static final String STATUS_APPROVED = "APPROVED";
-    private static final String STATUS_CHANGES_REQUESTED = "CHANGES_REQUESTED";
-    private static final String STATUS_REJECTED = "REJECTED";
-    private static final String HUMAN_REVIEW_PENDING = "PENDING";
-    private static final String HUMAN_REVIEW_APPROVED = "APPROVED";
-    private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
-    private static final String HUMAN_REVIEW_REJECTED = "REJECTED";
-    private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ChangedFileMapper changedFileMapper;
@@ -256,30 +233,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
-        }
-        if (!HUMAN_REVIEW_PENDING.equals(resolveHumanReviewStatus(task))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
-        }
-
-        String action = normalizeHumanReviewAction(request.action());
-        LocalDateTime reviewedAt = LocalDateTime.now();
-        String note = cleanHumanReviewNote(request.note());
-        String humanReviewStatus = humanReviewStatusForAction(action);
-        task.setStatus(taskStatusForHumanReview(humanReviewStatus));
-        task.setHumanReviewStatus(humanReviewStatus);
-        task.setHumanReviewNote(note);
-        task.setHumanReviewBy(cleanOperator(operator));
-        task.setHumanReviewedAt(reviewedAt);
-        reviewTaskMapper.updateById(task);
-        appendReviewTimeline(task.getId(), humanReviewTimelineLabel(humanReviewStatus, note), reviewedAt, "DONE");
-        evictDashboardOverview();
-        return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
+        return reviewTaskCommandService.submitHumanReview(id, request, operator);
     }
 
     @Override
@@ -316,134 +270,4 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    private String formatDateTimeOrNull(LocalDateTime value) {
-        return value == null ? null : value.format(DATE_TIME_FORMATTER);
-    }
-
-    private LocalDateTime resolveTaskUpdatedAt(ReviewTask task) {
-        if (task.getFinishedAt() != null) {
-            return task.getFinishedAt();
-        }
-        if (task.getStartedAt() != null) {
-            return task.getStartedAt();
-        }
-        return task.getCreatedAt();
-    }
-
-    private ReviewTimelineItem toTimelineItem(ReviewTimeline timeline) {
-        return new ReviewTimelineItem(
-            timeline.getLabel(),
-            timeline.getEventTime().format(TIME_FORMATTER),
-            switch (timeline.getStatus()) {
-                case "DONE" -> "done";
-                case "CURRENT" -> "current";
-                case "FAILED" -> "done";
-                default -> "pending";
-            }
-        );
-    }
-
-    private HumanReviewResponse humanReviewResponse(ReviewTask task, String message) {
-        return new HumanReviewResponse(
-            task.getId(),
-            lower(task.getStatus()),
-            Boolean.TRUE.equals(task.getHumanReviewRequired()),
-            lower(resolveHumanReviewStatus(task)),
-            task.getHumanReviewNote(),
-            task.getHumanReviewBy(),
-            formatDateTimeOrNull(task.getHumanReviewedAt()),
-            message
-        );
-    }
-
-    private String normalizeHumanReviewAction(String action) {
-        return action == null ? "" : action.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String cleanHumanReviewNote(String note) {
-        return StringUtils.hasText(note) ? note.trim() : null;
-    }
-
-    private String cleanOperator(String operator) {
-        return StringUtils.hasText(operator) ? truncate(operator.trim()) : "unknown";
-    }
-
-    private String humanReviewStatusForAction(String action) {
-        return switch (action) {
-            case "APPROVE" -> HUMAN_REVIEW_APPROVED;
-            case "CHANGES_REQUESTED" -> HUMAN_REVIEW_CHANGES_REQUESTED;
-            case "REJECT" -> HUMAN_REVIEW_REJECTED;
-            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported human review action: " + action);
-        };
-    }
-
-    private String taskStatusForHumanReview(String humanReviewStatus) {
-        return switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> STATUS_APPROVED;
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> STATUS_CHANGES_REQUESTED;
-            case HUMAN_REVIEW_REJECTED -> STATUS_REJECTED;
-            default -> STATUS_PENDING_HUMAN_REVIEW;
-        };
-    }
-
-    private String resolveHumanReviewStatus(ReviewTask task) {
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            return HUMAN_REVIEW_NOT_REQUIRED;
-        }
-        return StringUtils.hasText(task.getHumanReviewStatus()) ? task.getHumanReviewStatus() : HUMAN_REVIEW_PENDING;
-    }
-
-    private String humanReviewTimelineLabel(String humanReviewStatus, String note) {
-        String base = switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> "Human review approved";
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
-            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
-            default -> "Human review updated";
-        };
-        return StringUtils.hasText(note) ? truncate(base + ": " + note) : base;
-    }
-
-    private String humanReviewMessage(String humanReviewStatus) {
-        return switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> "Human review approved";
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
-            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
-            default -> "Human review updated";
-        };
-    }
-
-    private void appendReviewTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(label);
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private String truncate(String value) {
-        return value.length() > 120 ? value.substring(0, 117) + "..." : value;
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
-    }
-
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase();
-    }
 }
