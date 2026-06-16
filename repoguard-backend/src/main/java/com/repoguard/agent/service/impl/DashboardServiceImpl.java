@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -67,6 +69,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays")
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
         List<ReviewTask> tasks = reviewTaskMapper.selectList(

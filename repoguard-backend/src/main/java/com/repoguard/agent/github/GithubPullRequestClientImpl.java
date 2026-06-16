@@ -2,6 +2,7 @@ package com.repoguard.agent.github;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
@@ -17,6 +18,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -70,6 +72,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
+    @Cacheable(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS)
     public List<GithubPullRequestSummary> listOpenPullRequests() {
         LocalDateTime startedAt = LocalDateTime.now();
         IntegrationConfig config = loadGithubConfig();

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.ChunkedReviewDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
@@ -125,6 +126,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final GithubPullRequestClient githubPullRequestClient;
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
+    private final CacheEvictionService cacheEvictionService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -150,6 +152,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             null,
+            null,
             null
         );
     }
@@ -167,7 +170,8 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTaskPublisher reviewTaskPublisher,
         GithubPullRequestClient githubPullRequestClient,
         RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService
+        NotificationDispatchService notificationDispatchService,
+        CacheEvictionService cacheEvictionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -181,6 +185,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.githubPullRequestClient = githubPullRequestClient;
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
+        this.cacheEvictionService = cacheEvictionService;
     }
 
     public ReviewServiceImpl(
@@ -208,6 +213,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null
         );
     }
@@ -623,6 +629,7 @@ public class ReviewServiceImpl implements ReviewService {
             throw ex;
         }
         insertInitialTimeline(task.getId(), createdAt);
+        evictDashboardOverview();
         if (metrics != null) {
             metrics.reviewTaskCreated(source);
         }
@@ -668,10 +675,17 @@ public class ReviewServiceImpl implements ReviewService {
         });
     }
 
+    private void evictDashboardOverview() {
+        if (cacheEvictionService != null) {
+            cacheEvictionService.evictDashboardOverview();
+        }
+    }
+
     private ManualReviewResponse reuseExistingTask(ReviewTask existingTask) {
         // 同一 PR/commit 已有任务时不重复入队，只记录这次触发来自复用链路。
         existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
         reviewTaskMapper.updateById(existingTask);
+        evictDashboardOverview();
         return new ManualReviewResponse(
             existingTask.getId(),
             lower(existingTask.getStatus()),
@@ -707,6 +721,7 @@ public class ReviewServiceImpl implements ReviewService {
         task.setHumanReviewedAt(reviewedAt);
         reviewTaskMapper.updateById(task);
         appendReviewTimeline(task.getId(), humanReviewTimelineLabel(humanReviewStatus, note), reviewedAt, "DONE");
+        evictDashboardOverview();
         return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
     }
 
@@ -734,6 +749,7 @@ public class ReviewServiceImpl implements ReviewService {
             feedbackAt,
             "DONE"
         );
+        evictDashboardOverview();
         return findingFeedbackResponse(finding);
     }
 
@@ -766,6 +782,7 @@ public class ReviewServiceImpl implements ReviewService {
         task.setHumanReviewedAt(null);
         task.setDurationSeconds(0);
         reviewTaskMapper.updateById(task);
+        evictDashboardOverview();
 
         insertRetryTimeline(task.getId(), queuedAt);
         ReviewTaskMessage message = new ReviewTaskMessage(

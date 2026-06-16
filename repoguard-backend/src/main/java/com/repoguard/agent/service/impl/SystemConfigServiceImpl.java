@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
@@ -51,6 +53,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.env.Environment;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -87,6 +92,39 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     private final RabbitTemplate rabbitTemplate;
     private final SecretCryptoService secretCryptoService;
     private final Environment environment;
+    private final CacheEvictionService cacheEvictionService;
+
+    @Autowired
+    public SystemConfigServiceImpl(
+        IntegrationConfigMapper integrationConfigMapper,
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        ReviewRuleConfigMapper reviewRuleConfigMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        SystemSettingsConfigMapper systemSettingsConfigMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        DataSource dataSource,
+        RabbitTemplate rabbitTemplate,
+        SecretCryptoService secretCryptoService,
+        Environment environment,
+        CacheEvictionService cacheEvictionService
+    ) {
+        this.integrationConfigMapper = integrationConfigMapper;
+        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
+        this.reviewFindingMapper = reviewFindingMapper;
+        this.systemSettingsConfigMapper = systemSettingsConfigMapper;
+        this.systemSettingLogMapper = systemSettingLogMapper;
+        this.restClientBuilder = restClientBuilder;
+        this.objectMapper = objectMapper;
+        this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
+        this.dataSource = dataSource;
+        this.rabbitTemplate = rabbitTemplate;
+        this.secretCryptoService = secretCryptoService;
+        this.environment = environment;
+        this.cacheEvictionService = cacheEvictionService;
+    }
 
     public SystemConfigServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
@@ -102,19 +140,21 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         SecretCryptoService secretCryptoService,
         Environment environment
     ) {
-        this.integrationConfigMapper = integrationConfigMapper;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.systemSettingsConfigMapper = systemSettingsConfigMapper;
-        this.systemSettingLogMapper = systemSettingLogMapper;
-        this.restClientBuilder = restClientBuilder;
-        this.objectMapper = objectMapper;
-        this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
-        this.dataSource = dataSource;
-        this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
-        this.environment = environment;
+        this(
+            integrationConfigMapper,
+            reviewPolicyConfigMapper,
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            systemSettingsConfigMapper,
+            systemSettingLogMapper,
+            restClientBuilder,
+            objectMapper,
+            dataSource,
+            rabbitTemplate,
+            secretCryptoService,
+            environment,
+            null
+        );
     }
 
     @Override
@@ -124,6 +164,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
         String token = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.token());
@@ -147,6 +188,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .eq("id", config.getId())
                 .set("last_error", null)
         );
+        evictDashboardOverview();
         return toGithubDto(config);
     }
 
@@ -179,6 +221,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
         String apiKey = resolveSecretValue(secretCryptoService.decrypt(config.getApiKeyValue()), request.apiKey());
@@ -217,6 +260,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
     public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
         SystemSettingsConfig settingsConfig = loadSystemSettings();
         ReviewPolicyConfig reviewPolicyConfig = loadReviewPolicy();
@@ -250,6 +294,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
+    @Cacheable(cacheNames = CacheNames.REVIEW_RULES)
     public ReviewRulesResponse getReviewRules() {
         List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
             new LambdaQueryWrapper<ReviewRuleConfig>()
@@ -266,6 +311,7 @@ public class SystemConfigServiceImpl implements SystemConfigService {
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
         String id = normalizeRuleId(request.id());
         if (reviewRuleConfigMapper.selectById(id) != null) {
@@ -281,11 +327,13 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         rule.setCreatedAt(now);
         rule.setUpdatedAt(now);
         reviewRuleConfigMapper.insert(rule);
+        evictDashboardOverview();
         return toReviewRuleDto(rule, 0);
     }
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
         String normalizedId = normalizeRuleId(id);
         if (!normalizedId.equals(normalizeRuleId(request.id()))) {
@@ -298,17 +346,26 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         applyReviewRuleRequest(rule, normalizedId, request);
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
+        evictDashboardOverview();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
     @Override
     @Transactional
+    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
         ReviewRuleConfig rule = loadReviewRule(normalizeRuleId(id));
         rule.setStatus(normalizeStatus(status));
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
+        evictDashboardOverview();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
+    }
+
+    private void evictDashboardOverview() {
+        if (cacheEvictionService != null) {
+            cacheEvictionService.evictDashboardOverview();
+        }
     }
 
     @Override

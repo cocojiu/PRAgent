@@ -2,6 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
@@ -50,6 +51,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final PlatformTransactionManager transactionManager;
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
+    private final CacheEvictionService cacheEvictionService;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -61,7 +63,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         PullRequestReviewer pullRequestReviewer,
         PlatformTransactionManager transactionManager,
         RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService
+        NotificationDispatchService notificationDispatchService,
+        CacheEvictionService cacheEvictionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
@@ -72,6 +75,32 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         this.transactionManager = transactionManager;
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
+        this.cacheEvictionService = cacheEvictionService;
+    }
+
+    public ReviewTaskExecutorImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ChangedFileMapper changedFileMapper,
+        GithubPullRequestClient githubPullRequestClient,
+        PullRequestReviewer pullRequestReviewer,
+        PlatformTransactionManager transactionManager,
+        RepoGuardMetrics metrics,
+        NotificationDispatchService notificationDispatchService
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewFindingMapper,
+            changedFileMapper,
+            githubPullRequestClient,
+            pullRequestReviewer,
+            transactionManager,
+            metrics,
+            notificationDispatchService,
+            null
+        );
     }
 
     ReviewTaskExecutorImpl(
@@ -93,6 +122,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             pullRequestReviewer,
             transactionManager,
             metrics,
+            null,
             null
         );
     }
@@ -112,6 +142,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             changedFileMapper,
             githubPullRequestClient,
             pullRequestReviewer,
+            null,
             null,
             null,
             null
@@ -320,6 +351,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
                 metrics.reviewTaskDuration(Duration.between(startedAt, finishedAt), "completed");
             }
+            evictDashboardOverview();
             return findingCount;
         });
     }
@@ -432,8 +464,15 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             if (metrics != null) {
                 metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
             }
+            evictDashboardOverview();
         });
         publishReviewFailedNotification(task);
+    }
+
+    private void evictDashboardOverview() {
+        if (cacheEvictionService != null) {
+            cacheEvictionService.evictDashboardOverview();
+        }
     }
 
     private void publishReviewNotification(ReviewTask task, int findingCount) {
