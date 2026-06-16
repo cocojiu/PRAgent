@@ -59,6 +59,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
@@ -117,6 +118,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final CacheEvictionService cacheEvictionService;
     private final ReviewTaskQueryService reviewTaskQueryService;
     private final ReviewTaskCommandService reviewTaskCommandService;
+    private final FindingFeedbackService findingFeedbackService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -145,6 +147,7 @@ public class ReviewServiceImpl implements ReviewService {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -165,7 +168,8 @@ public class ReviewServiceImpl implements ReviewService {
         NotificationDispatchService notificationDispatchService,
         CacheEvictionService cacheEvictionService,
         ReviewTaskQueryService reviewTaskQueryService,
-        ReviewTaskCommandService reviewTaskCommandService
+        ReviewTaskCommandService reviewTaskCommandService,
+        FindingFeedbackService findingFeedbackService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -186,6 +190,9 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTaskCommandService = reviewTaskCommandService == null
             ? new ReviewTaskCommandServiceImpl(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService)
             : reviewTaskCommandService;
+        this.findingFeedbackService = findingFeedbackService == null
+            ? new FindingFeedbackServiceImpl(reviewTaskMapper, reviewFindingMapper, reviewTimelineMapper, cacheEvictionService)
+            : findingFeedbackService;
     }
 
     public ReviewServiceImpl(
@@ -213,6 +220,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null,
             null,
             null,
@@ -559,29 +567,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public FindingFeedbackResponse updateFindingFeedback(Long id, Long findingId, FindingFeedbackRequest request, String operator) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-        ReviewFinding finding = reviewFindingMapper.selectById(findingId);
-        if (finding == null || !id.equals(finding.getTaskId()) || !"FINDING".equals(finding.getCategory())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Review finding not found: " + findingId);
-        }
-        String status = normalizeFindingFeedbackStatus(request.status());
-        LocalDateTime feedbackAt = LocalDateTime.now();
-        finding.setFeedbackStatus(status);
-        finding.setFeedbackNote(cleanHumanReviewNote(request.note()));
-        finding.setFeedbackBy(cleanOperator(operator));
-        finding.setFeedbackAt(feedbackAt);
-        reviewFindingMapper.updateById(finding);
-        appendReviewTimeline(
-            task.getId(),
-            findingFeedbackTimelineLabel(finding, status),
-            feedbackAt,
-            "DONE"
-        );
-        evictDashboardOverview();
-        return findingFeedbackResponse(finding);
+        return findingFeedbackService.updateFindingFeedback(id, findingId, request, operator);
     }
 
     @Override
@@ -1623,31 +1609,6 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    private FindingFeedbackResponse findingFeedbackResponse(ReviewFinding finding) {
-        return new FindingFeedbackResponse(
-            finding.getId(),
-            finding.getTaskId(),
-            lower(resolveFindingFeedbackStatus(finding)),
-            finding.getFeedbackNote(),
-            finding.getFeedbackBy(),
-            formatDateTimeOrNull(finding.getFeedbackAt())
-        );
-    }
-
-    private String normalizeFindingFeedbackStatus(String status) {
-        if (!StringUtils.hasText(status)) {
-            return FEEDBACK_UNREVIEWED;
-        }
-        return switch (status.trim().toUpperCase(Locale.ROOT)) {
-            case "VALID" -> FEEDBACK_VALID;
-            case "FALSE_POSITIVE" -> FEEDBACK_FALSE_POSITIVE;
-            case "FIXED" -> FEEDBACK_FIXED;
-            case "IGNORED" -> FEEDBACK_IGNORED;
-            case "UNREVIEWED" -> FEEDBACK_UNREVIEWED;
-            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported finding feedback status: " + status);
-        };
-    }
-
     private String resolveFindingFeedbackStatus(ReviewFinding finding) {
         return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
     }
@@ -1664,11 +1625,6 @@ public class ReviewServiceImpl implements ReviewService {
             case FEEDBACK_IGNORED -> "Finding marked as ignored and will not be published";
             default -> "Finding is not actionable and will not be published";
         };
-    }
-
-    private String findingFeedbackTimelineLabel(ReviewFinding finding, String status) {
-        String file = StringUtils.hasText(finding.getFilePath()) ? finding.getFilePath() : "unknown file";
-        return truncate("Finding feedback updated: " + lower(status) + " for " + file);
     }
 
     private HumanReviewResponse humanReviewResponse(ReviewTask task, String message) {
