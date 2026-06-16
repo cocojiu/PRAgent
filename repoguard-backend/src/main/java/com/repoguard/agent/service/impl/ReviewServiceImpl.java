@@ -6,7 +6,6 @@ import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
-import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
@@ -19,8 +18,6 @@ import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestSummary;
-import com.repoguard.agent.github.GithubRepositoryRef;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -34,10 +31,10 @@ import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
+import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
-import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +59,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewTaskCommandService reviewTaskCommandService;
     private final FindingFeedbackService findingFeedbackService;
     private final GithubCommentApplicationService githubCommentApplicationService;
+    private final GithubPullRequestOptionService githubPullRequestOptionService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -92,6 +90,7 @@ public class ReviewServiceImpl implements ReviewService {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -114,7 +113,8 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTaskQueryService reviewTaskQueryService,
         ReviewTaskCommandService reviewTaskCommandService,
         FindingFeedbackService findingFeedbackService,
-        GithubCommentApplicationService githubCommentApplicationService
+        GithubCommentApplicationService githubCommentApplicationService,
+        GithubPullRequestOptionService githubPullRequestOptionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -152,6 +152,9 @@ public class ReviewServiceImpl implements ReviewService {
                 notificationDispatchService
             )
             : githubCommentApplicationService;
+        this.githubPullRequestOptionService = githubPullRequestOptionService == null
+            ? new GithubPullRequestOptionServiceImpl(githubPullRequestClient)
+            : githubPullRequestOptionService;
     }
 
     public ReviewServiceImpl(
@@ -179,6 +182,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null,
             null,
             null,
@@ -224,12 +228,6 @@ public class ReviewServiceImpl implements ReviewService {
         return reviewTaskCommandService.triggerManualReview(request);
     }
 
-    private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
-    }
-
     @Override
     @Transactional
     public HumanReviewResponse submitHumanReview(Long id, HumanReviewRequest request, String operator) {
@@ -250,24 +248,7 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public GithubPullRequestOptionsResponse listConfiguredGithubPullRequests() {
-        GithubRepositoryRef repositoryRef = githubPullRequestClient.getConfiguredRepository();
-        List<GithubPullRequestSummary> pullRequests = githubPullRequestClient.listOpenPullRequests();
-        return new GithubPullRequestOptionsResponse(
-            repositoryRef.owner(),
-            repositoryRef.repository(),
-            pullRequests.stream()
-                .map(item -> new GithubPullRequestOption(
-                    item.number(),
-                    item.title(),
-                    item.branch(),
-                    item.commit(),
-                    item.commit(),
-                    item.author(),
-                    item.url(),
-                    item.updatedAt()
-                ))
-                .toList()
-        );
+        return githubPullRequestOptionService.listConfiguredGithubPullRequests();
     }
 
 }
