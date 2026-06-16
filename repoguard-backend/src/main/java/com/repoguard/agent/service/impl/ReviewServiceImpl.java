@@ -56,13 +56,11 @@ import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.messaging.MessagePublishException;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.ReviewService;
+import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -77,11 +75,8 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -91,11 +86,6 @@ public class ReviewServiceImpl implements ReviewService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final String GITHUB_PROVIDER = "GITHUB";
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
-    private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
-    private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
-    private static final String STATUS_QUEUED = "QUEUED";
-    private static final String STATUS_FAILED = "FAILED";
-    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
     private static final String STATUS_PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW";
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_CHANGES_REQUESTED = "CHANGES_REQUESTED";
@@ -126,6 +116,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final NotificationDispatchService notificationDispatchService;
     private final CacheEvictionService cacheEvictionService;
     private final ReviewTaskQueryService reviewTaskQueryService;
+    private final ReviewTaskCommandService reviewTaskCommandService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -153,6 +144,7 @@ public class ReviewServiceImpl implements ReviewService {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -172,7 +164,8 @@ public class ReviewServiceImpl implements ReviewService {
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService,
         CacheEvictionService cacheEvictionService,
-        ReviewTaskQueryService reviewTaskQueryService
+        ReviewTaskQueryService reviewTaskQueryService,
+        ReviewTaskCommandService reviewTaskCommandService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -190,6 +183,9 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTaskQueryService = reviewTaskQueryService == null
             ? new ReviewTaskQueryServiceImpl(reviewTaskMapper, changedFileMapper, reviewFindingMapper, reviewTimelineMapper)
             : reviewTaskQueryService;
+        this.reviewTaskCommandService = reviewTaskCommandService == null
+            ? new ReviewTaskCommandServiceImpl(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService)
+            : reviewTaskCommandService;
     }
 
     public ReviewServiceImpl(
@@ -217,6 +213,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null,
             null,
             null
@@ -521,109 +518,13 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
-        String organization = request.organization().trim();
-        String repository = request.repository().trim();
-        String commit = resolveCommit(request);
-        String source = resolveTaskSource(request.source());
-        ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
-        if (existingTask != null) {
-            return reuseExistingTask(existingTask);
-        }
-
-        LocalDateTime createdAt = LocalDateTime.now();
-        ReviewTask task = new ReviewTask();
-        task.setPrNumber(request.prNumber());
-        task.setTitle(resolveTitle(request));
-        task.setRepository(repository);
-        task.setOrganization(organization);
-        task.setCommitSha(commit);
-        task.setBranchName(resolveBranch(request));
-        task.setStatus(STATUS_QUEUED);
-        task.setRiskLevel("INFO");
-        task.setMqRetries(0);
-        task.setPublishAttempts(0);
-        task.setLlmStatus("PENDING");
-        task.setPrUrl(buildPrUrl(request));
-        task.setSource(source);
-        task.setTriggerSource(source);
-        task.setCreatedAt(createdAt);
-        task.setDurationSeconds(0);
-
-        try {
-            reviewTaskMapper.insert(task);
-        } catch (DuplicateKeyException ex) {
-            ReviewTask concurrentTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
-            if (concurrentTask != null) {
-                return reuseExistingTask(concurrentTask);
-            }
-            throw ex;
-        }
-        insertInitialTimeline(task.getId(), createdAt);
-        evictDashboardOverview();
-        if (metrics != null) {
-            metrics.reviewTaskCreated(source);
-        }
-        ReviewTaskMessage message = new ReviewTaskMessage(
-            task.getId(),
-            organization,
-            repository,
-            request.prNumber(),
-            commit,
-            createdAt,
-            LogContext.currentTraceId()
-        );
-        try {
-            publishReviewTaskAfterCommit(task, message, createdAt);
-            return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
-        } catch (MessagePublishException ex) {
-            markPublishFailed(task, ex, createdAt);
-            return new ManualReviewResponse(
-                task.getId(),
-                "publish_failed",
-                "Review task saved, waiting for message publish compensation",
-                false,
-                lower(source),
-                lower(source)
-            );
-        }
-    }
-
-    private void publishReviewTaskAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            reviewTaskPublisher.publish(message);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    reviewTaskPublisher.publish(message);
-                } catch (MessagePublishException ex) {
-                    markPublishFailed(task, ex, queuedAt);
-                }
-            }
-        });
+        return reviewTaskCommandService.triggerManualReview(request);
     }
 
     private void evictDashboardOverview() {
         if (cacheEvictionService != null) {
             cacheEvictionService.evictDashboardOverview();
         }
-    }
-
-    private ManualReviewResponse reuseExistingTask(ReviewTask existingTask) {
-        // 同一 PR/commit 已有任务时不重复入队，只记录这次触发来自复用链路。
-        existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
-        reviewTaskMapper.updateById(existingTask);
-        evictDashboardOverview();
-        return new ManualReviewResponse(
-            existingTask.getId(),
-            lower(existingTask.getStatus()),
-            "Review task already exists",
-            true,
-            lower(resolveStoredSource(existingTask.getSource())),
-            lower(SOURCE_EXISTING_REUSED)
-        );
     }
 
     @Override
@@ -686,56 +587,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional
     public ReviewRetryResponse retryReview(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-        if (!STATUS_FAILED.equals(task.getStatus())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
-        }
-
-        LocalDateTime queuedAt = LocalDateTime.now();
-        int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
-        // 重试只重新入队，不清理上一次 findings；worker 成功拉取新结果后会统一替换。
-        task.setStatus(STATUS_QUEUED);
-        task.setRiskLevel("INFO");
-        task.setMqRetries(retryCount);
-        task.setPublishAttempts(0);
-        task.setNextPublishRetryAt(null);
-        task.setLastPublishError(null);
-        task.setLlmStatus("PENDING");
-        clearLlmQuality(task);
-        task.setHumanReviewRequired(false);
-        task.setHumanReviewStatus(HUMAN_REVIEW_NOT_REQUIRED);
-        task.setHumanReviewNote(null);
-        task.setHumanReviewBy(null);
-        task.setHumanReviewedAt(null);
-        task.setDurationSeconds(0);
-        reviewTaskMapper.updateById(task);
-        evictDashboardOverview();
-
-        insertRetryTimeline(task.getId(), queuedAt);
-        ReviewTaskMessage message = new ReviewTaskMessage(
-            task.getId(),
-            task.getOrganization(),
-            task.getRepository(),
-            task.getPrNumber(),
-            task.getCommitSha(),
-            queuedAt,
-            LogContext.currentTraceId()
-        );
-        try {
-            publishReviewTaskAfterCommit(task, message, queuedAt);
-            return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
-        } catch (MessagePublishException ex) {
-            markPublishFailed(task, ex, queuedAt);
-            return new ReviewRetryResponse(
-                task.getId(),
-                "publish_failed",
-                "Review task saved, waiting for message publish compensation",
-                retryCount
-            );
-        }
+        return reviewTaskCommandService.retryReview(id);
     }
 
     @Override
@@ -1753,100 +1605,8 @@ public class ReviewServiceImpl implements ReviewService {
         );
     }
 
-    private String resolveTitle(ManualReviewRequest request) {
-        if (StringUtils.hasText(request.title())) {
-            return request.title().trim();
-        }
-        return "Manual review for PR #" + request.prNumber();
-    }
-
-    private String resolveCommit(ManualReviewRequest request) {
-        if (StringUtils.hasText(request.commit())) {
-            return request.commit().trim();
-        }
-        return "pending";
-    }
-
-    private String resolveBranch(ManualReviewRequest request) {
-        if (StringUtils.hasText(request.branch())) {
-            return request.branch().trim();
-        }
-        return "unknown";
-    }
-
-    private String resolveTaskSource(String source) {
-        if (!StringUtils.hasText(source)) {
-            return SOURCE_MANUAL_INPUT;
-        }
-        // 创建来源只接受真实入口，未知值按手动输入兜底，避免污染任务来源统计。
-        String normalized = source.trim().toUpperCase();
-        return switch (normalized) {
-            case SOURCE_GITHUB_PR_PICKER -> SOURCE_GITHUB_PR_PICKER;
-            default -> SOURCE_MANUAL_INPUT;
-        };
-    }
-
     private String resolveStoredSource(String source) {
         return StringUtils.hasText(source) ? source : SOURCE_MANUAL_INPUT;
-    }
-
-    private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {
-        if (!StringUtils.hasText(commit)) {
-            return null;
-        }
-        return reviewTaskMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getOrganization, organization)
-                .eq(ReviewTask::getRepository, repository)
-                .eq(ReviewTask::getPrNumber, prNumber)
-                .eq(ReviewTask::getCommitSha, commit)
-                .last("limit 1")
-        );
-    }
-
-    private void insertInitialTimeline(Long taskId, LocalDateTime createdAt) {
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel("Task queued");
-        timeline.setEventTime(createdAt);
-        timeline.setStatus("CURRENT");
-        timeline.setSortOrder(1);
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private void insertRetryTimeline(Long taskId, LocalDateTime queuedAt) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel("Retry queued");
-        timeline.setEventTime(queuedAt);
-        timeline.setStatus("CURRENT");
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(STATUS_PUBLISH_FAILED);
-        task.setLlmStatus("PENDING");
-        clearLlmQuality(task);
-        task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
-        task.setNextPublishRetryAt(failedAt.plusSeconds(60));
-        task.setLastPublishError(truncate(errorMessage(ex)));
-        reviewTaskMapper.updateById(task);
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(task.getId());
-        timeline.setLabel(truncate("Message publish failed: " + errorMessage(ex)));
-        timeline.setEventTime(failedAt);
-        timeline.setStatus("FAILED");
-        timeline.setSortOrder(nextTimelineSortOrder(task.getId()));
-        reviewTimelineMapper.insert(timeline);
     }
 
     private void ensureGithubCommentPublishAllowed(ReviewTask task) {
@@ -1861,15 +1621,6 @@ public class ReviewServiceImpl implements ReviewService {
             ErrorCode.BAD_REQUEST,
             "Human review approval or changes request is required before publishing GitHub comments"
         );
-    }
-
-    private void clearLlmQuality(ReviewTask task) {
-        task.setLlmProvider(null);
-        task.setLlmModel(null);
-        task.setLlmDurationMs(null);
-        task.setLlmParseStatus(null);
-        task.setLlmFallbackReason(null);
-        task.setLlmPromptSummary(null);
     }
 
     private FindingFeedbackResponse findingFeedbackResponse(ReviewFinding finding) {
@@ -2006,12 +1757,6 @@ public class ReviewServiceImpl implements ReviewService {
         reviewTimelineMapper.insert(timeline);
     }
 
-    private String errorMessage(Exception ex) {
-        return ex.getMessage() == null || ex.getMessage().isBlank()
-            ? ex.getClass().getSimpleName()
-            : ex.getMessage().replaceAll("\\s+", " ").trim();
-    }
-
     private String truncate(String value) {
         return value.length() > 120 ? value.substring(0, 117) + "..." : value;
     }
@@ -2024,15 +1769,6 @@ public class ReviewServiceImpl implements ReviewService {
                 .last("limit 1")
         );
         return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
-    }
-
-    private String buildPrUrl(ManualReviewRequest request) {
-        return "https://github.com/"
-            + request.organization().trim()
-            + "/"
-            + request.repository().trim()
-            + "/pull/"
-            + request.prNumber();
     }
 
     private String lower(String value) {
