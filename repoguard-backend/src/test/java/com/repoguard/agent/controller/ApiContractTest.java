@@ -27,6 +27,7 @@ class ApiContractTest {
 
     private static final List<Class<?>> CONTROLLERS = List.of(
         AuthController.class,
+        CacheStatsController.class,
         DashboardController.class,
         DataRetentionController.class,
         MessageQueueHealthController.class,

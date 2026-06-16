@@ -15,7 +15,7 @@ import org.springframework.context.annotation.Configuration;
 public class CacheConfig {
 
     @Bean
-    CacheManager cacheManager() {
+    public CacheManager cacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(List.of(
             caffeineCache(CacheNames.DASHBOARD_OVERVIEW, Duration.ofSeconds(30), 256),
