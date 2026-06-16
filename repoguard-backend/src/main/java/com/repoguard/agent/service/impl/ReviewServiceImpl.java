@@ -7,7 +7,6 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ChangedFileDto;
-import com.repoguard.agent.dto.ChunkedReviewDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
@@ -22,7 +21,6 @@ import com.repoguard.agent.dto.GithubPullRequestOption;
 import com.repoguard.agent.dto.GithubPullRequestOptionsResponse;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
-import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.dto.MissingTestDto;
@@ -30,7 +28,6 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.PrRiskFileDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.PrReviewSummaryDto;
-import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewRetryResponse;
@@ -66,6 +63,7 @@ import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.ReviewService;
+import com.repoguard.agent.service.ReviewTaskQueryService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -127,6 +125,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewTaskQueryService reviewTaskQueryService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -153,6 +152,7 @@ public class ReviewServiceImpl implements ReviewService {
             githubPullRequestClient,
             null,
             null,
+            null,
             null
         );
     }
@@ -171,7 +171,8 @@ public class ReviewServiceImpl implements ReviewService {
         GithubPullRequestClient githubPullRequestClient,
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService,
-        CacheEvictionService cacheEvictionService
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskQueryService reviewTaskQueryService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -186,6 +187,9 @@ public class ReviewServiceImpl implements ReviewService {
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
         this.cacheEvictionService = cacheEvictionService;
+        this.reviewTaskQueryService = reviewTaskQueryService == null
+            ? new ReviewTaskQueryServiceImpl(reviewTaskMapper, changedFileMapper, reviewFindingMapper, reviewTimelineMapper)
+            : reviewTaskQueryService;
     }
 
     public ReviewServiceImpl(
@@ -214,24 +218,14 @@ public class ReviewServiceImpl implements ReviewService {
             githubPullRequestClient,
             metrics,
             null,
+            null,
             null
         );
     }
 
     @Override
     public PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query) {
-        Page<ReviewTask> page = reviewTaskMapper.selectPage(
-            Page.of(query.page(), query.pageSize()),
-            buildListWrapper(query)
-        );
-        List<ReviewTask> tasks = page.getRecords();
-        Map<Long, List<ReviewTimeline>> timelinesByTaskId = loadTimelinesByTaskId(tasks);
-        return new PageResponse<>(
-            tasks.stream()
-                .map(task -> toListItem(task, resolveFailureSummary(task, timelineLabels(timelinesByTaskId.get(task.getId())))))
-                .toList(),
-            page.getTotal()
-        );
+        return reviewTaskQueryService.listReviews(query);
     }
 
     @Override
@@ -314,76 +308,12 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public ReviewTaskDetail getReviewDetail(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-
-        List<ChangedFileDto> changedFiles = changedFileMapper.selectList(
-            new LambdaQueryWrapper<ChangedFile>()
-                .eq(ChangedFile::getTaskId, id)
-                .orderByAsc(ChangedFile::getId)
-        ).stream().map(this::toChangedFileDto).toList();
-
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>()
-                .eq(ReviewFinding::getTaskId, id)
-                .orderByAsc(ReviewFinding::getId)
-        );
-
-        List<ReviewFindingDto> findingDtos = findings.stream()
-            .filter(finding -> "FINDING".equals(finding.getCategory()))
-            .map(this::toFindingDto)
-            .toList();
-
-        List<MissingTestDto> missingTests = findings.stream()
-            .filter(finding -> "MISSING_TEST".equals(finding.getCategory()))
-            .map(this::toMissingTestDto)
-            .toList();
-
-        List<ReviewTimelineItem> timeline = reviewTimelineMapper.selectList(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, id)
-                .orderByAsc(ReviewTimeline::getSortOrder)
-        ).stream().map(this::toTimelineItem).toList();
-
-        return toDetail(task, findingDtos, missingTests, changedFiles, timeline);
+        return reviewTaskQueryService.getReviewDetail(id);
     }
 
     @Override
     public ReviewTaskStatusResponse getReviewStatus(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-
-        List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, id)
-                .orderByAsc(ReviewTimeline::getSortOrder)
-        );
-        ReviewTimelineItem latestTimeline = timelines == null || timelines.isEmpty()
-            ? null
-            : toTimelineItem(timelines.getLast());
-        ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timelineLabels(timelines)));
-
-        return new ReviewTaskStatusResponse(
-            item.id(),
-            item.status(),
-            item.riskLevel(),
-            item.llmStatus(),
-            item.duration(),
-            formatDateTimeOrNull(resolveTaskUpdatedAt(task)),
-            item.failureCategory(),
-            item.failureReason(),
-            item.failureSuggestion(),
-            latestTimeline,
-            item.humanReviewRequired(),
-            item.humanReviewStatus(),
-            item.humanReviewNote(),
-            item.humanReviewBy(),
-            item.humanReviewedAt()
-        );
+        return reviewTaskQueryService.getReviewStatus(id);
     }
 
     @Override
@@ -828,175 +758,6 @@ public class ReviewServiceImpl implements ReviewService {
                 ))
                 .toList()
         );
-    }
-
-    private LambdaQueryWrapper<ReviewTask> buildListWrapper(ReviewQuery query) {
-        LambdaQueryWrapper<ReviewTask> wrapper = new LambdaQueryWrapper<ReviewTask>()
-            .orderByDesc(ReviewTask::getCreatedAt);
-
-        // 前端使用小写筛选值，数据库保存类枚举的大写值，这里统一做一次转换。
-        if (StringUtils.hasText(query.repository())) {
-            wrapper.eq(ReviewTask::getRepository, query.repository().trim());
-        }
-        if (StringUtils.hasText(query.status())) {
-            wrapper.eq(ReviewTask::getStatus, query.status().trim().toUpperCase());
-        }
-        if (StringUtils.hasText(query.riskLevel())) {
-            wrapper.eq(ReviewTask::getRiskLevel, query.riskLevel().trim().toUpperCase());
-        }
-        // 来源筛选使用前端小写值，落库字段保持大写枚举。
-        if (StringUtils.hasText(query.source())) {
-            wrapper.eq(ReviewTask::getSource, query.source().trim().toUpperCase());
-        }
-        if (StringUtils.hasText(query.triggerSource())) {
-            wrapper.eq(ReviewTask::getTriggerSource, query.triggerSource().trim().toUpperCase());
-        }
-        if (StringUtils.hasText(query.keyword())) {
-            String keyword = query.keyword().trim();
-            Integer prNumber = parseIntegerOrNull(keyword);
-            // 关键字同时匹配可读字段；当关键字是数字时，也匹配 PR 编号。
-            wrapper.and(nested -> nested
-                .like(ReviewTask::getTitle, keyword)
-                .or()
-                .like(ReviewTask::getRepository, keyword)
-                .or()
-                .like(ReviewTask::getOrganization, keyword)
-                .or()
-                .like(ReviewTask::getCommitSha, keyword)
-                .or(prNumber != null)
-                .eq(prNumber != null, ReviewTask::getPrNumber, prNumber)
-            );
-        }
-        return wrapper;
-    }
-
-    private Integer parseIntegerOrNull(String value) {
-        try {
-            return Integer.valueOf(value);
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    private ReviewTaskDetail toDetail(
-        ReviewTask task,
-        List<ReviewFindingDto> findings,
-        List<MissingTestDto> missingTests,
-        List<ChangedFileDto> changedFiles,
-        List<ReviewTimelineItem> timeline
-    ) {
-        ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timeline.stream().map(ReviewTimelineItem::label).toList()));
-        PrRiskProfileDto riskProfile = buildRiskProfile(item, findings, changedFiles);
-        String effectiveRiskLevel = effectiveDetailRiskLevel(item.riskLevel(), riskProfile);
-        return new ReviewTaskDetail(
-            item.id(),
-            item.prNumber(),
-            item.title(),
-            item.repository(),
-            item.organization(),
-            item.commit(),
-            item.branch(),
-            item.status(),
-            effectiveRiskLevel,
-            item.mqRetries(),
-            item.llmStatus(),
-            item.source(),
-            item.triggerSource(),
-            item.createdAt(),
-            item.duration(),
-            item.failureCategory(),
-            item.failureReason(),
-            item.failureSuggestion(),
-            task.getPrUrl(),
-            findings,
-            missingTests,
-            changedFiles,
-            timeline,
-            riskProfile,
-            buildPrReviewSummary(item, findings, missingTests, changedFiles, riskProfile),
-            new LlmStatusDto(
-                item.llmStatus(),
-                item.duration(),
-                effectiveRiskLevel,
-                lower(task.getLlmProvider()),
-                task.getLlmModel(),
-                task.getLlmDurationMs(),
-                lower(task.getLlmParseStatus()),
-                task.getLlmFallbackReason(),
-                task.getLlmPromptSummary(),
-                task.getLlmPromptTokens(),
-                task.getLlmCompletionTokens(),
-                task.getLlmTotalTokens(),
-                task.getLlmEstimatedCost() == null ? null : task.getLlmEstimatedCost().toPlainString()
-            ),
-            buildChunkedReview(task.getLlmPromptSummary()),
-            new RabbitMqStatusDto(task.getMqRetries() + 1, task.getMqRetries(), "confirmed"),
-            item.humanReviewRequired(),
-            item.humanReviewStatus(),
-            item.humanReviewNote(),
-            item.humanReviewBy(),
-            item.humanReviewedAt()
-        );
-    }
-
-    private String effectiveDetailRiskLevel(String taskRiskLevel, PrRiskProfileDto riskProfile) {
-        if (riskProfile != null && StringUtils.hasText(riskProfile.level())) {
-            return riskProfile.level();
-        }
-        return lower(taskRiskLevel);
-    }
-
-    private ChunkedReviewDto buildChunkedReview(String promptSummary) {
-        if (!StringUtils.hasText(promptSummary)) {
-            return ChunkedReviewDto.disabled();
-        }
-        Map<String, String> summary = parsePromptSummary(promptSummary);
-        if (!"true".equalsIgnoreCase(summary.get("chunked"))) {
-            return ChunkedReviewDto.disabled();
-        }
-        return new ChunkedReviewDto(
-            true,
-            parsePositiveInt(summary.get("chunks")),
-            lower(summary.get("aggregateRisk")),
-            parsePositiveInt(summary.get("aggregateFindings")),
-            parsePositiveInt(summary.get("failedChunks")),
-            parseChunkReasons(summary.get("chunkReasons"))
-        );
-    }
-
-    private Map<String, String> parsePromptSummary(String promptSummary) {
-        return List.of(promptSummary.split(";")).stream()
-            .map(String::trim)
-            .filter(part -> part.contains("="))
-            .map(part -> part.split("=", 2))
-            .filter(parts -> parts.length == 2 && StringUtils.hasText(parts[0]))
-            .collect(Collectors.toMap(
-                parts -> parts[0].trim(),
-                parts -> parts[1].trim(),
-                (first, second) -> second
-            ));
-    }
-
-    private Integer parsePositiveInt(String value) {
-        if (!StringUtils.hasText(value)) {
-            return 0;
-        }
-        try {
-            return Math.max(Integer.parseInt(value.trim()), 0);
-        } catch (NumberFormatException exception) {
-            return 0;
-        }
-    }
-
-    private List<String> parseChunkReasons(String value) {
-        if (!StringUtils.hasText(value)) {
-            return List.of();
-        }
-        return List.of(value.split(",")).stream()
-            .map(String::trim)
-            .filter(StringUtils::hasText)
-            .distinct()
-            .toList();
     }
 
     private PrReviewSummaryDto buildPrReviewSummary(
@@ -1476,10 +1237,6 @@ public class ReviewServiceImpl implements ReviewService {
         return publication;
     }
 
-    private ReviewTaskListItem toListItem(ReviewTask task) {
-        return toListItem(task, resolveFailureSummary(task, List.of()));
-    }
-
     private ReviewTaskListItem toListItem(ReviewTask task, FailureSummary failureSummary) {
         return new ReviewTaskListItem(
             task.getId(),
@@ -1506,37 +1263,6 @@ public class ReviewServiceImpl implements ReviewService {
             task.getHumanReviewBy(),
             formatDateTimeOrNull(task.getHumanReviewedAt())
         );
-    }
-
-    private Map<Long, List<ReviewTimeline>> loadTimelinesByTaskId(List<ReviewTask> tasks) {
-        if (tasks == null || tasks.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        List<Long> taskIds = tasks.stream()
-            .map(ReviewTask::getId)
-            .filter(id -> id != null)
-            .toList();
-        if (taskIds.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .in(ReviewTimeline::getTaskId, taskIds)
-                .orderByAsc(ReviewTimeline::getTaskId)
-                .orderByAsc(ReviewTimeline::getSortOrder)
-        );
-        if (timelines == null || timelines.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return timelines.stream().collect(Collectors.groupingBy(ReviewTimeline::getTaskId));
-    }
-
-    private List<String> timelineLabels(List<ReviewTimeline> timelines) {
-        if (timelines == null || timelines.isEmpty()) {
-            return List.of();
-        }
-        return timelines.stream().map(ReviewTimeline::getLabel).toList();
     }
 
     private FailureSummary resolveFailureSummary(ReviewTask task, List<String> timelineLabels) {
