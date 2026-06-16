@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
@@ -40,6 +41,11 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String MASKED_SECRET = "******";
+    private static final String STATUS_CONFIGURED = "CONFIGURED";
+    private static final String STATUS_CONNECTED = "CONNECTED";
+    private static final String STATUS_DELETED = "DELETED";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_PENDING = "PENDING";
 
     private final NotificationChannelBindingMapper bindingMapper;
     private final NotificationEventMapper eventMapper;
@@ -69,11 +75,12 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
         String normalizedProvider = StringUtils.hasText(provider) ? normalizeProvider(provider) : null;
         Page<NotificationChannelBinding> result = bindingMapper.selectPage(
             Page.of(page, pageSize),
-            new LambdaQueryWrapper<NotificationChannelBinding>()
-                .eq(StringUtils.hasText(organization), NotificationChannelBinding::getOrganization, trim(organization))
-                .eq(StringUtils.hasText(repository), NotificationChannelBinding::getRepository, trim(repository))
-                .eq(normalizedProvider != null, NotificationChannelBinding::getProvider, normalizedProvider)
-                .orderByDesc(NotificationChannelBinding::getUpdatedAt)
+            new QueryWrapper<NotificationChannelBinding>()
+                .eq(StringUtils.hasText(organization), "organization", trim(organization))
+                .eq(StringUtils.hasText(repository), "repository", trim(repository))
+                .eq(normalizedProvider != null, "provider", normalizedProvider)
+                .ne("status", STATUS_DELETED)
+                .orderByDesc("updated_at")
         );
         return new PageResponse<>(result.getRecords().stream().map(this::toBindingDto).toList(), result.getTotal());
     }
@@ -115,7 +122,7 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
     public void deleteBinding(Long id) {
         NotificationChannelBinding binding = requireBinding(id);
         binding.setEnabled(false);
-        binding.setStatus("DELETED");
+        binding.setStatus(STATUS_DELETED);
         binding.setUpdatedAt(LocalDateTime.now());
         bindingMapper.updateById(binding);
     }
@@ -126,7 +133,7 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
         NotificationChannelBinding binding = requireBinding(id);
         NotificationSendResult result = adapterRegistry.get(binding.getProvider()).test(binding);
         binding.setLastCheckedAt(LocalDateTime.now());
-        binding.setStatus(result.success() ? "CONNECTED" : "FAILED");
+        binding.setStatus(result.success() ? STATUS_CONNECTED : STATUS_FAILED);
         binding.setLastError(result.success() ? null : truncate(result.message(), 1024));
         binding.setUpdatedAt(LocalDateTime.now());
         bindingMapper.updateById(binding);
@@ -155,7 +162,7 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
     @Transactional
     public NotificationEventDto retryEvent(Long id) {
         NotificationEvent event = requireEvent(id);
-        event.setStatus("PENDING");
+        event.setStatus(STATUS_PENDING);
         event.setRetryCount(0);
         event.setNextRetryAt(LocalDateTime.now());
         event.setLastError(null);
@@ -196,7 +203,7 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
         binding.setNotifyReviewFailed(request.notifyReviewFailed());
         binding.setNotifyHumanReviewRequired(request.notifyHumanReviewRequired());
         binding.setNotifyGithubComment(request.notifyGithubComment());
-        binding.setStatus("CONFIGURED");
+        binding.setStatus(STATUS_CONFIGURED);
         binding.setLastError(null);
         binding.setUpdatedAt(now);
     }
@@ -301,7 +308,7 @@ public class NotificationIntegrationServiceImpl implements NotificationIntegrati
             .map(provider -> provider.trim().toUpperCase(Locale.ROOT))
             .collect(Collectors.toCollection(LinkedHashSet::new));
         int failedCount = (int) deliveries.stream()
-            .filter(delivery -> "FAILED".equalsIgnoreCase(delivery.getStatus()))
+            .filter(delivery -> STATUS_FAILED.equalsIgnoreCase(delivery.getStatus()))
             .count();
         String latestStatus = deliveries.stream()
             .max(Comparator.comparing(

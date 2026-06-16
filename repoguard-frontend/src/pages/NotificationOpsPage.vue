@@ -403,22 +403,15 @@ import {
   XCircle
 } from "lucide-vue-next";
 import {
-  createNotificationBinding,
-  deleteNotificationBinding,
-  fetchNotificationBindings,
   fetchNotificationDeliveries,
   fetchNotificationEvents,
   fetchSystemSettings,
   retryNotificationEvent,
-  testNotificationBinding,
-  updateNotificationBinding,
-  updateNotificationBindingStatus,
   updateSystemSettings
 } from "@/api/config";
+import { useNotificationBindings } from "@/composables/useNotificationBindings";
 import { canManage } from "@/stores/authState";
 import type {
-  NotificationBinding,
-  NotificationBindingRequest,
   NotificationDelivery,
   NotificationEvent,
   NotificationSettings,
@@ -430,7 +423,6 @@ const activeTab = ref("settings");
 const loading = ref(false);
 const eventsLoading = ref(false);
 const deliveriesLoading = ref(false);
-const bindingsLoading = ref(false);
 const savingSettings = ref(false);
 const systemSettings = ref<SystemSettings>();
 const notificationForm = reactive<NotificationSettings>({
@@ -448,15 +440,10 @@ const retryIntervals = ["1", "5", "15", "30", "60"];
 
 const notificationEvents = ref<NotificationEvent[]>([]);
 const notificationDeliveries = ref<NotificationDelivery[]>([]);
-const notificationBindings = ref<NotificationBinding[]>([]);
 const notificationEventTotal = ref(0);
 const notificationDeliveryTotal = ref(0);
 const retryingEventId = ref<number>();
-const testingBindingId = ref<number>();
-const bindingDialogVisible = ref(false);
 const testDialogVisible = ref(false);
-const savingBinding = ref(false);
-const editingBindingId = ref<number>();
 const selectedTestBindingId = ref<number>();
 const eventFilter = reactive<{ page: number; pageSize: number; status?: string; taskId?: number }>({
   page: 1,
@@ -466,19 +453,21 @@ const deliveryFilter = reactive<{ page: number; pageSize: number; status?: strin
   page: 1,
   pageSize: 10
 });
-const bindingForm = reactive<NotificationBindingRequest>({
-  name: "",
-  provider: "DINGTALK",
-  organization: "",
-  repository: "",
-  enabled: true,
-  webhookUrl: "",
-  secret: "",
-  notifyReviewCompleted: true,
-  notifyReviewFailed: true,
-  notifyHumanReviewRequired: true,
-  notifyGithubComment: true
-});
+const {
+  notificationBindings,
+  bindingsLoading,
+  bindingDialogVisible,
+  savingBinding,
+  testingBindingId,
+  editingBindingId,
+  bindingForm,
+  loadNotificationBindings,
+  openBindingDialog,
+  saveBinding,
+  runBindingTest,
+  toggleBinding,
+  removeBinding
+} = useNotificationBindings();
 
 const failedEvents = computed(() =>
   notificationEvents.value.filter((event) => ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"].includes(event.status?.toUpperCase()))
@@ -564,18 +553,6 @@ const loadNotificationDeliveries = async () => {
   }
 };
 
-const loadNotificationBindings = async () => {
-  bindingsLoading.value = true;
-  try {
-    const result = await fetchNotificationBindings();
-    notificationBindings.value = result.items;
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "渠道绑定加载失败"));
-  } finally {
-    bindingsLoading.value = false;
-  }
-};
-
 const refreshNotificationData = async () => {
   await Promise.all([loadNotificationEvents(), loadNotificationDeliveries(), loadNotificationBindings()]);
 };
@@ -596,61 +573,6 @@ const retryEvent = async (id: number) => {
   }
 };
 
-const openBindingDialog = (binding?: NotificationBinding) => {
-  editingBindingId.value = binding?.id;
-  Object.assign(bindingForm, {
-    name: binding?.name ?? "",
-    provider: binding?.provider ?? "DINGTALK",
-    organization: binding?.organization ?? "",
-    repository: binding?.repository ?? "",
-    enabled: binding?.enabled ?? true,
-    webhookUrl: binding?.webhookUrl ?? "",
-    secret: binding?.secret ?? "",
-    notifyReviewCompleted: binding?.notifyReviewCompleted ?? true,
-    notifyReviewFailed: binding?.notifyReviewFailed ?? true,
-    notifyHumanReviewRequired: binding?.notifyHumanReviewRequired ?? true,
-    notifyGithubComment: binding?.notifyGithubComment ?? true
-  });
-  bindingDialogVisible.value = true;
-};
-
-const saveBinding = async () => {
-  if (!canManage.value || savingBinding.value) {
-    return;
-  }
-  savingBinding.value = true;
-  try {
-    const saved = editingBindingId.value
-      ? await updateNotificationBinding(editingBindingId.value, { ...bindingForm })
-      : await createNotificationBinding({ ...bindingForm });
-    const index = notificationBindings.value.findIndex((binding) => binding.id === saved.id);
-    if (index >= 0) {
-      notificationBindings.value[index] = saved;
-    } else {
-      notificationBindings.value = [saved, ...notificationBindings.value];
-    }
-    bindingDialogVisible.value = false;
-    ElMessage.success("消息通知绑定已保存");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知绑定保存失败"));
-  } finally {
-    savingBinding.value = false;
-  }
-};
-
-const runBindingTest = async (id: number) => {
-  testingBindingId.value = id;
-  try {
-    const result = await testNotificationBinding(id);
-    ElMessage[result.success ? "success" : "error"](result.message);
-    await loadNotificationBindings();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知测试失败"));
-  } finally {
-    testingBindingId.value = undefined;
-  }
-};
-
 const openTestDialog = () => {
   selectedTestBindingId.value = enabledNotificationBindings.value[0]?.id;
   testDialogVisible.value = true;
@@ -662,28 +584,6 @@ const runSelectedBindingTest = async () => {
   }
   await runBindingTest(selectedTestBindingId.value);
   testDialogVisible.value = false;
-};
-
-const toggleBinding = async (binding: NotificationBinding) => {
-  try {
-    const updated = await updateNotificationBindingStatus(binding.id, { enabled: !binding.enabled });
-    const index = notificationBindings.value.findIndex((item) => item.id === updated.id);
-    if (index >= 0) {
-      notificationBindings.value[index] = updated;
-    }
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知状态更新失败"));
-  }
-};
-
-const removeBinding = async (id: number) => {
-  try {
-    await deleteNotificationBinding(id);
-    notificationBindings.value = notificationBindings.value.filter((binding) => binding.id !== id);
-    ElMessage.success("消息通知绑定已删除");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败"));
-  }
 };
 
 const canRetry = (status: string) =>

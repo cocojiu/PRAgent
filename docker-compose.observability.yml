@@ -1,0 +1,48 @@
+services:
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: repoguard-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - ./config/observability/loki.yml:/etc/loki/loki.yml:ro
+      - repoguard_loki_data:/loki
+    ports:
+      - "${LOKI_PORT_BIND:-3100}:3100"
+    mem_limit: 384m
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: repoguard-promtail
+    restart: unless-stopped
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    depends_on:
+      - loki
+    volumes:
+      - ./config/observability/promtail.yml:/etc/promtail/promtail.yml:ro
+      - ./logs/backend:/var/log/repoguard/backend:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    mem_limit: 128m
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: repoguard-grafana
+    restart: unless-stopped
+    depends_on:
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-repoguard-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: ${GRAFANA_SERVE_FROM_SUB_PATH:-false}
+    volumes:
+      - repoguard_grafana_data:/var/lib/grafana
+      - ./config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT_BIND:-3000}:3000"
+    mem_limit: 384m
+
+volumes:
+  repoguard_loki_data:
+  repoguard_grafana_data:

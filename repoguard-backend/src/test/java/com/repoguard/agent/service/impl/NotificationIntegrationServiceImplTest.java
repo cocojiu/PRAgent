@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
@@ -17,6 +18,7 @@ import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class NotificationIntegrationServiceImplTest {
 
@@ -49,6 +51,21 @@ class NotificationIntegrationServiceImplTest {
         assertThat(result.total()).isEqualTo(1);
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().getFirst().provider()).isEqualTo("DINGTALK");
+    }
+
+    @Test
+    void listBindingsExcludesSoftDeletedBindings() {
+        Page<NotificationChannelBinding> page = Page.of(1, 20);
+        page.setRecords(List.of());
+        page.setTotal(0);
+        when(bindingMapper.selectPage(any(), any())).thenReturn(page);
+
+        service.listBindings(1, 20, null, null, null);
+
+        ArgumentCaptor<QueryWrapper<NotificationChannelBinding>> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        org.mockito.Mockito.verify(bindingMapper).selectPage(any(), wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("<>");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs()).containsValue("DELETED");
     }
 
     @Test

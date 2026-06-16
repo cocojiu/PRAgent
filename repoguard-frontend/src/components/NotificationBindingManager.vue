@@ -79,131 +79,25 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import {
-  createNotificationBinding,
-  deleteNotificationBinding,
-  fetchNotificationBindings,
-  testNotificationBinding,
-  updateNotificationBinding,
-  updateNotificationBindingStatus
-} from "@/api/config";
+import { onMounted } from "vue";
+import { useNotificationBindings } from "@/composables/useNotificationBindings";
 import { canManage } from "@/stores/authState";
-import type { NotificationBinding, NotificationBindingRequest } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 
-const notificationBindings = ref<NotificationBinding[]>([]);
-const loadingBindings = ref(false);
-const bindingDialogVisible = ref(false);
-const savingBinding = ref(false);
-const testingBindingId = ref<number>();
-const editingBindingId = ref<number>();
-const bindingForm = reactive<NotificationBindingRequest>({
-  name: "",
-  provider: "DINGTALK",
-  organization: "",
-  repository: "",
-  enabled: true,
-  webhookUrl: "",
-  secret: "",
-  notifyReviewCompleted: true,
-  notifyReviewFailed: true,
-  notifyHumanReviewRequired: true,
-  notifyGithubComment: true
-});
-
-const openBindingDialog = (binding?: NotificationBinding) => {
-  editingBindingId.value = binding?.id;
-  Object.assign(bindingForm, {
-    name: binding?.name ?? "",
-    provider: binding?.provider ?? "DINGTALK",
-    organization: binding?.organization ?? "",
-    repository: binding?.repository ?? "",
-    enabled: binding?.enabled ?? true,
-    webhookUrl: binding?.webhookUrl ?? "",
-    secret: binding?.secret ?? "",
-    notifyReviewCompleted: binding?.notifyReviewCompleted ?? true,
-    notifyReviewFailed: binding?.notifyReviewFailed ?? true,
-    notifyHumanReviewRequired: binding?.notifyHumanReviewRequired ?? true,
-    notifyGithubComment: binding?.notifyGithubComment ?? true
-  });
-  bindingDialogVisible.value = true;
-};
-
-const saveBinding = async () => {
-  if (!canManage.value || savingBinding.value) {
-    return;
-  }
-  savingBinding.value = true;
-  try {
-    const saved = editingBindingId.value
-      ? await updateNotificationBinding(editingBindingId.value, { ...bindingForm })
-      : await createNotificationBinding({ ...bindingForm });
-    const index = notificationBindings.value.findIndex((item) => item.id === saved.id);
-    if (index >= 0) {
-      notificationBindings.value[index] = saved;
-    } else {
-      notificationBindings.value = [saved, ...notificationBindings.value];
-    }
-    bindingDialogVisible.value = false;
-    ElMessage.success("消息通知绑定已保存");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知绑定保存失败"));
-  } finally {
-    savingBinding.value = false;
-  }
-};
-
-const runBindingTest = async (id: number) => {
-  if (testingBindingId.value) {
-    return;
-  }
-  testingBindingId.value = id;
-  try {
-    const result = await testNotificationBinding(id);
-    ElMessage[result.success ? "success" : "error"](result.message);
-    await refreshNotificationBindings();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知测试失败"));
-  } finally {
-    testingBindingId.value = undefined;
-  }
-};
-
-const toggleBinding = async (binding: NotificationBinding) => {
-  try {
-    const updated = await updateNotificationBindingStatus(binding.id, { enabled: !binding.enabled });
-    const index = notificationBindings.value.findIndex((item) => item.id === updated.id);
-    if (index >= 0) {
-      notificationBindings.value[index] = updated;
-    }
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知状态更新失败"));
-  }
-};
-
-const removeBinding = async (id: number) => {
-  try {
-    await deleteNotificationBinding(id);
-    notificationBindings.value = notificationBindings.value.filter((binding) => binding.id !== id);
-    ElMessage.success("消息通知绑定已删除");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败"));
-  }
-};
-
-const refreshNotificationBindings = async () => {
-  loadingBindings.value = true;
-  try {
-    const bindings = await fetchNotificationBindings();
-    notificationBindings.value = bindings.items;
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息通知绑定加载失败"));
-  } finally {
-    loadingBindings.value = false;
-  }
-};
+const {
+  notificationBindings,
+  bindingsLoading: loadingBindings,
+  bindingDialogVisible,
+  savingBinding,
+  testingBindingId,
+  editingBindingId,
+  bindingForm,
+  loadNotificationBindings: refreshNotificationBindings,
+  openBindingDialog,
+  saveBinding,
+  runBindingTest,
+  toggleBinding,
+  removeBinding
+} = useNotificationBindings();
 
 const providerText = (provider: string) => {
   if (provider === "DINGTALK") {
