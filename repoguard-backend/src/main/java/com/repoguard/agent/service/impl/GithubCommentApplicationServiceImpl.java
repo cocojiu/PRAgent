@@ -10,6 +10,8 @@ import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentPublishItem;
+import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PrRiskFileDto;
@@ -31,8 +33,15 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.github.GithubReviewCommentDraft;
+import com.repoguard.agent.github.GithubReviewCommentResult;
+import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.GithubCommentApplicationService;
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Comparator;
@@ -67,6 +76,9 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
     private final IntegrationConfigMapper integrationConfigMapper;
+    private final GithubPullRequestClient githubPullRequestClient;
+    private final RepoGuardMetrics metrics;
+    private final NotificationDispatchService notificationDispatchService;
 
     public GithubCommentApplicationServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -75,7 +87,10 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        IntegrationConfigMapper integrationConfigMapper
+        IntegrationConfigMapper integrationConfigMapper,
+        GithubPullRequestClient githubPullRequestClient,
+        RepoGuardMetrics metrics,
+        NotificationDispatchService notificationDispatchService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -84,6 +99,9 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.integrationConfigMapper = integrationConfigMapper;
+        this.githubPullRequestClient = githubPullRequestClient;
+        this.metrics = metrics;
+        this.notificationDispatchService = notificationDispatchService;
     }
 
     @Override
@@ -147,6 +165,381 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
             commentableCount,
             items.size() - commentableCount - publishedCount,
             items
+        );
+    }
+
+    @Override
+    public GithubCommentPublishResponse publishGithubComments(Long taskId) {
+        LocalDateTime startedAt = LocalDateTime.now();
+        ReviewTask task = reviewTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
+        }
+        ensureGithubCommentPublishAllowed(task);
+
+        GithubCommentPreviewResponse preview = getGithubCommentPreview(taskId);
+        List<GithubCommentPublishItem> skippedItems = preview.items().stream()
+            .filter(item -> !item.commentable())
+            .map(item -> new GithubCommentPublishItem(
+                item.findingId(),
+                item.file(),
+                item.line(),
+                item.targetType(),
+                Boolean.TRUE.equals(item.published()),
+                Boolean.TRUE.equals(item.published()) ? "already_published" : "skipped",
+                Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
+                null,
+                null,
+                null,
+                item.publicationUrl(),
+                null,
+                item.publishedAt()
+            ))
+            .toList();
+
+        List<GithubReviewCommentDraft> drafts = preview.items().stream()
+            .filter(GithubCommentPreviewItem::commentable)
+            .map(item -> new GithubReviewCommentDraft(
+                item.findingId(),
+                item.file(),
+                item.line(),
+                item.commentBody(),
+                item.targetType()
+            ))
+            .toList();
+
+        List<GithubCommentPublishItem> publishedItems = publishDrafts(task, drafts);
+        List<GithubCommentPublishItem> items = new java.util.ArrayList<>(publishedItems);
+        items.addAll(skippedItems);
+
+        int succeededCount = (int) publishedItems.stream().filter(GithubCommentPublishItem::success).count();
+        int failedCount = publishedItems.size() - succeededCount;
+        recordGithubCommentPublishMetrics(succeededCount, failedCount, skippedItems.size());
+        GithubCommentPublishResponse response = new GithubCommentPublishResponse(
+            task.getId(),
+            preview.totalFindings(),
+            drafts.size(),
+            succeededCount,
+            failedCount,
+            skippedItems.size(),
+            items
+        );
+        Long batchId = savePublicationBatch(response);
+        publishGithubCommentNotification(task, response, batchId);
+        recordGithubCommentPublishDuration(startedAt, failedCount > 0 ? "failed" : "success");
+        return response;
+    }
+
+    private void recordGithubCommentPublishDuration(LocalDateTime startedAt, String result) {
+        if (metrics != null) {
+            metrics.githubCommentPublishDuration(Duration.between(startedAt, LocalDateTime.now()), result);
+        }
+    }
+
+    private void recordGithubCommentPublishMetrics(int succeededCount, int failedCount, int skippedCount) {
+        if (metrics == null) {
+            return;
+        }
+        for (int i = 0; i < succeededCount; i++) {
+            metrics.githubCommentPublished("success");
+        }
+        for (int i = 0; i < failedCount; i++) {
+            metrics.githubCommentPublished("failed");
+        }
+        for (int i = 0; i < skippedCount; i++) {
+            metrics.githubCommentPublished("skipped");
+        }
+    }
+
+    private List<GithubCommentPublishItem> publishDrafts(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
+        if (drafts.isEmpty()) {
+            return List.of();
+        }
+        try {
+            return githubPullRequestClient.publishPullRequestComments(task, drafts).stream()
+                .map(result -> toGithubCommentPublishItem(task.getId(), result))
+                .toList();
+        } catch (RuntimeException ex) {
+            String message = StringUtils.hasText(ex.getMessage()) ? ex.getMessage() : ex.getClass().getSimpleName();
+            return drafts.stream()
+                .map(draft -> {
+                    GithubReviewCommentResult result = new GithubReviewCommentResult(
+                        draft.findingId(),
+                        draft.path(),
+                        draft.line(),
+                        draft.targetType(),
+                        false,
+                        "failed",
+                        message,
+                        null,
+                        null
+                    );
+                    return toGithubCommentPublishItem(task.getId(), result);
+                })
+                .toList();
+        }
+    }
+
+    private GithubCommentPublishItem toGithubCommentPublishItem(Long taskId, GithubReviewCommentResult result) {
+        GithubCommentPublication publication = savePublication(taskId, result);
+        FailureSummary failureSummary = resolveGithubWritebackFailure(result.status(), result.success(), result.message());
+        return new GithubCommentPublishItem(
+            result.findingId(),
+            result.path(),
+            result.line(),
+            result.targetType(),
+            result.success(),
+            result.status(),
+            result.message(),
+            failureSummary.category(),
+            failureSummary.reason(),
+            failureSummary.suggestion(),
+            result.url(),
+            result.commentId(),
+            publication.getPublishedAt() == null ? null : publication.getPublishedAt().format(DATE_TIME_FORMATTER)
+        );
+    }
+
+    private Long savePublicationBatch(GithubCommentPublishResponse response) {
+        LocalDateTime now = LocalDateTime.now();
+        GithubCommentPublicationBatch batch = new GithubCommentPublicationBatch();
+        batch.setTaskId(response.taskId());
+        batch.setStatus(resolvePublicationBatchStatus(response));
+        batch.setTotalFindings(response.totalFindings());
+        batch.setAttemptedCount(response.attemptedCount());
+        batch.setSucceededCount(response.succeededCount());
+        batch.setFailedCount(response.failedCount());
+        batch.setSkippedCount(response.skippedCount());
+        batch.setCreatedAt(now);
+        batch.setCompletedAt(now);
+        githubCommentPublicationBatchMapper.insert(batch);
+
+        // 所有结果都写入批次明细，包括 already_published 和 skipped，避免历史视图丢上下文。
+        for (GithubCommentPublishItem item : response.items()) {
+            GithubCommentPublicationBatchItem historyItem = new GithubCommentPublicationBatchItem();
+            historyItem.setBatchId(batch.getId());
+            historyItem.setTaskId(response.taskId());
+            historyItem.setFindingId(item.findingId());
+            historyItem.setFilePath(item.file());
+            historyItem.setLineNumber(item.line());
+            historyItem.setTargetType(item.targetType());
+            historyItem.setStatus(item.status());
+            historyItem.setSuccess(item.success());
+            historyItem.setGithubCommentId(item.githubCommentId());
+            historyItem.setGithubUrl(item.url());
+            historyItem.setMessage(item.message());
+            historyItem.setPublishedAt(parseDateTimeOrNull(item.publishedAt()));
+            historyItem.setCreatedAt(now);
+            githubCommentPublicationBatchItemMapper.insert(historyItem);
+        }
+        return batch.getId();
+    }
+
+    private void publishGithubCommentNotification(ReviewTask task, GithubCommentPublishResponse response, Long batchId) {
+        if (notificationDispatchService != null) {
+            notificationDispatchService.githubCommentsPublished(task, response, batchId);
+        }
+    }
+
+    private String resolvePublicationBatchStatus(GithubCommentPublishResponse response) {
+        // 批次状态用于页面摘要，不替代逐条审查发现的精确状态。
+        if (response.totalFindings() == 0) {
+            return "empty";
+        }
+        if (response.failedCount() > 0) {
+            return response.succeededCount() > 0 ? "partial_failed" : "failed";
+        }
+        if (response.attemptedCount() == 0 && response.skippedCount() > 0) {
+            return "skipped";
+        }
+        return "completed";
+    }
+
+    private GithubCommentPublication savePublication(Long taskId, GithubReviewCommentResult result) {
+        LocalDateTime now = LocalDateTime.now();
+        GithubCommentPublication publication = result.findingId() == null
+            ? loadPrSummaryPublication(taskId)
+            : githubCommentPublicationMapper.selectOne(
+                new LambdaQueryWrapper<GithubCommentPublication>()
+                    .eq(GithubCommentPublication::getFindingId, result.findingId())
+                    .last("limit 1")
+            );
+        boolean existing = publication != null;
+        if (!existing) {
+            publication = new GithubCommentPublication();
+            publication.setTaskId(taskId);
+            publication.setFindingId(result.findingId());
+            publication.setCreatedAt(now);
+        }
+        publication.setTargetType(result.targetType());
+        publication.setStatus(result.status());
+        publication.setSuccess(result.success());
+        publication.setGithubCommentId(result.commentId());
+        publication.setGithubUrl(result.url());
+        publication.setMessage(result.message());
+        publication.setPublishedAt(Boolean.TRUE.equals(result.success()) ? now : null);
+        publication.setUpdatedAt(now);
+        if (existing) {
+            githubCommentPublicationMapper.updateById(publication);
+        } else {
+            githubCommentPublicationMapper.insert(publication);
+        }
+        return publication;
+    }
+
+    private FailureSummary resolveGithubWritebackFailure(String status, Boolean success, String message) {
+        if (Boolean.TRUE.equals(success) || !"failed".equalsIgnoreCase(status)) {
+            return NO_FAILURE_SUMMARY;
+        }
+        return classifyGithubWritebackFailure(message);
+    }
+
+    private FailureSummary classifyGithubWritebackFailure(String message) {
+        // 回写失败只持久化原始 message，这里即时派生中文提示，避免为展示字段新增数据库列。
+        String normalized = StringUtils.hasText(message) ? message.trim() : "";
+        String lowerMessage = normalized.toLowerCase(Locale.ROOT);
+
+        if (lowerMessage.contains("category=github_token_invalid")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 鏃犳晥鎴栧凡杩囨湡",
+                "璇峰埌闆嗘垚閰嶇疆椤垫洿鏂?GitHub Token锛岀‘璁よ繛鎺ユ祴璇曢€氳繃鍚庨噸鏂板洖鍐欍€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_permission_denied")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 鏉冮檺涓嶈冻",
+                "璇风‘璁?Token 瀵圭洰鏍囦粨搴撳叿澶?Pull Request/Issue 璇勮鏉冮檺鍚庨噸鏂板洖鍐欍€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_target_not_found")) {
+            return new FailureSummary(
+                "github_target_not_found",
+                "GitHub PR 鎴栦粨搴撲笉鍙闂?",
+                "璇风‘璁や换鍔′粨搴撱€丳R 缂栧彿鍜?Token 鍙闂寖鍥达紝鍐嶉噸鏂板洖鍐欒瘎璁恒€?"
+            );
+        }
+        if (lowerMessage.contains("category=github_rate_limited")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 璁块棶鍙楅檺",
+                "璇风◢鍚庨噸璇曪紝鎴栨洿鎹㈠墿浣欓搴﹀厖瓒崇殑 GitHub Token銆?"
+            );
+        }
+        if (lowerMessage.contains("category=github_timeout")) {
+            return new FailureSummary(
+                "github_writeback_timeout",
+                "GitHub 回写请求超时",
+                "请检查网络和 GitHub 服务状态，稍后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("category=github_service_unavailable")) {
+            return new FailureSummary(
+                "github_service_unavailable",
+                "GitHub API 暂时不可用",
+                "请稍后重试，并关注 GitHub 服务状态或企业代理网络状态。"
+            );
+        }
+        if (lowerMessage.contains("token is not configured")) {
+            return new FailureSummary(
+                "github_token_missing",
+                "GitHub Token 未配置",
+                "请到集成配置页保存 GitHub Token 后重新回写评论。"
+            );
+        }
+        if (lowerMessage.contains("401") || lowerMessage.contains("bad credentials")
+            || lowerMessage.contains("unauthorized") || lowerMessage.contains("requires authentication")) {
+            return new FailureSummary(
+                "github_token_invalid",
+                "GitHub Token 无效或已过期",
+                "请到集成配置页更新 GitHub Token，确认连接测试通过后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("403") || lowerMessage.contains("forbidden")
+            || lowerMessage.contains("resource not accessible") || lowerMessage.contains("permission")) {
+            return new FailureSummary(
+                "github_permission_denied",
+                "GitHub Token 权限不足",
+                "请确认 Token 对目标仓库具备 Pull Request/Issue 评论权限后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("404") || lowerMessage.contains("not found")) {
+            return new FailureSummary(
+                "github_target_not_found",
+                "GitHub PR 或仓库不可访问",
+                "请确认任务仓库、PR 编号和 Token 可访问范围，再重新回写评论。"
+            );
+        }
+        if (isGithubCommentPositionFailure(lowerMessage)) {
+            return new FailureSummary(
+                "github_comment_position_invalid",
+                "GitHub 行评论定位失败",
+                "请检查该审查发现是否仍在 PR Diff 中；必要时改为 PR 总评评论。"
+            );
+        }
+        if (lowerMessage.contains("rate limit")) {
+            return new FailureSummary(
+                "github_rate_limited",
+                "GitHub API 访问受限",
+                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+            );
+        }
+        if (lowerMessage.contains("timeout") || lowerMessage.contains("timed out")) {
+            return new FailureSummary(
+                "github_writeback_timeout",
+                "GitHub 回写请求超时",
+                "请检查网络和 GitHub 服务状态，稍后重新回写。"
+            );
+        }
+        if (lowerMessage.contains("owner or repository is not configured")) {
+            return new FailureSummary(
+                "github_repository_not_configured",
+                "GitHub 仓库未配置",
+                "请在集成配置中补全默认仓库，或确认任务携带了正确仓库信息。"
+            );
+        }
+        return new FailureSummary(
+            "github_writeback_failed",
+            "GitHub 评论回写失败",
+            "请查看原始错误信息，确认 GitHub 集成配置和目标 PR 状态后重试。"
+        );
+    }
+
+    private boolean isGithubCommentPositionFailure(String lowerMessage) {
+        return lowerMessage.contains("422")
+            || lowerMessage.contains("validation failed")
+            || lowerMessage.contains("position")
+            || lowerMessage.contains("commit_id")
+            || lowerMessage.contains("line must")
+            || lowerMessage.contains("line is")
+            || lowerMessage.contains("line does not")
+            || lowerMessage.contains("not part of the diff")
+            || lowerMessage.contains("diff hunk");
+    }
+
+    private LocalDateTime parseDateTimeOrNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(value, DATE_TIME_FORMATTER);
+        } catch (DateTimeParseException exception) {
+            return null;
+        }
+    }
+
+    private void ensureGithubCommentPublishAllowed(ReviewTask task) {
+        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
+            return;
+        }
+        String humanReviewStatus = resolveHumanReviewStatus(task);
+        if ("APPROVED".equals(humanReviewStatus) || "CHANGES_REQUESTED".equals(humanReviewStatus)) {
+            return;
+        }
+        throw new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "Human review approval or changes request is required before publishing GitHub comments"
         );
     }
 
@@ -843,136 +1236,6 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
             item.getGithubCommentId(),
             formatDateTimeOrNull(item.getPublishedAt())
         );
-    }
-
-    private FailureSummary resolveGithubWritebackFailure(String status, Boolean success, String message) {
-        if (Boolean.TRUE.equals(success) || !"failed".equalsIgnoreCase(status)) {
-            return NO_FAILURE_SUMMARY;
-        }
-        return classifyGithubWritebackFailure(message);
-    }
-
-    private FailureSummary classifyGithubWritebackFailure(String message) {
-        String normalized = StringUtils.hasText(message) ? message.trim() : "";
-        String lowerMessage = normalized.toLowerCase(Locale.ROOT);
-
-        if (lowerMessage.contains("category=github_token_invalid")) {
-            return new FailureSummary(
-                "github_token_invalid",
-                "GitHub Token 鏃犳晥鎴栧凡杩囨湡",
-                "璇峰埌闆嗘垚閰嶇疆椤垫洿鏂?GitHub Token锛岀‘璁よ繛鎺ユ祴璇曢€氳繃鍚庨噸鏂板洖鍐欍€?"
-            );
-        }
-        if (lowerMessage.contains("category=github_permission_denied")) {
-            return new FailureSummary(
-                "github_permission_denied",
-                "GitHub Token 鏉冮檺涓嶈冻",
-                "璇风‘璁?Token 瀵圭洰鏍囦粨搴撳叿澶?Pull Request/Issue 璇勮鏉冮檺鍚庨噸鏂板洖鍐欍€?"
-            );
-        }
-        if (lowerMessage.contains("category=github_target_not_found")) {
-            return new FailureSummary(
-                "github_target_not_found",
-                "GitHub PR 鎴栦粨搴撲笉鍙闂?",
-                "璇风‘璁や换鍔′粨搴撱€丳R 缂栧彿鍜?Token 鍙闂寖鍥达紝鍐嶉噸鏂板洖鍐欒瘎璁恒€?"
-            );
-        }
-        if (lowerMessage.contains("category=github_rate_limited")) {
-            return new FailureSummary(
-                "github_rate_limited",
-                "GitHub API 璁块棶鍙楅檺",
-                "璇风◢鍚庨噸璇曪紝鎴栨洿鎹㈠墿浣欓搴﹀厖瓒崇殑 GitHub Token銆?"
-            );
-        }
-        if (lowerMessage.contains("category=github_timeout")) {
-            return new FailureSummary(
-                "github_writeback_timeout",
-                "GitHub 回写请求超时",
-                "请检查网络和 GitHub 服务状态，稍后重新回写。"
-            );
-        }
-        if (lowerMessage.contains("category=github_service_unavailable")) {
-            return new FailureSummary(
-                "github_service_unavailable",
-                "GitHub API 暂时不可用",
-                "请稍后重试，并关注 GitHub 服务状态或企业代理网络状态。"
-            );
-        }
-        if (lowerMessage.contains("token is not configured")) {
-            return new FailureSummary(
-                "github_token_missing",
-                "GitHub Token 未配置",
-                "请到集成配置页保存 GitHub Token 后重新回写评论。"
-            );
-        }
-        if (lowerMessage.contains("401") || lowerMessage.contains("bad credentials")
-            || lowerMessage.contains("unauthorized") || lowerMessage.contains("requires authentication")) {
-            return new FailureSummary(
-                "github_token_invalid",
-                "GitHub Token 无效或已过期",
-                "请到集成配置页更新 GitHub Token，确认连接测试通过后重新回写。"
-            );
-        }
-        if (lowerMessage.contains("403") || lowerMessage.contains("forbidden")
-            || lowerMessage.contains("resource not accessible") || lowerMessage.contains("permission")) {
-            return new FailureSummary(
-                "github_permission_denied",
-                "GitHub Token 权限不足",
-                "请确认 Token 对目标仓库具备 Pull Request/Issue 评论权限后重新回写。"
-            );
-        }
-        if (lowerMessage.contains("404") || lowerMessage.contains("not found")) {
-            return new FailureSummary(
-                "github_target_not_found",
-                "GitHub PR 或仓库不可访问",
-                "请确认任务仓库、PR 编号和 Token 可访问范围，再重新回写评论。"
-            );
-        }
-        if (isGithubCommentPositionFailure(lowerMessage)) {
-            return new FailureSummary(
-                "github_comment_position_invalid",
-                "GitHub 行评论定位失败",
-                "请检查该审查发现是否仍在 PR Diff 中；必要时改为 PR 总评评论。"
-            );
-        }
-        if (lowerMessage.contains("rate limit")) {
-            return new FailureSummary(
-                "github_rate_limited",
-                "GitHub API 访问受限",
-                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
-            );
-        }
-        if (lowerMessage.contains("timeout") || lowerMessage.contains("timed out")) {
-            return new FailureSummary(
-                "github_writeback_timeout",
-                "GitHub 回写请求超时",
-                "请检查网络和 GitHub 服务状态，稍后重新回写。"
-            );
-        }
-        if (lowerMessage.contains("owner or repository is not configured")) {
-            return new FailureSummary(
-                "github_repository_not_configured",
-                "GitHub 仓库未配置",
-                "请在集成配置中补全默认仓库，或确认任务携带了正确仓库信息。"
-            );
-        }
-        return new FailureSummary(
-            "github_writeback_failed",
-            "GitHub 评论回写失败",
-            "请查看原始错误信息，确认 GitHub 集成配置和目标 PR 状态后重试。"
-        );
-    }
-
-    private boolean isGithubCommentPositionFailure(String lowerMessage) {
-        return lowerMessage.contains("422")
-            || lowerMessage.contains("validation failed")
-            || lowerMessage.contains("position")
-            || lowerMessage.contains("commit_id")
-            || lowerMessage.contains("line must")
-            || lowerMessage.contains("line is")
-            || lowerMessage.contains("line does not")
-            || lowerMessage.contains("not part of the diff")
-            || lowerMessage.contains("diff hunk");
     }
 
     private String formatDateTimeOrNull(LocalDateTime value) {
