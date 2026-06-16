@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -95,6 +96,33 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewBuildsRiskDistributionFromGroupedQuery() {
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTaskMapper.selectCount(any())).thenReturn(4L, 1L, 0L);
+        when(reviewTaskMapper.selectRiskLevelCounts()).thenReturn(List.of(
+            riskLevelCount("HIGH", 1L),
+            riskLevelCount("MEDIUM", 2L),
+            riskLevelCount("INFO", 1L)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var riskDistribution = service.getOverview(null).riskDistribution();
+
+        assertThat(riskDistribution).hasSize(4);
+        assertThat(riskDistribution.get(0).value()).isEqualTo(1L);
+        assertThat(riskDistribution.get(0).percent()).isEqualTo("25.0%");
+        assertThat(riskDistribution.get(1).value()).isEqualTo(2L);
+        assertThat(riskDistribution.get(1).percent()).isEqualTo("50.0%");
+        assertThat(riskDistribution.get(2).value()).isZero();
+        assertThat(riskDistribution.get(2).percent()).isEqualTo("0.0%");
+        assertThat(riskDistribution.get(3).value()).isEqualTo(1L);
+        assertThat(riskDistribution.get(3).percent()).isEqualTo("25.0%");
+    }
+
+    @Test
     void overviewReportsLlmQualityByModelAndRepository() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
@@ -172,6 +200,13 @@ class DashboardServiceImplTest {
         finding.setCategory("FINDING");
         finding.setFeedbackStatus(feedbackStatus);
         return finding;
+    }
+
+    private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {
+        DashboardRiskLevelCount count = new DashboardRiskLevelCount();
+        count.setRiskLevel(riskLevel);
+        count.setTotal(total);
+        return count;
     }
 
     private IntegrationConfig githubConfig(String status, String token) {

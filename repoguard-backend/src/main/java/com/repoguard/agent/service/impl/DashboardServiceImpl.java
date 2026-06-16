@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
+import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
@@ -83,7 +84,7 @@ public class DashboardServiceImpl implements DashboardService {
         return new DashboardOverviewResponse(
             buildMetrics(tasks, metricStats),
             buildTrend(tasks),
-            buildRiskDistribution(tasks),
+            buildRiskDistribution(),
             buildRuleHits(findings),
             buildHighRiskReviews(tasks, findings),
             buildFailedRules(findings),
@@ -191,10 +192,11 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<ChartSliceDto> buildRiskDistribution(List<ReviewTask> tasks) {
-        long total = tasks.size();
-        Map<String, Long> countByRisk = tasks.stream()
-            .collect(Collectors.groupingBy(ReviewTask::getRiskLevel, Collectors.counting()));
+    private List<ChartSliceDto> buildRiskDistribution() {
+        List<DashboardRiskLevelCount> riskLevelCounts = reviewTaskMapper.selectRiskLevelCounts();
+        Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
+            .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
+        long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();
 
         return List.of(
             riskSlice("高风险", countByRisk.getOrDefault("HIGH", 0L), total, "#ef4444"),
@@ -499,6 +501,14 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeCount(Long value) {
         return value == null ? 0L : value;
+    }
+
+    private long safeTotal(DashboardRiskLevelCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private <T> List<T> nullToEmpty(List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     private String formatDuration(int durationSeconds) {
