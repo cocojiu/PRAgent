@@ -2,7 +2,6 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
@@ -11,8 +10,6 @@ import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
-import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
-import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
@@ -60,6 +57,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.FindingFeedbackService;
+import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
@@ -119,6 +117,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final ReviewTaskQueryService reviewTaskQueryService;
     private final ReviewTaskCommandService reviewTaskCommandService;
     private final FindingFeedbackService findingFeedbackService;
+    private final GithubCommentApplicationService githubCommentApplicationService;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -148,6 +147,7 @@ public class ReviewServiceImpl implements ReviewService {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -169,7 +169,8 @@ public class ReviewServiceImpl implements ReviewService {
         CacheEvictionService cacheEvictionService,
         ReviewTaskQueryService reviewTaskQueryService,
         ReviewTaskCommandService reviewTaskCommandService,
-        FindingFeedbackService findingFeedbackService
+        FindingFeedbackService findingFeedbackService,
+        GithubCommentApplicationService githubCommentApplicationService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -193,6 +194,13 @@ public class ReviewServiceImpl implements ReviewService {
         this.findingFeedbackService = findingFeedbackService == null
             ? new FindingFeedbackServiceImpl(reviewTaskMapper, reviewFindingMapper, reviewTimelineMapper, cacheEvictionService)
             : findingFeedbackService;
+        this.githubCommentApplicationService = githubCommentApplicationService == null
+            ? new GithubCommentApplicationServiceImpl(
+                reviewTaskMapper,
+                githubCommentPublicationBatchMapper,
+                githubCommentPublicationBatchItemMapper
+            )
+            : githubCommentApplicationService;
     }
 
     public ReviewServiceImpl(
@@ -220,6 +228,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null,
             null,
             null,
@@ -469,58 +478,9 @@ public class ReviewServiceImpl implements ReviewService {
         };
     }
 
-    private String normalizeOptionalStatus(String status) {
-        return StringUtils.hasText(status) ? status.trim().toLowerCase(Locale.ROOT) : null;
-    }
-
     @Override
     public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-
-        // 批次倒序展示，用户先看到最近一次回写结果。
-        String normalizedStatus = normalizeOptionalStatus(status);
-        LambdaQueryWrapper<GithubCommentPublicationBatch> batchQuery = new LambdaQueryWrapper<GithubCommentPublicationBatch>()
-            .eq(GithubCommentPublicationBatch::getTaskId, id)
-            .eq(normalizedStatus != null, GithubCommentPublicationBatch::getStatus, normalizedStatus)
-            .orderByDesc(GithubCommentPublicationBatch::getCreatedAt)
-            .orderByDesc(GithubCommentPublicationBatch::getId);
-        Page<GithubCommentPublicationBatch> batchPage = githubCommentPublicationBatchMapper.selectPage(
-            Page.of(page, pageSize),
-            batchQuery
-        );
-        List<GithubCommentPublicationBatch> batches = batchPage.getRecords();
-        if (batches == null || batches.isEmpty()) {
-            return new GithubCommentPublicationHistoryResponse(
-                task.getId(),
-                batchPage.getTotal(),
-                page,
-                pageSize,
-                normalizedStatus,
-                List.of()
-            );
-        }
-
-        List<Long> batchIds = batches.stream().map(GithubCommentPublicationBatch::getId).toList();
-        Map<Long, List<GithubCommentPublicationBatchItem>> itemsByBatchId = githubCommentPublicationBatchItemMapper.selectList(
-            new LambdaQueryWrapper<GithubCommentPublicationBatchItem>()
-                .in(GithubCommentPublicationBatchItem::getBatchId, batchIds)
-                .orderByAsc(GithubCommentPublicationBatchItem::getId)
-        ).stream().collect(Collectors.groupingBy(GithubCommentPublicationBatchItem::getBatchId));
-
-        List<GithubCommentPublicationBatchDto> batchDtos = batches.stream()
-            .map(batch -> toGithubCommentPublicationBatchDto(batch, itemsByBatchId.getOrDefault(batch.getId(), List.of())))
-            .toList();
-        return new GithubCommentPublicationHistoryResponse(
-            task.getId(),
-            batchPage.getTotal(),
-            page,
-            pageSize,
-            normalizedStatus,
-            batchDtos
-        );
+        return githubCommentApplicationService.getGithubCommentPublicationHistory(id, page, pageSize, status);
     }
 
     @Override
@@ -974,43 +934,6 @@ public class ReviewServiceImpl implements ReviewService {
             return "skipped";
         }
         return "completed";
-    }
-
-    private GithubCommentPublicationBatchDto toGithubCommentPublicationBatchDto(
-        GithubCommentPublicationBatch batch,
-        List<GithubCommentPublicationBatchItem> items
-    ) {
-        return new GithubCommentPublicationBatchDto(
-            batch.getId(),
-            batch.getStatus(),
-            batch.getTotalFindings(),
-            batch.getAttemptedCount(),
-            batch.getSucceededCount(),
-            batch.getFailedCount(),
-            batch.getSkippedCount(),
-            formatDateTimeOrNull(batch.getCreatedAt()),
-            formatDateTimeOrNull(batch.getCompletedAt()),
-            items.stream().map(this::toGithubCommentPublicationHistoryItem).toList()
-        );
-    }
-
-    private GithubCommentPublicationHistoryItem toGithubCommentPublicationHistoryItem(GithubCommentPublicationBatchItem item) {
-        FailureSummary failureSummary = resolveGithubWritebackFailure(item.getStatus(), item.getSuccess(), item.getMessage());
-        return new GithubCommentPublicationHistoryItem(
-            item.getFindingId(),
-            item.getFilePath(),
-            item.getLineNumber(),
-            item.getTargetType(),
-            item.getSuccess(),
-            item.getStatus(),
-            item.getMessage(),
-            failureSummary.category(),
-            failureSummary.reason(),
-            failureSummary.suggestion(),
-            item.getGithubUrl(),
-            item.getGithubCommentId(),
-            formatDateTimeOrNull(item.getPublishedAt())
-        );
     }
 
     private Map<Long, GithubCommentPublication> loadPublicationByFindingId(Long taskId, List<ReviewFinding> findings) {
