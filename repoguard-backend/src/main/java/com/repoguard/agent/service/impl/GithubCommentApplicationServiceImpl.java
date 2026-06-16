@@ -4,21 +4,43 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
+import com.repoguard.agent.dto.GithubCommentPreviewItem;
+import com.repoguard.agent.dto.GithubCommentPreviewResponse;
+import com.repoguard.agent.dto.GithubCommentWritebackCheck;
+import com.repoguard.agent.dto.MissingTestDto;
+import com.repoguard.agent.dto.PrRiskFileDto;
+import com.repoguard.agent.dto.PrRiskProfileDto;
+import com.repoguard.agent.dto.PrReviewSummaryDto;
+import com.repoguard.agent.dto.ReviewFindingDto;
+import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.entity.ChangedFile;
+import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
+import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ChangedFileMapper;
+import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
+import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -27,20 +49,705 @@ import org.springframework.util.StringUtils;
 public class GithubCommentApplicationServiceImpl implements GithubCommentApplicationService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String GITHUB_PROVIDER = "GITHUB";
+    private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
+    private static final String HUMAN_REVIEW_PENDING = "PENDING";
+    private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
+    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
+    private static final String FEEDBACK_VALID = "VALID";
+    private static final String FEEDBACK_FALSE_POSITIVE = "FALSE_POSITIVE";
+    private static final String FEEDBACK_FIXED = "FIXED";
+    private static final String FEEDBACK_IGNORED = "IGNORED";
     private static final FailureSummary NO_FAILURE_SUMMARY = new FailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
+    private final ChangedFileMapper changedFileMapper;
+    private final ReviewFindingMapper reviewFindingMapper;
+    private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
+    private final IntegrationConfigMapper integrationConfigMapper;
 
     public GithubCommentApplicationServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        IntegrationConfigMapper integrationConfigMapper
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
+        this.changedFileMapper = changedFileMapper;
+        this.reviewFindingMapper = reviewFindingMapper;
+        this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
+        this.integrationConfigMapper = integrationConfigMapper;
+    }
+
+    @Override
+    public GithubCommentPreviewResponse getGithubCommentPreview(Long taskId) {
+        ReviewTask task = reviewTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
+        }
+
+        Map<String, ChangedFile> changedFileByPath = changedFileMapper.selectList(
+            new LambdaQueryWrapper<ChangedFile>()
+                .eq(ChangedFile::getTaskId, taskId)
+                .orderByAsc(ChangedFile::getId)
+        ).stream().collect(Collectors.toMap(
+            ChangedFile::getFilePath,
+            Function.identity(),
+            (first, ignored) -> first
+        ));
+
+        List<ReviewFinding> findings = reviewFindingMapper.selectList(
+            new LambdaQueryWrapper<ReviewFinding>()
+                .eq(ReviewFinding::getTaskId, taskId)
+                .orderByAsc(ReviewFinding::getId)
+        );
+        List<ReviewFinding> actionableFindings = findings.stream()
+            .filter(finding -> "FINDING".equals(finding.getCategory()))
+            .toList();
+        List<ReviewFindingDto> findingDtos = actionableFindings.stream().map(this::toFindingDto).toList();
+        List<MissingTestDto> missingTests = findings.stream()
+            .filter(finding -> "MISSING_TEST".equals(finding.getCategory()))
+            .map(this::toMissingTestDto)
+            .toList();
+        List<ChangedFileDto> changedFileDtos = changedFileByPath.values().stream()
+            .sorted(Comparator.comparing(file -> file.getId() == null ? Long.MAX_VALUE : file.getId()))
+            .map(this::toChangedFileDto)
+            .toList();
+        ReviewTaskListItem taskItem = toListItem(task);
+        PrRiskProfileDto riskProfile = buildRiskProfile(taskItem, findingDtos, changedFileDtos);
+        PrReviewSummaryDto prSummary = buildPrReviewSummary(taskItem, findingDtos, missingTests, changedFileDtos, riskProfile);
+        Map<Long, GithubCommentPublication> publicationByFindingId = loadPublicationByFindingId(taskId, actionableFindings);
+        GithubCommentPublication prSummaryPublication = loadPrSummaryPublication(taskId);
+
+        List<GithubCommentPreviewItem> items = new java.util.ArrayList<>();
+        items.add(toPrSummaryCommentPreviewItem(prSummary, prSummaryPublication));
+        items.addAll(actionableFindings.stream()
+            .map(finding -> toGithubCommentPreviewItem(
+                finding,
+                changedFileByPath.get(finding.getFilePath()),
+                publicationByFindingId.get(finding.getId())
+            ))
+            .toList());
+
+        int commentableCount = (int) items.stream().filter(GithubCommentPreviewItem::commentable).count();
+        int publishedCount = (int) items.stream().filter(item -> Boolean.TRUE.equals(item.published())).count();
+        return new GithubCommentPreviewResponse(
+            task.getId(),
+            task.getPrNumber(),
+            task.getPrUrl(),
+            buildGithubCommentWritebackCheck(task),
+            actionableFindings.size(),
+            commentableCount,
+            items.size() - commentableCount - publishedCount,
+            items
+        );
+    }
+
+    private GithubCommentWritebackCheck buildGithubCommentWritebackCheck(ReviewTask task) {
+        IntegrationConfig config = loadGithubIntegrationConfig();
+        String taskOwner = trimToNull(task.getOrganization());
+        String taskRepository = trimToNull(task.getRepository());
+        String configuredOwner = trimToNull(config == null ? null : config.getDefaultOwner());
+        String configuredRepository = trimToNull(config == null ? null : config.getDefaultRepo());
+        boolean tokenConfigured = config != null && StringUtils.hasText(config.getTokenValue());
+        boolean repositoryConfigured = StringUtils.hasText(configuredOwner) && StringUtils.hasText(configuredRepository);
+        boolean repositoryMatched = repositoryConfigured
+            && equalsIgnoreCase(taskOwner, configuredOwner)
+            && equalsIgnoreCase(taskRepository, configuredRepository);
+        boolean connectionHealthy = tokenConfigured
+            && repositoryConfigured
+            && repositoryMatched;
+
+        List<String> messages = new java.util.ArrayList<>();
+        if (!tokenConfigured) {
+            messages.add("GitHub Token 未配置，请先到集成配置页保存 Token。");
+        }
+        if (!repositoryConfigured) {
+            messages.add("GitHub 默认 owner/repo 未配置，无法提前判断任务仓库是否匹配。");
+        } else if (!repositoryMatched) {
+            messages.add("当前任务仓库与 GitHub 集成默认仓库不一致，请确认 Token 对目标仓库有评论权限。");
+        }
+        if (config != null && StringUtils.hasText(config.getLastError())) {
+            messages.add("GitHub 最近一次连接测试失败：" + config.getLastError());
+        } else if (config != null && !"CONFIGURED".equals(config.getStatus())) {
+            messages.add("GitHub 当前连接状态不是已配置成功，请先到集成配置页测试连接。");
+        }
+        if (messages.isEmpty()) {
+            messages.add("GitHub 回写配置与当前任务仓库匹配。");
+        }
+
+        String status = resolveWritebackCheckStatus(tokenConfigured, repositoryConfigured, repositoryMatched, connectionHealthy);
+        return new GithubCommentWritebackCheck(
+            status,
+            resolveWritebackCheckLevel(status),
+            taskOwner,
+            taskRepository,
+            configuredOwner,
+            configuredRepository,
+            repositoryMatched,
+            tokenConfigured,
+            connectionHealthy,
+            config == null ? null : config.getLastError(),
+            messages
+        );
+    }
+
+    private IntegrationConfig loadGithubIntegrationConfig() {
+        return integrationConfigMapper.selectOne(
+            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
+        );
+    }
+
+    private String resolveWritebackCheckStatus(
+        boolean tokenConfigured,
+        boolean repositoryConfigured,
+        boolean repositoryMatched,
+        boolean connectionHealthy
+    ) {
+        if (!tokenConfigured) {
+            return "token_missing";
+        }
+        if (!repositoryConfigured) {
+            return "repository_not_configured";
+        }
+        if (!repositoryMatched) {
+            return "repository_mismatch";
+        }
+        if (!connectionHealthy) {
+            return "connection_failed";
+        }
+        return "ready";
+    }
+
+    private String resolveWritebackCheckLevel(String status) {
+        return switch (status) {
+            case "ready" -> "success";
+            case "repository_mismatch", "repository_not_configured" -> "warning";
+            default -> "danger";
+        };
+    }
+
+    private PrReviewSummaryDto buildPrReviewSummary(
+        ReviewTaskListItem task,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        PrRiskProfileDto riskProfile
+    ) {
+        int criticalCount = countSeverity(findings, "critical");
+        int highCount = countSeverity(findings, "high");
+        int mediumCount = countSeverity(findings, "medium");
+        int totalFindings = findings.size();
+        String overallRisk = riskProfile == null ? "info" : riskProfile.level();
+        boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
+            || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
+        boolean recommendMerge = criticalCount == 0 && highCount == 0 && !humanReviewRequired;
+        String mergeRecommendation = mergeRecommendation(recommendMerge, criticalCount, highCount, mediumCount, humanReviewRequired);
+        List<String> keyRisks = buildPrSummaryRisks(riskProfile, missingTests, criticalCount, highCount, mediumCount);
+        List<String> focusFiles = buildPrSummaryFocusFiles(riskProfile, changedFiles);
+        String summary = "本次 PR 综合风险为 " + riskText(overallRisk)
+            + "，包含 " + changedFiles.size() + " 个变更文件、" + totalFindings + " 条审查发现"
+            + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
+            + "。";
+        String commentBody = buildPrSummaryCommentBody(task, overallRisk, summary, mergeRecommendation, keyRisks, focusFiles);
+        return new PrReviewSummaryDto(
+            overallRisk,
+            summary,
+            mergeRecommendation,
+            recommendMerge,
+            humanReviewRequired,
+            keyRisks,
+            focusFiles,
+            commentBody
+        );
+    }
+
+    private String mergeRecommendation(
+        boolean recommendMerge,
+        int criticalCount,
+        int highCount,
+        int mediumCount,
+        boolean humanReviewRequired
+    ) {
+        if (criticalCount > 0 || highCount > 0) {
+            return "暂不建议直接合并，请优先处理高风险发现后再评估。";
+        }
+        if (humanReviewRequired || mediumCount > 0) {
+            return "建议完成必要人工复核和中风险确认后再合并。";
+        }
+        return recommendMerge ? "未发现阻塞性风险，可按团队流程合并。" : "建议完成复核后再合并。";
+    }
+
+    private List<String> buildPrSummaryRisks(
+        PrRiskProfileDto riskProfile,
+        List<MissingTestDto> missingTests,
+        int criticalCount,
+        int highCount,
+        int mediumCount
+    ) {
+        List<String> risks = new java.util.ArrayList<>();
+        if (criticalCount > 0) {
+            risks.add("包含 " + criticalCount + " 条严重风险发现");
+        }
+        if (highCount > 0) {
+            risks.add("包含 " + highCount + " 条高风险发现");
+        }
+        if (mediumCount > 0) {
+            risks.add("包含 " + mediumCount + " 条中风险发现");
+        }
+        if (!missingTests.isEmpty()) {
+            risks.add("存在 " + missingTests.size() + " 条缺失测试建议");
+        }
+        if (riskProfile != null && riskProfile.signals() != null) {
+            riskProfile.signals().stream()
+                .filter(StringUtils::hasText)
+                .filter(signal -> risks.stream().noneMatch(existing -> existing.equals(signal)))
+                .limit(Math.max(0, 5 - risks.size()))
+                .forEach(risks::add);
+        }
+        if (risks.isEmpty()) {
+            risks.add("未发现明显阻塞性风险");
+        }
+        return risks.stream().limit(5).toList();
+    }
+
+    private List<String> buildPrSummaryFocusFiles(PrRiskProfileDto riskProfile, List<ChangedFileDto> changedFiles) {
+        List<String> files = new java.util.ArrayList<>();
+        if (riskProfile != null && riskProfile.highRiskFiles() != null) {
+            riskProfile.highRiskFiles().stream()
+                .map(PrRiskFileDto::file)
+                .filter(StringUtils::hasText)
+                .limit(3)
+                .forEach(files::add);
+        }
+        if (files.size() < 3) {
+            changedFiles.stream()
+                .sorted(Comparator.comparingInt(file -> -(safeInt(file.additions()) + safeInt(file.deletions()))))
+                .map(ChangedFileDto::path)
+                .filter(StringUtils::hasText)
+                .filter(file -> !files.contains(file))
+                .limit(3 - files.size())
+                .forEach(files::add);
+        }
+        return files;
+    }
+
+    private String buildPrSummaryCommentBody(
+        ReviewTaskListItem task,
+        String overallRisk,
+        String summary,
+        String mergeRecommendation,
+        List<String> keyRisks,
+        List<String> focusFiles
+    ) {
+        StringBuilder body = new StringBuilder();
+        body.append("## RepoGuard PR 总评");
+        body.append("\n\n").append(summary);
+        body.append("\n\n**合并建议**：").append(mergeRecommendation);
+        body.append("\n\n**关键风险**");
+        keyRisks.forEach(risk -> body.append("\n- ").append(risk));
+        if (!focusFiles.isEmpty()) {
+            body.append("\n\n**建议重点查看文件**");
+            focusFiles.forEach(file -> body.append("\n- `").append(file).append("`"));
+        }
+        body.append("\n\n> 任务 #").append(task.id()).append("，风险等级：").append(riskText(overallRisk)).append("。");
+        return body.toString();
+    }
+
+    private String riskText(String riskLevel) {
+        if (!StringUtils.hasText(riskLevel)) {
+            return "提示";
+        }
+        return switch (riskLevel.trim().toLowerCase(Locale.ROOT)) {
+            case "critical" -> "严重";
+            case "high" -> "高";
+            case "medium" -> "中";
+            case "low" -> "低";
+            default -> "提示";
+        };
+    }
+
+    private PrRiskProfileDto buildRiskProfile(
+        ReviewTaskListItem task,
+        List<ReviewFindingDto> findings,
+        List<ChangedFileDto> changedFiles
+    ) {
+        Map<String, Long> findingCountByFile = findings.stream()
+            .filter(finding -> StringUtils.hasText(finding.file()))
+            .collect(Collectors.groupingBy(ReviewFindingDto::file, Collectors.counting()));
+        int criticalCount = countSeverity(findings, "critical");
+        int highCount = countSeverity(findings, "high");
+        int mediumCount = countSeverity(findings, "medium");
+        int lowCount = countSeverity(findings, "low");
+        int totalChurn = changedFiles.stream()
+            .mapToInt(file -> safeInt(file.additions()) + safeInt(file.deletions()))
+            .sum();
+        int sensitiveFileCount = (int) changedFiles.stream().filter(file -> !riskReasons(file).isEmpty()).count();
+
+        int score = criticalCount * 35
+            + highCount * 25
+            + mediumCount * 12
+            + lowCount * 4
+            + Math.min(changedFiles.size() * 2, 20)
+            + Math.min(totalChurn / 50, 20)
+            + Math.min(sensitiveFileCount * 8, 24);
+        score = Math.min(score, 100);
+        String level = scoreToRiskLevel(score, task.riskLevel());
+
+        List<String> signals = new java.util.ArrayList<>();
+        if (criticalCount + highCount > 0) {
+            signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
+        }
+        if (mediumCount > 0) {
+            signals.add("包含 " + mediumCount + " 条中风险发现");
+        }
+        if (changedFiles.size() >= 8) {
+            signals.add("变更文件较多：" + changedFiles.size() + " 个文件");
+        }
+        if (totalChurn >= 300) {
+            signals.add("变更规模较大：" + totalChurn + " 行增删");
+        }
+        if (sensitiveFileCount > 0) {
+            signals.add("触及 " + sensitiveFileCount + " 个敏感文件");
+        }
+        if (signals.isEmpty()) {
+            signals.add("未发现明显放大风险的变更信号");
+        }
+
+        boolean recommendHumanReview = score >= 55 || Boolean.TRUE.equals(task.humanReviewRequired());
+        String humanReviewReason = recommendHumanReview
+            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
+            : "风险分较低，可按常规自动审查流程推进。";
+        List<PrRiskFileDto> highRiskFiles = changedFiles.stream()
+            .map(file -> toRiskFile(file, findingCountByFile.getOrDefault(file.path(), 0L).intValue()))
+            .filter(file -> file.score() > 0)
+            .sorted(Comparator.comparing(PrRiskFileDto::score).reversed())
+            .limit(5)
+            .toList();
+
+        return new PrRiskProfileDto(
+            score,
+            level,
+            buildRiskSummary(level, score, findings.size(), changedFiles.size(), totalChurn),
+            recommendHumanReview,
+            humanReviewReason,
+            signals,
+            highRiskFiles
+        );
+    }
+
+    private PrRiskFileDto toRiskFile(ChangedFileDto file, int findingCount) {
+        List<String> reasons = riskReasons(file);
+        int churn = safeInt(file.additions()) + safeInt(file.deletions());
+        int score = findingCount * 18 + Math.min(churn / 25, 20) + reasons.size() * 12;
+        return new PrRiskFileDto(
+            file.path(),
+            file.changeType(),
+            file.additions(),
+            file.deletions(),
+            findingCount,
+            Math.min(score, 100),
+            reasons
+        );
+    }
+
+    private List<String> riskReasons(ChangedFileDto file) {
+        String path = file.path() == null ? "" : file.path().toLowerCase(Locale.ROOT);
+        List<String> reasons = new java.util.ArrayList<>();
+        if (path.contains("db/migration") || path.endsWith(".sql")) {
+            reasons.add("数据库迁移");
+        }
+        if (path.contains("security") || path.contains("auth") || path.contains("token") || path.contains("permission")) {
+            reasons.add("认证或权限");
+        }
+        if (path.endsWith("application.yml") || path.endsWith("application-prod.yml") || path.contains("config")) {
+            reasons.add("运行配置");
+        }
+        if (path.contains(".github/") || path.contains("docker") || path.endsWith("pom.xml") || path.endsWith("package.json")) {
+            reasons.add("构建或发布链路");
+        }
+        return reasons;
+    }
+
+    private int countSeverity(List<ReviewFindingDto> findings, String severity) {
+        return (int) findings.stream().filter(finding -> severity.equalsIgnoreCase(finding.severity())).count();
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String scoreToRiskLevel(int score, String fallbackRiskLevel) {
+        if (score >= 80 || "critical".equalsIgnoreCase(fallbackRiskLevel)) {
+            return "critical";
+        }
+        if (score >= 55 || "high".equalsIgnoreCase(fallbackRiskLevel)) {
+            return "high";
+        }
+        if (score >= 30 || "medium".equalsIgnoreCase(fallbackRiskLevel)) {
+            return "medium";
+        }
+        if (score >= 10 || "low".equalsIgnoreCase(fallbackRiskLevel)) {
+            return "low";
+        }
+        return "info";
+    }
+
+    private String buildRiskSummary(String level, int score, int findingCount, int fileCount, int totalChurn) {
+        return "本次 PR 综合风险为 " + lower(level)
+            + "（" + score + "/100），覆盖 "
+            + fileCount + " 个变更文件、" + totalChurn + " 行增删，审查发现 "
+            + findingCount + " 条。";
+    }
+
+    private Map<Long, GithubCommentPublication> loadPublicationByFindingId(Long taskId, List<ReviewFinding> findings) {
+        if (findings == null || findings.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Long> findingIds = findings.stream().map(ReviewFinding::getId).toList();
+        List<GithubCommentPublication> publications = githubCommentPublicationMapper.selectList(
+            new LambdaQueryWrapper<GithubCommentPublication>()
+                .eq(GithubCommentPublication::getTaskId, taskId)
+                .in(GithubCommentPublication::getFindingId, findingIds)
+        );
+        if (publications == null || publications.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return publications.stream().collect(Collectors.toMap(
+            GithubCommentPublication::getFindingId,
+            Function.identity(),
+            (first, ignored) -> first
+        ));
+    }
+
+    private GithubCommentPublication loadPrSummaryPublication(Long taskId) {
+        return githubCommentPublicationMapper.selectOne(
+            new LambdaQueryWrapper<GithubCommentPublication>()
+                .eq(GithubCommentPublication::getTaskId, taskId)
+                .isNull(GithubCommentPublication::getFindingId)
+                .eq(GithubCommentPublication::getTargetType, "pull_request")
+                .last("limit 1")
+        );
+    }
+
+    private ReviewTaskListItem toListItem(ReviewTask task) {
+        return new ReviewTaskListItem(
+            task.getId(),
+            task.getPrNumber(),
+            task.getTitle(),
+            task.getRepository(),
+            task.getOrganization(),
+            task.getCommitSha(),
+            task.getBranchName(),
+            lower(task.getStatus()),
+            lower(task.getRiskLevel()),
+            task.getMqRetries(),
+            lower(task.getLlmStatus()),
+            lower(resolveStoredSource(task.getSource())),
+            lower(resolveStoredSource(task.getTriggerSource())),
+            task.getCreatedAt().format(DATE_TIME_FORMATTER),
+            formatDuration(task.getDurationSeconds()),
+            null,
+            null,
+            null,
+            Boolean.TRUE.equals(task.getHumanReviewRequired()),
+            lower(resolveHumanReviewStatus(task)),
+            task.getHumanReviewNote(),
+            task.getHumanReviewBy(),
+            formatDateTimeOrNull(task.getHumanReviewedAt())
+        );
+    }
+
+    private ChangedFileDto toChangedFileDto(ChangedFile file) {
+        return new ChangedFileDto(file.getFilePath(), file.getChangeType(), file.getAdditions(), file.getDeletions());
+    }
+
+    private ReviewFindingDto toFindingDto(ReviewFinding finding) {
+        return new ReviewFindingDto(
+            finding.getId(),
+            lower(finding.getSeverity()),
+            finding.getFilePath(),
+            finding.getLineNumber(),
+            finding.getMessage(),
+            finding.getRecommendation(),
+            lower(resolveFindingFeedbackStatus(finding)),
+            finding.getFeedbackNote(),
+            finding.getFeedbackBy(),
+            formatDateTimeOrNull(finding.getFeedbackAt())
+        );
+    }
+
+    private MissingTestDto toMissingTestDto(ReviewFinding finding) {
+        return new MissingTestDto(
+            finding.getFilePath(),
+            finding.getMethodName(),
+            finding.getTestType(),
+            finding.getRecommendation()
+        );
+    }
+
+    private GithubCommentPreviewItem toGithubCommentPreviewItem(
+        ReviewFinding finding,
+        ChangedFile changedFile,
+        GithubCommentPublication publication
+    ) {
+        String targetType = resolveCommentTargetType(finding, changedFile);
+        String reason = resolveCommentReason(targetType, finding, changedFile);
+        boolean published = isPublished(publication);
+        boolean actionable = isActionableFinding(finding);
+        return new GithubCommentPreviewItem(
+            finding.getId(),
+            lower(finding.getSeverity()),
+            finding.getFilePath(),
+            finding.getLineNumber(),
+            finding.getMessage(),
+            finding.getRecommendation(),
+            buildGithubCommentBody(finding),
+            !published && actionable,
+            targetType,
+            published ? "GitHub comment already published" : actionable ? reason : feedbackSkipReason(finding),
+            published,
+            publication == null ? null : publication.getStatus(),
+            publication == null ? null : publication.getGithubUrl(),
+            publication == null ? null : publication.getMessage(),
+            publication == null || publication.getPublishedAt() == null
+                ? null
+                : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
+            lower(resolveFindingFeedbackStatus(finding))
+        );
+    }
+
+    private GithubCommentPreviewItem toPrSummaryCommentPreviewItem(
+        PrReviewSummaryDto summary,
+        GithubCommentPublication publication
+    ) {
+        boolean published = isPublished(publication);
+        return new GithubCommentPreviewItem(
+            null,
+            summary.overallRisk(),
+            "PR 总评",
+            null,
+            summary.summary(),
+            summary.mergeRecommendation(),
+            summary.githubCommentBody(),
+            !published,
+            "pull_request",
+            published ? "GitHub comment already published" : null,
+            published,
+            publication == null ? null : publication.getStatus(),
+            publication == null ? null : publication.getGithubUrl(),
+            publication == null ? null : publication.getMessage(),
+            publication == null || publication.getPublishedAt() == null
+                ? null
+                : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
+            "valid"
+        );
+    }
+
+    private boolean isPublished(GithubCommentPublication publication) {
+        return publication != null
+            && Boolean.TRUE.equals(publication.getSuccess())
+            && StringUtils.hasText(publication.getGithubUrl());
+    }
+
+    private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {
+        if (
+            StringUtils.hasText(finding.getFilePath())
+                && finding.getLineNumber() != null
+                && finding.getLineNumber() > 0
+                && changedFile != null
+                && !isDeletedChange(changedFile.getChangeType())
+        ) {
+            return "line";
+        }
+        return "pull_request";
+    }
+
+    private String resolveCommentReason(String targetType, ReviewFinding finding, ChangedFile changedFile) {
+        if ("line".equals(targetType)) {
+            return null;
+        }
+        if (!StringUtils.hasText(finding.getFilePath())) {
+            return "Finding is missing file path and will be posted as a PR comment";
+        }
+        if (finding.getLineNumber() == null || finding.getLineNumber() <= 0) {
+            return "Finding is missing a valid line number and will be posted as a PR comment";
+        }
+        if (changedFile == null) {
+            return "Finding file is not in the changed files list and will be posted as a PR comment";
+        }
+        if (isDeletedChange(changedFile.getChangeType())) {
+            return "Deleted files will be posted as PR comments";
+        }
+        return "Finding will be posted as a PR comment";
+    }
+
+    private boolean isDeletedChange(String changeType) {
+        if (!StringUtils.hasText(changeType)) {
+            return false;
+        }
+        return Set.of("D", "DELETE", "DELETED", "REMOVE", "REMOVED").contains(changeType.trim().toUpperCase(Locale.ROOT));
+    }
+
+    private String buildGithubCommentBody(ReviewFinding finding) {
+        StringBuilder body = new StringBuilder();
+        body.append("**RepoGuard ");
+        if (StringUtils.hasText(finding.getSeverity())) {
+            body.append(finding.getSeverity().trim().toUpperCase(Locale.ROOT));
+        } else {
+            body.append("INFO");
+        }
+        body.append(" finding**");
+
+        if (StringUtils.hasText(finding.getRuleId())) {
+            body.append(" · `").append(finding.getRuleId().trim()).append("`");
+        }
+
+        if (StringUtils.hasText(finding.getMessage())) {
+            body.append("\n\n").append(finding.getMessage().trim());
+        }
+
+        if (StringUtils.hasText(finding.getRecommendation())) {
+            body.append("\n\n**建议**：").append(finding.getRecommendation().trim());
+        }
+
+        return body.toString();
+    }
+
+    private boolean isActionableFinding(ReviewFinding finding) {
+        String feedbackStatus = resolveFindingFeedbackStatus(finding);
+        return FEEDBACK_UNREVIEWED.equals(feedbackStatus) || FEEDBACK_VALID.equals(feedbackStatus);
+    }
+
+    private String feedbackSkipReason(ReviewFinding finding) {
+        return switch (resolveFindingFeedbackStatus(finding)) {
+            case FEEDBACK_FALSE_POSITIVE -> "Finding marked as false positive and will not be published";
+            case FEEDBACK_FIXED -> "Finding marked as fixed and will not be published";
+            case FEEDBACK_IGNORED -> "Finding marked as ignored and will not be published";
+            default -> "Finding is not actionable and will not be published";
+        };
+    }
+
+    private String resolveStoredSource(String source) {
+        return StringUtils.hasText(source) ? source : SOURCE_MANUAL_INPUT;
+    }
+
+    private String resolveFindingFeedbackStatus(ReviewFinding finding) {
+        return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
+    }
+
+    private String resolveHumanReviewStatus(ReviewTask task) {
+        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
+            return HUMAN_REVIEW_NOT_REQUIRED;
+        }
+        return StringUtils.hasText(task.getHumanReviewStatus()) ? task.getHumanReviewStatus() : HUMAN_REVIEW_PENDING;
     }
 
     @Override
@@ -270,6 +977,28 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
 
     private String formatDateTimeOrNull(LocalDateTime value) {
         return value == null ? null : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private String formatDuration(Integer durationSeconds) {
+        int totalSeconds = durationSeconds == null ? 0 : durationSeconds;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return minutes + " 分 " + seconds + " 秒";
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private boolean equalsIgnoreCase(String first, String second) {
+        return first != null && second != null && first.equalsIgnoreCase(second);
+    }
+
+    private String lower(String value) {
+        return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
 
     private record FailureSummary(String category, String reason, String suggestion) {
