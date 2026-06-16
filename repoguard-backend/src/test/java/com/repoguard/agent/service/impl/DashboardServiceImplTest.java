@@ -73,6 +73,28 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewBuildsTopMetricsFromCountQueries() {
+        ReviewTask completedTask = task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200);
+        ReviewTask failedTask = task(2L, "octocat", "api", "dashscope", "qwen-plus", "FAILED", "FALLBACK", 2400);
+        failedTask.setRiskLevel("HIGH");
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(completedTask, failedTask));
+        when(reviewTaskMapper.selectCount(any())).thenReturn(3L, 2L, 1L);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var metrics = service.getOverview(null).overviewMetrics();
+
+        assertThat(metrics).extracting("label").containsExactly("本周审查", "高风险 PR", "失败任务", "平均审查耗时");
+        assertThat(metrics.get(0).value()).isEqualTo("3");
+        assertThat(metrics.get(1).value()).isEqualTo("2");
+        assertThat(metrics.get(1).trend()).isEqualTo("66.7%");
+        assertThat(metrics.get(2).value()).isEqualTo("1");
+        assertThat(metrics.get(2).trend()).isEqualTo("33.3%");
+    }
+
+    @Test
     void overviewReportsLlmQualityByModelAndRepository() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),

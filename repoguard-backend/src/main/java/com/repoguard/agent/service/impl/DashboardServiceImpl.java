@@ -78,9 +78,10 @@ public class DashboardServiceImpl implements DashboardService {
         List<ReviewFinding> findings = reviewFindingMapper.selectList(
             new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
         );
+        DashboardMetricStats metricStats = loadMetricStats();
 
         return new DashboardOverviewResponse(
-            buildMetrics(tasks),
+            buildMetrics(tasks, metricStats),
             buildTrend(tasks),
             buildRiskDistribution(tasks),
             buildRuleHits(findings),
@@ -91,6 +92,17 @@ public class DashboardServiceImpl implements DashboardService {
             buildLlmQualityByRepository(tasks, findings),
             buildLlmQualityTrend(tasks, normalizedLlmTrendDays)
         );
+    }
+
+    private DashboardMetricStats loadMetricStats() {
+        long total = safeCount(reviewTaskMapper.selectCount(new LambdaQueryWrapper<>()));
+        long highRisk = safeCount(reviewTaskMapper.selectCount(
+            new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getRiskLevel, List.of("HIGH", "CRITICAL"))
+        ));
+        long failed = safeCount(reviewTaskMapper.selectCount(
+            new LambdaQueryWrapper<ReviewTask>().eq(ReviewTask::getStatus, "FAILED")
+        ));
+        return new DashboardMetricStats(total, highRisk, failed);
     }
 
     private int normalizeLlmTrendDays(Integer days) {
@@ -155,18 +167,15 @@ public class DashboardServiceImpl implements DashboardService {
         }
     }
 
-    private List<DashboardMetricDto> buildMetrics(List<ReviewTask> tasks) {
-        long total = tasks.size();
-        long highRisk = tasks.stream().filter(task -> isHighRisk(task.getRiskLevel())).count();
-        long failed = tasks.stream().filter(task -> "FAILED".equals(task.getStatus())).count();
-        int avgSeconds = total == 0
+    private List<DashboardMetricDto> buildMetrics(List<ReviewTask> tasks, DashboardMetricStats stats) {
+        int avgSeconds = stats.total() == 0
             ? 0
             : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getDurationSeconds())).average().orElse(0));
 
         return List.of(
-            new DashboardMetricDto("本周审查", String.valueOf(total), "0.0%", "up", "blue"),
-            new DashboardMetricDto("高风险 PR", String.valueOf(highRisk), percent(highRisk, total), "up-danger", "red"),
-            new DashboardMetricDto("失败任务", String.valueOf(failed), percent(failed, total), "down", "orange"),
+            new DashboardMetricDto("本周审查", String.valueOf(stats.total()), "0.0%", "up", "blue"),
+            new DashboardMetricDto("高风险 PR", String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total()), "up-danger", "red"),
+            new DashboardMetricDto("失败任务", String.valueOf(stats.failed()), percent(stats.failed(), stats.total()), "down", "orange"),
             new DashboardMetricDto("平均审查耗时", formatDuration(avgSeconds), "0.0%", "down", "green")
         );
     }
@@ -488,9 +497,16 @@ public class DashboardServiceImpl implements DashboardService {
         return value == null ? 0 : value;
     }
 
+    private long safeCount(Long value) {
+        return value == null ? 0L : value;
+    }
+
     private String formatDuration(int durationSeconds) {
         int minutes = durationSeconds / 60;
         int seconds = durationSeconds % 60;
         return minutes + "分 " + seconds + "秒";
+    }
+
+    private record DashboardMetricStats(long total, long highRisk, long failed) {
     }
 }
