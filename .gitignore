@@ -9,10 +9,11 @@ target/
 .idea/
 .vscode/
 *.log
-logs/*.txt
+logs/
 .DS_Store
 *.local
 .npm-cache/
+move-codex-data-to-d.ps1
 BackendRules/
 repoguard-backend/src/main/resources/application-local.yml
 config/application-local.yml
