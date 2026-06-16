@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
+import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
@@ -32,7 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -80,14 +80,15 @@ public class DashboardServiceImpl implements DashboardService {
             new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
         );
         DashboardMetricStats metricStats = loadMetricStats();
+        List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
             buildMetrics(tasks, metricStats),
             buildTrend(tasks),
             buildRiskDistribution(),
-            buildRuleHits(findings),
+            buildRuleHits(ruleHitCounts),
             buildHighRiskReviews(tasks, findings),
-            buildFailedRules(findings),
+            buildFailedRules(ruleHitCounts),
             buildSystemHealth(),
             buildLlmQualityByModel(tasks, findings),
             buildLlmQualityByRepository(tasks, findings),
@@ -206,16 +207,17 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private List<ChartSliceDto> buildRuleHits(List<ReviewFinding> findings) {
-        long total = findings.size();
+    private List<ChartSliceDto> buildRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
+        long total = totalRuleHits(ruleHitCounts);
         // 没有确定规则编号的问题统一归类为 LLM 审查结果。
-        Map<String, Long> countByRule = findings.stream()
-            .map(finding -> finding.getRuleId() == null ? "LLM" : finding.getRuleId())
-            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        return countByRule.entrySet().stream()
-            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-            .map(entry -> new ChartSliceDto(ruleName(entry.getKey()), entry.getValue(), ruleColor(entry.getKey()), percent(entry.getValue(), total)))
+        return nullToEmpty(ruleHitCounts).stream()
+            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
+            .map(count -> new ChartSliceDto(
+                ruleName(defaultRuleId(count.getRuleId())),
+                safeRuleTotal(count),
+                ruleColor(defaultRuleId(count.getRuleId())),
+                percent(safeRuleTotal(count), total)
+            ))
             .toList();
     }
 
@@ -238,15 +240,17 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<FailedRuleStatDto> buildFailedRules(List<ReviewFinding> findings) {
-        long total = findings.size();
-        Map<String, Long> countByRule = findings.stream()
-            .map(finding -> finding.getRuleId() == null ? "LLM" : finding.getRuleId())
-            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        return countByRule.entrySet().stream()
-            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-            .map(entry -> new FailedRuleStatDto(ruleName(entry.getKey()), entry.getValue(), "0.0%", "down", percent(entry.getValue(), total)))
+    private List<FailedRuleStatDto> buildFailedRules(List<DashboardRuleHitCount> ruleHitCounts) {
+        long total = totalRuleHits(ruleHitCounts);
+        return nullToEmpty(ruleHitCounts).stream()
+            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
+            .map(count -> new FailedRuleStatDto(
+                ruleName(defaultRuleId(count.getRuleId())),
+                safeRuleTotal(count),
+                "0.0%",
+                "down",
+                percent(safeRuleTotal(count), total)
+            ))
             .toList();
     }
 
@@ -505,6 +509,18 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeTotal(DashboardRiskLevelCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeRuleTotal(DashboardRuleHitCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
+        return nullToEmpty(ruleHitCounts).stream().mapToLong(this::safeRuleTotal).sum();
+    }
+
+    private String defaultRuleId(String ruleId) {
+        return ruleId == null ? "LLM" : ruleId;
     }
 
     private <T> List<T> nullToEmpty(List<T> values) {

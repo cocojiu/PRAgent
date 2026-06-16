@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
+import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -123,6 +124,33 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewBuildsRuleHitsFromGroupedQuery() {
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTaskMapper.selectCount(any())).thenReturn(6L, 0L, 0L);
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectRuleHitCounts()).thenReturn(List.of(
+            ruleHitCount("RG-API-001", 2L),
+            ruleHitCount(null, 1L),
+            ruleHitCount("RG-SECRET-001", 3L)
+        ));
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var overview = service.getOverview(null);
+
+        assertThat(overview.ruleHits()).hasSize(3);
+        assertThat(overview.ruleHits().get(0).value()).isEqualTo(3L);
+        assertThat(overview.ruleHits().get(0).percent()).isEqualTo("50.0%");
+        assertThat(overview.ruleHits().get(1).value()).isEqualTo(2L);
+        assertThat(overview.ruleHits().get(1).percent()).isEqualTo("33.3%");
+        assertThat(overview.ruleHits().get(2).value()).isEqualTo(1L);
+        assertThat(overview.ruleHits().get(2).percent()).isEqualTo("16.7%");
+        assertThat(overview.failedRules()).extracting("count").containsExactly(3L, 2L, 1L);
+        assertThat(overview.failedRules()).extracting("percent").containsExactly("50.0%", "33.3%", "16.7%");
+    }
+
+    @Test
     void overviewReportsLlmQualityByModelAndRepository() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
@@ -205,6 +233,13 @@ class DashboardServiceImplTest {
     private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {
         DashboardRiskLevelCount count = new DashboardRiskLevelCount();
         count.setRiskLevel(riskLevel);
+        count.setTotal(total);
+        return count;
+    }
+
+    private DashboardRuleHitCount ruleHitCount(String ruleId, Long total) {
+        DashboardRuleHitCount count = new DashboardRuleHitCount();
+        count.setRuleId(ruleId);
         count.setTotal(total);
         return count;
     }
