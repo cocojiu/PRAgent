@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
+import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
@@ -77,9 +78,8 @@ class DashboardServiceImplTest {
     }
 
     @Test
-    void overviewBuildsTopMetricsFromCountQueries() {
-        when(reviewTaskMapper.selectCount(any())).thenReturn(3L, 2L, 1L);
-        when(reviewTaskMapper.selectAverageDurationSeconds()).thenReturn(BigDecimal.valueOf(1800));
+    void overviewBuildsTopMetricsFromAggregateQuery() {
+        when(reviewTaskMapper.selectDashboardMetricStat()).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
@@ -336,6 +336,15 @@ class DashboardServiceImplTest {
         count.setRuleId(ruleId);
         count.setTotal(total);
         return count;
+    }
+
+    private DashboardMetricStat metricStat(Long total, Long highRisk, Long failed, BigDecimal averageDurationSeconds) {
+        DashboardMetricStat stat = new DashboardMetricStat();
+        stat.setTotal(total);
+        stat.setHighRisk(highRisk);
+        stat.setFailed(failed);
+        stat.setAverageDurationSeconds(averageDurationSeconds);
+        return stat;
     }
 
     private DashboardHighRiskReview highRiskReview(

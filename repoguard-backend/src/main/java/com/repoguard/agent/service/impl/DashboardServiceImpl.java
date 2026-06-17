@@ -1,6 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
@@ -12,6 +11,7 @@ import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
+import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -23,7 +23,6 @@ import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.service.DashboardService;
@@ -97,14 +96,11 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private DashboardMetricStats loadMetricStats() {
-        long total = safeCount(reviewTaskMapper.selectCount(new LambdaQueryWrapper<>()));
-        long highRisk = safeCount(reviewTaskMapper.selectCount(
-            new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getRiskLevel, List.of("HIGH", "CRITICAL"))
-        ));
-        long failed = safeCount(reviewTaskMapper.selectCount(
-            new LambdaQueryWrapper<ReviewTask>().eq(ReviewTask::getStatus, "FAILED")
-        ));
-        int averageDurationSeconds = safeAverageDuration(reviewTaskMapper.selectAverageDurationSeconds());
+        DashboardMetricStat metricStat = reviewTaskMapper.selectDashboardMetricStat();
+        long total = metricStat == null ? 0L : safeCount(metricStat.getTotal());
+        long highRisk = metricStat == null ? 0L : safeCount(metricStat.getHighRisk());
+        long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
+        int averageDurationSeconds = metricStat == null ? 0 : safeAverageDuration(metricStat.getAverageDurationSeconds());
         return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
     }
 

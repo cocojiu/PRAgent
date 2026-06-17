@@ -5,10 +5,10 @@ import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
+import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.entity.ReviewTask;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
@@ -24,18 +24,22 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
     List<DashboardRiskLevelCount> selectRiskLevelCounts();
 
     @Select("""
+        select
+            count(*) as total,
+            sum(case when risk_level in ('HIGH', 'CRITICAL') then 1 else 0 end) as highRisk,
+            sum(case when status = 'FAILED' then 1 else 0 end) as failed,
+            avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
+        from review_task
+        """)
+    DashboardMetricStat selectDashboardMetricStat();
+
+    @Select("""
         select date_format(created_at, '%m-%d') as dayLabel, count(*) as total
         from review_task
         group by date_format(created_at, '%m-%d')
         order by dayLabel
         """)
     List<DashboardReviewTrendCount> selectReviewTrendCounts();
-
-    @Select("""
-        select avg(coalesce(duration_seconds, 0))
-        from review_task
-        """)
-    BigDecimal selectAverageDurationSeconds();
 
     @Select("""
         select
