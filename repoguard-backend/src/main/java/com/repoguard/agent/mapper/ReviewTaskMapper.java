@@ -3,6 +3,7 @@ package com.repoguard.agent.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
+import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -132,6 +133,59 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         ) feedback_stats on feedback_stats.modelLabel = task_stats.modelLabel
         order by task_stats.taskCount desc
         limit 6
-        """)
+    """)
     List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats();
+
+    @Select("""
+        select
+            task_stats.repositoryLabel as repositoryLabel,
+            task_stats.taskCount as taskCount,
+            task_stats.fallbackCount as fallbackCount,
+            task_stats.partialFallbackCount as partialFallbackCount,
+            coalesce(feedback_stats.reviewedFeedbackCount, 0) as reviewedFeedbackCount,
+            coalesce(feedback_stats.validFeedbackCount, 0) as validFeedbackCount,
+            coalesce(feedback_stats.falsePositiveFeedbackCount, 0) as falsePositiveFeedbackCount
+        from (
+            select
+                case
+                    when organization is null or trim(organization) = ''
+                    then coalesce(nullif(trim(repository), ''), 'unknown')
+                    else concat(trim(organization), '/', coalesce(nullif(trim(repository), ''), 'unknown'))
+                end as repositoryLabel,
+                count(*) as taskCount,
+                sum(case
+                    when llm_status = 'FALLBACK' or llm_parse_status = 'FALLBACK'
+                    then 1 else 0 end) as fallbackCount,
+                sum(case
+                    when llm_parse_status = 'PARTIAL_FALLBACK'
+                    then 1 else 0 end) as partialFallbackCount
+            from review_task
+            where llm_status is not null
+              and llm_status <> ''
+              and llm_status <> 'PENDING'
+            group by repositoryLabel
+        ) task_stats
+        left join (
+            select
+                case
+                    when t.organization is null or trim(t.organization) = ''
+                    then coalesce(nullif(trim(t.repository), ''), 'unknown')
+                    else concat(trim(t.organization), '/', coalesce(nullif(trim(t.repository), ''), 'unknown'))
+                end as repositoryLabel,
+                sum(case
+                    when f.feedback_status is not null and f.feedback_status <> '' and f.feedback_status <> 'UNREVIEWED'
+                    then 1 else 0 end) as reviewedFeedbackCount,
+                sum(case when f.feedback_status = 'VALID' then 1 else 0 end) as validFeedbackCount,
+                sum(case when f.feedback_status = 'FALSE_POSITIVE' then 1 else 0 end) as falsePositiveFeedbackCount
+            from review_task t
+            join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+            where t.llm_status is not null
+              and t.llm_status <> ''
+              and t.llm_status <> 'PENDING'
+            group by repositoryLabel
+        ) feedback_stats on feedback_stats.repositoryLabel = task_stats.repositoryLabel
+        order by task_stats.taskCount desc
+        limit 6
+        """)
+    List<DashboardLlmQualityRepositoryStat> selectLlmQualityByRepositoryStats();
 }

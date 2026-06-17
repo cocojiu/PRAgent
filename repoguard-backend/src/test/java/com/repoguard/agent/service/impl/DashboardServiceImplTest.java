@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
+import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -242,6 +243,10 @@ class DashboardServiceImplTest {
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L),
             llmQualityModelStat("openai / gpt-test", 1L, 800, 900, "0.000456", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
+        when(reviewTaskMapper.selectLlmQualityByRepositoryStats()).thenReturn(List.of(
+            llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L),
+            llmQualityRepositoryStat("octocat/web", 1L, 0L, 0L, 0L, 0L, 0L)
+        ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "VALID"),
             finding(1L, "FALSE_POSITIVE"),
@@ -392,6 +397,26 @@ class DashboardServiceImplTest {
         stat.setAverageTokens(BigDecimal.valueOf(averageTokens));
         stat.setAverageCost(new BigDecimal(averageCost));
         stat.setParseSuccessCount(parseSuccessCount);
+        stat.setFallbackCount(fallbackCount);
+        stat.setPartialFallbackCount(partialFallbackCount);
+        stat.setReviewedFeedbackCount(reviewedFeedbackCount);
+        stat.setValidFeedbackCount(validFeedbackCount);
+        stat.setFalsePositiveFeedbackCount(falsePositiveFeedbackCount);
+        return stat;
+    }
+
+    private DashboardLlmQualityRepositoryStat llmQualityRepositoryStat(
+        String repositoryLabel,
+        Long taskCount,
+        Long fallbackCount,
+        Long partialFallbackCount,
+        Long reviewedFeedbackCount,
+        Long validFeedbackCount,
+        Long falsePositiveFeedbackCount
+    ) {
+        DashboardLlmQualityRepositoryStat stat = new DashboardLlmQualityRepositoryStat();
+        stat.setRepositoryLabel(repositoryLabel);
+        stat.setTaskCount(taskCount);
         stat.setFallbackCount(fallbackCount);
         stat.setPartialFallbackCount(partialFallbackCount);
         stat.setReviewedFeedbackCount(reviewedFeedbackCount);

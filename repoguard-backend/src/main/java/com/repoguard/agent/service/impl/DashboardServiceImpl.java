@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
+import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
@@ -19,7 +20,6 @@ import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
@@ -37,7 +37,6 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -81,13 +80,11 @@ public class DashboardServiceImpl implements DashboardService {
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>().orderByAsc(ReviewTask::getCreatedAt)
         );
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
-        );
         DashboardMetricStats metricStats = loadMetricStats();
         List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
         List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
         List<DashboardLlmQualityModelStat> llmQualityByModelStats = reviewTaskMapper.selectLlmQualityByModelStats();
+        List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = reviewTaskMapper.selectLlmQualityByRepositoryStats();
         List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = reviewTaskMapper.selectLlmQualityTrendCounts(
             LocalDate.now().minusDays(normalizedLlmTrendDays - 1L)
         );
@@ -102,7 +99,7 @@ public class DashboardServiceImpl implements DashboardService {
             buildFailedRules(ruleHitCounts),
             buildSystemHealth(),
             buildLlmQualityByModel(llmQualityByModelStats),
-            buildLlmQualityByRepository(tasks, findings),
+            buildLlmQualityByRepository(llmQualityByRepositoryStats),
             buildLlmQualityTrend(llmQualityTrendCounts, normalizedLlmTrendDays)
         );
     }
@@ -272,28 +269,16 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
-        return llmQualityTasks(tasks).stream()
-            .collect(Collectors.groupingBy(this::repositoryLabel))
-            .entrySet()
-            .stream()
-            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
-            .limit(6)
-            .map(entry -> {
-                List<ReviewTask> repositoryTasks = entry.getValue();
-                Set<Long> taskIds = taskIds(repositoryTasks);
-                List<ReviewFinding> repositoryFindings = findingsForTasks(findingsByTask, taskIds);
-                long reviewedCount = reviewedFeedbackCount(repositoryFindings);
-                return new LlmQualityByRepositoryDto(
-                    entry.getKey(),
-                    repositoryTasks.size(),
-                    percentage(fallbackCount(repositoryTasks), repositoryTasks.size()),
-                    percentage(partialFallbackCount(repositoryTasks), repositoryTasks.size()),
-                    percentage(feedbackCount(repositoryFindings, "VALID"), reviewedCount),
-                    percentage(feedbackCount(repositoryFindings, "FALSE_POSITIVE"), reviewedCount)
-                );
-            })
+    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<DashboardLlmQualityRepositoryStat> stats) {
+        return nullToEmpty(stats).stream()
+            .map(stat -> new LlmQualityByRepositoryDto(
+                stat.getRepositoryLabel(),
+                safeRepositoryTaskCount(stat),
+                percentage(safeRepositoryFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                percentage(safeRepositoryPartialFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                percentage(safeRepositoryValidFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat)),
+                percentage(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
+            ))
             .toList();
     }
 
@@ -318,51 +303,6 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<ReviewTask> llmQualityTasks(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> StringUtils.hasText(task.getLlmStatus()))
-            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "PENDING"))
-            .toList();
-    }
-
-    private String repositoryLabel(ReviewTask task) {
-        if (!StringUtils.hasText(task.getOrganization())) {
-            return StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown";
-        }
-        return task.getOrganization().trim() + "/" + (StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown");
-    }
-
-    private Set<Long> taskIds(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .map(ReviewTask::getId)
-            .filter(java.util.Objects::nonNull)
-            .collect(Collectors.toSet());
-    }
-
-    private Map<Long, List<ReviewFinding>> findingsByTask(List<ReviewFinding> findings) {
-        return findings.stream()
-            .filter(finding -> finding.getTaskId() != null)
-            .collect(Collectors.groupingBy(ReviewFinding::getTaskId));
-    }
-
-    private List<ReviewFinding> findingsForTasks(Map<Long, List<ReviewFinding>> findingsByTask, Set<Long> taskIds) {
-        return taskIds.stream()
-            .flatMap(taskId -> findingsByTask.getOrDefault(taskId, List.of()).stream())
-            .toList();
-    }
-
-    private long fallbackCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmStatus(), "FALLBACK") || equalsIgnoreCase(task.getLlmParseStatus(), "FALLBACK"))
-            .count();
-    }
-
-    private long partialFallbackCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARTIAL_FALLBACK"))
-            .count();
-    }
-
     private String formatAverageNumber(BigDecimal average) {
         if (average == null || average.compareTo(BigDecimal.ZERO) <= 0) {
             return "0";
@@ -379,17 +319,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private int toRoundedInt(BigDecimal value) {
         return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
-    }
-
-    private long reviewedFeedbackCount(List<ReviewFinding> findings) {
-        return findings.stream()
-            .filter(finding -> StringUtils.hasText(finding.getFeedbackStatus()))
-            .filter(finding -> !equalsIgnoreCase(finding.getFeedbackStatus(), "UNREVIEWED"))
-            .count();
-    }
-
-    private long feedbackCount(List<ReviewFinding> findings, String status) {
-        return findings.stream().filter(finding -> equalsIgnoreCase(finding.getFeedbackStatus(), status)).count();
     }
 
     private String percentage(long value, long total) {
@@ -526,6 +455,30 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private long safeModelFalsePositiveFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
+    }
+
+    private long safeRepositoryTaskCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
+    }
+
+    private long safeRepositoryFallbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
+    }
+
+    private long safeRepositoryPartialFallbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
+    }
+
+    private long safeRepositoryReviewedFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
+    }
+
+    private long safeRepositoryValidFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
+    }
+
+    private long safeRepositoryFalsePositiveFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
         return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
     }
 
