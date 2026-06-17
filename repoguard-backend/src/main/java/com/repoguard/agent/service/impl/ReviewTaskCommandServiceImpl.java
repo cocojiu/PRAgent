@@ -143,12 +143,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
-        }
-        if (!HUMAN_REVIEW_PENDING.equals(resolveHumanReviewStatus(task))) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
-        }
+        reviewTaskStateMachine.ensureHumanReviewAllowed(
+            Boolean.TRUE.equals(task.getHumanReviewRequired()),
+            resolveHumanReviewStatus(task)
+        );
 
         String action = normalizeHumanReviewAction(request.action());
         LocalDateTime reviewedAt = LocalDateTime.now();

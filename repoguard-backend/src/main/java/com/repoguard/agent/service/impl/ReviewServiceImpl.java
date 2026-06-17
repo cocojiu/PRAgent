@@ -140,7 +140,14 @@ public class ReviewServiceImpl implements ReviewService {
             ? new ReviewTaskQueryServiceImpl(reviewTaskMapper, changedFileMapper, reviewFindingMapper, reviewTimelineMapper)
             : reviewTaskQueryService;
         this.reviewTaskCommandService = reviewTaskCommandService == null
-            ? new ReviewTaskCommandServiceImpl(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService)
+            ? new ReviewTaskCommandServiceImpl(
+                reviewTaskMapper,
+                reviewTimelineMapper,
+                reviewTaskPublisher,
+                metrics,
+                cacheEvictionService,
+                this.reviewTaskStateMachine
+            )
             : reviewTaskCommandService;
         this.findingFeedbackService = findingFeedbackService == null
             ? new FindingFeedbackServiceImpl(reviewTaskMapper, reviewFindingMapper, reviewTimelineMapper, cacheEvictionService)

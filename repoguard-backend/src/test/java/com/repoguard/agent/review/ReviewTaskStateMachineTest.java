@@ -49,4 +49,16 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.canPublishGithubComments(true, "PENDING")).isFalse();
         assertThat(stateMachine.canPublishGithubComments(true, "REJECTED")).isFalse();
     }
+
+    @Test
+    void ensureHumanReviewAllowedRequiresPendingRequiredReview() {
+        stateMachine.ensureHumanReviewAllowed(true, "PENDING");
+
+        assertThatThrownBy(() -> stateMachine.ensureHumanReviewAllowed(false, "NOT_REQUIRED"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Human review is not required");
+        assertThatThrownBy(() -> stateMachine.ensureHumanReviewAllowed(true, "APPROVED"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("already been decided");
+    }
 }

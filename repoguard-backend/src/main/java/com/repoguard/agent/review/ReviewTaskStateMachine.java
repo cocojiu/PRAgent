@@ -27,6 +27,15 @@ public class ReviewTaskStateMachine {
         }
     }
 
+    public void ensureHumanReviewAllowed(boolean humanReviewRequired, String humanReviewStatus) {
+        if (!humanReviewRequired) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
+        }
+        if (!"PENDING".equals(humanReviewStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
+        }
+    }
+
     public boolean canPublishGithubComments(boolean humanReviewRequired, String humanReviewStatus) {
         if (!humanReviewRequired) {
             return true;
