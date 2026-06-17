@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
@@ -94,6 +95,28 @@ class DashboardServiceImplTest {
         assertThat(metrics.get(1).trend()).isEqualTo("66.7%");
         assertThat(metrics.get(2).value()).isEqualTo("1");
         assertThat(metrics.get(2).trend()).isEqualTo("33.3%");
+    }
+
+    @Test
+    void overviewBuildsReviewTrendFromGroupedQuery() {
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTaskMapper.selectCount(any())).thenReturn(5L, 0L, 0L);
+        when(reviewTaskMapper.selectReviewTrendCounts()).thenReturn(List.of(
+            reviewTrendCount("06-15", 2L),
+            reviewTrendCount("06-16", 3L)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var reviewTrend = service.getOverview(null).reviewTrend();
+
+        assertThat(reviewTrend).hasSize(2);
+        assertThat(reviewTrend.get(0).date()).isEqualTo("06-15");
+        assertThat(reviewTrend.get(0).value()).isEqualTo(2L);
+        assertThat(reviewTrend.get(1).date()).isEqualTo("06-16");
+        assertThat(reviewTrend.get(1).value()).isEqualTo(3L);
     }
 
     @Test
@@ -233,6 +256,13 @@ class DashboardServiceImplTest {
     private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {
         DashboardRiskLevelCount count = new DashboardRiskLevelCount();
         count.setRiskLevel(riskLevel);
+        count.setTotal(total);
+        return count;
+    }
+
+    private DashboardReviewTrendCount reviewTrendCount(String dayLabel, Long total) {
+        DashboardReviewTrendCount count = new DashboardReviewTrendCount();
+        count.setDayLabel(dayLabel);
         count.setTotal(total);
         return count;
     }

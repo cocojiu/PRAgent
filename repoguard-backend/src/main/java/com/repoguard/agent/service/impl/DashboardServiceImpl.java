@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
+import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
@@ -80,11 +81,12 @@ public class DashboardServiceImpl implements DashboardService {
             new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
         );
         DashboardMetricStats metricStats = loadMetricStats();
+        List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
         List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
             buildMetrics(tasks, metricStats),
-            buildTrend(tasks),
+            buildTrend(reviewTrendCounts),
             buildRiskDistribution(),
             buildRuleHits(ruleHitCounts),
             buildHighRiskReviews(tasks, findings),
@@ -182,14 +184,10 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private List<ReviewTrendPointDto> buildTrend(List<ReviewTask> tasks) {
+    private List<ReviewTrendPointDto> buildTrend(List<DashboardReviewTrendCount> reviewTrendCounts) {
         // 当前仪表盘图表直接消费展示标签，因此这里按格式化后的日期聚合。
-        Map<String, Long> countByDate = tasks.stream()
-            .collect(Collectors.groupingBy(task -> task.getCreatedAt().format(TREND_DATE_FORMATTER), Collectors.counting()));
-
-        return countByDate.entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .map(entry -> new ReviewTrendPointDto(entry.getKey(), entry.getValue()))
+        return nullToEmpty(reviewTrendCounts).stream()
+            .map(count -> new ReviewTrendPointDto(count.getDayLabel(), safeTrendTotal(count)))
             .toList();
     }
 
@@ -508,6 +506,10 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private long safeTotal(DashboardRiskLevelCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeTrendTotal(DashboardReviewTrendCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
     }
 
