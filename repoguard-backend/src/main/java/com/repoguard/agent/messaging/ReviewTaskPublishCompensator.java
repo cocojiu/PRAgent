@@ -9,6 +9,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -19,15 +20,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewTaskPublishCompensator {
 
-    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
-    private static final String STATUS_QUEUED = "QUEUED";
-
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RabbitReviewQueueProperties properties;
     private final String instanceId;
     private final RepoGuardMetrics metrics;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     @Autowired
     public ReviewTaskPublishCompensator(
@@ -35,7 +34,8 @@ public class ReviewTaskPublishCompensator {
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         RabbitReviewQueueProperties properties,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
             reviewTaskMapper,
@@ -43,7 +43,8 @@ public class ReviewTaskPublishCompensator {
             reviewTaskPublisher,
             properties,
             "repoguard-" + UUID.randomUUID(),
-            metrics
+            metrics,
+            reviewTaskStateMachine
         );
     }
 
@@ -54,7 +55,7 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         String instanceId
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null);
     }
 
     ReviewTaskPublishCompensator(
@@ -65,19 +66,34 @@ public class ReviewTaskPublishCompensator {
         String instanceId,
         RepoGuardMetrics metrics
     ) {
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null);
+    }
+
+    ReviewTaskPublishCompensator(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RabbitReviewQueueProperties properties,
+        String instanceId,
+        RepoGuardMetrics metrics,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.properties = properties;
         this.instanceId = instanceId;
         this.metrics = metrics;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
     public void compensatePublishFailures() {
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getStatus, STATUS_PUBLISH_FAILED)
+                .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
                 .le(ReviewTask::getNextPublishRetryAt, LocalDateTime.now())
                 .lt(ReviewTask::getPublishAttempts, maxAttempts())
                 .orderByAsc(ReviewTask::getNextPublishRetryAt)
@@ -96,7 +112,7 @@ public class ReviewTaskPublishCompensator {
         int nextAttempt = safeAttempts(task) + 1;
         try {
             reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
-            task.setStatus(STATUS_QUEUED);
+            task.setStatus(reviewTaskStateMachine.statusWhenQueued());
             task.setLlmStatus("PENDING");
             task.setPublishAttempts(nextAttempt);
             task.setNextPublishRetryAt(null);
@@ -127,7 +143,7 @@ public class ReviewTaskPublishCompensator {
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
-                .eq("status", STATUS_PUBLISH_FAILED)
+                .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
                 .le("next_publish_retry_at", claimedAt)
                 .lt("publish_attempts", maxAttempts())
                 .and(wrapper -> wrapper
