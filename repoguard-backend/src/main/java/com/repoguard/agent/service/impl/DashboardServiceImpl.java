@@ -23,8 +23,7 @@ import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -47,21 +46,18 @@ public class DashboardServiceImpl implements DashboardService {
     private static final DateTimeFormatter TREND_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
+    private final DashboardMapper dashboardMapper;
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyProvider reviewPolicyProvider;
     private final RabbitTemplate rabbitTemplate;
 
     public DashboardServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewFindingMapper reviewFindingMapper,
+        DashboardMapper dashboardMapper,
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyProvider reviewPolicyProvider,
         RabbitTemplate rabbitTemplate
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
+        this.dashboardMapper = dashboardMapper;
         this.githubIntegrationProvider = githubIntegrationProvider;
         this.reviewPolicyProvider = reviewPolicyProvider;
         this.rabbitTemplate = rabbitTemplate;
@@ -72,14 +68,14 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
         DashboardMetricStats metricStats = loadMetricStats();
-        List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
-        List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
-        List<DashboardLlmQualityModelStat> llmQualityByModelStats = reviewTaskMapper.selectLlmQualityByModelStats();
-        List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = reviewTaskMapper.selectLlmQualityByRepositoryStats();
-        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = reviewTaskMapper.selectLlmQualityTrendCounts(
+        List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts();
+        List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews();
+        List<DashboardLlmQualityModelStat> llmQualityByModelStats = dashboardMapper.selectLlmQualityByModelStats();
+        List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats();
+        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(
             LocalDate.now().minusDays(normalizedLlmTrendDays - 1L)
         );
-        List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
+        List<DashboardRuleHitCount> ruleHitCounts = dashboardMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
             buildMetrics(metricStats),
@@ -96,7 +92,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private DashboardMetricStats loadMetricStats() {
-        DashboardMetricStat metricStat = reviewTaskMapper.selectDashboardMetricStat();
+        DashboardMetricStat metricStat = dashboardMapper.selectMetricStat();
         long total = metricStat == null ? 0L : safeCount(metricStat.getTotal());
         long highRisk = metricStat == null ? 0L : safeCount(metricStat.getHighRisk());
         long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
@@ -177,7 +173,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private List<ChartSliceDto> buildRiskDistribution() {
-        List<DashboardRiskLevelCount> riskLevelCounts = reviewTaskMapper.selectRiskLevelCounts();
+        List<DashboardRiskLevelCount> riskLevelCounts = dashboardMapper.selectRiskLevelCounts();
         Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
             .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
         long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();

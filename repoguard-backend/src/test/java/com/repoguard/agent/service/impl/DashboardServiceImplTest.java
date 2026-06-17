@@ -17,10 +17,7 @@ import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.entity.ReviewFinding;
-import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.DashboardMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,14 +29,12 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class DashboardServiceImplTest {
 
-    private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
-    private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+    private final DashboardMapper dashboardMapper = org.mockito.Mockito.mock(DashboardMapper.class);
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final DashboardServiceImpl service = new DashboardServiceImpl(
-        reviewTaskMapper,
-        reviewFindingMapper,
+        dashboardMapper,
         githubIntegrationProvider,
         reviewPolicyProvider,
         rabbitTemplate
@@ -47,8 +42,6 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewReportsConfiguredDependenciesAsHealthy() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -63,8 +56,6 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewKeepsRenderingWhenDependencyHealthChecksFail() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
             .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test"));
@@ -79,8 +70,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsTopMetricsFromAggregateQuery() {
-        when(reviewTaskMapper.selectDashboardMetricStat()).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(dashboardMapper.selectMetricStat()).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -98,13 +88,10 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsReviewTrendFromGroupedQuery() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewTaskMapper.selectCount(any())).thenReturn(5L, 0L, 0L);
-        when(reviewTaskMapper.selectReviewTrendCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectReviewTrendCounts()).thenReturn(List.of(
             reviewTrendCount("06-15", 2L),
             reviewTrendCount("06-16", 3L)
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -120,14 +107,11 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRiskDistributionFromGroupedQuery() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewTaskMapper.selectCount(any())).thenReturn(4L, 1L, 0L);
-        when(reviewTaskMapper.selectRiskLevelCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectRiskLevelCounts()).thenReturn(List.of(
             riskLevelCount("HIGH", 1L),
             riskLevelCount("MEDIUM", 2L),
             riskLevelCount("INFO", 1L)
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -147,10 +131,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRuleHitsFromGroupedQuery() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewTaskMapper.selectCount(any())).thenReturn(6L, 0L, 0L);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectRuleHitCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectRuleHitCounts()).thenReturn(List.of(
             ruleHitCount("RG-API-001", 2L),
             ruleHitCount(null, 1L),
             ruleHitCount("RG-SECRET-001", 3L)
@@ -174,13 +155,10 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsHighRiskReviewsFromLimitedQuery() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewTaskMapper.selectCount(any())).thenReturn(2L, 2L, 0L);
-        when(reviewTaskMapper.selectRecentHighRiskReviews()).thenReturn(List.of(
+        when(dashboardMapper.selectRecentHighRiskReviews()).thenReturn(List.of(
             highRiskReview("Fix auth bypass", "api", "CRITICAL", 4L, "COMPLETED", LocalDateTime.of(2026, 6, 17, 9, 30)),
             highRiskReview("Harden config", "ops", "HIGH", 2L, "FAILED", LocalDateTime.of(2026, 6, 16, 18, 15))
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -202,13 +180,10 @@ class DashboardServiceImplTest {
         LocalDateTime today = LocalDateTime.now();
         String yesterdayKey = today.minusDays(1).toLocalDate().toString();
         String todayKey = today.toLocalDate().toString();
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
-        when(reviewTaskMapper.selectCount(any())).thenReturn(5L, 0L, 0L);
-        when(reviewTaskMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
             llmQualityTrendCount(yesterdayKey, 2L, 1L, 1L, 0L),
             llmQualityTrendCount(todayKey, 3L, 2L, 0L, 1L)
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -228,25 +203,13 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewReportsLlmQualityByModelAndRepository() {
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
-            task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
-            task(2L, "octocat", "api", "dashscope", "qwen-plus", "FALLBACK", "FALLBACK", 2200),
-            task(3L, "octocat", "web", "openai", "gpt-test", "COMPLETED", "PARSED", 800),
-            task(4L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARTIAL_FALLBACK", 1800)
-        ));
-        when(reviewTaskMapper.selectLlmQualityByModelStats()).thenReturn(List.of(
+        when(dashboardMapper.selectLlmQualityByModelStats()).thenReturn(List.of(
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L),
             llmQualityModelStat("openai / gpt-test", 1L, 800, 900, "0.000456", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
-        when(reviewTaskMapper.selectLlmQualityByRepositoryStats()).thenReturn(List.of(
+        when(dashboardMapper.selectLlmQualityByRepositoryStats()).thenReturn(List.of(
             llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L),
             llmQualityRepositoryStat("octocat/web", 1L, 0L, 0L, 0L, 0L, 0L)
-        ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
-            finding(1L, "VALID"),
-            finding(1L, "FALSE_POSITIVE"),
-            finding(2L, "VALID"),
-            finding(3L, "UNREVIEWED")
         ));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
@@ -282,39 +245,6 @@ class DashboardServiceImplTest {
 
     private Map<String, String> healthByName(List<SystemHealthItemDto> healthItems) {
         return healthItems.stream().collect(Collectors.toMap(SystemHealthItemDto::name, SystemHealthItemDto::status));
-    }
-
-    private ReviewTask task(
-        Long id,
-        String organization,
-        String repository,
-        String provider,
-        String model,
-        String llmStatus,
-        String parseStatus,
-        Integer durationMs
-    ) {
-        ReviewTask task = new ReviewTask();
-        task.setId(id);
-        task.setOrganization(organization);
-        task.setRepository(repository);
-        task.setCreatedAt(LocalDateTime.now().minusDays(id));
-        task.setStatus("COMPLETED");
-        task.setRiskLevel("LOW");
-        task.setLlmStatus(llmStatus);
-        task.setLlmParseStatus(parseStatus);
-        task.setLlmProvider(provider);
-        task.setLlmModel(model);
-        task.setLlmDurationMs(durationMs);
-        return task;
-    }
-
-    private ReviewFinding finding(Long taskId, String feedbackStatus) {
-        ReviewFinding finding = new ReviewFinding();
-        finding.setTaskId(taskId);
-        finding.setCategory("FINDING");
-        finding.setFeedbackStatus(feedbackStatus);
-        return finding;
     }
 
     private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {
