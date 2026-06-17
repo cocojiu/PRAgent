@@ -31,6 +31,7 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.statusWhenReviewing()).isEqualTo("REVIEWING");
         assertThat(stateMachine.statusWhenQueued()).isEqualTo("QUEUED");
         assertThat(stateMachine.statusWhenPublishFailed()).isEqualTo("PUBLISH_FAILED");
+        assertThat(stateMachine.statusWhenFailed()).isEqualTo("FAILED");
         assertThat(stateMachine.statusAfterReviewCompleted(false)).isEqualTo("COMPLETED");
         assertThat(stateMachine.statusAfterReviewCompleted(true)).isEqualTo("PENDING_HUMAN_REVIEW");
     }

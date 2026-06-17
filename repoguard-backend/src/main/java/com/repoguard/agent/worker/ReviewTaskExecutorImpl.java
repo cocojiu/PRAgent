@@ -23,7 +23,6 @@ import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import com.repoguard.agent.review.ReviewTaskStatus;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -294,7 +293,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             int updated = reviewTaskMapper.update(
                 new UpdateWrapper<ReviewTask>()
                     .eq("id", task.getId())
-                    .eq("status", ReviewTaskStatus.QUEUED.code())
+                    .eq("status", reviewTaskStateMachine.statusWhenQueued())
                     .set("status", reviewTaskStateMachine.statusWhenReviewing())
                     .set("started_at", startedAt)
             );
@@ -464,7 +463,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private void failReview(ReviewTask task, LocalDateTime startedAt, RuntimeException ex) {
         inTransaction(() -> {
             LocalDateTime failedAt = LocalDateTime.now();
-            task.setStatus("FAILED");
+            task.setStatus(reviewTaskStateMachine.statusWhenFailed());
             task.setRiskLevel("HIGH");
             task.setLlmStatus("FAILED");
             task.setFinishedAt(failedAt);

@@ -23,6 +23,10 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.PUBLISH_FAILED.code();
     }
 
+    public String statusWhenFailed() {
+        return ReviewTaskStatus.FAILED.code();
+    }
+
     public String statusAfterReviewCompleted(boolean humanReviewRequired) {
         return humanReviewRequired
             ? ReviewTaskStatus.PENDING_HUMAN_REVIEW.code()
