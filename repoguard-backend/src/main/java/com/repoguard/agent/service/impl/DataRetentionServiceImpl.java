@@ -21,10 +21,12 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.DataRetentionService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,6 +46,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
     private final SystemSettingsProvider systemSettingsProvider;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     public DataRetentionServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -55,6 +58,31 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
         SystemSettingsProvider systemSettingsProvider
     ) {
+        this(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            null
+        );
+    }
+
+    @Autowired
+    public DataRetentionServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        SystemSettingsProvider systemSettingsProvider,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
@@ -63,6 +91,9 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.systemSettingsProvider = systemSettingsProvider;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Override
@@ -140,7 +171,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private LambdaQueryWrapper<ReviewTask> candidateTaskQuery(LocalDateTime cutoff) {
         return new LambdaQueryWrapper<ReviewTask>()
             .lt(ReviewTask::getCreatedAt, cutoff)
-            .in(ReviewTask::getStatus, List.of("COMPLETED", "FAILED"));
+            .in(ReviewTask::getStatus, reviewTaskStateMachine.dataRetentionCandidateStatuses());
     }
 
     private DataRetentionCleanupResponse response(

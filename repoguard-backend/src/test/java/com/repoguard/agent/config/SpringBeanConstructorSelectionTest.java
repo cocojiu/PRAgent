@@ -8,6 +8,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.review.LlmPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
 import com.repoguard.agent.service.impl.MessageQueueHealthServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
 import com.repoguard.agent.service.impl.ReviewServiceImpl;
@@ -29,6 +30,7 @@ class SpringBeanConstructorSelectionTest {
             LlmPullRequestReviewer.class,
             AuthTokenService.class,
             SecretCryptoService.class,
+            DataRetentionServiceImpl.class,
             MessageQueueHealthServiceImpl.class,
             ReviewTaskCommandServiceImpl.class,
             ReviewServiceImpl.class,

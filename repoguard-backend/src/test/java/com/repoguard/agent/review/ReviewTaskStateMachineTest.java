@@ -78,4 +78,9 @@ class ReviewTaskStateMachineTest {
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Claimed message tasks cannot be requeued");
     }
+
+    @Test
+    void dataRetentionCandidateStatusesIncludeOnlyTerminalCleanupStatuses() {
+        assertThat(stateMachine.dataRetentionCandidateStatuses()).containsExactly("COMPLETED", "FAILED");
+    }
 }

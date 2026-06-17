@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -50,6 +51,10 @@ public class ReviewTaskStateMachine {
 
     public boolean isPublishFailed(String status) {
         return ReviewTaskStatus.PUBLISH_FAILED == ReviewTaskStatus.from(status);
+    }
+
+    public List<String> dataRetentionCandidateStatuses() {
+        return List.of(ReviewTaskStatus.COMPLETED.code(), ReviewTaskStatus.FAILED.code());
     }
 
     public void ensureHumanReviewAllowed(boolean humanReviewRequired, String humanReviewStatus) {
