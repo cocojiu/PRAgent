@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryItem;
@@ -23,14 +25,12 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.github.GithubPullRequestClient;
@@ -58,7 +58,6 @@ import org.springframework.util.StringUtils;
 public class GithubCommentApplicationServiceImpl implements GithubCommentApplicationService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String GITHUB_PROVIDER = "GITHUB";
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String HUMAN_REVIEW_PENDING = "PENDING";
     private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
@@ -75,7 +74,7 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
+    private final GithubIntegrationProvider githubIntegrationProvider;
     private final GithubPullRequestClient githubPullRequestClient;
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
@@ -87,7 +86,7 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        GithubIntegrationProvider githubIntegrationProvider,
         GithubPullRequestClient githubPullRequestClient,
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService
@@ -98,7 +97,7 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
+        this.githubIntegrationProvider = githubIntegrationProvider;
         this.githubPullRequestClient = githubPullRequestClient;
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
@@ -544,12 +543,15 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     }
 
     private GithubCommentWritebackCheck buildGithubCommentWritebackCheck(ReviewTask task) {
-        IntegrationConfig config = loadGithubIntegrationConfig();
+        GithubIntegrationSettings settings = githubIntegrationProvider.getSettings();
+        if (settings == null) {
+            settings = GithubIntegrationSettings.empty();
+        }
         String taskOwner = trimToNull(task.getOrganization());
         String taskRepository = trimToNull(task.getRepository());
-        String configuredOwner = trimToNull(config == null ? null : config.getDefaultOwner());
-        String configuredRepository = trimToNull(config == null ? null : config.getDefaultRepo());
-        boolean tokenConfigured = config != null && StringUtils.hasText(config.getTokenValue());
+        String configuredOwner = trimToNull(settings.defaultOwner());
+        String configuredRepository = trimToNull(settings.defaultRepo());
+        boolean tokenConfigured = StringUtils.hasText(settings.token());
         boolean repositoryConfigured = StringUtils.hasText(configuredOwner) && StringUtils.hasText(configuredRepository);
         boolean repositoryMatched = repositoryConfigured
             && equalsIgnoreCase(taskOwner, configuredOwner)
@@ -567,9 +569,9 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         } else if (!repositoryMatched) {
             messages.add("当前任务仓库与 GitHub 集成默认仓库不一致，请确认 Token 对目标仓库有评论权限。");
         }
-        if (config != null && StringUtils.hasText(config.getLastError())) {
-            messages.add("GitHub 最近一次连接测试失败：" + config.getLastError());
-        } else if (config != null && !"CONFIGURED".equals(config.getStatus())) {
+        if (StringUtils.hasText(settings.lastError())) {
+            messages.add("GitHub 最近一次连接测试失败：" + settings.lastError());
+        } else if (settings.exists() && !"CONFIGURED".equals(settings.status())) {
             messages.add("GitHub 当前连接状态不是已配置成功，请先到集成配置页测试连接。");
         }
         if (messages.isEmpty()) {
@@ -587,14 +589,8 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
             repositoryMatched,
             tokenConfigured,
             connectionHealthy,
-            config == null ? null : config.getLastError(),
+            settings.lastError(),
             messages
-        );
-    }
-
-    private IntegrationConfig loadGithubIntegrationConfig() {
-        return integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
         );
     }
 

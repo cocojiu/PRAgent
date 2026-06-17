@@ -16,4 +16,8 @@ public record GithubIntegrationSettings(
     public static GithubIntegrationSettings empty() {
         return new GithubIntegrationSettings(GITHUB_PROVIDER, null, null, null, null, null, null, null);
     }
+
+    public boolean exists() {
+        return id != null;
+    }
 }
