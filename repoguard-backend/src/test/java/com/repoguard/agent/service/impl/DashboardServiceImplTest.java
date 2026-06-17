@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -237,6 +238,10 @@ class DashboardServiceImplTest {
             task(3L, "octocat", "web", "openai", "gpt-test", "COMPLETED", "PARSED", 800),
             task(4L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARTIAL_FALLBACK", 1800)
         ));
+        when(reviewTaskMapper.selectLlmQualityByModelStats()).thenReturn(List.of(
+            llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L),
+            llmQualityModelStat("openai / gpt-test", 1L, 800, 900, "0.000456", 1L, 0L, 0L, 0L, 0L, 0L)
+        ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "VALID"),
             finding(1L, "FALSE_POSITIVE"),
@@ -255,6 +260,9 @@ class DashboardServiceImplTest {
             .findFirst()
             .orElseThrow();
         assertThat(qwen.taskCount()).isEqualTo(3);
+        assertThat(qwen.averageDuration()).isEqualTo("1.7 s");
+        assertThat(qwen.averageTokens()).isEqualTo("1200");
+        assertThat(qwen.averageCost()).isEqualTo("$0.000123");
         assertThat(qwen.parseSuccessRate()).isEqualTo("33.3%");
         assertThat(qwen.fallbackRate()).isEqualTo("33.3%");
         assertThat(qwen.partialFallbackRate()).isEqualTo("33.3%");
@@ -362,6 +370,34 @@ class DashboardServiceImplTest {
         count.setFallbackCount(fallbackCount);
         count.setPartialFallbackCount(partialFallbackCount);
         return count;
+    }
+
+    private DashboardLlmQualityModelStat llmQualityModelStat(
+        String modelLabel,
+        Long taskCount,
+        Integer averageDurationMs,
+        Integer averageTokens,
+        String averageCost,
+        Long parseSuccessCount,
+        Long fallbackCount,
+        Long partialFallbackCount,
+        Long reviewedFeedbackCount,
+        Long validFeedbackCount,
+        Long falsePositiveFeedbackCount
+    ) {
+        DashboardLlmQualityModelStat stat = new DashboardLlmQualityModelStat();
+        stat.setModelLabel(modelLabel);
+        stat.setTaskCount(taskCount);
+        stat.setAverageDurationMs(BigDecimal.valueOf(averageDurationMs));
+        stat.setAverageTokens(BigDecimal.valueOf(averageTokens));
+        stat.setAverageCost(new BigDecimal(averageCost));
+        stat.setParseSuccessCount(parseSuccessCount);
+        stat.setFallbackCount(fallbackCount);
+        stat.setPartialFallbackCount(partialFallbackCount);
+        stat.setReviewedFeedbackCount(reviewedFeedbackCount);
+        stat.setValidFeedbackCount(validFeedbackCount);
+        stat.setFalsePositiveFeedbackCount(falsePositiveFeedbackCount);
+        return stat;
     }
 
     private IntegrationConfig githubConfig(String status, String token) {

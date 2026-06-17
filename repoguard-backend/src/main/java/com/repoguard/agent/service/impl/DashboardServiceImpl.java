@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
@@ -86,6 +87,7 @@ public class DashboardServiceImpl implements DashboardService {
         DashboardMetricStats metricStats = loadMetricStats();
         List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
         List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
+        List<DashboardLlmQualityModelStat> llmQualityByModelStats = reviewTaskMapper.selectLlmQualityByModelStats();
         List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = reviewTaskMapper.selectLlmQualityTrendCounts(
             LocalDate.now().minusDays(normalizedLlmTrendDays - 1L)
         );
@@ -99,7 +101,7 @@ public class DashboardServiceImpl implements DashboardService {
             buildHighRiskReviews(highRiskReviews),
             buildFailedRules(ruleHitCounts),
             buildSystemHealth(),
-            buildLlmQualityByModel(tasks, findings),
+            buildLlmQualityByModel(llmQualityByModelStats),
             buildLlmQualityByRepository(tasks, findings),
             buildLlmQualityTrend(llmQualityTrendCounts, normalizedLlmTrendDays)
         );
@@ -253,32 +255,20 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
-        return llmQualityTasks(tasks).stream()
-            .collect(Collectors.groupingBy(this::llmModelLabel))
-            .entrySet()
-            .stream()
-            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
-            .limit(6)
-            .map(entry -> {
-                List<ReviewTask> modelTasks = entry.getValue();
-                Set<Long> taskIds = taskIds(modelTasks);
-                List<ReviewFinding> modelFindings = findingsForTasks(findingsByTask, taskIds);
-                long reviewedCount = reviewedFeedbackCount(modelFindings);
-                return new LlmQualityByModelDto(
-                    entry.getKey(),
-                    modelTasks.size(),
-                    formatMilliseconds(averageLlmDuration(modelTasks)),
-                    formatAverageTokens(modelTasks),
-                    formatAverageCost(modelTasks),
-                    percentage(parseSuccessCount(modelTasks), modelTasks.size()),
-                    percentage(fallbackCount(modelTasks), modelTasks.size()),
-                    percentage(partialFallbackCount(modelTasks), modelTasks.size()),
-                    percentage(feedbackCount(modelFindings, "VALID"), reviewedCount),
-                    percentage(feedbackCount(modelFindings, "FALSE_POSITIVE"), reviewedCount)
-                );
-            })
+    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<DashboardLlmQualityModelStat> stats) {
+        return nullToEmpty(stats).stream()
+            .map(stat -> new LlmQualityByModelDto(
+                stat.getModelLabel(),
+                safeModelTaskCount(stat),
+                formatMilliseconds(toRoundedInt(stat.getAverageDurationMs())),
+                formatAverageNumber(stat.getAverageTokens()),
+                formatAverageCost(stat.getAverageCost()),
+                percentage(safeModelParseSuccessCount(stat), safeModelTaskCount(stat)),
+                percentage(safeModelFallbackCount(stat), safeModelTaskCount(stat)),
+                percentage(safeModelPartialFallbackCount(stat), safeModelTaskCount(stat)),
+                percentage(safeModelValidFeedbackCount(stat), safeModelReviewedFeedbackCount(stat)),
+                percentage(safeModelFalsePositiveFeedbackCount(stat), safeModelReviewedFeedbackCount(stat))
+            ))
             .toList();
     }
 
@@ -335,12 +325,6 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private String llmModelLabel(ReviewTask task) {
-        String provider = StringUtils.hasText(task.getLlmProvider()) ? task.getLlmProvider().trim() : "unknown";
-        String model = StringUtils.hasText(task.getLlmModel()) ? task.getLlmModel().trim() : "unknown";
-        return provider + " / " + model;
-    }
-
     private String repositoryLabel(ReviewTask task) {
         if (!StringUtils.hasText(task.getOrganization())) {
             return StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown";
@@ -367,14 +351,6 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private long parseSuccessCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARSED")
-                || (!StringUtils.hasText(task.getLlmParseStatus()) && equalsIgnoreCase(task.getLlmStatus(), "COMPLETED")))
-            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "FALLBACK"))
-            .count();
-    }
-
     private long fallbackCount(List<ReviewTask> tasks) {
         return tasks.stream()
             .filter(task -> equalsIgnoreCase(task.getLlmStatus(), "FALLBACK") || equalsIgnoreCase(task.getLlmParseStatus(), "FALLBACK"))
@@ -387,32 +363,22 @@ public class DashboardServiceImpl implements DashboardService {
             .count();
     }
 
-    private int averageLlmDuration(List<ReviewTask> tasks) {
-        return tasks.isEmpty()
-            ? 0
-            : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getLlmDurationMs())).average().orElse(0));
+    private String formatAverageNumber(BigDecimal average) {
+        if (average == null || average.compareTo(BigDecimal.ZERO) <= 0) {
+            return "0";
+        }
+        return String.format(Locale.ROOT, "%.0f", average);
     }
 
-    private String formatAverageTokens(List<ReviewTask> tasks) {
-        double average = tasks.stream()
-            .filter(task -> task.getLlmTotalTokens() != null && task.getLlmTotalTokens() > 0)
-            .mapToInt(ReviewTask::getLlmTotalTokens)
-            .average()
-            .orElse(0);
-        return average <= 0 ? "0" : String.format(Locale.ROOT, "%.0f", average);
-    }
-
-    private String formatAverageCost(List<ReviewTask> tasks) {
-        List<BigDecimal> costs = tasks.stream()
-            .map(ReviewTask::getLlmEstimatedCost)
-            .filter(java.util.Objects::nonNull)
-            .toList();
-        if (costs.isEmpty()) {
+    private String formatAverageCost(BigDecimal average) {
+        if (average == null || average.compareTo(BigDecimal.ZERO) <= 0) {
             return "$0.000000";
         }
-        BigDecimal total = costs.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal average = total.divide(BigDecimal.valueOf(costs.size()), 6, RoundingMode.HALF_UP);
-        return "$" + average.toPlainString();
+        return "$" + average.setScale(6, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private int toRoundedInt(BigDecimal value) {
+        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
     private long reviewedFeedbackCount(List<ReviewFinding> findings) {
@@ -533,6 +499,34 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeLlmPartialFallbackCount(DashboardLlmQualityTrendCount count) {
         return count == null || count.getPartialFallbackCount() == null ? 0L : count.getPartialFallbackCount();
+    }
+
+    private long safeModelTaskCount(DashboardLlmQualityModelStat stat) {
+        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
+    }
+
+    private long safeModelParseSuccessCount(DashboardLlmQualityModelStat stat) {
+        return stat.getParseSuccessCount() == null ? 0L : stat.getParseSuccessCount();
+    }
+
+    private long safeModelFallbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
+    }
+
+    private long safeModelPartialFallbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
+    }
+
+    private long safeModelReviewedFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
+    }
+
+    private long safeModelValidFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
+    }
+
+    private long safeModelFalsePositiveFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
     }
 
     private String formatReviewedAt(LocalDateTime reviewedAt) {

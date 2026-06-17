@@ -2,6 +2,7 @@ package com.repoguard.agent.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -68,4 +69,69 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         group by date_format(created_at, '%Y-%m-%d')
         """)
     List<DashboardLlmQualityTrendCount> selectLlmQualityTrendCounts(@Param("startDate") LocalDate startDate);
+
+    @Select("""
+        select
+            task_stats.modelLabel as modelLabel,
+            task_stats.taskCount as taskCount,
+            task_stats.averageDurationMs as averageDurationMs,
+            task_stats.averageTokens as averageTokens,
+            task_stats.averageCost as averageCost,
+            task_stats.parseSuccessCount as parseSuccessCount,
+            task_stats.fallbackCount as fallbackCount,
+            task_stats.partialFallbackCount as partialFallbackCount,
+            coalesce(feedback_stats.reviewedFeedbackCount, 0) as reviewedFeedbackCount,
+            coalesce(feedback_stats.validFeedbackCount, 0) as validFeedbackCount,
+            coalesce(feedback_stats.falsePositiveFeedbackCount, 0) as falsePositiveFeedbackCount
+        from (
+            select
+                concat(
+                    coalesce(nullif(trim(llm_provider), ''), 'unknown'),
+                    ' / ',
+                    coalesce(nullif(trim(llm_model), ''), 'unknown')
+                ) as modelLabel,
+                count(*) as taskCount,
+                avg(coalesce(llm_duration_ms, 0)) as averageDurationMs,
+                avg(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens end) as averageTokens,
+                avg(llm_estimated_cost) as averageCost,
+                sum(case
+                    when (llm_parse_status = 'PARSED'
+                        or ((llm_parse_status is null or llm_parse_status = '') and llm_status = 'COMPLETED'))
+                        and llm_status <> 'FALLBACK'
+                    then 1 else 0 end) as parseSuccessCount,
+                sum(case
+                    when llm_status = 'FALLBACK' or llm_parse_status = 'FALLBACK'
+                    then 1 else 0 end) as fallbackCount,
+                sum(case
+                    when llm_parse_status = 'PARTIAL_FALLBACK'
+                    then 1 else 0 end) as partialFallbackCount
+            from review_task
+            where llm_status is not null
+              and llm_status <> ''
+              and llm_status <> 'PENDING'
+            group by modelLabel
+        ) task_stats
+        left join (
+            select
+                concat(
+                    coalesce(nullif(trim(t.llm_provider), ''), 'unknown'),
+                    ' / ',
+                    coalesce(nullif(trim(t.llm_model), ''), 'unknown')
+                ) as modelLabel,
+                sum(case
+                    when f.feedback_status is not null and f.feedback_status <> '' and f.feedback_status <> 'UNREVIEWED'
+                    then 1 else 0 end) as reviewedFeedbackCount,
+                sum(case when f.feedback_status = 'VALID' then 1 else 0 end) as validFeedbackCount,
+                sum(case when f.feedback_status = 'FALSE_POSITIVE' then 1 else 0 end) as falsePositiveFeedbackCount
+            from review_task t
+            join review_finding f on f.task_id = t.id and f.category = 'FINDING'
+            where t.llm_status is not null
+              and t.llm_status <> ''
+              and t.llm_status <> 'PENDING'
+            group by modelLabel
+        ) feedback_stats on feedback_stats.modelLabel = task_stats.modelLabel
+        order by task_stats.taskCount desc
+        limit 6
+        """)
+    List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats();
 }
