@@ -78,11 +78,8 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsTopMetricsFromCountQueries() {
-        ReviewTask completedTask = task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200);
-        ReviewTask failedTask = task(2L, "octocat", "api", "dashscope", "qwen-plus", "FAILED", "FALLBACK", 2400);
-        failedTask.setRiskLevel("HIGH");
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(completedTask, failedTask));
         when(reviewTaskMapper.selectCount(any())).thenReturn(3L, 2L, 1L);
+        when(reviewTaskMapper.selectAverageDurationSeconds()).thenReturn(BigDecimal.valueOf(1800));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
@@ -96,6 +93,7 @@ class DashboardServiceImplTest {
         assertThat(metrics.get(1).trend()).isEqualTo("66.7%");
         assertThat(metrics.get(2).value()).isEqualTo("1");
         assertThat(metrics.get(2).trend()).isEqualTo("33.3%");
+        assertThat(metrics.get(3).value()).contains("30");
     }
 
     @Test

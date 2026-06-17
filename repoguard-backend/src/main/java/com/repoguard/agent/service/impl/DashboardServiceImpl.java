@@ -72,9 +72,6 @@ public class DashboardServiceImpl implements DashboardService {
     @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays")
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>().orderByAsc(ReviewTask::getCreatedAt)
-        );
         DashboardMetricStats metricStats = loadMetricStats();
         List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
         List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
@@ -86,7 +83,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
-            buildMetrics(tasks, metricStats),
+            buildMetrics(metricStats),
             buildTrend(reviewTrendCounts),
             buildRiskDistribution(),
             buildRuleHits(ruleHitCounts),
@@ -107,7 +104,8 @@ public class DashboardServiceImpl implements DashboardService {
         long failed = safeCount(reviewTaskMapper.selectCount(
             new LambdaQueryWrapper<ReviewTask>().eq(ReviewTask::getStatus, "FAILED")
         ));
-        return new DashboardMetricStats(total, highRisk, failed);
+        int averageDurationSeconds = safeAverageDuration(reviewTaskMapper.selectAverageDurationSeconds());
+        return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
     }
 
     private int normalizeLlmTrendDays(Integer days) {
@@ -166,16 +164,12 @@ public class DashboardServiceImpl implements DashboardService {
         }
     }
 
-    private List<DashboardMetricDto> buildMetrics(List<ReviewTask> tasks, DashboardMetricStats stats) {
-        int avgSeconds = stats.total() == 0
-            ? 0
-            : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getDurationSeconds())).average().orElse(0));
-
+    private List<DashboardMetricDto> buildMetrics(DashboardMetricStats stats) {
         return List.of(
             new DashboardMetricDto("本周审查", String.valueOf(stats.total()), "0.0%", "up", "blue"),
             new DashboardMetricDto("高风险 PR", String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total()), "up-danger", "red"),
             new DashboardMetricDto("失败任务", String.valueOf(stats.failed()), percent(stats.failed(), stats.total()), "down", "orange"),
-            new DashboardMetricDto("平均审查耗时", formatDuration(avgSeconds), "0.0%", "down", "green")
+            new DashboardMetricDto("平均审查耗时", formatDuration(stats.averageDurationSeconds()), "0.0%", "down", "green")
         );
     }
 
@@ -379,12 +373,12 @@ public class DashboardServiceImpl implements DashboardService {
         return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
     }
 
-    private int nullToZero(Integer value) {
-        return value == null ? 0 : value;
-    }
-
     private long safeCount(Long value) {
         return value == null ? 0L : value;
+    }
+
+    private int safeAverageDuration(BigDecimal value) {
+        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
     private long safeTotal(DashboardRiskLevelCount count) {
@@ -493,6 +487,6 @@ public class DashboardServiceImpl implements DashboardService {
         return minutes + "分 " + seconds + "秒";
     }
 
-    private record DashboardMetricStats(long total, long highRisk, long failed) {
+    private record DashboardMetricStats(long total, long highRisk, long failed, int averageDurationSeconds) {
     }
 }

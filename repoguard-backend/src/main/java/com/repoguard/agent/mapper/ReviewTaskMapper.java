@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.entity.ReviewTask;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
@@ -29,6 +30,12 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         order by dayLabel
         """)
     List<DashboardReviewTrendCount> selectReviewTrendCounts();
+
+    @Select("""
+        select avg(coalesce(duration_seconds, 0))
+        from review_task
+        """)
+    BigDecimal selectAverageDurationSeconds();
 
     @Select("""
         select
