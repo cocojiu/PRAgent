@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
@@ -174,6 +175,31 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewBuildsHighRiskReviewsFromLimitedQuery() {
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTaskMapper.selectCount(any())).thenReturn(2L, 2L, 0L);
+        when(reviewTaskMapper.selectRecentHighRiskReviews()).thenReturn(List.of(
+            highRiskReview("Fix auth bypass", "api", "CRITICAL", 4L, "COMPLETED", LocalDateTime.of(2026, 6, 17, 9, 30)),
+            highRiskReview("Harden config", "ops", "HIGH", 2L, "FAILED", LocalDateTime.of(2026, 6, 16, 18, 15))
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var highRiskReviews = service.getOverview(null).highRiskReviews();
+
+        assertThat(highRiskReviews).hasSize(2);
+        assertThat(highRiskReviews.get(0).title()).isEqualTo("Fix auth bypass");
+        assertThat(highRiskReviews.get(0).riskLevel()).isEqualTo("critical");
+        assertThat(highRiskReviews.get(0).ruleHits()).isEqualTo(4L);
+        assertThat(highRiskReviews.get(0).reviewedAt()).isEqualTo("2026-06-17 09:30");
+        assertThat(highRiskReviews.get(1).title()).isEqualTo("Harden config");
+        assertThat(highRiskReviews.get(1).riskLevel()).isEqualTo("high");
+        assertThat(highRiskReviews.get(1).ruleHits()).isEqualTo(2L);
+    }
+
+    @Test
     void overviewReportsLlmQualityByModelAndRepository() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
@@ -272,6 +298,24 @@ class DashboardServiceImplTest {
         count.setRuleId(ruleId);
         count.setTotal(total);
         return count;
+    }
+
+    private DashboardHighRiskReview highRiskReview(
+        String title,
+        String repository,
+        String riskLevel,
+        Long ruleHits,
+        String status,
+        LocalDateTime createdAt
+    ) {
+        DashboardHighRiskReview review = new DashboardHighRiskReview();
+        review.setTitle(title);
+        review.setRepository(repository);
+        review.setRiskLevel(riskLevel);
+        review.setRuleHits(ruleHits);
+        review.setStatus(status);
+        review.setCreatedAt(createdAt);
+        return review;
     }
 
     private IntegrationConfig githubConfig(String status, String token) {

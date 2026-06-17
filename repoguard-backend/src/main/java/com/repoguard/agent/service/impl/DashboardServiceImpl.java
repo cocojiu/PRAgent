@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
+import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
@@ -28,6 +29,7 @@ import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -82,6 +84,7 @@ public class DashboardServiceImpl implements DashboardService {
         );
         DashboardMetricStats metricStats = loadMetricStats();
         List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
+        List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
         List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
@@ -89,7 +92,7 @@ public class DashboardServiceImpl implements DashboardService {
             buildTrend(reviewTrendCounts),
             buildRiskDistribution(),
             buildRuleHits(ruleHitCounts),
-            buildHighRiskReviews(tasks, findings),
+            buildHighRiskReviews(highRiskReviews),
             buildFailedRules(ruleHitCounts),
             buildSystemHealth(),
             buildLlmQualityByModel(tasks, findings),
@@ -219,21 +222,15 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<HighRiskReviewDto> buildHighRiskReviews(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, Long> findingCountByTask = findings.stream()
-            .collect(Collectors.groupingBy(ReviewFinding::getTaskId, Collectors.counting()));
-
-        return tasks.stream()
-            .filter(task -> isHighRisk(task.getRiskLevel()))
-            .sorted(Comparator.comparing(ReviewTask::getCreatedAt).reversed())
-            .limit(5)
-            .map(task -> new HighRiskReviewDto(
-                task.getTitle(),
-                task.getRepository(),
-                lower(task.getRiskLevel()),
-                findingCountByTask.getOrDefault(task.getId(), 0L),
-                task.getCreatedAt().format(REVIEWED_AT_FORMATTER),
-                statusText(task.getStatus())
+    private List<HighRiskReviewDto> buildHighRiskReviews(List<DashboardHighRiskReview> highRiskReviews) {
+        return nullToEmpty(highRiskReviews).stream()
+            .map(review -> new HighRiskReviewDto(
+                review.getTitle(),
+                review.getRepository(),
+                lower(review.getRiskLevel()),
+                safeHighRiskRuleHits(review),
+                formatReviewedAt(review.getCreatedAt()),
+                statusText(review.getStatus())
             ))
             .toList();
     }
@@ -445,10 +442,6 @@ public class DashboardServiceImpl implements DashboardService {
         return new ChartSliceDto(name, value, color, percent(value, total));
     }
 
-    private boolean isHighRisk(String riskLevel) {
-        return "HIGH".equals(riskLevel) || "CRITICAL".equals(riskLevel);
-    }
-
     private String statusText(String status) {
         return switch (status) {
             case "COMPLETED" -> "已完成";
@@ -515,6 +508,14 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeRuleTotal(DashboardRuleHitCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeHighRiskRuleHits(DashboardHighRiskReview review) {
+        return review.getRuleHits() == null ? 0L : review.getRuleHits();
+    }
+
+    private String formatReviewedAt(LocalDateTime reviewedAt) {
+        return reviewedAt == null ? "" : reviewedAt.format(REVIEWED_AT_FORMATTER);
     }
 
     private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
