@@ -19,10 +19,13 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,13 +40,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
-    private static final String STATUS_QUEUED = "QUEUED";
-    private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
-    private static final String STATUS_PENDING_HUMAN_REVIEW = "PENDING_HUMAN_REVIEW";
-    private static final String STATUS_APPROVED = "APPROVED";
-    private static final String STATUS_CHANGES_REQUESTED = "CHANGES_REQUESTED";
-    private static final String STATUS_REJECTED = "REJECTED";
     private static final String HUMAN_REVIEW_PENDING = "PENDING";
     private static final String HUMAN_REVIEW_APPROVED = "APPROVED";
     private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
@@ -55,6 +52,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     public ReviewTaskCommandServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -63,11 +61,24 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         RepoGuardMetrics metrics,
         CacheEvictionService cacheEvictionService
     ) {
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService, null);
+    }
+
+    @Autowired
+    public ReviewTaskCommandServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RepoGuardMetrics metrics,
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null ? new ReviewTaskStateMachine() : reviewTaskStateMachine;
     }
 
     @Override
@@ -159,9 +170,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
-        if (!STATUS_FAILED.equals(task.getStatus())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
-        }
+        reviewTaskStateMachine.ensureRetryAllowed(task.getStatus());
 
         LocalDateTime queuedAt = LocalDateTime.now();
         int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
@@ -208,7 +217,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setOrganization(organization);
         task.setCommitSha(commit);
         task.setBranchName(resolveBranch(request));
-        task.setStatus(STATUS_QUEUED);
+        task.setStatus(ReviewTaskStatus.QUEUED.code());
         task.setRiskLevel("INFO");
         task.setMqRetries(0);
         task.setPublishAttempts(0);
@@ -222,7 +231,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private void resetTaskForRetry(ReviewTask task, int retryCount) {
-        task.setStatus(STATUS_QUEUED);
+        task.setStatus(ReviewTaskStatus.QUEUED.code());
         task.setRiskLevel("INFO");
         task.setMqRetries(retryCount);
         task.setPublishAttempts(0);
@@ -441,12 +450,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private String taskStatusForHumanReview(String humanReviewStatus) {
-        return switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> STATUS_APPROVED;
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> STATUS_CHANGES_REQUESTED;
-            case HUMAN_REVIEW_REJECTED -> STATUS_REJECTED;
-            default -> STATUS_PENDING_HUMAN_REVIEW;
-        };
+        return reviewTaskStateMachine.statusAfterHumanReview(humanReviewStatus);
     }
 
     private String resolveHumanReviewStatus(ReviewTask task) {
