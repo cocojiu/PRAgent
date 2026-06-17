@@ -73,7 +73,7 @@ class NotificationServiceImplTest {
     }
 
     private GithubIntegrationSettings githubSettings(String status, String token, String lastError) {
-        return new GithubIntegrationSettings("GITHUB", status, "https://api.github.com", token, lastError);
+        return new GithubIntegrationSettings("GITHUB", status, "https://api.github.com", token, lastError, "octocat", "api", 1L);
     }
 
     private ReviewPolicySettings reviewPolicySettings(String apiKey) {

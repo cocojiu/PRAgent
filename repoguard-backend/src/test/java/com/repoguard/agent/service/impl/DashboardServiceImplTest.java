@@ -423,7 +423,7 @@ class DashboardServiceImplTest {
     }
 
     private GithubIntegrationSettings githubSettings(String status, String token) {
-        return new GithubIntegrationSettings("GITHUB", status, "https://api.github.com", token, null);
+        return new GithubIntegrationSettings("GITHUB", status, "https://api.github.com", token, null, "octocat", "api", 1L);
     }
 
     private ReviewPolicySettings reviewPolicySettings(String apiKey) {

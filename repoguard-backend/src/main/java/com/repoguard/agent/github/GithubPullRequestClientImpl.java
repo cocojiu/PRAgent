@@ -1,16 +1,14 @@
 package com.repoguard.agent.github;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.security.SecretCryptoService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -29,62 +27,51 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Service
 public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
+    private static final String DEFAULT_GITHUB_BASE_URL = "https://api.github.com";
 
-    private final IntegrationConfigMapper integrationConfigMapper;
+    private final GithubIntegrationProvider githubIntegrationProvider;
     private final RestClient restClient;
-    private final SecretCryptoService secretCryptoService;
     private final RepoGuardMetrics metrics;
     private final ExternalCallResilience resilience;
 
     GithubPullRequestClientImpl(
-        IntegrationConfigMapper integrationConfigMapper,
-        RestClient.Builder restClientBuilder,
-        SecretCryptoService secretCryptoService
+        GithubIntegrationProvider githubIntegrationProvider,
+        RestClient.Builder restClientBuilder
     ) {
-        this(integrationConfigMapper, restClientBuilder, secretCryptoService, null, null);
+        this(githubIntegrationProvider, restClientBuilder, null, null);
     }
 
     @Autowired
     public GithubPullRequestClientImpl(
-        IntegrationConfigMapper integrationConfigMapper,
+        GithubIntegrationProvider githubIntegrationProvider,
         RestClient.Builder restClientBuilder,
-        SecretCryptoService secretCryptoService,
         RepoGuardMetrics metrics,
         ExternalCallResilience resilience
     ) {
-        this.integrationConfigMapper = integrationConfigMapper;
+        this.githubIntegrationProvider = githubIntegrationProvider;
         this.restClient = restClientBuilder.build();
-        this.secretCryptoService = secretCryptoService;
         this.metrics = metrics;
         this.resilience = resilience;
     }
 
     @Override
     public GithubRepositoryRef getConfiguredRepository() {
-        IntegrationConfig config = loadGithubConfig();
-        String owner = config == null ? null : config.getDefaultOwner();
-        String repository = config == null ? null : config.getDefaultRepo();
-        return new GithubRepositoryRef(
-            StringUtils.hasText(owner) ? owner.trim() : null,
-            StringUtils.hasText(repository) ? repository.trim() : null
-        );
+        GithubIntegrationSettings settings = loadGithubSettings();
+        return configuredRepository(settings);
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS)
     public List<GithubPullRequestSummary> listOpenPullRequests() {
         LocalDateTime startedAt = LocalDateTime.now();
-        IntegrationConfig config = loadGithubConfig();
-        GithubRepositoryRef repositoryRef = getConfiguredRepository();
+        GithubIntegrationSettings settings = loadGithubSettings();
+        GithubRepositoryRef repositoryRef = configuredRepository(settings);
         String owner = repositoryRef.owner();
         String repository = repositoryRef.repository();
         if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
             throw new IllegalStateException("GitHub owner or repository is not configured");
         }
-        String baseUrl = config != null && StringUtils.hasText(config.getBaseUrl())
-            ? config.getBaseUrl().trim()
-            : "https://api.github.com";
+        String baseUrl = baseUrl(settings);
         String url = UriComponentsBuilder
             .fromUriString(baseUrl)
             .path("/repos/{owner}/{repo}/pulls")
@@ -98,11 +85,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         try {
             GithubPullRequestListItem[] items = executeGithub("list_open_pull_requests", () -> restClient.get()
                 .uri(url)
-                .headers(headers -> applyGithubHeaders(headers, config))
+                .headers(headers -> applyGithubHeaders(headers, settings))
                 .retrieve()
                 .body(GithubPullRequestListItem[].class));
             recordGithubApiRequest(startedAt, "list_open_pull_requests", "success", null, null);
-            markGithubChecked(config, null);
+            markGithubChecked(settings, null);
             return items == null ? List.of() : Arrays.stream(items)
                 .map(item -> new GithubPullRequestSummary(
                     owner.trim(),
@@ -120,7 +107,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
             recordGithubApiRequest(startedAt, "list_open_pull_requests", "failed", classified);
             recordExternalFailure(classified);
-            markGithubChecked(config, conciseError(classified));
+            markGithubChecked(settings, conciseError(classified));
             throw classified;
         }
     }
@@ -128,16 +115,14 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     @Override
     public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         LocalDateTime startedAt = LocalDateTime.now();
-        IntegrationConfig config = loadGithubConfig();
-        String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
-        String repository = choose(task.getRepository(), config == null ? null : config.getDefaultRepo());
+        GithubIntegrationSettings settings = loadGithubSettings();
+        String owner = choose(task.getOrganization(), settings.defaultOwner());
+        String repository = choose(task.getRepository(), settings.defaultRepo());
         if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
             throw new IllegalStateException("GitHub owner or repository is not configured");
         }
 
-        String baseUrl = config != null && StringUtils.hasText(config.getBaseUrl())
-            ? config.getBaseUrl().trim()
-            : "https://api.github.com";
+        String baseUrl = baseUrl(settings);
         String url = UriComponentsBuilder
             .fromUriString(baseUrl)
             .path("/repos/{owner}/{repo}/pulls/{pullNumber}/files")
@@ -147,11 +132,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         try {
             GithubChangedFile[] files = executeGithub("fetch_pull_request_diff", () -> restClient.get()
                 .uri(url)
-                .headers(headers -> applyGithubHeaders(headers, config))
+                .headers(headers -> applyGithubHeaders(headers, settings))
                 .retrieve()
                 .body(GithubChangedFile[].class));
 
-            markGithubChecked(config, null);
+            markGithubChecked(settings, null);
             recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "success", null, null);
             List<GithubChangedFile> changedFiles = files == null ? List.of() : Arrays.asList(files);
             return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
@@ -159,7 +144,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
             recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "failed", classified);
             recordExternalFailure(classified);
-            markGithubChecked(config, conciseError(classified));
+            markGithubChecked(settings, conciseError(classified));
             throw classified;
         }
     }
@@ -167,20 +152,17 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     @Override
     public List<GithubReviewCommentResult> publishPullRequestComments(ReviewTask task, List<GithubReviewCommentDraft> drafts) {
         LocalDateTime startedAt = LocalDateTime.now();
-        IntegrationConfig config = loadGithubConfig();
-        String owner = choose(task.getOrganization(), config == null ? null : config.getDefaultOwner());
-        String repository = choose(task.getRepository(), config == null ? null : config.getDefaultRepo());
+        GithubIntegrationSettings settings = loadGithubSettings();
+        String owner = choose(task.getOrganization(), settings.defaultOwner());
+        String repository = choose(task.getRepository(), settings.defaultRepo());
         if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
             throw new IllegalStateException("GitHub owner or repository is not configured");
         }
-        String token = config == null ? null : secretCryptoService.decrypt(config.getTokenValue());
-        if (!StringUtils.hasText(token)) {
+        if (!StringUtils.hasText(settings.token())) {
             throw new IllegalStateException("GitHub token is not configured");
         }
 
-        String baseUrl = config != null && StringUtils.hasText(config.getBaseUrl())
-            ? config.getBaseUrl().trim()
-            : "https://api.github.com";
+        String baseUrl = baseUrl(settings);
         String lineCommentUrl = UriComponentsBuilder
             .fromUriString(baseUrl)
             .path("/repos/{owner}/{repo}/pulls/{pullNumber}/comments")
@@ -201,19 +183,19 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 GithubReviewCommentResponse response;
                 String actualTargetType = draft.targetType();
                 if ("pull_request".equals(draft.targetType())) {
-                    response = publishPullRequestComment(prCommentUrl, draft.body(), config);
+                    response = publishPullRequestComment(prCommentUrl, draft.body(), settings);
                 } else {
                     if (!StringUtils.hasText(commitSha)) {
-                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, config);
+                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings);
                     }
                     try {
-                        response = publishLineComment(lineCommentUrl, draft, commitSha, config);
+                        response = publishLineComment(lineCommentUrl, draft, commitSha, settings);
                     } catch (RuntimeException ex) {
                         if (!isUnresolvableLineComment(ex)) {
                             throw ex;
                         }
                         actualTargetType = "pull_request";
-                        response = publishPullRequestComment(prCommentUrl, draft.body(), config);
+                        response = publishPullRequestComment(prCommentUrl, draft.body(), settings);
                     }
                 }
                 boolean downgradedToPrComment = "pull_request".equals(actualTargetType) && !"pull_request".equals(draft.targetType());
@@ -230,7 +212,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                     response == null ? null : response.htmlUrl(),
                     response == null ? null : response.id()
                 ));
-                markGithubChecked(config, null);
+                markGithubChecked(settings, null);
             } catch (RuntimeException ex) {
                 RuntimeException classified = ExternalCallErrorClassifier.github(ex);
                 failedCount++;
@@ -248,7 +230,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                     null,
                     null
                 ));
-                markGithubChecked(config, message);
+                markGithubChecked(settings, message);
             }
         }
         recordGithubApiRequest(
@@ -301,11 +283,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private GithubReviewCommentResponse publishPullRequestComment(
         String prCommentUrl,
         String body,
-        IntegrationConfig config
+        GithubIntegrationSettings settings
     ) {
         return executeGithub("publish_pull_request_comment", () -> restClient.post()
             .uri(prCommentUrl)
-            .headers(headers -> applyGithubHeaders(headers, config))
+            .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of("body", body))
             .retrieve()
             .body(GithubReviewCommentResponse.class));
@@ -315,11 +297,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String lineCommentUrl,
         GithubReviewCommentDraft draft,
         String commitSha,
-        IntegrationConfig config
+        GithubIntegrationSettings settings
     ) {
         return executeGithub("publish_line_comment", () -> restClient.post()
             .uri(lineCommentUrl)
-            .headers(headers -> applyGithubHeaders(headers, config))
+            .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of(
                 "body", draft.body(),
                 "commit_id", commitSha,
@@ -343,7 +325,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         String owner,
         String repository,
         ReviewTask task,
-        IntegrationConfig config
+        GithubIntegrationSettings settings
     ) {
         if (StringUtils.hasText(task.getCommitSha()) && task.getCommitSha().trim().matches("[a-fA-F0-9]{40}")) {
             return task.getCommitSha().trim();
@@ -355,7 +337,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             .toString();
         GithubPullRequestResponse response = executeGithub("resolve_pull_request_head", () -> restClient.get()
             .uri(url)
-            .headers(headers -> applyGithubHeaders(headers, config))
+            .headers(headers -> applyGithubHeaders(headers, settings))
             .retrieve()
             .body(GithubPullRequestResponse.class));
         String sha = response == null || response.head() == null ? null : response.head().sha();
@@ -365,12 +347,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         return sha.trim();
     }
 
-    private void applyGithubHeaders(HttpHeaders headers, IntegrationConfig config) {
+    private void applyGithubHeaders(HttpHeaders headers, GithubIntegrationSettings settings) {
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
         headers.set("X-GitHub-Api-Version", "2022-11-28");
-        String token = config == null ? null : secretCryptoService.decrypt(config.getTokenValue());
-        if (StringUtils.hasText(token)) {
-            headers.setBearerAuth(token.trim());
+        if (StringUtils.hasText(settings.token())) {
+            headers.setBearerAuth(settings.token().trim());
         }
     }
 
@@ -378,21 +359,25 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         return resilience == null ? supplier.get() : resilience.github(operation, supplier);
     }
 
-    private IntegrationConfig loadGithubConfig() {
-        return integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
+    private GithubIntegrationSettings loadGithubSettings() {
+        return githubIntegrationProvider.getSettings();
+    }
+
+    private GithubRepositoryRef configuredRepository(GithubIntegrationSettings settings) {
+        String owner = settings.defaultOwner();
+        String repository = settings.defaultRepo();
+        return new GithubRepositoryRef(
+            StringUtils.hasText(owner) ? owner.trim() : null,
+            StringUtils.hasText(repository) ? repository.trim() : null
         );
     }
 
-    private void markGithubChecked(IntegrationConfig config, String error) {
-        if (config == null || config.getId() == null) {
-            return;
-        }
-        config.setLastCheckedAt(LocalDateTime.now());
-        config.setLastError(error);
-        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
+    private void markGithubChecked(GithubIntegrationSettings settings, String error) {
+        githubIntegrationProvider.markChecked(settings, error);
+    }
+
+    private String baseUrl(GithubIntegrationSettings settings) {
+        return StringUtils.hasText(settings.baseUrl()) ? settings.baseUrl().trim() : DEFAULT_GITHUB_BASE_URL;
     }
 
     private String choose(String primary, String fallback) {
