@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
@@ -200,6 +201,35 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewBuildsLlmQualityTrendFromGroupedQuery() {
+        LocalDateTime today = LocalDateTime.now();
+        String yesterdayKey = today.minusDays(1).toLocalDate().toString();
+        String todayKey = today.toLocalDate().toString();
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(reviewTaskMapper.selectCount(any())).thenReturn(5L, 0L, 0L);
+        when(reviewTaskMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+            llmQualityTrendCount(yesterdayKey, 2L, 1L, 1L, 0L),
+            llmQualityTrendCount(todayKey, 3L, 2L, 0L, 1L)
+        ));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
+
+        var trend = service.getOverview(7).llmQualityTrend();
+
+        assertThat(trend).hasSize(7);
+        assertThat(trend.get(4).taskCount()).isZero();
+        assertThat(trend.get(4).parseSuccessRate()).isEqualTo("0.0%");
+        assertThat(trend.get(5).taskCount()).isEqualTo(2L);
+        assertThat(trend.get(5).parseSuccessRate()).isEqualTo("50.0%");
+        assertThat(trend.get(5).fallbackRate()).isEqualTo("50.0%");
+        assertThat(trend.get(6).taskCount()).isEqualTo(3L);
+        assertThat(trend.get(6).parseSuccessRate()).isEqualTo("66.7%");
+        assertThat(trend.get(6).partialFallbackRate()).isEqualTo("33.3%");
+    }
+
+    @Test
     void overviewReportsLlmQualityByModelAndRepository() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "octocat", "api", "dashscope", "qwen-plus", "COMPLETED", "PARSED", 1200),
@@ -316,6 +346,22 @@ class DashboardServiceImplTest {
         review.setStatus(status);
         review.setCreatedAt(createdAt);
         return review;
+    }
+
+    private DashboardLlmQualityTrendCount llmQualityTrendCount(
+        String dayKey,
+        Long taskCount,
+        Long parseSuccessCount,
+        Long fallbackCount,
+        Long partialFallbackCount
+    ) {
+        DashboardLlmQualityTrendCount count = new DashboardLlmQualityTrendCount();
+        count.setDayKey(dayKey);
+        count.setTaskCount(taskCount);
+        count.setParseSuccessCount(parseSuccessCount);
+        count.setFallbackCount(fallbackCount);
+        count.setPartialFallbackCount(partialFallbackCount);
+        return count;
     }
 
     private IntegrationConfig githubConfig(String status, String token) {

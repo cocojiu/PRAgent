@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
@@ -85,6 +86,9 @@ public class DashboardServiceImpl implements DashboardService {
         DashboardMetricStats metricStats = loadMetricStats();
         List<DashboardReviewTrendCount> reviewTrendCounts = reviewTaskMapper.selectReviewTrendCounts();
         List<DashboardHighRiskReview> highRiskReviews = reviewTaskMapper.selectRecentHighRiskReviews();
+        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = reviewTaskMapper.selectLlmQualityTrendCounts(
+            LocalDate.now().minusDays(normalizedLlmTrendDays - 1L)
+        );
         List<DashboardRuleHitCount> ruleHitCounts = reviewFindingMapper.selectRuleHitCounts();
 
         return new DashboardOverviewResponse(
@@ -97,7 +101,7 @@ public class DashboardServiceImpl implements DashboardService {
             buildSystemHealth(),
             buildLlmQualityByModel(tasks, findings),
             buildLlmQualityByRepository(tasks, findings),
-            buildLlmQualityTrend(tasks, normalizedLlmTrendDays)
+            buildLlmQualityTrend(llmQualityTrendCounts, normalizedLlmTrendDays)
         );
     }
 
@@ -303,21 +307,22 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<ReviewTask> tasks, int days) {
+    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<DashboardLlmQualityTrendCount> trendCounts, int days) {
         LocalDate today = LocalDate.now();
-        Map<LocalDate, List<ReviewTask>> tasksByDate = llmQualityTasks(tasks).stream()
-            .filter(task -> task.getCreatedAt() != null)
-            .collect(Collectors.groupingBy(task -> task.getCreatedAt().toLocalDate()));
+        Map<String, DashboardLlmQualityTrendCount> countsByDay = nullToEmpty(trendCounts).stream()
+            .filter(count -> StringUtils.hasText(count.getDayKey()))
+            .collect(Collectors.toMap(DashboardLlmQualityTrendCount::getDayKey, java.util.function.Function.identity(), (first, second) -> first));
         return java.util.stream.IntStream.rangeClosed(0, days - 1)
             .mapToObj(today.minusDays(days - 1L)::plusDays)
             .map(date -> {
-                List<ReviewTask> dateTasks = tasksByDate.getOrDefault(date, List.of());
+                DashboardLlmQualityTrendCount count = countsByDay.get(date.toString());
+                long taskCount = safeLlmTaskCount(count);
                 return new LlmQualityTrendPointDto(
                     date.format(TREND_DATE_FORMATTER),
-                    dateTasks.size(),
-                    percentage(parseSuccessCount(dateTasks), dateTasks.size()),
-                    percentage(fallbackCount(dateTasks), dateTasks.size()),
-                    percentage(partialFallbackCount(dateTasks), dateTasks.size())
+                    taskCount,
+                    percentage(safeLlmParseSuccessCount(count), taskCount),
+                    percentage(safeLlmFallbackCount(count), taskCount),
+                    percentage(safeLlmPartialFallbackCount(count), taskCount)
                 );
             })
             .toList();
@@ -512,6 +517,22 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeHighRiskRuleHits(DashboardHighRiskReview review) {
         return review.getRuleHits() == null ? 0L : review.getRuleHits();
+    }
+
+    private long safeLlmTaskCount(DashboardLlmQualityTrendCount count) {
+        return count == null || count.getTaskCount() == null ? 0L : count.getTaskCount();
+    }
+
+    private long safeLlmParseSuccessCount(DashboardLlmQualityTrendCount count) {
+        return count == null || count.getParseSuccessCount() == null ? 0L : count.getParseSuccessCount();
+    }
+
+    private long safeLlmFallbackCount(DashboardLlmQualityTrendCount count) {
+        return count == null || count.getFallbackCount() == null ? 0L : count.getFallbackCount();
+    }
+
+    private long safeLlmPartialFallbackCount(DashboardLlmQualityTrendCount count) {
+        return count == null || count.getPartialFallbackCount() == null ? 0L : count.getPartialFallbackCount();
     }
 
     private String formatReviewedAt(LocalDateTime reviewedAt) {
