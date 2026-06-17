@@ -1,24 +1,24 @@
 package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.config.ReviewRuleProvider;
+import com.repoguard.agent.config.ReviewRuleSettings;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RuleBasedPullRequestReviewerTest {
 
-    private final ReviewRuleConfigMapper reviewRuleConfigMapper = org.mockito.Mockito.mock(ReviewRuleConfigMapper.class);
-    private final RuleBasedPullRequestReviewer reviewer = new RuleBasedPullRequestReviewer(reviewRuleConfigMapper);
+    private final ReviewRuleProvider reviewRuleProvider = org.mockito.Mockito.mock(ReviewRuleProvider.class);
+    private final RuleBasedPullRequestReviewer reviewer = new RuleBasedPullRequestReviewer(reviewRuleProvider);
 
     @Test
     void skipsDisabledRulesWhenReviewingPatch() {
-        when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(disabledRule("RG-JAVA-002")));
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-JAVA-002", disabledRule("RG-JAVA-002")));
 
         ReviewResult result = reviewer.review(new GithubPullRequestDiff(
             "octocat",
@@ -46,7 +46,8 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void skipsRulesWhenFilePatternDoesNotMatch() {
-        when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(rule("RG-JAVA-002", "ENABLED", "*.java")));
+        when(reviewRuleProvider.getRulesById())
+            .thenReturn(Map.of("RG-JAVA-002", rule("RG-JAVA-002", "ENABLED", "*.java")));
 
         ReviewResult result = reviewer.review(new GithubPullRequestDiff(
             "octocat",
@@ -69,15 +70,11 @@ class RuleBasedPullRequestReviewerTest {
             .doesNotContain("RG-JAVA-002");
     }
 
-    private ReviewRuleConfig disabledRule(String id) {
+    private ReviewRuleSettings disabledRule(String id) {
         return rule(id, "DISABLED", "");
     }
 
-    private ReviewRuleConfig rule(String id, String status, String filePatterns) {
-        ReviewRuleConfig rule = new ReviewRuleConfig();
-        rule.setId(id);
-        rule.setStatus(status);
-        rule.setFilePatterns(filePatterns);
-        return rule;
+    private ReviewRuleSettings rule(String id, String status, String filePatterns) {
+        return new ReviewRuleSettings(id, status, filePatterns);
     }
 }
