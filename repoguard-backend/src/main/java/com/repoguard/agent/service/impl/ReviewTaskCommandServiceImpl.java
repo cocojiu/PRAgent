@@ -20,7 +20,6 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -40,7 +39,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
-    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
     private static final String HUMAN_REVIEW_PENDING = "PENDING";
     private static final String HUMAN_REVIEW_APPROVED = "APPROVED";
     private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
@@ -217,7 +215,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setOrganization(organization);
         task.setCommitSha(commit);
         task.setBranchName(resolveBranch(request));
-        task.setStatus(ReviewTaskStatus.QUEUED.code());
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setRiskLevel("INFO");
         task.setMqRetries(0);
         task.setPublishAttempts(0);
@@ -231,7 +229,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private void resetTaskForRetry(ReviewTask task, int retryCount) {
-        task.setStatus(ReviewTaskStatus.QUEUED.code());
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setRiskLevel("INFO");
         task.setMqRetries(retryCount);
         task.setPublishAttempts(0);
@@ -343,7 +341,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(STATUS_PUBLISH_FAILED);
+        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
         task.setLlmStatus("PENDING");
         clearLlmQuality(task);
         task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
