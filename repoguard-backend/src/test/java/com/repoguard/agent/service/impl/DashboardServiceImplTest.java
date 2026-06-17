@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
@@ -12,11 +14,9 @@ import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -34,14 +34,14 @@ class DashboardServiceImplTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
-    private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
+    private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final DashboardServiceImpl service = new DashboardServiceImpl(
         reviewTaskMapper,
         reviewFindingMapper,
-        integrationConfigMapper,
+        githubIntegrationProvider,
         reviewPolicyConfigMapper,
         rabbitTemplate,
         secretCryptoService
@@ -52,7 +52,7 @@ class DashboardServiceImplTest {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
@@ -69,7 +69,7 @@ class DashboardServiceImplTest {
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
             .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("FAILED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(null);
 
         Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
@@ -88,7 +88,7 @@ class DashboardServiceImplTest {
         when(reviewTaskMapper.selectCount(any())).thenReturn(3L, 2L, 1L);
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var metrics = service.getOverview(null).overviewMetrics();
@@ -111,7 +111,7 @@ class DashboardServiceImplTest {
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var reviewTrend = service.getOverview(null).reviewTrend();
@@ -134,7 +134,7 @@ class DashboardServiceImplTest {
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var riskDistribution = service.getOverview(null).riskDistribution();
@@ -161,7 +161,7 @@ class DashboardServiceImplTest {
             ruleHitCount("RG-SECRET-001", 3L)
         ));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var overview = service.getOverview(null);
@@ -187,7 +187,7 @@ class DashboardServiceImplTest {
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var highRiskReviews = service.getOverview(null).highRiskReviews();
@@ -215,7 +215,7 @@ class DashboardServiceImplTest {
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var trend = service.getOverview(7).llmQualityTrend();
@@ -254,7 +254,7 @@ class DashboardServiceImplTest {
             finding(3L, "UNREVIEWED")
         ));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("CONFIGURED", "ghp_test"));
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(reviewPolicyConfig("sk-test"));
 
         var overview = service.getOverview(30);
@@ -425,13 +425,8 @@ class DashboardServiceImplTest {
         return stat;
     }
 
-    private IntegrationConfig githubConfig(String status, String token) {
-        IntegrationConfig config = new IntegrationConfig();
-        config.setProvider("GITHUB");
-        config.setStatus(status);
-        config.setBaseUrl("https://api.github.com");
-        config.setTokenValue(token);
-        return config;
+    private GithubIntegrationSettings githubSettings(String status, String token) {
+        return new GithubIntegrationSettings("GITHUB", status, "https://api.github.com", token);
     }
 
     private ReviewPolicyConfig reviewPolicyConfig(String apiKey) {

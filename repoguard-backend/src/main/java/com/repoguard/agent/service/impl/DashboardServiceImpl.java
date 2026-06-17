@@ -1,6 +1,9 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
@@ -18,11 +21,8 @@ import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -46,13 +46,12 @@ import org.springframework.util.StringUtils;
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
     private static final DateTimeFormatter TREND_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
+    private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final RabbitTemplate rabbitTemplate;
     private final SecretCryptoService secretCryptoService;
@@ -60,14 +59,14 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewFindingMapper reviewFindingMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
         RabbitTemplate rabbitTemplate,
         SecretCryptoService secretCryptoService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
+        this.githubIntegrationProvider = githubIntegrationProvider;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.rabbitTemplate = rabbitTemplate;
         this.secretCryptoService = secretCryptoService;
@@ -146,13 +145,11 @@ public class DashboardServiceImpl implements DashboardService {
 
     private String githubHealthStatus() {
         try {
-            IntegrationConfig config = integrationConfigMapper.selectOne(
-                new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-            );
-            if (config == null || !StringUtils.hasText(secretCryptoService.decrypt(config.getTokenValue()))) {
+            GithubIntegrationSettings settings = githubIntegrationProvider.getSettings();
+            if (!StringUtils.hasText(settings.token())) {
                 return "未接入";
             }
-            return "FAILED".equalsIgnoreCase(config.getStatus()) ? "异常" : "正常";
+            return "FAILED".equalsIgnoreCase(settings.status()) ? "异常" : "正常";
         } catch (RuntimeException ex) {
             return "异常";
         }
