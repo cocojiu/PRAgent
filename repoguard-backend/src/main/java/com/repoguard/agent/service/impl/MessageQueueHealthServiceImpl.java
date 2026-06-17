@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.RabbitMqIntegrationProvider;
+import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
@@ -12,11 +14,9 @@ import com.repoguard.agent.dto.MessageQueueMetricDto;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.dto.RabbitMqTopologyDto;
 import com.repoguard.agent.dto.RetryCompensationStatusDto;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
@@ -38,7 +38,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
 
-    private static final String RABBITMQ_PROVIDER = "RABBITMQ";
     private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
     private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_DLQ = "DLQ";
@@ -48,7 +47,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final SystemSettingLogMapper systemSettingLogMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
+    private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider;
     private final RabbitReviewQueueProperties properties;
     private final RabbitTemplate rabbitTemplate;
     private final ReviewTaskPublisher reviewTaskPublisher;
@@ -59,7 +58,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         SystemSettingLogMapper systemSettingLogMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher
@@ -68,7 +67,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             reviewTaskMapper,
             reviewTimelineMapper,
             systemSettingLogMapper,
-            integrationConfigMapper,
+            rabbitMqIntegrationProvider,
             properties,
             rabbitTemplate,
             reviewTaskPublisher,
@@ -80,7 +79,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         SystemSettingLogMapper systemSettingLogMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher,
@@ -89,7 +88,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
+        this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
         this.reviewTaskPublisher = reviewTaskPublisher;
@@ -101,12 +100,13 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>().orderByDesc(ReviewTask::getCreatedAt)
         );
-        IntegrationConfig activeConfig = integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, RABBITMQ_PROVIDER)
-        );
+        RabbitMqIntegrationSettings settings = rabbitMqIntegrationProvider.getSettings();
+        if (settings == null) {
+            settings = RabbitMqIntegrationSettings.empty();
+        }
 
         return new MessageQueueHealthResponse(
-            activeConfig(activeConfig),
+            activeConfig(settings),
             topology(),
             metrics(tasks),
             retryCompensation(tasks),
@@ -168,27 +168,27 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         }
     }
 
-    private ActiveRabbitMqConfigDto activeConfig(IntegrationConfig config) {
+    private ActiveRabbitMqConfigDto activeConfig(RabbitMqIntegrationSettings settings) {
         return new ActiveRabbitMqConfigDto(
-            RABBITMQ_PROVIDER,
-            config == null ? "NOT_CONFIGURED" : config.getStatus(),
+            settings.provider(),
+            settings.status(),
             runtimeConnectionStatus(),
-            config == null ? null : config.getBaseUrl(),
-            config == null ? null : config.getDefaultOwner(),
-            config == null ? null : config.getDefaultRepo(),
-            config == null ? null : format(config.getLastCheckedAt()),
-            config == null ? null : config.getLastError(),
-            config == null ? null : format(config.getUpdatedAt()),
-            configVersion(config),
+            settings.baseUrl(),
+            settings.username(),
+            settings.virtualHost(),
+            format(settings.lastCheckedAt()),
+            settings.lastError(),
+            format(settings.updatedAt()),
+            configVersion(settings),
             "Testing a connection does not switch the active configuration; save integration settings to take effect."
         );
     }
 
-    private String configVersion(IntegrationConfig config) {
-        if (config == null || config.getUpdatedAt() == null) {
+    private String configVersion(RabbitMqIntegrationSettings settings) {
+        if (settings == null || settings.updatedAt() == null) {
             return "runtime-default";
         }
-        return "cfg-" + config.getUpdatedAt().format(VERSION_FORMATTER);
+        return "cfg-" + settings.updatedAt().format(VERSION_FORMATTER);
     }
 
     private String runtimeConnectionStatus() {
