@@ -4,12 +4,13 @@ public record GithubIntegrationSettings(
     String provider,
     String status,
     String baseUrl,
-    String token
+    String token,
+    String lastError
 ) {
 
     private static final String GITHUB_PROVIDER = "GITHUB";
 
     public static GithubIntegrationSettings empty() {
-        return new GithubIntegrationSettings(GITHUB_PROVIDER, null, null, null);
+        return new GithubIntegrationSettings(GITHUB_PROVIDER, null, null, null, null);
     }
 }

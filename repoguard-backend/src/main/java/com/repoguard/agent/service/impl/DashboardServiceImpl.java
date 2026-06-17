@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.config.ReviewPolicyProvider;
+import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
@@ -21,12 +23,9 @@ import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -52,24 +51,21 @@ public class DashboardServiceImpl implements DashboardService {
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
     private final GithubIntegrationProvider githubIntegrationProvider;
-    private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final ReviewPolicyProvider reviewPolicyProvider;
     private final RabbitTemplate rabbitTemplate;
-    private final SecretCryptoService secretCryptoService;
 
     public DashboardServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewFindingMapper reviewFindingMapper,
         GithubIntegrationProvider githubIntegrationProvider,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService
+        ReviewPolicyProvider reviewPolicyProvider,
+        RabbitTemplate rabbitTemplate
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.githubIntegrationProvider = githubIntegrationProvider;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.reviewPolicyProvider = reviewPolicyProvider;
         this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
     }
 
     @Override
@@ -157,18 +153,14 @@ public class DashboardServiceImpl implements DashboardService {
 
     private String llmHealthStatus() {
         try {
-            ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
-            if (config == null) {
+            ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
+            if (!settings.exists()) {
                 return "未接入";
             }
-            if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
+            if (!settings.enabled()) {
                 return "已禁用";
             }
-            boolean configured = StringUtils.hasText(config.getBaseUrl())
-                && StringUtils.hasText(config.getModelName())
-                && StringUtils.hasText(secretCryptoService.decrypt(config.getApiKeyValue()))
-                && !"mock".equalsIgnoreCase(config.getLlmProvider());
-            return configured ? "正常" : "未接入";
+            return settings.readyForLlmReview() ? "正常" : "未接入";
         } catch (RuntimeException ex) {
             return "异常";
         }

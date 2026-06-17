@@ -1,15 +1,14 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.config.ReviewPolicyProvider;
+import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.dto.NotificationCenterDto;
 import com.repoguard.agent.dto.NotificationItemDto;
-import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
-import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.NotificationService;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -25,28 +24,24 @@ import org.springframework.util.StringUtils;
 @Service
 public class NotificationServiceImpl implements NotificationService {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int MAX_NOTIFICATIONS = 12;
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
-    private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final GithubIntegrationProvider githubIntegrationProvider;
+    private final ReviewPolicyProvider reviewPolicyProvider;
     private final RabbitTemplate rabbitTemplate;
-    private final SecretCryptoService secretCryptoService;
 
     public NotificationServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
-        IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService
+        GithubIntegrationProvider githubIntegrationProvider,
+        ReviewPolicyProvider reviewPolicyProvider,
+        RabbitTemplate rabbitTemplate
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.githubIntegrationProvider = githubIntegrationProvider;
+        this.reviewPolicyProvider = reviewPolicyProvider;
         this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
     }
 
     @Override
@@ -124,10 +119,8 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addGithubNotification(List<NotificationItemDto> items) {
         try {
-            IntegrationConfig config = integrationConfigMapper.selectOne(
-                new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-            );
-            if (config == null || !StringUtils.hasText(secretCryptoService.decrypt(config.getTokenValue()))) {
+            GithubIntegrationSettings settings = githubIntegrationProvider.getSettings();
+            if (!StringUtils.hasText(settings.token())) {
                 items.add(systemNotification(
                     "integration-github-missing",
                     "warning",
@@ -137,12 +130,12 @@ public class NotificationServiceImpl implements NotificationService {
                 ));
                 return;
             }
-            if ("FAILED".equalsIgnoreCase(config.getStatus())) {
+            if ("FAILED".equalsIgnoreCase(settings.status())) {
                 items.add(systemNotification(
                     "integration-github-failed",
                     "danger",
                     "GitHub 连接异常",
-                    StringUtils.hasText(config.getLastError()) ? config.getLastError() : "最近一次 GitHub 连接测试失败。",
+                    StringUtils.hasText(settings.lastError()) ? settings.lastError() : "最近一次 GitHub 连接测试失败。",
                     "/repoguard/integrations"
                 ));
             }
@@ -182,8 +175,8 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addLlmNotification(List<NotificationItemDto> items) {
         try {
-            ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
-            if (config == null || !Boolean.TRUE.equals(config.getLlmEnabled())) {
+            ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
+            if (!settings.exists() || !settings.enabled()) {
                 items.add(systemNotification(
                     "llm-disabled",
                     "warning",
@@ -193,11 +186,7 @@ public class NotificationServiceImpl implements NotificationService {
                 ));
                 return;
             }
-            boolean configured = StringUtils.hasText(config.getBaseUrl())
-                && StringUtils.hasText(config.getModelName())
-                && StringUtils.hasText(secretCryptoService.decrypt(config.getApiKeyValue()))
-                && !"mock".equalsIgnoreCase(config.getLlmProvider());
-            if (!configured) {
+            if (!settings.readyForLlmReview()) {
                 items.add(systemNotification(
                     "llm-missing-secret",
                     "warning",

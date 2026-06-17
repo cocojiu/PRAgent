@@ -33,7 +33,8 @@ public class GithubIntegrationProvider {
             config.getProvider(),
             config.getStatus(),
             config.getBaseUrl(),
-            secretCryptoService.decrypt(config.getTokenValue())
+            secretCryptoService.decrypt(config.getTokenValue()),
+            config.getLastError()
         );
     }
 }

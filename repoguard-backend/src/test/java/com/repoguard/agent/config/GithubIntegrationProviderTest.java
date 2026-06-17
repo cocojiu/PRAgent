@@ -25,6 +25,7 @@ class GithubIntegrationProviderTest {
         config.setStatus("CONFIGURED");
         config.setBaseUrl("https://api.github.com");
         config.setTokenValue(secretCryptoService.encrypt("ghp_test"));
+        config.setLastError("last failure");
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         GithubIntegrationSettings settings = provider.getSettings();
@@ -33,6 +34,7 @@ class GithubIntegrationProviderTest {
         assertThat(settings.status()).isEqualTo("CONFIGURED");
         assertThat(settings.baseUrl()).isEqualTo("https://api.github.com");
         assertThat(settings.token()).isEqualTo("ghp_test");
+        assertThat(settings.lastError()).isEqualTo("last failure");
     }
 
     @Test
