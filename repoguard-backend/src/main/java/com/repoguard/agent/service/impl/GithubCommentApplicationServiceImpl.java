@@ -38,6 +38,7 @@ import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -78,6 +79,7 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     private final GithubPullRequestClient githubPullRequestClient;
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     public GithubCommentApplicationServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -91,6 +93,34 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService
     ) {
+        this(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            githubIntegrationProvider,
+            githubPullRequestClient,
+            metrics,
+            notificationDispatchService,
+            null
+        );
+    }
+
+    public GithubCommentApplicationServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        GithubCommentPublicationMapper githubCommentPublicationMapper,
+        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
+        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        GithubIntegrationProvider githubIntegrationProvider,
+        GithubPullRequestClient githubPullRequestClient,
+        RepoGuardMetrics metrics,
+        NotificationDispatchService notificationDispatchService,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
@@ -101,6 +131,9 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
         this.githubPullRequestClient = githubPullRequestClient;
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Override
@@ -529,11 +562,11 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     }
 
     private void ensureGithubCommentPublishAllowed(ReviewTask task) {
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            return;
-        }
         String humanReviewStatus = resolveHumanReviewStatus(task);
-        if ("APPROVED".equals(humanReviewStatus) || "CHANGES_REQUESTED".equals(humanReviewStatus)) {
+        if (reviewTaskStateMachine.canPublishGithubComments(
+            Boolean.TRUE.equals(task.getHumanReviewRequired()),
+            humanReviewStatus
+        )) {
             return;
         }
         throw new BusinessException(

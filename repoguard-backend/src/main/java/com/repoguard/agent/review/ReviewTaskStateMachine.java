@@ -27,6 +27,13 @@ public class ReviewTaskStateMachine {
         }
     }
 
+    public boolean canPublishGithubComments(boolean humanReviewRequired, String humanReviewStatus) {
+        if (!humanReviewRequired) {
+            return true;
+        }
+        return "APPROVED".equals(humanReviewStatus) || "CHANGES_REQUESTED".equals(humanReviewStatus);
+    }
+
     public String statusAfterHumanReview(String humanReviewStatus) {
         return switch (humanReviewStatus) {
             case "APPROVED" -> ReviewTaskStatus.APPROVED.code();

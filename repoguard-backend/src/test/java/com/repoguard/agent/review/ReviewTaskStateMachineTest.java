@@ -40,4 +40,13 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.statusAfterHumanReview("REJECTED")).isEqualTo("REJECTED");
         assertThat(stateMachine.statusAfterHumanReview("PENDING")).isEqualTo("PENDING_HUMAN_REVIEW");
     }
+
+    @Test
+    void canPublishGithubCommentsRequiresFinalHumanReviewDecisionWhenNeeded() {
+        assertThat(stateMachine.canPublishGithubComments(false, "PENDING")).isTrue();
+        assertThat(stateMachine.canPublishGithubComments(true, "APPROVED")).isTrue();
+        assertThat(stateMachine.canPublishGithubComments(true, "CHANGES_REQUESTED")).isTrue();
+        assertThat(stateMachine.canPublishGithubComments(true, "PENDING")).isFalse();
+        assertThat(stateMachine.canPublishGithubComments(true, "REJECTED")).isFalse();
+    }
 }

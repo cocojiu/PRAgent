@@ -29,6 +29,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubPullRequestOptionService;
@@ -60,6 +61,7 @@ public class ReviewServiceImpl implements ReviewService {
     private final GithubCommentApplicationService githubCommentApplicationService;
     private final GithubPullRequestOptionService githubPullRequestOptionService;
     private final GithubIntegrationProvider githubIntegrationProvider;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     public ReviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -91,6 +93,7 @@ public class ReviewServiceImpl implements ReviewService {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -114,7 +117,8 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewTaskCommandService reviewTaskCommandService,
         FindingFeedbackService findingFeedbackService,
         GithubCommentApplicationService githubCommentApplicationService,
-        GithubPullRequestOptionService githubPullRequestOptionService
+        GithubPullRequestOptionService githubPullRequestOptionService,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -123,6 +127,9 @@ public class ReviewServiceImpl implements ReviewService {
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.githubIntegrationProvider = githubIntegrationProvider;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.githubPullRequestClient = githubPullRequestClient;
@@ -149,7 +156,8 @@ public class ReviewServiceImpl implements ReviewService {
                 githubIntegrationProvider,
                 githubPullRequestClient,
                 metrics,
-                notificationDispatchService
+                notificationDispatchService,
+                this.reviewTaskStateMachine
             )
             : githubCommentApplicationService;
         this.githubPullRequestOptionService = githubPullRequestOptionService == null
@@ -182,6 +190,7 @@ public class ReviewServiceImpl implements ReviewService {
             reviewTaskPublisher,
             githubPullRequestClient,
             metrics,
+            null,
             null,
             null,
             null,
