@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.SystemSettings;
+import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
@@ -18,7 +20,6 @@ import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -26,7 +27,6 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -40,7 +40,7 @@ class DataRetentionServiceImplTest {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
-    private final SystemSettingsConfigMapper systemSettingsConfigMapper = org.mockito.Mockito.mock(SystemSettingsConfigMapper.class);
+    private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -49,14 +49,12 @@ class DataRetentionServiceImplTest {
         githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
-        systemSettingsConfigMapper
+        systemSettingsProvider
     );
 
     @Test
     void cleanupDryRunUsesSavedRetentionDaysAndDoesNotDelete() {
-        SystemSettingsConfig settings = new SystemSettingsConfig();
-        settings.setRetentionDays(30);
-        when(systemSettingsConfigMapper.selectById(1L)).thenReturn(settings);
+        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(reviewTaskMapper.selectCount(any())).thenReturn(2L);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(1L), task(2L)));
 
@@ -116,5 +114,26 @@ class DataRetentionServiceImplTest {
         ReviewTask task = new ReviewTask();
         task.setId(id);
         return task;
+    }
+
+    private SystemSettings systemSettings(Integer retentionDays) {
+        return new SystemSettings(
+            true,
+            "RepoGuard",
+            "zh-CN",
+            "Asia/Shanghai",
+            retentionDays,
+            2000,
+            true,
+            true,
+            true,
+            true,
+            true,
+            null,
+            true,
+            true,
+            false,
+            7
+        );
     }
 }

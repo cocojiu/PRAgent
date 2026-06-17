@@ -3,6 +3,8 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.SystemSettings;
+import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.entity.ChangedFile;
@@ -12,7 +14,6 @@ import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -20,7 +21,6 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
 import com.repoguard.agent.service.DataRetentionService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -43,7 +43,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
-    private final SystemSettingsConfigMapper systemSettingsConfigMapper;
+    private final SystemSettingsProvider systemSettingsProvider;
 
     public DataRetentionServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -53,7 +53,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        SystemSettingsConfigMapper systemSettingsConfigMapper
+        SystemSettingsProvider systemSettingsProvider
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -62,7 +62,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
-        this.systemSettingsConfigMapper = systemSettingsConfigMapper;
+        this.systemSettingsProvider = systemSettingsProvider;
     }
 
     @Override
@@ -132,8 +132,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         if (request != null && request.retentionDays() != null) {
             return request.retentionDays();
         }
-        SystemSettingsConfig config = systemSettingsConfigMapper.selectById(1L);
-        Integer retentionDays = config == null ? null : config.getRetentionDays();
+        SystemSettings settings = systemSettingsProvider.getSettings();
+        Integer retentionDays = settings == null ? null : settings.retentionDays();
         return retentionDays == null || retentionDays <= 0 ? DEFAULT_RETENTION_DAYS : retentionDays;
     }
 
