@@ -25,6 +25,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,8 +39,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
 
-    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
-    private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_DLQ = "DLQ";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -52,8 +51,8 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final RabbitTemplate rabbitTemplate;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
-    @Autowired
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
@@ -71,7 +70,32 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             properties,
             rabbitTemplate,
             reviewTaskPublisher,
+            null,
             null
+        );
+    }
+
+    @Autowired
+    public MessageQueueHealthServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
+        RabbitReviewQueueProperties properties,
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            null,
+            reviewTaskStateMachine
         );
     }
 
@@ -85,6 +109,30 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         ReviewTaskPublisher reviewTaskPublisher,
         RepoGuardMetrics metrics
     ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            metrics,
+            null
+        );
+    }
+
+    public MessageQueueHealthServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
+        RabbitReviewQueueProperties properties,
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RepoGuardMetrics metrics,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
@@ -93,6 +141,9 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         this.rabbitTemplate = rabbitTemplate;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.metrics = metrics;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Override
@@ -124,17 +175,19 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             recordAudit(taskId, "FAILED", "not found");
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
-        if (!isPublishFailed(task)) {
-            recordAudit(taskId, "FAILED", "status=" + task.getStatus());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
-        }
-        if (task.getPublishClaimedAt() != null) {
-            recordAudit(taskId, "FAILED", "claimedBy=" + task.getPublishClaimedBy());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
+        try {
+            reviewTaskStateMachine.ensurePublishRequeueAllowed(task.getStatus(), task.getPublishClaimedAt() != null);
+        } catch (BusinessException ex) {
+            if (task.getPublishClaimedAt() != null) {
+                recordAudit(taskId, "FAILED", "claimedBy=" + task.getPublishClaimedBy());
+            } else {
+                recordAudit(taskId, "FAILED", "status=" + task.getStatus());
+            }
+            throw ex;
         }
 
         LocalDateTime queuedAt = LocalDateTime.now();
-        task.setStatus(STATUS_QUEUED);
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setLlmStatus("PENDING");
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
@@ -296,7 +349,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(STATUS_PUBLISH_FAILED);
+        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
         task.setLlmStatus("PENDING");
         task.setPublishAttempts(safeAttempts(task) + 1);
         task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, properties.getPublishCompensationIntervalMs()) * 1_000_000));
@@ -340,7 +393,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private boolean isPublishFailed(ReviewTask task) {
-        return STATUS_PUBLISH_FAILED.equals(task.getStatus());
+        return reviewTaskStateMachine.isPublishFailed(task.getStatus());
     }
 
     private boolean isRetryExhausted(ReviewTask task) {

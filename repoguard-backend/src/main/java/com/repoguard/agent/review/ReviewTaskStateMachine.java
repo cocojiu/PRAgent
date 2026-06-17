@@ -15,6 +15,14 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.REVIEWING.code();
     }
 
+    public String statusWhenQueued() {
+        return ReviewTaskStatus.QUEUED.code();
+    }
+
+    public String statusWhenPublishFailed() {
+        return ReviewTaskStatus.PUBLISH_FAILED.code();
+    }
+
     public String statusAfterReviewCompleted(boolean humanReviewRequired) {
         return humanReviewRequired
             ? ReviewTaskStatus.PENDING_HUMAN_REVIEW.code()
@@ -25,6 +33,19 @@ public class ReviewTaskStateMachine {
         if (ReviewTaskStatus.FAILED != ReviewTaskStatus.from(status)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
         }
+    }
+
+    public void ensurePublishRequeueAllowed(String status, boolean publishClaimed) {
+        if (ReviewTaskStatus.PUBLISH_FAILED != ReviewTaskStatus.from(status)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
+        }
+        if (publishClaimed) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
+        }
+    }
+
+    public boolean isPublishFailed(String status) {
+        return ReviewTaskStatus.PUBLISH_FAILED == ReviewTaskStatus.from(status);
     }
 
     public void ensureHumanReviewAllowed(boolean humanReviewRequired, String humanReviewStatus) {
