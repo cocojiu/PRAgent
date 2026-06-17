@@ -16,6 +16,8 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsDto;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
+import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.SecuritySettingsDto;
@@ -25,7 +27,6 @@ import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.SystemSettingLog;
@@ -49,7 +50,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -301,12 +301,12 @@ public class SystemConfigServiceImpl implements SystemConfigService {
                 .orderByAsc(ReviewRuleConfig::getSortOrder)
                 .orderByAsc(ReviewRuleConfig::getId)
         );
-        List<ReviewFinding> ruleFindings = loadRuleFindings();
-        Map<String, Long> hitCountByRule = buildRuleHitCounts(ruleFindings);
+        Map<String, Long> hitCountByRule = loadRuleHitCounts();
+        ReviewRuleFeedbackStat feedbackStat = loadRuleFeedbackStat();
         List<ReviewRuleConfigDto> ruleDtos = rules.stream()
             .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
             .toList();
-        return new ReviewRulesResponse(buildRuleMetrics(rules, ruleFindings, hitCountByRule), ruleDtos);
+        return new ReviewRulesResponse(buildRuleMetrics(rules, feedbackStat, hitCountByRule), ruleDtos);
     }
 
     @Override
@@ -595,32 +595,34 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     private Map<String, Long> loadRuleHitCounts() {
-        return buildRuleHitCounts(loadRuleFindings());
+        return buildRuleHitCounts(reviewFindingMapper.selectReviewRuleHitCounts());
     }
 
-    private List<ReviewFinding> loadRuleFindings() {
-        return reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
-        );
+    private ReviewRuleFeedbackStat loadRuleFeedbackStat() {
+        ReviewRuleFeedbackStat feedbackStat = reviewFindingMapper.selectReviewRuleFeedbackStat();
+        return feedbackStat == null ? new ReviewRuleFeedbackStat() : feedbackStat;
     }
 
-    private Map<String, Long> buildRuleHitCounts(List<ReviewFinding> findings) {
-        return findings.stream()
-            .map(ReviewFinding::getRuleId)
-            .filter(StringUtils::hasText)
-            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+    private Map<String, Long> buildRuleHitCounts(List<ReviewRuleHitCount> hitCounts) {
+        if (hitCounts == null || hitCounts.isEmpty()) {
+            return Map.of();
+        }
+        return hitCounts.stream()
+            .filter(count -> count != null && StringUtils.hasText(count.getRuleId()))
+            .collect(Collectors.toMap(ReviewRuleHitCount::getRuleId, count -> safeCount(count.getTotal()), Long::sum));
     }
 
-    private List<ReviewRuleMetricDto> buildRuleMetrics(List<ReviewRuleConfig> rules, List<ReviewFinding> findings, Map<String, Long> hitCountByRule) {
+    private List<ReviewRuleMetricDto> buildRuleMetrics(
+        List<ReviewRuleConfig> rules,
+        ReviewRuleFeedbackStat feedbackStat,
+        Map<String, Long> hitCountByRule
+    ) {
         long enabledCount = rules.stream().filter(rule -> "ENABLED".equals(rule.getStatus())).count();
         long highRiskCount = rules.stream().filter(rule -> isHighSeverity(rule.getSeverity())).count();
-        long totalHits = hitCountByRule.values().stream().mapToLong(Long::longValue).sum();
-        long validCount = feedbackCount(findings, "VALID");
-        long falsePositiveCount = feedbackCount(findings, "FALSE_POSITIVE");
-        long reviewedCount = findings.stream()
-            .filter(finding -> StringUtils.hasText(finding.getFeedbackStatus()))
-            .filter(finding -> !"UNREVIEWED".equals(finding.getFeedbackStatus()))
-            .count();
+        long totalHits = safeCount(feedbackStat.getTotalHits());
+        long validCount = safeCount(feedbackStat.getValidCount());
+        long falsePositiveCount = safeCount(feedbackStat.getFalsePositiveCount());
+        long reviewedCount = safeCount(feedbackStat.getReviewedCount());
         int averageConfidence = rules.isEmpty()
             ? 0
             : (int) Math.round(rules.stream().mapToInt(rule -> rule.getConfidence() == null ? 0 : rule.getConfidence()).average().orElse(0));
@@ -634,8 +636,8 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         );
     }
 
-    private long feedbackCount(List<ReviewFinding> findings, String status) {
-        return findings.stream().filter(finding -> status.equals(finding.getFeedbackStatus())).count();
+    private long safeCount(Long value) {
+        return value == null ? 0L : value;
     }
 
     private String percentage(long numerator, long denominator) {
