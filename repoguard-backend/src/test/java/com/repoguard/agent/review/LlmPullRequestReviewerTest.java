@@ -7,15 +7,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.config.ReviewPolicyProvider;
+import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,16 +25,14 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void reviewFallsBackToRulesWhenLlmCircuitIsOpen() {
-        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
-        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
         RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
         ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
-        ReviewPolicyConfig config = llmConfig();
+        ReviewPolicySettings settings = llmSettings();
         GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
 
-        when(configMapper.selectById(1L)).thenReturn(config);
-        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(reviewPolicyProvider.getSettings()).thenReturn(settings);
         when(resilience.llm(eq("chat_completions"), any())).thenThrow(new ExternalCallException(
             "LLM",
             "llm_circuit_open",
@@ -47,11 +44,10 @@ class LlmPullRequestReviewerTest {
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
 
         ReviewResult result = new LlmPullRequestReviewer(
-            configMapper,
+            reviewPolicyProvider,
             ruleBasedReviewer,
             RestClient.builder(),
             new ObjectMapper(),
-            secretCryptoService,
             metrics,
             resilience
         ).review(new ReviewTask(), diff);
@@ -69,10 +65,9 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void reviewSplitsLargeDiffAndAggregatesFindings() {
-        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
-        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
-        ReviewPolicyConfig config = llmConfig();
+        ReviewPolicySettings settings = llmSettings();
         List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
         GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
@@ -84,14 +79,12 @@ class LlmPullRequestReviewerTest {
             file("src/main/java/com/repoguard/agent/service/B.java", 120, 30)
         ));
 
-        when(configMapper.selectById(1L)).thenReturn(config);
-        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(reviewPolicyProvider.getSettings()).thenReturn(settings);
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
 
         ReviewResult result = new TestableLlmPullRequestReviewer(
-            configMapper,
+            reviewPolicyProvider,
             ruleBasedReviewer,
-            secretCryptoService,
             reviewedChunks
         ).review(new ReviewTask(), diff);
 
@@ -111,27 +104,31 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void reviewCombinesLlmAndRuleFindingsWhenLlmSucceeds() {
-        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
-        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
-        ReviewPolicyConfig config = llmConfig();
-        config.setChunkFileThreshold(99);
+        ReviewPolicySettings settings = llmSettings(99, 700, 4, 450);
         List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
         GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/java/com/repoguard/agent/service/A.java", 10, 2)
         ));
 
-        when(configMapper.selectById(1L)).thenReturn(config);
-        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(reviewPolicyProvider.getSettings()).thenReturn(settings);
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed(
             "HIGH",
-            List.of(new ReviewFindingResult("HIGH", "RULE", "RG-JAVA-002", "src/main/java/com/repoguard/agent/service/A.java", 12, "Rule finding", "Use logger"))
+            List.of(new ReviewFindingResult(
+                "HIGH",
+                "RULE",
+                "RG-JAVA-002",
+                "src/main/java/com/repoguard/agent/service/A.java",
+                12,
+                "Rule finding",
+                "Use logger"
+            ))
         ));
 
         ReviewResult result = new TestableLlmPullRequestReviewer(
-            configMapper,
+            reviewPolicyProvider,
             ruleBasedReviewer,
-            secretCryptoService,
             reviewedChunks
         ).review(new ReviewTask(), diff);
 
@@ -143,10 +140,9 @@ class LlmPullRequestReviewerTest {
 
     @Test
     void reviewFallsBackOnlyFailedChunksToRules() {
-        ReviewPolicyConfigMapper configMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
-        SecretCryptoService secretCryptoService = org.mockito.Mockito.mock(SecretCryptoService.class);
-        ReviewPolicyConfig config = llmConfig();
+        ReviewPolicySettings settings = llmSettings();
         List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
         GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
@@ -158,8 +154,7 @@ class LlmPullRequestReviewerTest {
             file("src/main/java/com/repoguard/agent/service/E.java", 150, 30)
         ));
 
-        when(configMapper.selectById(1L)).thenReturn(config);
-        when(secretCryptoService.decrypt("enc:v2:local:key")).thenReturn("llm-key");
+        when(reviewPolicyProvider.getSettings()).thenReturn(settings);
         when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenAnswer(invocation -> {
             GithubPullRequestDiff reviewedDiff = invocation.getArgument(0);
             String matchedFile = reviewedDiff.files().stream()
@@ -170,16 +165,23 @@ class LlmPullRequestReviewerTest {
             if (matchedFile != null) {
                 return ReviewResult.completed(
                     "MEDIUM",
-                    List.of(new ReviewFindingResult("MEDIUM", "RULE", "RG-CONFIG-001", matchedFile, 1, "Config fallback finding", "Review production config"))
+                    List.of(new ReviewFindingResult(
+                        "MEDIUM",
+                        "RULE",
+                        "RG-CONFIG-001",
+                        matchedFile,
+                        1,
+                        "Config fallback finding",
+                        "Review production config"
+                    ))
                 );
             }
             return ReviewResult.completed("INFO", List.of());
         });
 
         ReviewResult result = new TestableLlmPullRequestReviewer(
-            configMapper,
+            reviewPolicyProvider,
             ruleBasedReviewer,
-            secretCryptoService,
             reviewedChunks,
             "service/C.java"
         ).review(new ReviewTask(), diff);
@@ -192,25 +194,35 @@ class LlmPullRequestReviewerTest {
         assertThat(result.llmPromptTokens()).isEqualTo((reviewedChunks.size() - 1) * 100);
     }
 
-    private ReviewPolicyConfig llmConfig() {
-        ReviewPolicyConfig config = new ReviewPolicyConfig();
-        config.setId(1L);
-        config.setLlmEnabled(true);
-        config.setLlmProvider("openai");
-        config.setBaseUrl("https://llm.example.test");
-        config.setApiKeyValue("enc:v2:local:key");
-        config.setModelName("gpt-test");
-        config.setTemperature(BigDecimal.valueOf(0.2));
-        config.setMaxTokens(1024);
-        config.setTimeoutSeconds(30);
-        config.setFallbackToRules(true);
-        config.setChunkFileThreshold(6);
-        config.setChunkLineThreshold(700);
-        config.setChunkMaxFiles(4);
-        config.setChunkMaxLines(450);
-        config.setInputTokenPricePerMillion(BigDecimal.valueOf(0.5));
-        config.setOutputTokenPricePerMillion(BigDecimal.valueOf(1.5));
-        return config;
+    private ReviewPolicySettings llmSettings() {
+        return llmSettings(6, 700, 4, 450);
+    }
+
+    private ReviewPolicySettings llmSettings(
+        Integer chunkFileThreshold,
+        Integer chunkLineThreshold,
+        Integer chunkMaxFiles,
+        Integer chunkMaxLines
+    ) {
+        return new ReviewPolicySettings(
+            true,
+            true,
+            "openai",
+            "gpt-test",
+            "https://llm.example.test",
+            "llm-key",
+            30,
+            BigDecimal.valueOf(0.2),
+            1024,
+            true,
+            1,
+            chunkFileThreshold,
+            chunkLineThreshold,
+            chunkMaxFiles,
+            chunkMaxLines,
+            BigDecimal.valueOf(0.5),
+            BigDecimal.valueOf(1.5)
+        );
     }
 
     private GithubChangedFile file(String path, int additions, int deletions) {
@@ -223,27 +235,24 @@ class LlmPullRequestReviewerTest {
         private final String failingFilePart;
 
         TestableLlmPullRequestReviewer(
-            ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+            ReviewPolicyProvider reviewPolicyProvider,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
-            SecretCryptoService secretCryptoService,
             List<GithubPullRequestDiff> reviewedChunks
         ) {
-            this(reviewPolicyConfigMapper, ruleBasedReviewer, secretCryptoService, reviewedChunks, null);
+            this(reviewPolicyProvider, ruleBasedReviewer, reviewedChunks, null);
         }
 
         TestableLlmPullRequestReviewer(
-            ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+            ReviewPolicyProvider reviewPolicyProvider,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
-            SecretCryptoService secretCryptoService,
             List<GithubPullRequestDiff> reviewedChunks,
             String failingFilePart
         ) {
             super(
-                reviewPolicyConfigMapper,
+                reviewPolicyProvider,
                 ruleBasedReviewer,
                 RestClient.builder(),
                 new ObjectMapper(),
-                secretCryptoService,
                 null,
                 null,
                 new PullRequestDiffChunker()
@@ -253,7 +262,7 @@ class LlmPullRequestReviewerTest {
         }
 
         @Override
-        protected LlmCallResult callLlm(ReviewPolicyConfig config, ReviewTask task, GithubPullRequestDiff diff) {
+        protected LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
             reviewedChunks.add(diff);
             String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
             boolean shouldFail = failingFilePart != null

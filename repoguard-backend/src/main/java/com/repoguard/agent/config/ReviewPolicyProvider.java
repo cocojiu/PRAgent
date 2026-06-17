@@ -37,7 +37,13 @@ public class ReviewPolicyProvider {
             config.getTemperature(),
             config.getMaxTokens(),
             config.getFallbackToRules(),
-            config.getWorkerConcurrency()
+            config.getWorkerConcurrency(),
+            config.getChunkFileThreshold(),
+            config.getChunkLineThreshold(),
+            config.getChunkMaxFiles(),
+            config.getChunkMaxLines(),
+            config.getInputTokenPricePerMillion(),
+            config.getOutputTokenPricePerMillion()
         );
     }
 }

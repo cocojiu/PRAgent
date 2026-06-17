@@ -1,8 +1,9 @@
 package com.repoguard.agent.review;
 
+import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +24,10 @@ public class PullRequestDiffChunker {
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicyConfig config) {
         return chunk(diff, ChunkingPolicy.from(config));
+    }
+
+    public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicySettings settings) {
+        return chunk(diff, ChunkingPolicy.from(settings));
     }
 
     private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ChunkingPolicy policy) {
@@ -179,6 +184,18 @@ public class PullRequestDiffChunker {
                 positive(config.getChunkMaxLines(), MAX_LINES_PER_CHUNK),
                 positive(config.getChunkFileThreshold(), LARGE_PR_FILE_THRESHOLD),
                 positive(config.getChunkLineThreshold(), LARGE_PR_LINE_THRESHOLD)
+            );
+        }
+
+        static ChunkingPolicy from(ReviewPolicySettings settings) {
+            if (settings == null) {
+                return defaults();
+            }
+            return new ChunkingPolicy(
+                positive(settings.chunkMaxFiles(), MAX_FILES_PER_CHUNK),
+                positive(settings.chunkMaxLines(), MAX_LINES_PER_CHUNK),
+                positive(settings.chunkFileThreshold(), LARGE_PR_FILE_THRESHOLD),
+                positive(settings.chunkLineThreshold(), LARGE_PR_LINE_THRESHOLD)
             );
         }
 

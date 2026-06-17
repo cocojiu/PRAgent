@@ -31,6 +31,10 @@ class ReviewPolicyProviderTest {
         config.setMaxTokens(4096);
         config.setFallbackToRules(true);
         config.setWorkerConcurrency(2);
+        config.setChunkMaxFiles(4);
+        config.setChunkMaxLines(450);
+        config.setInputTokenPricePerMillion(BigDecimal.valueOf(0.5));
+        config.setOutputTokenPricePerMillion(BigDecimal.valueOf(1.5));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
         ReviewPolicySettings settings = provider.getSettings();
@@ -42,6 +46,8 @@ class ReviewPolicyProviderTest {
         assertThat(settings.modelName()).isEqualTo("qwen-plus");
         assertThat(settings.apiKey()).isEqualTo("sk-test");
         assertThat(settings.workerConcurrency()).isEqualTo(2);
+        assertThat(settings.chunkMaxFiles()).isEqualTo(4);
+        assertThat(settings.inputTokenPricePerMillion()).isEqualByComparingTo(BigDecimal.valueOf(0.5));
     }
 
     @Test

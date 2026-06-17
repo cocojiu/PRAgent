@@ -88,7 +88,13 @@ class NotificationServiceImplTest {
             BigDecimal.valueOf(0.20),
             4096,
             true,
-            1
+            1,
+            6,
+            700,
+            4,
+            450,
+            BigDecimal.valueOf(0.5),
+            BigDecimal.valueOf(1.5)
         );
     }
 }

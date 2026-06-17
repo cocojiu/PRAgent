@@ -13,11 +13,17 @@ public record ReviewPolicySettings(
     BigDecimal temperature,
     Integer maxTokens,
     Boolean fallbackToRules,
-    Integer workerConcurrency
+    Integer workerConcurrency,
+    Integer chunkFileThreshold,
+    Integer chunkLineThreshold,
+    Integer chunkMaxFiles,
+    Integer chunkMaxLines,
+    BigDecimal inputTokenPricePerMillion,
+    BigDecimal outputTokenPricePerMillion
 ) {
 
     public static ReviewPolicySettings empty() {
-        return new ReviewPolicySettings(false, false, null, null, null, null, null, null, null, null, null);
+        return new ReviewPolicySettings(false, false, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
     }
 
     public boolean enabled() {
