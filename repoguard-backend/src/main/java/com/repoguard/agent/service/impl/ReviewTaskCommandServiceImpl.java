@@ -78,7 +78,9 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null ? new ReviewTaskStateMachine() : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Override

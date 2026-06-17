@@ -22,6 +22,8 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.ReviewTaskStatus;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -52,6 +54,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -64,7 +67,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         PlatformTransactionManager transactionManager,
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService,
-        CacheEvictionService cacheEvictionService
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
@@ -76,6 +80,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
         this.cacheEvictionService = cacheEvictionService;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     public ReviewTaskExecutorImpl(
@@ -99,6 +106,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             transactionManager,
             metrics,
             notificationDispatchService,
+            null,
             null
         );
     }
@@ -123,6 +131,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             transactionManager,
             metrics,
             null,
+            null,
             null
         );
     }
@@ -142,6 +151,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             changedFileMapper,
             githubPullRequestClient,
             pullRequestReviewer,
+            null,
             null,
             null,
             null,
@@ -165,7 +175,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 );
                 return;
             }
-            if (!"QUEUED".equals(task.getStatus())) {
+            if (!reviewTaskStateMachine.canStartReview(task.getStatus())) {
                 LOGGER.info(
                     "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=status_not_queued currentStatus={}",
                     task.getId(),
@@ -279,13 +289,13 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private boolean markReviewing(ReviewTask task, LocalDateTime startedAt) {
         return inTransaction(() -> {
-            task.setStatus("REVIEWING");
+            task.setStatus(reviewTaskStateMachine.statusWhenReviewing());
             task.setStartedAt(startedAt);
             int updated = reviewTaskMapper.update(
                 new UpdateWrapper<ReviewTask>()
                     .eq("id", task.getId())
-                    .eq("status", "QUEUED")
-                    .set("status", "REVIEWING")
+                    .eq("status", ReviewTaskStatus.QUEUED.code())
+                    .set("status", reviewTaskStateMachine.statusWhenReviewing())
                     .set("started_at", startedAt)
             );
             if (updated <= 0) {
@@ -319,7 +329,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
             LocalDateTime finishedAt = LocalDateTime.now();
             boolean humanReviewRequired = requiresHumanReview(reviewResult.riskLevel());
-            task.setStatus(humanReviewRequired ? "PENDING_HUMAN_REVIEW" : "COMPLETED");
+            task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
             task.setRiskLevel(reviewResult.riskLevel());
             task.setLlmStatus(reviewResult.llmStatus());
             task.setLlmProvider(reviewResult.llmProvider());

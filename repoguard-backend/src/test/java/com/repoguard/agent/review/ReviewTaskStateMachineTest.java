@@ -20,6 +20,20 @@ class ReviewTaskStateMachineTest {
     }
 
     @Test
+    void canStartReviewAcceptsOnlyQueuedTasks() {
+        assertThat(stateMachine.canStartReview("QUEUED")).isTrue();
+        assertThat(stateMachine.canStartReview("REVIEWING")).isFalse();
+        assertThat(stateMachine.canStartReview(null)).isFalse();
+    }
+
+    @Test
+    void statusAfterReviewCompletedRespectsHumanReviewRequirement() {
+        assertThat(stateMachine.statusWhenReviewing()).isEqualTo("REVIEWING");
+        assertThat(stateMachine.statusAfterReviewCompleted(false)).isEqualTo("COMPLETED");
+        assertThat(stateMachine.statusAfterReviewCompleted(true)).isEqualTo("PENDING_HUMAN_REVIEW");
+    }
+
+    @Test
     void statusAfterHumanReviewMapsDecisionsToTaskStatuses() {
         assertThat(stateMachine.statusAfterHumanReview("APPROVED")).isEqualTo("APPROVED");
         assertThat(stateMachine.statusAfterHumanReview("CHANGES_REQUESTED")).isEqualTo("CHANGES_REQUESTED");
