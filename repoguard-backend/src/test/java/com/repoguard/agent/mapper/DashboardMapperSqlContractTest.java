@@ -66,12 +66,13 @@ class DashboardMapperSqlContractTest {
 
     @Test
     void recentHighRiskQueryKeepsRiskFilterOrderAndLimitContract() throws Exception {
-        String sql = sql("selectRecentHighRiskReviews");
+        String sql = sql("selectRecentHighRiskReviews", LocalDate.class);
 
         assertThat(sql)
             .contains("from review_task t")
             .contains("left join review_finding f on f.task_id = t.id and f.category = 'finding'")
             .contains("where t.risk_level in ('high', 'critical')")
+            .contains("t.created_at >= #{startdate}")
             .contains("order by t.created_at desc")
             .contains("limit 5");
     }

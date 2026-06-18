@@ -83,7 +83,7 @@ public class DashboardServiceImpl implements DashboardService {
         LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();
         DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
         List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
-        List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews();
+        List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate);
         List<DashboardLlmQualityModelStat> llmQualityByModelStats = dashboardMapper.selectLlmQualityByModelStats(reviewTrendStartDate);
         List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats(reviewTrendStartDate);
         List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());

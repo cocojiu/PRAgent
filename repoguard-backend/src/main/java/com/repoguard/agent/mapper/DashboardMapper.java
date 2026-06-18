@@ -66,11 +66,12 @@ public interface DashboardMapper {
         from review_task t
         left join review_finding f on f.task_id = t.id and f.category = 'FINDING'
         where t.risk_level in ('HIGH', 'CRITICAL')
+          and t.created_at >= #{startDate}
         group by t.id, t.title, t.repository, t.risk_level, t.created_at, t.status
         order by t.created_at desc
         limit 5
         """)
-    List<DashboardHighRiskReview> selectRecentHighRiskReviews();
+    List<DashboardHighRiskReview> selectRecentHighRiskReviews(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select

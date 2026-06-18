@@ -203,7 +203,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsHighRiskReviewsFromLimitedQuery() {
-        when(dashboardMapper.selectRecentHighRiskReviews()).thenReturn(List.of(
+        when(dashboardMapper.selectRecentHighRiskReviews(any())).thenReturn(List.of(
             highRiskReview("Fix auth bypass", "api", "CRITICAL", 4L, "COMPLETED", LocalDateTime.of(2026, 6, 17, 9, 30)),
             highRiskReview("Harden config", "ops", "HIGH", 2L, "FAILED", LocalDateTime.of(2026, 6, 16, 18, 15))
         ));
@@ -213,6 +213,7 @@ class DashboardServiceImplTest {
 
         var highRiskReviews = service.getOverview(null).highRiskReviews();
 
+        verify(dashboardMapper).selectRecentHighRiskReviews(LocalDate.of(2026, 6, 13));
         assertThat(highRiskReviews).hasSize(2);
         assertThat(highRiskReviews.get(0).title()).isEqualTo("Fix auth bypass");
         assertThat(highRiskReviews.get(0).riskLevel()).isEqualTo("critical");
