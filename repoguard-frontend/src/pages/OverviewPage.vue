@@ -31,54 +31,16 @@
       </article>
     </section>
 
-    <section class="dashboard-grid llm-quality-grid">
-      <article class="dashboard-card chart-card chart-card--wide">
-        <div class="quality-card-head">
-          <h2>LLM 质量趋势</h2>
-          <el-segmented
-            v-model="llmTrendDays"
-            :options="llmTrendWindowOptions"
-            size="small"
-            :disabled="loading"
-            @change="() => loadOverview()"
-          />
-        </div>
-        <EChartPanel v-if="llmQualityTrend.length" :option="llmQualityTrendOption" />
-        <el-empty v-else description="暂无 LLM 质量趋势数据" />
-      </article>
-      <article class="dashboard-card">
-        <h2>模型质量</h2>
-        <el-table :data="llmQualityByModel" class="rg-table" size="large" aria-label="模型质量统计">
-          <el-table-column prop="model" label="模型" min-width="180" />
-          <el-table-column prop="taskCount" label="任务" width="80" />
-          <el-table-column prop="averageDuration" label="均耗时" width="100" />
-          <el-table-column prop="averageTokens" label="均 Token" width="110" />
-          <el-table-column prop="averageCost" label="均成本" width="120" />
-          <el-table-column prop="parseSuccessRate" label="解析率" width="100" />
-          <el-table-column prop="fallbackRate" label="兜底率" width="100" />
-          <el-table-column prop="partialFallbackRate" label="补位率" width="100" />
-          <el-table-column prop="validRate" label="有效率" width="100" />
-          <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
-          <template #empty>
-            <el-empty description="暂无模型质量数据" />
-          </template>
-        </el-table>
-      </article>
-      <article class="dashboard-card">
-        <h2>仓库质量</h2>
-        <el-table :data="llmQualityByRepository" class="rg-table" size="large" aria-label="仓库质量统计">
-          <el-table-column prop="repository" label="仓库" min-width="180" />
-          <el-table-column prop="taskCount" label="任务" width="80" />
-          <el-table-column prop="fallbackRate" label="兜底率" width="100" />
-          <el-table-column prop="partialFallbackRate" label="补位率" width="100" />
-          <el-table-column prop="validRate" label="有效率" width="100" />
-          <el-table-column prop="falsePositiveRate" label="误报率" width="100" />
-          <template #empty>
-            <el-empty description="暂无仓库质量数据" />
-          </template>
-        </el-table>
-      </article>
-    </section>
+    <LlmQualitySection
+      :loading="loading"
+      :trend-days="llmTrendDays"
+      :trend-window-options="llmTrendWindowOptions"
+      :quality-trend="llmQualityTrend"
+      :quality-trend-option="llmQualityTrendOption"
+      :quality-by-model="llmQualityByModel"
+      :quality-by-repository="llmQualityByRepository"
+      @trend-days-change="updateLlmTrendDays"
+    />
 
     <section class="bottom-grid">
       <article class="dashboard-card">
@@ -154,6 +116,7 @@ import { RouterLink } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import EChartPanel from "@/components/EChartPanel.vue";
+import LlmQualitySection from "@/components/LlmQualitySection.vue";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchDashboardOverview } from "@/api/dashboard";
 import { useMetricIcon } from "@/composables/useMetricIcon";
@@ -232,6 +195,11 @@ const loadOverview = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const updateLlmTrendDays = (days: number) => {
+  llmTrendDays.value = days;
+  void loadOverview();
 };
 
 onMounted(loadOverview);
