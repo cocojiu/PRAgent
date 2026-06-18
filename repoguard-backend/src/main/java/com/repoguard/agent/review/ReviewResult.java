@@ -28,7 +28,7 @@ public record ReviewResult(
     }
 
     public static ReviewResult completed(String riskLevel, List<ReviewFindingResult> findings) {
-        return new ReviewResult(riskLevel, "COMPLETED", null, findings);
+        return new ReviewResult(riskLevel, LlmStatus.COMPLETED.code(), null, findings);
     }
 
     public static ReviewResult completed(
@@ -58,7 +58,7 @@ public record ReviewResult(
     ) {
         return new ReviewResult(
             riskLevel,
-            "COMPLETED",
+            LlmStatus.COMPLETED.code(),
             null,
             findings,
             llmProvider,
@@ -74,7 +74,7 @@ public record ReviewResult(
     }
 
     public static ReviewResult fallback(String riskLevel, String statusDetail, List<ReviewFindingResult> findings) {
-        return new ReviewResult(riskLevel, "FALLBACK", statusDetail, findings);
+        return new ReviewResult(riskLevel, LlmStatus.FALLBACK.code(), statusDetail, findings);
     }
 
     public static ReviewResult fallback(
@@ -88,7 +88,7 @@ public record ReviewResult(
     ) {
         return new ReviewResult(
             riskLevel,
-            "FALLBACK",
+            LlmStatus.FALLBACK.code(),
             statusDetail,
             findings,
             llmProvider,

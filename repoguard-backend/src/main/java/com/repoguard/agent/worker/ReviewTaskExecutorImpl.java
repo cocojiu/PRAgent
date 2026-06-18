@@ -20,6 +20,8 @@ import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
+import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
@@ -342,7 +344,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             task.setLlmTotalTokens(reviewResult.llmTotalTokens());
             task.setLlmEstimatedCost(reviewResult.llmEstimatedCost());
             task.setHumanReviewRequired(humanReviewRequired);
-            task.setHumanReviewStatus(humanReviewRequired ? "PENDING" : "NOT_REQUIRED");
+            task.setHumanReviewStatus(HumanReviewStatus.defaultForRequired(humanReviewRequired).code());
             task.setHumanReviewNote(null);
             task.setHumanReviewBy(null);
             task.setHumanReviewedAt(null);
@@ -465,7 +467,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             LocalDateTime failedAt = LocalDateTime.now();
             task.setStatus(reviewTaskStateMachine.statusWhenFailed());
             task.setRiskLevel("HIGH");
-            task.setLlmStatus("FAILED");
+            task.setLlmStatus(LlmStatus.FAILED.code());
             task.setFinishedAt(failedAt);
             task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
             reviewTaskMapper.updateById(task);
@@ -527,7 +529,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     }
 
     private String reviewGeneratedLabel(ReviewResult reviewResult) {
-        if (!"FALLBACK".equals(reviewResult.llmStatus())) {
+        if (LlmStatus.FALLBACK != LlmStatus.from(reviewResult.llmStatus())) {
             return "Code review generated";
         }
         String detail = reviewResult.statusDetail();

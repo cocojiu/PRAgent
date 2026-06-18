@@ -9,6 +9,8 @@ import com.repoguard.agent.dto.NotificationCenterDto;
 import com.repoguard.agent.dto.NotificationItemDto;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.NotificationService;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -71,7 +73,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addFailedTaskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
         tasks.stream()
-            .filter(task -> "FAILED".equalsIgnoreCase(task.getStatus()))
+            .filter(task -> ReviewTaskStatus.FAILED == ReviewTaskStatus.from(task.getStatus()))
             .limit(4)
             .map(task -> taskNotification(
                 "review-failed-" + task.getId(),
@@ -99,7 +101,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addFallbackNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
         tasks.stream()
-            .filter(task -> "FALLBACK".equalsIgnoreCase(task.getLlmStatus()))
+            .filter(task -> LlmStatus.FALLBACK == LlmStatus.from(task.getLlmStatus()))
             .limit(3)
             .map(task -> taskNotification(
                 "review-llm-fallback-" + task.getId(),

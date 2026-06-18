@@ -61,7 +61,7 @@ public class ReviewTaskStateMachine {
         if (!humanReviewRequired) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
         }
-        if (!"PENDING".equals(humanReviewStatus)) {
+        if (HumanReviewStatus.PENDING != HumanReviewStatus.from(humanReviewStatus)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
         }
     }
@@ -70,14 +70,14 @@ public class ReviewTaskStateMachine {
         if (!humanReviewRequired) {
             return true;
         }
-        return "APPROVED".equals(humanReviewStatus) || "CHANGES_REQUESTED".equals(humanReviewStatus);
+        return HumanReviewStatus.from(humanReviewStatus).allowsGithubCommentPublish();
     }
 
     public String statusAfterHumanReview(String humanReviewStatus) {
-        return switch (humanReviewStatus) {
-            case "APPROVED" -> ReviewTaskStatus.APPROVED.code();
-            case "CHANGES_REQUESTED" -> ReviewTaskStatus.CHANGES_REQUESTED.code();
-            case "REJECTED" -> ReviewTaskStatus.REJECTED.code();
+        return switch (HumanReviewStatus.from(humanReviewStatus)) {
+            case APPROVED -> ReviewTaskStatus.APPROVED.code();
+            case CHANGES_REQUESTED -> ReviewTaskStatus.CHANGES_REQUESTED.code();
+            case REJECTED -> ReviewTaskStatus.REJECTED.code();
             default -> ReviewTaskStatus.PENDING_HUMAN_REVIEW.code();
         };
     }

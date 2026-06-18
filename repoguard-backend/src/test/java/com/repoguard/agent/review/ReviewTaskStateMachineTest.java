@@ -48,14 +48,16 @@ class ReviewTaskStateMachineTest {
     void canPublishGithubCommentsRequiresFinalHumanReviewDecisionWhenNeeded() {
         assertThat(stateMachine.canPublishGithubComments(false, "PENDING")).isTrue();
         assertThat(stateMachine.canPublishGithubComments(true, "APPROVED")).isTrue();
+        assertThat(stateMachine.canPublishGithubComments(true, " approved ")).isTrue();
         assertThat(stateMachine.canPublishGithubComments(true, "CHANGES_REQUESTED")).isTrue();
         assertThat(stateMachine.canPublishGithubComments(true, "PENDING")).isFalse();
         assertThat(stateMachine.canPublishGithubComments(true, "REJECTED")).isFalse();
+        assertThat(stateMachine.canPublishGithubComments(true, null)).isFalse();
     }
 
     @Test
     void ensureHumanReviewAllowedRequiresPendingRequiredReview() {
-        stateMachine.ensureHumanReviewAllowed(true, "PENDING");
+        stateMachine.ensureHumanReviewAllowed(true, " pending ");
 
         assertThatThrownBy(() -> stateMachine.ensureHumanReviewAllowed(false, "NOT_REQUIRED"))
             .isInstanceOf(BusinessException.class)

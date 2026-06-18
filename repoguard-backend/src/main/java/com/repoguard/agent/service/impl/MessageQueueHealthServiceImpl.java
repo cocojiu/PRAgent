@@ -25,6 +25,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
@@ -188,7 +189,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
         LocalDateTime queuedAt = LocalDateTime.now();
         task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-        task.setLlmStatus("PENDING");
+        task.setLlmStatus(LlmStatus.PENDING.code());
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);
@@ -350,7 +351,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
         task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
-        task.setLlmStatus("PENDING");
+        task.setLlmStatus(LlmStatus.PENDING.code());
         task.setPublishAttempts(safeAttempts(task) + 1);
         task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, properties.getPublishCompensationIntervalMs()) * 1_000_000));
         task.setLastPublishError(truncate(errorMessage(ex)));

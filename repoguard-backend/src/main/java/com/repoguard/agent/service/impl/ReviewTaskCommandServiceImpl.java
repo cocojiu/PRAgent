@@ -19,6 +19,8 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.time.LocalDateTime;
@@ -39,11 +41,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
-    private static final String HUMAN_REVIEW_PENDING = "PENDING";
-    private static final String HUMAN_REVIEW_APPROVED = "APPROVED";
-    private static final String HUMAN_REVIEW_CHANGES_REQUESTED = "CHANGES_REQUESTED";
-    private static final String HUMAN_REVIEW_REJECTED = "REJECTED";
-    private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -219,7 +216,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setRiskLevel("INFO");
         task.setMqRetries(0);
         task.setPublishAttempts(0);
-        task.setLlmStatus("PENDING");
+        task.setLlmStatus(LlmStatus.PENDING.code());
         task.setPrUrl(buildPrUrl(request));
         task.setSource(source);
         task.setTriggerSource(source);
@@ -235,10 +232,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);
-        task.setLlmStatus("PENDING");
+        task.setLlmStatus(LlmStatus.PENDING.code());
         clearLlmQuality(task);
         task.setHumanReviewRequired(false);
-        task.setHumanReviewStatus(HUMAN_REVIEW_NOT_REQUIRED);
+        task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
         task.setHumanReviewNote(null);
         task.setHumanReviewBy(null);
         task.setHumanReviewedAt(null);
@@ -342,7 +339,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
 
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
         task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
-        task.setLlmStatus("PENDING");
+        task.setLlmStatus(LlmStatus.PENDING.code());
         clearLlmQuality(task);
         task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
         task.setNextPublishRetryAt(failedAt.plusSeconds(60));
@@ -439,12 +436,11 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private String humanReviewStatusForAction(String action) {
-        return switch (action) {
-            case "APPROVE" -> HUMAN_REVIEW_APPROVED;
-            case "CHANGES_REQUESTED" -> HUMAN_REVIEW_CHANGES_REQUESTED;
-            case "REJECT" -> HUMAN_REVIEW_REJECTED;
-            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported human review action: " + action);
-        };
+        HumanReviewStatus humanReviewStatus = HumanReviewStatus.fromAction(action);
+        if (humanReviewStatus == HumanReviewStatus.UNKNOWN) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported human review action: " + action);
+        }
+        return humanReviewStatus.code();
     }
 
     private String taskStatusForHumanReview(String humanReviewStatus) {
@@ -452,27 +448,27 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private String resolveHumanReviewStatus(ReviewTask task) {
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            return HUMAN_REVIEW_NOT_REQUIRED;
+        if (StringUtils.hasText(task.getHumanReviewStatus())) {
+            return HumanReviewStatus.from(task.getHumanReviewStatus()).code();
         }
-        return StringUtils.hasText(task.getHumanReviewStatus()) ? task.getHumanReviewStatus() : HUMAN_REVIEW_PENDING;
+        return HumanReviewStatus.defaultForRequired(Boolean.TRUE.equals(task.getHumanReviewRequired())).code();
     }
 
     private String humanReviewTimelineLabel(String humanReviewStatus, String note) {
-        String base = switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> "Human review approved";
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
-            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
+        String base = switch (HumanReviewStatus.from(humanReviewStatus)) {
+            case APPROVED -> "Human review approved";
+            case CHANGES_REQUESTED -> "Human review requested changes";
+            case REJECTED -> "Human review rejected";
             default -> "Human review updated";
         };
         return StringUtils.hasText(note) ? truncate(base + ": " + note) : base;
     }
 
     private String humanReviewMessage(String humanReviewStatus) {
-        return switch (humanReviewStatus) {
-            case HUMAN_REVIEW_APPROVED -> "Human review approved";
-            case HUMAN_REVIEW_CHANGES_REQUESTED -> "Human review requested changes";
-            case HUMAN_REVIEW_REJECTED -> "Human review rejected";
+        return switch (HumanReviewStatus.from(humanReviewStatus)) {
+            case APPROVED -> "Human review approved";
+            case CHANGES_REQUESTED -> "Human review requested changes";
+            case REJECTED -> "Human review rejected";
             default -> "Human review updated";
         };
     }

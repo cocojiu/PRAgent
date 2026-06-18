@@ -24,31 +24,36 @@ public interface DashboardMapper {
             sum(case when status = 'FAILED' then 1 else 0 end) as failed,
             avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
         from review_task
+        where created_at >= #{startDate}
         """)
-    DashboardMetricStat selectMetricStat();
+    DashboardMetricStat selectMetricStat(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select risk_level as riskLevel, count(*) as total
         from review_task
+        where created_at >= #{startDate}
         group by risk_level
         """)
-    List<DashboardRiskLevelCount> selectRiskLevelCounts();
+    List<DashboardRiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select date_format(created_at, '%m-%d') as dayLabel, count(*) as total
         from review_task
+        where created_at >= #{startDate}
         group by date_format(created_at, '%m-%d')
         order by dayLabel
         """)
-    List<DashboardReviewTrendCount> selectReviewTrendCounts();
+    List<DashboardReviewTrendCount> selectReviewTrendCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
-        select coalesce(rule_id, 'LLM') as ruleId, count(*) as total
-        from review_finding
-        where category = 'FINDING'
-        group by coalesce(rule_id, 'LLM')
+        select coalesce(f.rule_id, 'LLM') as ruleId, count(*) as total
+        from review_finding f
+        join review_task t on t.id = f.task_id
+        where f.category = 'FINDING'
+          and t.created_at >= #{startDate}
+        group by coalesce(f.rule_id, 'LLM')
         """)
-    List<DashboardRuleHitCount> selectRuleHitCounts();
+    List<DashboardRuleHitCount> selectRuleHitCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select

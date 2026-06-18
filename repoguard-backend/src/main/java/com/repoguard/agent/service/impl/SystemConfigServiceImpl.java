@@ -1,129 +1,61 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
-import com.repoguard.agent.dto.NotificationSettingsDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
-import com.repoguard.agent.dto.ReviewPolicySettingsDto;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
-import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
-import com.repoguard.agent.dto.ReviewRuleHitCount;
-import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
-import com.repoguard.agent.dto.SecuritySettingsDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
-import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
-import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
-import com.repoguard.agent.entity.ReviewRuleConfig;
-import com.repoguard.agent.entity.SystemSettingLog;
-import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
-import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.service.ConnectionTestService;
+import com.repoguard.agent.service.ReviewPolicyConfigService;
+import com.repoguard.agent.service.ReviewRuleConfigService;
 import com.repoguard.agent.service.SystemConfigService;
-import java.math.BigDecimal;
-import java.net.URI;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
+import com.repoguard.agent.service.SystemIntegrationConfigService;
+import com.repoguard.agent.service.SystemSettingsApplicationService;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.env.Environment;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 public class SystemConfigServiceImpl implements SystemConfigService {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
-    private static final String MYSQL_PROVIDER = "MYSQL";
-    private static final String RABBITMQ_PROVIDER = "RABBITMQ";
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final int MIN_LLM_TEST_MAX_TOKENS = 512;
-    private static final int MAX_LLM_TEST_MAX_TOKENS = 4096;
-    private static final int DEFAULT_CHUNK_FILE_THRESHOLD = 6;
-    private static final int DEFAULT_CHUNK_LINE_THRESHOLD = 700;
-    private static final int DEFAULT_CHUNK_MAX_FILES = 4;
-    private static final int DEFAULT_CHUNK_MAX_LINES = 450;
-
-    private final IntegrationConfigMapper integrationConfigMapper;
-    private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
-    private final ReviewRuleConfigMapper reviewRuleConfigMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
-    private final SystemSettingsConfigMapper systemSettingsConfigMapper;
-    private final SystemSettingLogMapper systemSettingLogMapper;
-    private final RestClient.Builder restClientBuilder;
-    private final ObjectMapper objectMapper;
-    private final LlmReviewResultParser llmReviewResultParser;
-    private final DataSource dataSource;
-    private final RabbitTemplate rabbitTemplate;
-    private final SecretCryptoService secretCryptoService;
-    private final Environment environment;
-    private final CacheEvictionService cacheEvictionService;
+    private final ConnectionTestService connectionTestService;
+    private final SystemIntegrationConfigService systemIntegrationConfigService;
+    private final ReviewPolicyConfigService reviewPolicyConfigService;
+    private final ReviewRuleConfigService reviewRuleConfigService;
+    private final SystemSettingsApplicationService systemSettingsApplicationService;
 
     @Autowired
     public SystemConfigServiceImpl(
-        IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        ReviewRuleConfigMapper reviewRuleConfigMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        SystemSettingsConfigMapper systemSettingsConfigMapper,
-        SystemSettingLogMapper systemSettingLogMapper,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        DataSource dataSource,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService,
-        Environment environment,
-        CacheEvictionService cacheEvictionService
+        ConnectionTestService connectionTestService,
+        SystemIntegrationConfigService systemIntegrationConfigService,
+        ReviewPolicyConfigService reviewPolicyConfigService,
+        ReviewRuleConfigService reviewRuleConfigService,
+        SystemSettingsApplicationService systemSettingsApplicationService
     ) {
-        this.integrationConfigMapper = integrationConfigMapper;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.systemSettingsConfigMapper = systemSettingsConfigMapper;
-        this.systemSettingLogMapper = systemSettingLogMapper;
-        this.restClientBuilder = restClientBuilder;
-        this.objectMapper = objectMapper;
-        this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
-        this.dataSource = dataSource;
-        this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
-        this.environment = environment;
-        this.cacheEvictionService = cacheEvictionService;
+        this.connectionTestService = connectionTestService;
+        this.systemIntegrationConfigService = systemIntegrationConfigService;
+        this.reviewPolicyConfigService = reviewPolicyConfigService;
+        this.reviewRuleConfigService = reviewRuleConfigService;
+        this.systemSettingsApplicationService = systemSettingsApplicationService;
     }
 
     public SystemConfigServiceImpl(
@@ -141,1172 +73,127 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         Environment environment
     ) {
         this(
-            integrationConfigMapper,
-            reviewPolicyConfigMapper,
-            reviewRuleConfigMapper,
-            reviewFindingMapper,
-            systemSettingsConfigMapper,
-            systemSettingLogMapper,
-            restClientBuilder,
-            objectMapper,
-            dataSource,
-            rabbitTemplate,
-            secretCryptoService,
-            environment,
-            null
+            new ConnectionTestServiceImpl(
+                integrationConfigMapper,
+                reviewPolicyConfigMapper,
+                restClientBuilder,
+                objectMapper,
+                dataSource,
+                rabbitTemplate,
+                secretCryptoService
+            ),
+            new SystemIntegrationConfigServiceImpl(
+                integrationConfigMapper,
+                secretCryptoService,
+                environment,
+                null
+            ),
+            new ReviewPolicyConfigServiceImpl(
+                reviewPolicyConfigMapper,
+                secretCryptoService
+            ),
+            new ReviewRuleConfigServiceImpl(
+                reviewRuleConfigMapper,
+                reviewFindingMapper,
+                null
+            ),
+            new SystemSettingsApplicationServiceImpl(
+                systemSettingsConfigMapper,
+                systemSettingLogMapper,
+                reviewPolicyConfigMapper
+            )
         );
     }
 
     @Override
     public GithubIntegrationConfigDto getGithubIntegration() {
-        return toGithubDto(loadGithubConfig());
+        return systemIntegrationConfigService.getGithubIntegration();
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
-        IntegrationConfig config = loadGithubConfig();
-        String token = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.token());
-        config.setBaseUrl(request.baseUrl().trim());
-        config.setTokenValue(secretCryptoService.encrypt(token));
-        config.setDefaultOwner(trimToNull(request.defaultOwner()));
-        config.setDefaultRepo(trimToNull(request.defaultRepo()));
-        config.setStatus(StringUtils.hasText(token) ? "CONFIGURED" : "NOT_CONFIGURED");
-        config.setLastError(null);
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (config.getTokenValue() == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("token_value", null)
-            );
-        }
-        integrationConfigMapper.update(
-            new UpdateWrapper<IntegrationConfig>()
-                .eq("id", config.getId())
-                .set("last_error", null)
-        );
-        evictDashboardOverview();
-        return toGithubDto(config);
+        return systemIntegrationConfigService.updateGithubIntegration(request);
     }
 
     @Override
     public ServiceIntegrationConfigDto getMysqlIntegration() {
-        return toServiceIntegrationDto(loadServiceIntegration(MYSQL_PROVIDER));
+        return systemIntegrationConfigService.getMysqlIntegration();
     }
 
     @Override
-    @Transactional
     public ServiceIntegrationConfigDto updateMysqlIntegration(ServiceIntegrationConfigRequest request) {
-        return updateServiceIntegration(MYSQL_PROVIDER, request);
+        return systemIntegrationConfigService.updateMysqlIntegration(request);
     }
 
     @Override
     public ServiceIntegrationConfigDto getRabbitMqIntegration() {
-        return toServiceIntegrationDto(loadServiceIntegration(RABBITMQ_PROVIDER));
+        return systemIntegrationConfigService.getRabbitMqIntegration();
     }
 
     @Override
-    @Transactional
     public ServiceIntegrationConfigDto updateRabbitMqIntegration(ServiceIntegrationConfigRequest request) {
-        return updateServiceIntegration(RABBITMQ_PROVIDER, request);
+        return systemIntegrationConfigService.updateRabbitMqIntegration(request);
     }
 
     @Override
     public ReviewPolicyConfigDto getReviewPolicy() {
-        return toReviewPolicyDto(loadReviewPolicy());
+        return reviewPolicyConfigService.getReviewPolicy();
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
-        ReviewPolicyConfig config = loadReviewPolicy();
-        String apiKey = resolveSecretValue(secretCryptoService.decrypt(config.getApiKeyValue()), request.apiKey());
-        config.setLlmEnabled(request.llmEnabled());
-        config.setLlmProvider(request.llmProvider().trim());
-        config.setModelName(request.modelName().trim());
-        config.setBaseUrl(trimToNull(request.baseUrl()));
-        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
-        config.setTimeoutSeconds(request.timeoutSeconds());
-        config.setTemperature(request.temperature());
-        config.setMaxTokens(request.maxTokens());
-        config.setFallbackToRules(request.fallbackToRules());
-        config.setWorkerConcurrency(request.workerConcurrency());
-        config.setChunkFileThreshold(request.chunkFileThreshold());
-        config.setChunkLineThreshold(request.chunkLineThreshold());
-        config.setChunkMaxFiles(request.chunkMaxFiles());
-        config.setChunkMaxLines(request.chunkMaxLines());
-        config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
-        config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
-        config.setUpdatedAt(LocalDateTime.now());
-        reviewPolicyConfigMapper.updateById(config);
-        if (config.getApiKeyValue() == null) {
-            reviewPolicyConfigMapper.update(
-                new UpdateWrapper<ReviewPolicyConfig>()
-                    .eq("id", config.getId())
-                    .set("api_key_value", null)
-            );
-        }
-        return toReviewPolicyDto(config);
+        return reviewPolicyConfigService.updateReviewPolicy(request);
     }
 
     @Override
     public SystemSettingsDto getSystemSettings() {
-        return toSystemSettingsDto(loadSystemSettings(), loadReviewPolicy(), loadSettingLogs());
+        return systemSettingsApplicationService.getSystemSettings();
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
     public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
-        SystemSettingsConfig settingsConfig = loadSystemSettings();
-        ReviewPolicyConfig reviewPolicyConfig = loadReviewPolicy();
-        LocalDateTime now = LocalDateTime.now();
-
-        settingsConfig.setSystemName(request.base().systemName().trim());
-        settingsConfig.setLanguage(request.base().language().trim());
-        settingsConfig.setTimezone(request.base().timezone().trim());
-        settingsConfig.setRetentionDays(request.base().retentionDays());
-        settingsConfig.setMaxDiffLines(request.policy().maxDiffLines());
-        settingsConfig.setAutoComment(request.policy().autoComment());
-        settingsConfig.setAutoRetry(request.policy().autoRetry());
-        settingsConfig.setGithubComment(request.notification().githubComment());
-        settingsConfig.setHighRiskPr(request.notification().highRiskPr());
-        settingsConfig.setFailedTask(request.notification().failedTask());
-        settingsConfig.setNotificationEmail(trimToNull(request.notification().email()));
-        settingsConfig.setWebhookSignature(request.security().webhookSignature());
-        settingsConfig.setSecretMasking(request.security().secretMasking());
-        settingsConfig.setPublicRepoAllowed(request.security().publicRepoAllowed());
-        settingsConfig.setTokenTtlDays(request.security().tokenTtlDays());
-        settingsConfig.setUpdatedAt(now);
-        systemSettingsConfigMapper.updateById(settingsConfig);
-
-        reviewPolicyConfig.setTimeoutSeconds(request.policy().llmTimeoutSeconds());
-        reviewPolicyConfig.setWorkerConcurrency(request.policy().workerConcurrency());
-        reviewPolicyConfig.setUpdatedAt(now);
-        reviewPolicyConfigMapper.updateById(reviewPolicyConfig);
-
-        recordSystemSettingLog("admin", "更新系统设置", "成功", now);
-        return toSystemSettingsDto(settingsConfig, reviewPolicyConfig, loadSettingLogs());
+        return systemSettingsApplicationService.updateSystemSettings(request);
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.REVIEW_RULES)
     public ReviewRulesResponse getReviewRules() {
-        List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
-            new LambdaQueryWrapper<ReviewRuleConfig>()
-                .orderByAsc(ReviewRuleConfig::getSortOrder)
-                .orderByAsc(ReviewRuleConfig::getId)
-        );
-        Map<String, Long> hitCountByRule = loadRuleHitCounts();
-        ReviewRuleFeedbackStat feedbackStat = loadRuleFeedbackStat();
-        List<ReviewRuleConfigDto> ruleDtos = rules.stream()
-            .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
-            .toList();
-        return new ReviewRulesResponse(buildRuleMetrics(rules, feedbackStat, hitCountByRule), ruleDtos);
+        return reviewRuleConfigService.getReviewRules();
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
-        String id = normalizeRuleId(request.id());
-        if (reviewRuleConfigMapper.selectById(id) != null) {
-            throw new com.repoguard.agent.common.BusinessException(
-                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
-                "Review rule already exists: " + id
-            );
-        }
-        ReviewRuleConfig rule = new ReviewRuleConfig();
-        applyReviewRuleRequest(rule, id, request);
-        rule.setSortOrder(nextRuleSortOrder());
-        LocalDateTime now = LocalDateTime.now();
-        rule.setCreatedAt(now);
-        rule.setUpdatedAt(now);
-        reviewRuleConfigMapper.insert(rule);
-        evictDashboardOverview();
-        return toReviewRuleDto(rule, 0);
+        return reviewRuleConfigService.createReviewRule(request);
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
-        String normalizedId = normalizeRuleId(id);
-        if (!normalizedId.equals(normalizeRuleId(request.id()))) {
-            throw new com.repoguard.agent.common.BusinessException(
-                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
-                "Review rule id in path and body must match"
-            );
-        }
-        ReviewRuleConfig rule = loadReviewRule(normalizedId);
-        applyReviewRuleRequest(rule, normalizedId, request);
-        rule.setUpdatedAt(LocalDateTime.now());
-        reviewRuleConfigMapper.updateById(rule);
-        evictDashboardOverview();
-        return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
+        return reviewRuleConfigService.updateReviewRule(id, request);
     }
 
     @Override
-    @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
-        ReviewRuleConfig rule = loadReviewRule(normalizeRuleId(id));
-        rule.setStatus(normalizeStatus(status));
-        rule.setUpdatedAt(LocalDateTime.now());
-        reviewRuleConfigMapper.updateById(rule);
-        evictDashboardOverview();
-        return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
-    }
-
-    private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        return reviewRuleConfigService.updateReviewRuleStatus(id, status);
     }
 
     @Override
     @Transactional
     public ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest configRequest) {
-        IntegrationConfig savedConfig = findGithubConfig();
-        boolean transientConfig = configRequest != null;
-        IntegrationConfig config = transientConfig ? githubIntegrationForTest(configRequest, savedConfig) : savedConfig;
-        if (config == null) {
-            return connectionResult(false, "failed", "GitHub integration is not configured");
-        }
-        try {
-            String url = buildGithubTestUrl(config);
-            String token = secretCryptoService.decrypt(config.getTokenValue());
-            RestClient.RequestHeadersSpec<?> request = restClientBuilder.build()
-                .get()
-                .uri(url)
-                .accept(MediaType.APPLICATION_JSON);
-            if (StringUtils.hasText(token)) {
-                request.header("Authorization", "Bearer " + token.trim());
-            }
-            request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
-            if (!transientConfig) {
-                markGithubIntegrationChecked(config, null);
-            }
-            return connectionResult(true, "connected", "GitHub connection test succeeded");
-        } catch (RuntimeException ex) {
-            String error = conciseError(ex);
-            if (!transientConfig) {
-                markGithubIntegrationChecked(config, error);
-            }
-            return connectionResult(false, "failed", error);
-        }
+        return connectionTestService.testGithubIntegration(configRequest);
     }
 
     @Override
     public ConnectionTestResultDto testReviewPolicy(ReviewPolicyConfigRequest configRequest) {
-        ReviewPolicyConfig savedConfig = findReviewPolicy();
-        ReviewPolicyConfig config = configRequest == null ? savedConfig : reviewPolicyForTest(configRequest, savedConfig);
-        if (config == null) {
-            return connectionResult(false, "failed", "LLM config is not configured");
-        }
-        if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
-            return connectionResult(false, "failed", "LLM review is disabled");
-        }
-        String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
-        if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
-            return connectionResult(false, "failed", "LLM base URL, model or API key is missing");
-        }
-        try {
-            RestClient restClient = restClientBuilder
-                .baseUrl(config.getBaseUrl().trim())
-                .requestFactory(requestFactory(config.getTimeoutSeconds()))
-                .build();
-            String response = restClient.post()
-                .uri("/chat/completions")
-                .header("Authorization", "Bearer " + apiKey.trim())
-                .contentType(MediaType.APPLICATION_JSON)
-                .accept(MediaType.APPLICATION_JSON)
-                .body(Map.of(
-                    "model", config.getModelName(),
-                    "temperature", connectionTestTemperature(config.getTemperature()),
-                    "max_tokens", connectionTestMaxTokens(config.getMaxTokens()),
-                    "messages", List.of(
-                        Map.of("role", "system", "content", "You are a RepoGuard connectivity probe. Reply with strict JSON only."),
-                        Map.of("role", "user", "content", "Return exactly this JSON object and no markdown: {\"riskLevel\":\"INFO\",\"findings\":[]}")
-                    )
-                ))
-                .retrieve()
-                .body(String.class);
-            String content = extractLlmMessageContent(response);
-            if (!StringUtils.hasText(content)) {
-                return connectionResult(false, "failed", "LLM response did not include usable review content");
-            }
-            try {
-                llmReviewResultParser.parse(content);
-            } catch (RuntimeException ex) {
-                return connectionResult(false, "failed", "LLM response was received but could not be parsed as review JSON: " + conciseError(ex));
-            }
-            return connectionResult(true, "connected", "LLM connection test succeeded");
-        } catch (Exception ex) {
-            return connectionResult(false, "failed", conciseError(ex));
-        }
+        return connectionTestService.testReviewPolicy(configRequest);
     }
 
     @Override
     public ConnectionTestResultDto testMysqlConnection(ServiceIntegrationConfigRequest configRequest) {
-        IntegrationConfig savedConfig = findServiceIntegration(MYSQL_PROVIDER);
-        boolean transientConfig = configRequest != null;
-        IntegrationConfig config = transientConfig ? serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig) : savedConfig;
-        if (config != null) {
-            ProbeResult runtimeProbe = runtimeMysqlProbe();
-            try (Connection connection = DriverManager.getConnection(
-                config.getBaseUrl(),
-                config.getDefaultOwner(),
-                secretCryptoService.decrypt(config.getTokenValue())
-            )) {
-                boolean valid = connection.isValid(2);
-                String error = valid ? null : "MySQL connection is not valid";
-                if (!transientConfig) {
-                    markServiceIntegrationChecked(config, error);
-                }
-                String source = transientConfig ? "submitted_config" : "saved_config";
-                Boolean savedConfigProbe = transientConfig ? null : valid;
-                return valid
-                    ? serviceConnectionResult(true, "connected", "MySQL connection test succeeded", source, runtimeProbe, savedConfig, savedConfigProbe)
-                    : serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, savedConfigProbe);
-            } catch (Exception ex) {
-                String error = conciseError(ex);
-                if (!transientConfig) {
-                    markServiceIntegrationChecked(config, error);
-                }
-                String source = transientConfig ? "submitted_config" : "saved_config";
-                return serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, transientConfig ? null : false);
-            }
-        }
-        ProbeResult runtimeProbe = runtimeMysqlProbe();
-        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
-        return serviceConnectionResult(
-            success,
-            success ? "connected" : "failed",
-            success ? "MySQL runtime connection test succeeded" : runtimeProbe.message(),
-            "runtime_config",
-            runtimeProbe,
-            savedConfig,
-            null
-        );
+        return connectionTestService.testMysqlConnection(configRequest);
     }
 
     @Override
     public ConnectionTestResultDto testRabbitMqConnection(ServiceIntegrationConfigRequest configRequest) {
-        IntegrationConfig savedConfig = findServiceIntegration(RABBITMQ_PROVIDER);
-        boolean transientConfig = configRequest != null;
-        IntegrationConfig config = transientConfig ? serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig) : savedConfig;
-        if (config != null) {
-            ProbeResult runtimeProbe = runtimeRabbitMqProbe();
-            try (com.rabbitmq.client.Connection connection = rabbitMqConnectionFactory(config).newConnection()) {
-                boolean open = connection.isOpen();
-                String error = open ? null : "RabbitMQ connection is not open";
-                if (!transientConfig) {
-                    markServiceIntegrationChecked(config, error);
-                }
-                String source = transientConfig ? "submitted_config" : "saved_config";
-                Boolean savedConfigProbe = transientConfig ? null : open;
-                return open
-                    ? serviceConnectionResult(true, "connected", "RabbitMQ connection test succeeded", source, runtimeProbe, savedConfig, savedConfigProbe)
-                    : serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, savedConfigProbe);
-            } catch (Exception ex) {
-                String error = conciseError(ex);
-                if (!transientConfig) {
-                    markServiceIntegrationChecked(config, error);
-                }
-                String source = transientConfig ? "submitted_config" : "saved_config";
-                return serviceConnectionResult(false, "failed", error, source, runtimeProbe, savedConfig, transientConfig ? null : false);
-            }
-        }
-        ProbeResult runtimeProbe = runtimeRabbitMqProbe();
-        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
-        return serviceConnectionResult(
-            success,
-            success ? "connected" : "failed",
-            success ? "RabbitMQ runtime connection test succeeded" : runtimeProbe.message(),
-            "runtime_config",
-            runtimeProbe,
-            savedConfig,
-            null
-        );
+        return connectionTestService.testRabbitMqConnection(configRequest);
     }
 
-    private ProbeResult runtimeMysqlProbe() {
-        if (dataSource == null) {
-            return new ProbeResult(null, "unavailable", "Runtime DataSource is not available in this context");
-        }
-        try (Connection connection = dataSource.getConnection()) {
-            boolean valid = connection.isValid(2);
-            return new ProbeResult(valid, valid ? "connected" : "failed", valid ? "MySQL runtime connection is valid" : "MySQL runtime connection is not valid");
-        } catch (Exception ex) {
-            return new ProbeResult(false, "failed", conciseError(ex));
-        }
-    }
-
-    private ProbeResult runtimeRabbitMqProbe() {
-        if (rabbitTemplate == null) {
-            return new ProbeResult(null, "unavailable", "Runtime RabbitTemplate is not available in this context");
-        }
-        try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            boolean connected = Boolean.TRUE.equals(open);
-            return new ProbeResult(connected, connected ? "connected" : "failed", connected ? "RabbitMQ runtime channel is open" : "RabbitMQ channel is not open");
-        } catch (RuntimeException ex) {
-            return new ProbeResult(false, "failed", conciseError(ex));
-        }
-    }
-
-    private ReviewRuleConfig loadReviewRule(String id) {
-        ReviewRuleConfig rule = reviewRuleConfigMapper.selectById(id);
-        if (rule == null) {
-            throw new com.repoguard.agent.common.BusinessException(
-                com.repoguard.agent.common.ErrorCode.BAD_REQUEST,
-                "Review rule not found: " + id
-            );
-        }
-        return rule;
-    }
-
-    private void applyReviewRuleRequest(ReviewRuleConfig rule, String id, ReviewRuleConfigRequest request) {
-        rule.setId(id);
-        rule.setRuleName(request.name().trim());
-        rule.setScope(request.scope().trim());
-        rule.setApplicableLanguages(cleanOptional(request.applicableLanguages()));
-        rule.setFilePatterns(cleanOptional(request.filePatterns()));
-        rule.setSeverity(normalizeSeverity(request.severity()));
-        rule.setStatus(normalizeStatus(request.status()));
-        rule.setConfidence(request.confidence() == null ? 90 : request.confidence());
-        rule.setDescription(request.description().trim());
-        rule.setPositiveExample(cleanOptional(request.positiveExample()));
-        rule.setFalsePositiveGuidance(cleanOptional(request.falsePositiveGuidance()));
-    }
-
-    private int nextRuleSortOrder() {
-        List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
-            new LambdaQueryWrapper<ReviewRuleConfig>().orderByDesc(ReviewRuleConfig::getSortOrder)
-        );
-        return rules == null || rules.isEmpty() || rules.getFirst().getSortOrder() == null
-            ? 10
-            : rules.getFirst().getSortOrder() + 10;
-    }
-
-    private Map<String, Long> loadRuleHitCounts() {
-        return buildRuleHitCounts(reviewFindingMapper.selectReviewRuleHitCounts());
-    }
-
-    private ReviewRuleFeedbackStat loadRuleFeedbackStat() {
-        ReviewRuleFeedbackStat feedbackStat = reviewFindingMapper.selectReviewRuleFeedbackStat();
-        return feedbackStat == null ? new ReviewRuleFeedbackStat() : feedbackStat;
-    }
-
-    private Map<String, Long> buildRuleHitCounts(List<ReviewRuleHitCount> hitCounts) {
-        if (hitCounts == null || hitCounts.isEmpty()) {
-            return Map.of();
-        }
-        return hitCounts.stream()
-            .filter(count -> count != null && StringUtils.hasText(count.getRuleId()))
-            .collect(Collectors.toMap(ReviewRuleHitCount::getRuleId, count -> safeCount(count.getTotal()), Long::sum));
-    }
-
-    private List<ReviewRuleMetricDto> buildRuleMetrics(
-        List<ReviewRuleConfig> rules,
-        ReviewRuleFeedbackStat feedbackStat,
-        Map<String, Long> hitCountByRule
-    ) {
-        long enabledCount = rules.stream().filter(rule -> "ENABLED".equals(rule.getStatus())).count();
-        long highRiskCount = rules.stream().filter(rule -> isHighSeverity(rule.getSeverity())).count();
-        long totalHits = safeCount(feedbackStat.getTotalHits());
-        long validCount = safeCount(feedbackStat.getValidCount());
-        long falsePositiveCount = safeCount(feedbackStat.getFalsePositiveCount());
-        long reviewedCount = safeCount(feedbackStat.getReviewedCount());
-        int averageConfidence = rules.isEmpty()
-            ? 0
-            : (int) Math.round(rules.stream().mapToInt(rule -> rule.getConfidence() == null ? 0 : rule.getConfidence()).average().orElse(0));
-        return List.of(
-            new ReviewRuleMetricDto("启用规则", String.valueOf(enabledCount), "共 " + rules.size() + " 条规则", "blue"),
-            new ReviewRuleMetricDto("高风险规则", String.valueOf(highRiskCount), "包含 high / critical", "red"),
-            new ReviewRuleMetricDto("累计命中", String.valueOf(totalHits), "来自历史审查结果", "orange"),
-            new ReviewRuleMetricDto("平均置信度", averageConfidence + "%", "规则配置均值", "green"),
-            new ReviewRuleMetricDto("有效率", percentage(validCount, reviewedCount), "人工判定有效 / 已判定", "green"),
-            new ReviewRuleMetricDto("误报率", percentage(falsePositiveCount, reviewedCount), "人工判定误报 / 已判定", "red")
-        );
-    }
-
-    private long safeCount(Long value) {
-        return value == null ? 0L : value;
-    }
-
-    private String percentage(long numerator, long denominator) {
-        if (denominator <= 0) {
-            return "0%";
-        }
-        return Math.round(numerator * 100.0 / denominator) + "%";
-    }
-
-    private boolean isHighSeverity(String severity) {
-        return "HIGH".equals(severity) || "CRITICAL".equals(severity);
-    }
-
-    private ReviewRuleConfigDto toReviewRuleDto(ReviewRuleConfig rule, long hitCount) {
-        return new ReviewRuleConfigDto(
-            rule.getId(),
-            rule.getRuleName(),
-            rule.getScope(),
-            defaultString(rule.getApplicableLanguages()),
-            defaultString(rule.getFilePatterns()),
-            lower(rule.getSeverity()),
-            lower(rule.getStatus()),
-            hitCount,
-            (rule.getConfidence() == null ? 0 : rule.getConfidence()) + "%",
-            format(rule.getUpdatedAt()),
-            rule.getDescription(),
-            defaultString(rule.getPositiveExample()),
-            defaultString(rule.getFalsePositiveGuidance())
-        );
-    }
-
-    private String cleanOptional(String value) {
-        return StringUtils.hasText(value) ? value.trim() : "";
-    }
-
-    private String defaultString(String value) {
-        return value == null ? "" : value;
-    }
-
-    private String normalizeRuleId(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizeSeverity(String value) {
-        return value == null ? "INFO" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizeStatus(String value) {
-        return value == null ? "DISABLED" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private IntegrationConfig loadGithubConfig() {
-        IntegrationConfig config = findGithubConfig();
-        if (config != null) {
-            return config;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        IntegrationConfig defaultConfig = new IntegrationConfig();
-        defaultConfig.setProvider(GITHUB_PROVIDER);
-        defaultConfig.setStatus("NOT_CONFIGURED");
-        defaultConfig.setBaseUrl("https://api.github.com");
-        defaultConfig.setCreatedAt(now);
-        defaultConfig.setUpdatedAt(now);
-        integrationConfigMapper.insert(defaultConfig);
-        return defaultConfig;
-    }
-
-    private IntegrationConfig findGithubConfig() {
-        return integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-        );
-    }
-
-    private IntegrationConfig githubIntegrationForTest(GithubIntegrationConfigRequest request, IntegrationConfig savedConfig) {
-        IntegrationConfig config = new IntegrationConfig();
-        String token = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
-            request.token()
-        );
-        config.setProvider(GITHUB_PROVIDER);
-        config.setStatus("CONFIGURED");
-        config.setBaseUrl(request.baseUrl().trim());
-        config.setTokenValue(secretCryptoService.encrypt(token));
-        config.setDefaultOwner(trimToNull(request.defaultOwner()));
-        config.setDefaultRepo(trimToNull(request.defaultRepo()));
-        return config;
-    }
-
-    private ServiceIntegrationConfigDto updateServiceIntegration(String provider, ServiceIntegrationConfigRequest request) {
-        IntegrationConfig config = loadServiceIntegration(provider);
-        String secret = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.secret());
-        config.setBaseUrl(request.baseUrl().trim());
-        config.setDefaultOwner(trimToNull(request.username()));
-        config.setDefaultRepo(trimToNull(request.resource()));
-        config.setTokenValue(secretCryptoService.encrypt(secret));
-        config.setStatus(StringUtils.hasText(config.getBaseUrl()) ? "CONFIGURED" : "NOT_CONFIGURED");
-        config.setLastError(null);
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (config.getTokenValue() == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("token_value", null)
-            );
-        }
-        integrationConfigMapper.update(
-            new UpdateWrapper<IntegrationConfig>()
-                .eq("id", config.getId())
-                .set("last_error", null)
-        );
-        return toServiceIntegrationDto(config);
-    }
-
-    private IntegrationConfig loadServiceIntegration(String provider) {
-        IntegrationConfig config = findServiceIntegration(provider);
-        if (config != null) {
-            return config;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        IntegrationConfig defaultConfig = new IntegrationConfig();
-        defaultConfig.setProvider(provider);
-        defaultConfig.setStatus("NOT_CONFIGURED");
-        defaultConfig.setBaseUrl(defaultServiceBaseUrl(provider));
-        defaultConfig.setDefaultOwner(defaultServiceUsername(provider));
-        defaultConfig.setDefaultRepo(defaultServiceResource(provider));
-        defaultConfig.setTokenValue(secretCryptoService.encrypt(defaultServiceSecret(provider)));
-        defaultConfig.setCreatedAt(now);
-        defaultConfig.setUpdatedAt(now);
-        integrationConfigMapper.insert(defaultConfig);
-        return defaultConfig;
-    }
-
-    private IntegrationConfig findServiceIntegration(String provider) {
-        return integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, provider)
-        );
-    }
-
-    private IntegrationConfig serviceIntegrationForTest(
-        String provider,
-        ServiceIntegrationConfigRequest request,
-        IntegrationConfig savedConfig
-    ) {
-        IntegrationConfig config = new IntegrationConfig();
-        String secret = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
-            request.secret()
-        );
-        config.setProvider(provider);
-        config.setStatus("CONFIGURED");
-        config.setBaseUrl(request.baseUrl().trim());
-        config.setTokenValue(secretCryptoService.encrypt(secret));
-        config.setDefaultOwner(trimToNull(request.username()));
-        config.setDefaultRepo(trimToNull(request.resource()));
-        return config;
-    }
-
-    private ReviewPolicyConfig loadReviewPolicy() {
-        ReviewPolicyConfig config = findReviewPolicy();
-        if (config != null) {
-            return config;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        ReviewPolicyConfig defaultConfig = new ReviewPolicyConfig();
-        defaultConfig.setId(1L);
-        defaultConfig.setLlmEnabled(true);
-        defaultConfig.setLlmProvider("dashscope");
-        defaultConfig.setModelName("qwen-plus");
-        defaultConfig.setBaseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1");
-        defaultConfig.setTimeoutSeconds(60);
-        defaultConfig.setTemperature(java.math.BigDecimal.valueOf(0.20));
-        defaultConfig.setMaxTokens(4096);
-        defaultConfig.setFallbackToRules(true);
-        defaultConfig.setWorkerConcurrency(1);
-        defaultConfig.setChunkFileThreshold(DEFAULT_CHUNK_FILE_THRESHOLD);
-        defaultConfig.setChunkLineThreshold(DEFAULT_CHUNK_LINE_THRESHOLD);
-        defaultConfig.setChunkMaxFiles(DEFAULT_CHUNK_MAX_FILES);
-        defaultConfig.setChunkMaxLines(DEFAULT_CHUNK_MAX_LINES);
-        defaultConfig.setInputTokenPricePerMillion(BigDecimal.ZERO);
-        defaultConfig.setOutputTokenPricePerMillion(BigDecimal.ZERO);
-        defaultConfig.setCreatedAt(now);
-        defaultConfig.setUpdatedAt(now);
-        reviewPolicyConfigMapper.insert(defaultConfig);
-        return defaultConfig;
-    }
-
-    private ReviewPolicyConfig findReviewPolicy() {
-        return reviewPolicyConfigMapper.selectById(1L);
-    }
-
-    private ReviewPolicyConfig reviewPolicyForTest(ReviewPolicyConfigRequest request, ReviewPolicyConfig savedConfig) {
-        ReviewPolicyConfig config = new ReviewPolicyConfig();
-        String apiKey = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getApiKeyValue()),
-            request.apiKey()
-        );
-        config.setLlmEnabled(request.llmEnabled());
-        config.setLlmProvider(request.llmProvider().trim());
-        config.setModelName(request.modelName().trim());
-        config.setBaseUrl(trimToNull(request.baseUrl()));
-        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
-        config.setTimeoutSeconds(request.timeoutSeconds());
-        config.setTemperature(request.temperature());
-        config.setMaxTokens(request.maxTokens());
-        config.setFallbackToRules(request.fallbackToRules());
-        config.setWorkerConcurrency(request.workerConcurrency());
-        config.setChunkFileThreshold(request.chunkFileThreshold());
-        config.setChunkLineThreshold(request.chunkLineThreshold());
-        config.setChunkMaxFiles(request.chunkMaxFiles());
-        config.setChunkMaxLines(request.chunkMaxLines());
-        config.setInputTokenPricePerMillion(request.inputTokenPricePerMillion());
-        config.setOutputTokenPricePerMillion(request.outputTokenPricePerMillion());
-        return config;
-    }
-
-    private SystemSettingsConfig loadSystemSettings() {
-        SystemSettingsConfig config = systemSettingsConfigMapper.selectById(1L);
-        if (config != null) {
-            return config;
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        SystemSettingsConfig defaultConfig = new SystemSettingsConfig();
-        defaultConfig.setId(1L);
-        defaultConfig.setSystemName("RepoGuard Agent");
-        defaultConfig.setLanguage("中文");
-        defaultConfig.setTimezone("Asia/Shanghai");
-        defaultConfig.setRetentionDays(90);
-        defaultConfig.setMaxDiffLines(800);
-        defaultConfig.setAutoComment(true);
-        defaultConfig.setAutoRetry(true);
-        defaultConfig.setGithubComment(true);
-        defaultConfig.setHighRiskPr(true);
-        defaultConfig.setFailedTask(true);
-        defaultConfig.setNotificationEmail("ops@repoguard.dev");
-        defaultConfig.setWebhookSignature(true);
-        defaultConfig.setSecretMasking(true);
-        defaultConfig.setPublicRepoAllowed(false);
-        defaultConfig.setTokenTtlDays(30);
-        defaultConfig.setCreatedAt(now);
-        defaultConfig.setUpdatedAt(now);
-        systemSettingsConfigMapper.insert(defaultConfig);
-        return defaultConfig;
-    }
-
-    private List<SystemSettingLog> loadSettingLogs() {
-        List<SystemSettingLog> logs = systemSettingLogMapper.selectList(
-            new LambdaQueryWrapper<SystemSettingLog>()
-                .orderByDesc(SystemSettingLog::getCreatedAt)
-                .orderByDesc(SystemSettingLog::getId)
-                .last("limit 20")
-        );
-        if (logs == null) {
-            return List.of();
-        }
-        return logs;
-    }
-
-    private void recordSystemSettingLog(String operator, String action, String status, LocalDateTime createdAt) {
-        SystemSettingLog log = new SystemSettingLog();
-        log.setOperator(operator);
-        log.setAction(action);
-        log.setStatus(status);
-        log.setCreatedAt(createdAt);
-        systemSettingLogMapper.insert(log);
-    }
-
-    private String defaultServiceBaseUrl(String provider) {
-        if (MYSQL_PROVIDER.equals(provider)) {
-            return property(
-                "spring.datasource.url",
-                "jdbc:mysql://localhost:3306/repoguard?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true"
-            );
-        }
-        if (RABBITMQ_PROVIDER.equals(provider)) {
-            return "amqp://" + property("spring.rabbitmq.host", "localhost") + ":" + property("spring.rabbitmq.port", "5672");
-        }
-        return "";
-    }
-
-    private String defaultServiceUsername(String provider) {
-        if (MYSQL_PROVIDER.equals(provider)) {
-            return property("spring.datasource.username", "root");
-        }
-        if (RABBITMQ_PROVIDER.equals(provider)) {
-            return property("spring.rabbitmq.username", "guest");
-        }
-        return null;
-    }
-
-    private String defaultServiceSecret(String provider) {
-        if (MYSQL_PROVIDER.equals(provider)) {
-            return property("spring.datasource.password", null);
-        }
-        if (RABBITMQ_PROVIDER.equals(provider)) {
-            return property("spring.rabbitmq.password", null);
-        }
-        return null;
-    }
-
-    private String defaultServiceResource(String provider) {
-        if (MYSQL_PROVIDER.equals(provider)) {
-            return databaseNameFromJdbcUrl(defaultServiceBaseUrl(provider));
-        }
-        if (RABBITMQ_PROVIDER.equals(provider)) {
-            return property("spring.rabbitmq.virtual-host", "/");
-        }
-        return null;
-    }
-
-    private String databaseNameFromJdbcUrl(String jdbcUrl) {
-        if (!StringUtils.hasText(jdbcUrl)) {
-            return null;
-        }
-        int slash = jdbcUrl.lastIndexOf('/');
-        if (slash < 0 || slash == jdbcUrl.length() - 1) {
-            return null;
-        }
-        String database = jdbcUrl.substring(slash + 1);
-        int query = database.indexOf('?');
-        return query >= 0 ? database.substring(0, query) : database;
-    }
-
-    private String property(String key, String defaultValue) {
-        return environment == null ? defaultValue : environment.getProperty(key, defaultValue);
-    }
-
-    private String buildGithubTestUrl(IntegrationConfig config) {
-        String baseUrl = StringUtils.hasText(config.getBaseUrl()) ? config.getBaseUrl().trim() : "https://api.github.com";
-        if (StringUtils.hasText(config.getDefaultOwner()) && StringUtils.hasText(config.getDefaultRepo())) {
-            return UriComponentsBuilder
-                .fromUriString(baseUrl)
-                .path("/repos/{owner}/{repo}")
-                .build(config.getDefaultOwner().trim(), config.getDefaultRepo().trim())
-                .toString();
-        }
-        return UriComponentsBuilder.fromUriString(baseUrl).path("/rate_limit").toUriString();
-    }
-
-    private void markGithubIntegrationChecked(IntegrationConfig config, String error) {
-        if (config == null || config.getId() == null) {
-            return;
-        }
-        config.setLastCheckedAt(LocalDateTime.now());
-        config.setLastError(error);
-        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (error == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("last_error", null)
-            );
-        }
-    }
-
-    private void markServiceIntegrationChecked(IntegrationConfig config, String error) {
-        if (config == null || config.getId() == null) {
-            return;
-        }
-        config.setLastCheckedAt(LocalDateTime.now());
-        config.setLastError(error);
-        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (error == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("last_error", null)
-            );
-        }
-    }
-
-    private com.rabbitmq.client.ConnectionFactory rabbitMqConnectionFactory(IntegrationConfig config) {
-        URI uri = URI.create(config.getBaseUrl());
-        com.rabbitmq.client.ConnectionFactory factory = new com.rabbitmq.client.ConnectionFactory();
-        if (StringUtils.hasText(uri.getHost())) {
-            factory.setHost(uri.getHost());
-        }
-        if (uri.getPort() > 0) {
-            factory.setPort(uri.getPort());
-        }
-        if (StringUtils.hasText(config.getDefaultOwner())) {
-            factory.setUsername(config.getDefaultOwner());
-        }
-        String secret = secretCryptoService.decrypt(config.getTokenValue());
-        if (StringUtils.hasText(secret)) {
-            factory.setPassword(secret);
-        }
-        String virtualHost = StringUtils.hasText(config.getDefaultRepo()) ? config.getDefaultRepo() : pathVirtualHost(uri);
-        if (StringUtils.hasText(virtualHost)) {
-            factory.setVirtualHost(virtualHost);
-        }
-        factory.setConnectionTimeout(2_000);
-        factory.setRequestedHeartbeat(10);
-        return factory;
-    }
-
-    private String pathVirtualHost(URI uri) {
-        String path = uri.getPath();
-        if (!StringUtils.hasText(path) || "/".equals(path)) {
-            return "/";
-        }
-        return path.substring(1);
-    }
-
-    private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds == null ? 60 : timeoutSeconds));
-        requestFactory.setConnectTimeout(timeout);
-        requestFactory.setReadTimeout(timeout);
-        return requestFactory;
-    }
-
-    private BigDecimal connectionTestTemperature(BigDecimal configuredTemperature) {
-        return configuredTemperature == null ? BigDecimal.ZERO : configuredTemperature;
-    }
-
-    private int connectionTestMaxTokens(Integer configuredMaxTokens) {
-        int maxTokens = configuredMaxTokens == null ? MIN_LLM_TEST_MAX_TOKENS : configuredMaxTokens;
-        return Math.max(MIN_LLM_TEST_MAX_TOKENS, Math.min(maxTokens, MAX_LLM_TEST_MAX_TOKENS));
-    }
-
-    private String extractLlmMessageContent(String response) throws Exception {
-        JsonNode root = objectMapper.readTree(response == null ? "" : response);
-        for (String pointer : List.of(
-            "/choices/0/message/content",
-            "/choices/0/text",
-            "/output_text",
-            "/output/0/content/0/text",
-            "/content"
-        )) {
-            String content = nodeText(root.at(pointer));
-            if (StringUtils.hasText(content)) {
-                return content.trim();
-            }
-        }
-        return "";
-    }
-
-    private String nodeText(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return "";
-        }
-        if (node.isTextual()) {
-            return node.asText();
-        }
-        if (node.isArray()) {
-            StringBuilder builder = new StringBuilder();
-            for (JsonNode item : node) {
-                String text = nodeText(item);
-                if (StringUtils.hasText(text)) {
-                    if (builder.length() > 0) {
-                        builder.append('\n');
-                    }
-                    builder.append(text.trim());
-                }
-            }
-            return builder.toString();
-        }
-        if (node.isObject()) {
-            for (String field : List.of("text", "content")) {
-                String text = nodeText(node.path(field));
-                if (StringUtils.hasText(text)) {
-                    return text;
-                }
-            }
-        }
-        return "";
-    }
-
-    private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
-        return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()), null, null, null, null, null, null);
-    }
-
-    private ConnectionTestResultDto serviceConnectionResult(
-        boolean success,
-        String status,
-        String message,
-        String testedConfigSource,
-        ProbeResult runtimeProbe,
-        IntegrationConfig savedConfig,
-        Boolean testedSavedConfigHealthy
-    ) {
-        Boolean runtimeHealthy = runtimeProbe == null ? null : runtimeProbe.healthy();
-        Boolean savedConfigHealthy = resolveSavedConfigHealthy(savedConfig, testedSavedConfigHealthy);
-        return new ConnectionTestResultDto(
-            success,
-            status,
-            message,
-            format(LocalDateTime.now()),
-            testedConfigSource,
-            runtimeHealthy,
-            savedConfigHealthy,
-            mismatch(runtimeHealthy, savedConfigHealthy),
-            runtimeProbe == null ? null : runtimeProbe.status(),
-            savedConfig == null ? "not_configured" : lower(savedConfig.getStatus())
-        );
-    }
-
-    private Boolean resolveSavedConfigHealthy(IntegrationConfig savedConfig, Boolean testedSavedConfigHealthy) {
-        if (savedConfig == null) {
-            return null;
-        }
-        if (testedSavedConfigHealthy != null) {
-            return testedSavedConfigHealthy;
-        }
-        return "CONFIGURED".equals(savedConfig.getStatus()) && !StringUtils.hasText(savedConfig.getLastError());
-    }
-
-    private Boolean mismatch(Boolean runtimeHealthy, Boolean savedConfigHealthy) {
-        if (runtimeHealthy == null || savedConfigHealthy == null) {
-            return null;
-        }
-        return !runtimeHealthy.equals(savedConfigHealthy);
-    }
-
-    private String conciseError(Exception ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message) && ex.getCause() != null) {
-            message = ex.getCause().getMessage();
-        }
-        if (!StringUtils.hasText(message)) {
-            return ex.getClass().getSimpleName();
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
-    }
-
-    private GithubIntegrationConfigDto toGithubDto(IntegrationConfig config) {
-        return new GithubIntegrationConfigDto(
-            config.getProvider(),
-            lower(config.getStatus()),
-            config.getBaseUrl(),
-            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
-            config.getDefaultOwner(),
-            config.getDefaultRepo(),
-            format(config.getLastCheckedAt()),
-            config.getLastError(),
-            format(config.getUpdatedAt())
-        );
-    }
-
-    private ServiceIntegrationConfigDto toServiceIntegrationDto(IntegrationConfig config) {
-        return new ServiceIntegrationConfigDto(
-            config.getProvider(),
-            lower(config.getStatus()),
-            config.getBaseUrl(),
-            config.getDefaultOwner(),
-            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
-            config.getDefaultRepo(),
-            format(config.getLastCheckedAt()),
-            config.getLastError(),
-            format(config.getUpdatedAt())
-        );
-    }
-
-    private ReviewPolicyConfigDto toReviewPolicyDto(ReviewPolicyConfig config) {
-        return new ReviewPolicyConfigDto(
-            config.getLlmEnabled(),
-            config.getLlmProvider(),
-            config.getModelName(),
-            config.getBaseUrl(),
-            maskSecret(secretCryptoService.decrypt(config.getApiKeyValue())),
-            config.getTimeoutSeconds(),
-            config.getTemperature(),
-            config.getMaxTokens(),
-            config.getFallbackToRules(),
-            config.getWorkerConcurrency(),
-            valueOrDefault(config.getChunkFileThreshold(), DEFAULT_CHUNK_FILE_THRESHOLD),
-            valueOrDefault(config.getChunkLineThreshold(), DEFAULT_CHUNK_LINE_THRESHOLD),
-            valueOrDefault(config.getChunkMaxFiles(), DEFAULT_CHUNK_MAX_FILES),
-            valueOrDefault(config.getChunkMaxLines(), DEFAULT_CHUNK_MAX_LINES),
-            decimalOrZero(config.getInputTokenPricePerMillion()),
-            decimalOrZero(config.getOutputTokenPricePerMillion()),
-            format(config.getUpdatedAt())
-        );
-    }
-
-    private SystemSettingsDto toSystemSettingsDto(
-        SystemSettingsConfig settingsConfig,
-        ReviewPolicyConfig reviewPolicyConfig,
-        List<SystemSettingLog> logs
-    ) {
-        return new SystemSettingsDto(
-            new BaseSettingsDto(
-                settingsConfig.getSystemName(),
-                settingsConfig.getLanguage(),
-                settingsConfig.getTimezone(),
-                settingsConfig.getRetentionDays()
-            ),
-            new ReviewPolicySettingsDto(
-                settingsConfig.getMaxDiffLines(),
-                reviewPolicyConfig.getTimeoutSeconds(),
-                reviewPolicyConfig.getWorkerConcurrency(),
-                settingsConfig.getAutoComment(),
-                settingsConfig.getAutoRetry()
-            ),
-            new NotificationSettingsDto(
-                settingsConfig.getGithubComment(),
-                settingsConfig.getHighRiskPr(),
-                settingsConfig.getFailedTask(),
-                settingsConfig.getNotificationEmail()
-            ),
-            new SecuritySettingsDto(
-                settingsConfig.getWebhookSignature(),
-                settingsConfig.getSecretMasking(),
-                settingsConfig.getPublicRepoAllowed(),
-                settingsConfig.getTokenTtlDays()
-            ),
-            logs.stream().map(this::toSettingLogDto).toList()
-        );
-    }
-
-    private SettingLogDto toSettingLogDto(SystemSettingLog log) {
-        return new SettingLogDto(
-            format(log.getCreatedAt()),
-            log.getOperator(),
-            log.getAction(),
-            log.getStatus()
-        );
-    }
-
-    private String resolveSecretValue(String currentValue, String submittedValue) {
-        if (submittedValue == null) {
-            return currentValue;
-        }
-        String trimmed = submittedValue.trim();
-        if (trimmed.startsWith("****")) {
-            return currentValue;
-        }
-        return StringUtils.hasText(trimmed) ? trimmed : null;
-    }
-
-    private String maskSecret(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        String trimmed = value.trim();
-        int visible = Math.min(4, trimmed.length());
-        return "****" + trimmed.substring(trimmed.length() - visible);
-    }
-
-    private String trimToNull(String value) {
-        return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase();
-    }
-
-    private Integer valueOrDefault(Integer value, Integer defaultValue) {
-        return value == null ? defaultValue : value;
-    }
-
-    private BigDecimal decimalOrZero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
-    }
-
-    private String format(LocalDateTime time) {
-        return time == null ? null : time.format(DATE_TIME_FORMATTER);
-    }
-
-    private record ProbeResult(Boolean healthy, String status, String message) {
-    }
 }

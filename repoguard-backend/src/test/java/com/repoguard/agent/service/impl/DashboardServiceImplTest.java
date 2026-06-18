@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.GithubIntegrationProvider;
@@ -19,26 +20,54 @@ import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class DashboardServiceImplTest {
 
+    private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-06-19T10:00:00Z"), ZoneId.of("UTC"));
+
     private final DashboardMapper dashboardMapper = org.mockito.Mockito.mock(DashboardMapper.class);
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    private final DashboardStatusMapper statusMapper = new DashboardStatusMapper();
+    private final DashboardRuleDisplayMapper ruleDisplayMapper = new DashboardRuleDisplayMapper();
+    private final DashboardOverviewDisplayMapper overviewDisplayMapper = new DashboardOverviewDisplayMapper();
+    private final DashboardLlmQualityFormatter llmQualityFormatter = new DashboardLlmQualityFormatter();
+    private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder = DashboardLlmQualityTrendBuilder.forTest(
+        llmQualityFormatter,
+        FIXED_CLOCK
+    );
+    private final DashboardReviewTrendWindow reviewTrendWindow = DashboardReviewTrendWindow.forTest(FIXED_CLOCK);
     private final DashboardServiceImpl service = new DashboardServiceImpl(
         dashboardMapper,
         githubIntegrationProvider,
         reviewPolicyProvider,
-        rabbitTemplate
+        rabbitTemplate,
+        statusMapper,
+        ruleDisplayMapper,
+        overviewDisplayMapper,
+        llmQualityFormatter,
+        llmQualityTrendBuilder,
+        reviewTrendWindow
     );
+
+    @BeforeEach
+    void setUp() {
+        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of());
+        when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of());
+    }
 
     @Test
     void overviewReportsConfiguredDependenciesAsHealthy() {
@@ -70,14 +99,17 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsTopMetricsFromAggregateQuery() {
-        when(dashboardMapper.selectMetricStat()).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
         var metrics = service.getOverview(null).overviewMetrics();
 
+        verify(dashboardMapper).selectMetricStat(LocalDate.of(2026, 6, 13));
         assertThat(metrics).extracting("label").containsExactly("本周审查", "高风险 PR", "失败任务", "平均审查耗时");
+        assertThat(metrics).extracting("trendType").containsExactly("up", "up-danger", "down", "down");
+        assertThat(metrics).extracting("color").containsExactly("blue", "red", "orange", "green");
         assertThat(metrics.get(0).value()).isEqualTo("3");
         assertThat(metrics.get(1).value()).isEqualTo("2");
         assertThat(metrics.get(1).trend()).isEqualTo("66.7%");
@@ -88,7 +120,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsReviewTrendFromGroupedQuery() {
-        when(dashboardMapper.selectReviewTrendCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of(
             reviewTrendCount("06-15", 2L),
             reviewTrendCount("06-16", 3L)
         ));
@@ -98,6 +130,7 @@ class DashboardServiceImplTest {
 
         var reviewTrend = service.getOverview(null).reviewTrend();
 
+        verify(dashboardMapper).selectReviewTrendCounts(LocalDate.of(2026, 6, 13));
         assertThat(reviewTrend).hasSize(2);
         assertThat(reviewTrend.get(0).date()).isEqualTo("06-15");
         assertThat(reviewTrend.get(0).value()).isEqualTo(2L);
@@ -107,7 +140,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRiskDistributionFromGroupedQuery() {
-        when(dashboardMapper.selectRiskLevelCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectRiskLevelCounts(any())).thenReturn(List.of(
             riskLevelCount("HIGH", 1L),
             riskLevelCount("MEDIUM", 2L),
             riskLevelCount("INFO", 1L)
@@ -118,7 +151,10 @@ class DashboardServiceImplTest {
 
         var riskDistribution = service.getOverview(null).riskDistribution();
 
+        verify(dashboardMapper).selectRiskLevelCounts(LocalDate.of(2026, 6, 13));
         assertThat(riskDistribution).hasSize(4);
+        assertThat(riskDistribution).extracting("name").containsExactly("高风险", "中风险", "低风险", "提示");
+        assertThat(riskDistribution).extracting("color").containsExactly("#ef4444", "#f59e0b", "#2563eb", "#22c55e");
         assertThat(riskDistribution.get(0).value()).isEqualTo(1L);
         assertThat(riskDistribution.get(0).percent()).isEqualTo("25.0%");
         assertThat(riskDistribution.get(1).value()).isEqualTo(2L);
@@ -131,7 +167,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRuleHitsFromGroupedQuery() {
-        when(dashboardMapper.selectRuleHitCounts()).thenReturn(List.of(
+        when(dashboardMapper.selectRuleHitCounts(any())).thenReturn(List.of(
             ruleHitCount("RG-API-001", 2L),
             ruleHitCount(null, 1L),
             ruleHitCount("RG-SECRET-001", 3L)
@@ -142,13 +178,25 @@ class DashboardServiceImplTest {
 
         var overview = service.getOverview(null);
 
+        verify(dashboardMapper).selectRuleHitCounts(LocalDate.of(2026, 6, 13));
         assertThat(overview.ruleHits()).hasSize(3);
+        assertThat(overview.ruleHits().get(0).name()).isEqualTo("\u786c\u7f16\u7801\u5bc6\u94a5\u68c0\u6d4b");
+        assertThat(overview.ruleHits().get(0).color()).isEqualTo("#ef4444");
         assertThat(overview.ruleHits().get(0).value()).isEqualTo(3L);
         assertThat(overview.ruleHits().get(0).percent()).isEqualTo("50.0%");
+        assertThat(overview.ruleHits().get(1).name()).isEqualTo("Controller \u65e0\u6d4b\u8bd5");
+        assertThat(overview.ruleHits().get(1).color()).isEqualTo("#f59e0b");
         assertThat(overview.ruleHits().get(1).value()).isEqualTo(2L);
         assertThat(overview.ruleHits().get(1).percent()).isEqualTo("33.3%");
+        assertThat(overview.ruleHits().get(2).name()).isEqualTo("LLM \u5ba1\u67e5");
+        assertThat(overview.ruleHits().get(2).color()).isEqualTo("#14b8a6");
         assertThat(overview.ruleHits().get(2).value()).isEqualTo(1L);
         assertThat(overview.ruleHits().get(2).percent()).isEqualTo("16.7%");
+        assertThat(overview.failedRules()).extracting("name").containsExactly(
+            "\u786c\u7f16\u7801\u5bc6\u94a5\u68c0\u6d4b",
+            "Controller \u65e0\u6d4b\u8bd5",
+            "LLM \u5ba1\u67e5"
+        );
         assertThat(overview.failedRules()).extracting("count").containsExactly(3L, 2L, 1L);
         assertThat(overview.failedRules()).extracting("percent").containsExactly("50.0%", "33.3%", "16.7%");
     }
@@ -173,13 +221,13 @@ class DashboardServiceImplTest {
         assertThat(highRiskReviews.get(1).title()).isEqualTo("Harden config");
         assertThat(highRiskReviews.get(1).riskLevel()).isEqualTo("high");
         assertThat(highRiskReviews.get(1).ruleHits()).isEqualTo(2L);
+        assertThat(highRiskReviews.get(1).status()).isEqualTo("失败");
     }
 
     @Test
     void overviewBuildsLlmQualityTrendFromGroupedQuery() {
-        LocalDateTime today = LocalDateTime.now();
-        String yesterdayKey = today.minusDays(1).toLocalDate().toString();
-        String todayKey = today.toLocalDate().toString();
+        String yesterdayKey = LocalDate.of(2026, 6, 18).toString();
+        String todayKey = LocalDate.of(2026, 6, 19).toString();
         when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
             llmQualityTrendCount(yesterdayKey, 2L, 1L, 1L, 0L),
             llmQualityTrendCount(todayKey, 3L, 2L, 0L, 1L)
@@ -190,6 +238,7 @@ class DashboardServiceImplTest {
 
         var trend = service.getOverview(7).llmQualityTrend();
 
+        verify(dashboardMapper).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
         assertThat(trend).hasSize(7);
         assertThat(trend.get(4).taskCount()).isZero();
         assertThat(trend.get(4).parseSuccessRate()).isEqualTo("0.0%");

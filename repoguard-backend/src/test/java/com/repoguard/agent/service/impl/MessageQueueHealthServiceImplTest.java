@@ -103,6 +103,7 @@ class MessageQueueHealthServiceImplTest {
 
         assertThat(response.status()).isEqualTo("queued");
         assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
         assertThat(task.getPublishAttempts()).isZero();
         assertThat(task.getNextPublishRetryAt()).isNull();
         assertThat(task.getLastPublishError()).isNull();
@@ -125,6 +126,7 @@ class MessageQueueHealthServiceImplTest {
 
         assertThat(response.status()).isEqualTo("publish_failed");
         assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getNextPublishRetryAt()).isNotNull();
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
@@ -170,6 +172,7 @@ class MessageQueueHealthServiceImplTest {
         task.setRepository("PRAgent");
         task.setPrNumber(100 + id.intValue());
         task.setStatus(status);
+        task.setLlmStatus("FAILED");
         task.setPublishAttempts(publishAttempts);
         task.setNextPublishRetryAt(nextRetryAt);
         task.setPublishClaimedBy(claimedBy);

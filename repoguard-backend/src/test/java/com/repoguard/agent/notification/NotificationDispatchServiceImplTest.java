@@ -3,10 +3,10 @@ package com.repoguard.agent.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
@@ -19,13 +19,20 @@ import org.mockito.ArgumentCaptor;
 class NotificationDispatchServiceImplTest {
 
     private final NotificationEventMapper eventMapper = org.mockito.Mockito.mock(NotificationEventMapper.class);
+    private final NotificationOutboxEventStore outboxEventStore = new NotificationOutboxEventStore(eventMapper);
     private final NotificationEventPublisher publisher = org.mockito.Mockito.mock(NotificationEventPublisher.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
+    private final NotificationEventPayloadBuilder payloadBuilder = new NotificationEventPayloadBuilder(new com.fasterxml.jackson.databind.ObjectMapper());
+    private final NotificationPublishFailurePolicy publishFailurePolicy = new NotificationPublishFailurePolicy();
+    private final NotificationPublishEventStateUpdater publishEventStateUpdater =
+        new NotificationPublishEventStateUpdater(eventMapper);
     private final NotificationDispatchServiceImpl service = new NotificationDispatchServiceImpl(
-        eventMapper,
+        outboxEventStore,
         publisher,
         properties,
-        new ObjectMapper()
+        payloadBuilder,
+        publishFailurePolicy,
+        publishEventStateUpdater
     );
 
     @Test
@@ -40,8 +47,8 @@ class NotificationDispatchServiceImplTest {
 
         ArgumentCaptor<NotificationEvent> eventCaptor = ArgumentCaptor.forClass(NotificationEvent.class);
         verify(eventMapper).insert(eventCaptor.capture());
-        assertThat(eventCaptor.getValue().getEventKey()).isEqualTo("REVIEW_COMPLETED:42");
-        assertThat(eventCaptor.getValue().getStatus()).isEqualTo("PENDING");
+        assertThat(eventCaptor.getValue().getEventKey()).isEqualTo(NotificationEventType.REVIEW_COMPLETED.code() + ":42");
+        assertThat(eventCaptor.getValue().getStatus()).isEqualTo(NotificationEventStatus.PENDING.code());
         assertThat(eventCaptor.getValue().getPayload()).contains("\"findingCount\":3");
         verify(publisher).publish(any(NotificationEventMessage.class));
     }
@@ -62,6 +69,18 @@ class NotificationDispatchServiceImplTest {
         ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(eventMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSet()).contains("status", "retry_count", "next_retry_at", "last_error");
+    }
+
+    @Test
+    void publishExistingEventSkipsAlreadyPublishedEvent() {
+        NotificationEvent event = new NotificationEvent();
+        event.setId(99L);
+        event.setStatus("PUBLISHED");
+        when(eventMapper.selectById(99L)).thenReturn(event);
+
+        service.publishExistingEvent(99L);
+
+        verify(publisher, never()).publish(any(NotificationEventMessage.class));
     }
 
     private ReviewTask task(String status) {

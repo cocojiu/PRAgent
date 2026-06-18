@@ -2,9 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
@@ -20,7 +18,6 @@ import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
-import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
@@ -38,61 +35,76 @@ import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
-    private static final DateTimeFormatter TREND_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final DashboardMapper dashboardMapper;
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyProvider reviewPolicyProvider;
     private final RabbitTemplate rabbitTemplate;
+    private final DashboardStatusMapper statusMapper;
+    private final DashboardRuleDisplayMapper ruleDisplayMapper;
+    private final DashboardOverviewDisplayMapper overviewDisplayMapper;
+    private final DashboardLlmQualityFormatter llmQualityFormatter;
+    private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
+    private final DashboardReviewTrendWindow reviewTrendWindow;
 
     public DashboardServiceImpl(
         DashboardMapper dashboardMapper,
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyProvider reviewPolicyProvider,
-        RabbitTemplate rabbitTemplate
+        RabbitTemplate rabbitTemplate,
+        DashboardStatusMapper statusMapper,
+        DashboardRuleDisplayMapper ruleDisplayMapper,
+        DashboardOverviewDisplayMapper overviewDisplayMapper,
+        DashboardLlmQualityFormatter llmQualityFormatter,
+        DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
+        DashboardReviewTrendWindow reviewTrendWindow
     ) {
         this.dashboardMapper = dashboardMapper;
         this.githubIntegrationProvider = githubIntegrationProvider;
         this.reviewPolicyProvider = reviewPolicyProvider;
         this.rabbitTemplate = rabbitTemplate;
+        this.statusMapper = statusMapper;
+        this.ruleDisplayMapper = ruleDisplayMapper;
+        this.overviewDisplayMapper = overviewDisplayMapper;
+        this.llmQualityFormatter = llmQualityFormatter;
+        this.llmQualityTrendBuilder = llmQualityTrendBuilder;
+        this.reviewTrendWindow = reviewTrendWindow;
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays")
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
-        DashboardMetricStats metricStats = loadMetricStats();
-        List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts();
+        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays);
+        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();
+        DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
+        List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
         List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews();
         List<DashboardLlmQualityModelStat> llmQualityByModelStats = dashboardMapper.selectLlmQualityByModelStats();
         List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats();
-        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(
-            LocalDate.now().minusDays(normalizedLlmTrendDays - 1L)
-        );
-        List<DashboardRuleHitCount> ruleHitCounts = dashboardMapper.selectRuleHitCounts();
+        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());
+        List<DashboardRuleHitCount> ruleHitCounts = dashboardMapper.selectRuleHitCounts(reviewTrendStartDate);
 
         return new DashboardOverviewResponse(
             buildMetrics(metricStats),
             buildTrend(reviewTrendCounts),
-            buildRiskDistribution(),
+            buildRiskDistribution(reviewTrendStartDate),
             buildRuleHits(ruleHitCounts),
             buildHighRiskReviews(highRiskReviews),
             buildFailedRules(ruleHitCounts),
             buildSystemHealth(),
             buildLlmQualityByModel(llmQualityByModelStats),
             buildLlmQualityByRepository(llmQualityByRepositoryStats),
-            buildLlmQualityTrend(llmQualityTrendCounts, normalizedLlmTrendDays)
+            llmQualityTrendBuilder.build(llmQualityTrendCounts, llmTrendWindow)
         );
     }
 
-    private DashboardMetricStats loadMetricStats() {
-        DashboardMetricStat metricStat = dashboardMapper.selectMetricStat();
+    private DashboardMetricStats loadMetricStats(LocalDate startDate) {
+        DashboardMetricStat metricStat = dashboardMapper.selectMetricStat(startDate);
         long total = metricStat == null ? 0L : safeCount(metricStat.getTotal());
         long highRisk = metricStat == null ? 0L : safeCount(metricStat.getHighRisk());
         long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
@@ -100,20 +112,9 @@ public class DashboardServiceImpl implements DashboardService {
         return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
     }
 
-    private int normalizeLlmTrendDays(Integer days) {
-        if (days == null) {
-            return 7;
-        }
-        return switch (days) {
-            case 30 -> 30;
-            case 90 -> 90;
-            default -> 7;
-        };
-    }
-
     private List<SystemHealthItemDto> buildSystemHealth() {
         return List.of(
-            new SystemHealthItemDto("MySQL", "正常"),
+            new SystemHealthItemDto("MySQL", DashboardStatusMapper.HEALTH_NORMAL),
             new SystemHealthItemDto("RabbitMQ", rabbitMqHealthStatus()),
             new SystemHealthItemDto("GitHub", githubHealthStatus()),
             new SystemHealthItemDto("Spring AI", llmHealthStatus())
@@ -123,45 +124,38 @@ public class DashboardServiceImpl implements DashboardService {
     private String rabbitMqHealthStatus() {
         try {
             Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            return Boolean.TRUE.equals(open) ? "正常" : "异常";
+            return statusMapper.rabbitMqHealth(open);
         } catch (RuntimeException ex) {
-            return "异常";
+            return DashboardStatusMapper.HEALTH_ABNORMAL;
         }
     }
 
     private String githubHealthStatus() {
         try {
-            GithubIntegrationSettings settings = githubIntegrationProvider.getSettings();
-            if (!StringUtils.hasText(settings.token())) {
-                return "未接入";
-            }
-            return "FAILED".equalsIgnoreCase(settings.status()) ? "异常" : "正常";
+            return statusMapper.githubHealth(githubIntegrationProvider.getSettings());
         } catch (RuntimeException ex) {
-            return "异常";
+            return DashboardStatusMapper.HEALTH_ABNORMAL;
         }
     }
 
     private String llmHealthStatus() {
         try {
-            ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
-            if (!settings.exists()) {
-                return "未接入";
-            }
-            if (!settings.enabled()) {
-                return "已禁用";
-            }
-            return settings.readyForLlmReview() ? "正常" : "未接入";
+            return statusMapper.llmHealth(reviewPolicyProvider.getSettings());
         } catch (RuntimeException ex) {
-            return "异常";
+            return DashboardStatusMapper.HEALTH_ABNORMAL;
         }
     }
 
     private List<DashboardMetricDto> buildMetrics(DashboardMetricStats stats) {
+        DashboardOverviewDisplayMapper.MetricDisplay totalReviews = overviewDisplayMapper.totalReviewsMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay highRiskPullRequests = overviewDisplayMapper.highRiskPullRequestsMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay failedTasks = overviewDisplayMapper.failedTasksMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay averageReviewDuration = overviewDisplayMapper.averageReviewDurationMetric();
         return List.of(
-            new DashboardMetricDto("本周审查", String.valueOf(stats.total()), "0.0%", "up", "blue"),
-            new DashboardMetricDto("高风险 PR", String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total()), "up-danger", "red"),
-            new DashboardMetricDto("失败任务", String.valueOf(stats.failed()), percent(stats.failed(), stats.total()), "down", "orange"),
-            new DashboardMetricDto("平均审查耗时", formatDuration(stats.averageDurationSeconds()), "0.0%", "down", "green")
+            metric(totalReviews, String.valueOf(stats.total()), "0.0%"),
+            metric(highRiskPullRequests, String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total())),
+            metric(failedTasks, String.valueOf(stats.failed()), percent(stats.failed(), stats.total())),
+            metric(averageReviewDuration, formatDuration(stats.averageDurationSeconds()), "0.0%")
         );
     }
 
@@ -172,17 +166,17 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
-    private List<ChartSliceDto> buildRiskDistribution() {
-        List<DashboardRiskLevelCount> riskLevelCounts = dashboardMapper.selectRiskLevelCounts();
+    private List<ChartSliceDto> buildRiskDistribution(LocalDate startDate) {
+        List<DashboardRiskLevelCount> riskLevelCounts = dashboardMapper.selectRiskLevelCounts(startDate);
         Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
             .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
         long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();
 
         return List.of(
-            riskSlice("高风险", countByRisk.getOrDefault("HIGH", 0L), total, "#ef4444"),
-            riskSlice("中风险", countByRisk.getOrDefault("MEDIUM", 0L), total, "#f59e0b"),
-            riskSlice("低风险", countByRisk.getOrDefault("LOW", 0L), total, "#2563eb"),
-            riskSlice("提示", countByRisk.getOrDefault("INFO", 0L), total, "#22c55e")
+            riskSlice("HIGH", countByRisk.getOrDefault("HIGH", 0L), total),
+            riskSlice("MEDIUM", countByRisk.getOrDefault("MEDIUM", 0L), total),
+            riskSlice("LOW", countByRisk.getOrDefault("LOW", 0L), total),
+            riskSlice("INFO", countByRisk.getOrDefault("INFO", 0L), total)
         );
     }
 
@@ -192,9 +186,9 @@ public class DashboardServiceImpl implements DashboardService {
         return nullToEmpty(ruleHitCounts).stream()
             .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
             .map(count -> new ChartSliceDto(
-                ruleName(defaultRuleId(count.getRuleId())),
+                ruleDisplayMapper.ruleName(count.getRuleId()),
                 safeRuleTotal(count),
-                ruleColor(defaultRuleId(count.getRuleId())),
+                ruleDisplayMapper.ruleColor(count.getRuleId()),
                 percent(safeRuleTotal(count), total)
             ))
             .toList();
@@ -208,7 +202,7 @@ public class DashboardServiceImpl implements DashboardService {
                 lower(review.getRiskLevel()),
                 safeHighRiskRuleHits(review),
                 formatReviewedAt(review.getCreatedAt()),
-                statusText(review.getStatus())
+                statusMapper.reviewTaskStatusText(review.getStatus())
             ))
             .toList();
     }
@@ -218,7 +212,7 @@ public class DashboardServiceImpl implements DashboardService {
         return nullToEmpty(ruleHitCounts).stream()
             .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
             .map(count -> new FailedRuleStatDto(
-                ruleName(defaultRuleId(count.getRuleId())),
+                ruleDisplayMapper.ruleName(count.getRuleId()),
                 safeRuleTotal(count),
                 "0.0%",
                 "down",
@@ -232,14 +226,14 @@ public class DashboardServiceImpl implements DashboardService {
             .map(stat -> new LlmQualityByModelDto(
                 stat.getModelLabel(),
                 safeModelTaskCount(stat),
-                formatMilliseconds(toRoundedInt(stat.getAverageDurationMs())),
-                formatAverageNumber(stat.getAverageTokens()),
-                formatAverageCost(stat.getAverageCost()),
-                percentage(safeModelParseSuccessCount(stat), safeModelTaskCount(stat)),
-                percentage(safeModelFallbackCount(stat), safeModelTaskCount(stat)),
-                percentage(safeModelPartialFallbackCount(stat), safeModelTaskCount(stat)),
-                percentage(safeModelValidFeedbackCount(stat), safeModelReviewedFeedbackCount(stat)),
-                percentage(safeModelFalsePositiveFeedbackCount(stat), safeModelReviewedFeedbackCount(stat))
+                llmQualityFormatter.averageDuration(stat.getAverageDurationMs()),
+                llmQualityFormatter.averageTokens(stat.getAverageTokens()),
+                llmQualityFormatter.averageCost(stat.getAverageCost()),
+                llmQualityFormatter.rate(safeModelParseSuccessCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelFallbackCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelPartialFallbackCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelValidFeedbackCount(stat), safeModelReviewedFeedbackCount(stat)),
+                llmQualityFormatter.rate(safeModelFalsePositiveFeedbackCount(stat), safeModelReviewedFeedbackCount(stat))
             ))
             .toList();
     }
@@ -249,113 +243,25 @@ public class DashboardServiceImpl implements DashboardService {
             .map(stat -> new LlmQualityByRepositoryDto(
                 stat.getRepositoryLabel(),
                 safeRepositoryTaskCount(stat),
-                percentage(safeRepositoryFallbackCount(stat), safeRepositoryTaskCount(stat)),
-                percentage(safeRepositoryPartialFallbackCount(stat), safeRepositoryTaskCount(stat)),
-                percentage(safeRepositoryValidFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat)),
-                percentage(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
+                llmQualityFormatter.rate(safeRepositoryFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryPartialFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryValidFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
             ))
             .toList();
     }
 
-    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<DashboardLlmQualityTrendCount> trendCounts, int days) {
-        LocalDate today = LocalDate.now();
-        Map<String, DashboardLlmQualityTrendCount> countsByDay = nullToEmpty(trendCounts).stream()
-            .filter(count -> StringUtils.hasText(count.getDayKey()))
-            .collect(Collectors.toMap(DashboardLlmQualityTrendCount::getDayKey, java.util.function.Function.identity(), (first, second) -> first));
-        return java.util.stream.IntStream.rangeClosed(0, days - 1)
-            .mapToObj(today.minusDays(days - 1L)::plusDays)
-            .map(date -> {
-                DashboardLlmQualityTrendCount count = countsByDay.get(date.toString());
-                long taskCount = safeLlmTaskCount(count);
-                return new LlmQualityTrendPointDto(
-                    date.format(TREND_DATE_FORMATTER),
-                    taskCount,
-                    percentage(safeLlmParseSuccessCount(count), taskCount),
-                    percentage(safeLlmFallbackCount(count), taskCount),
-                    percentage(safeLlmPartialFallbackCount(count), taskCount)
-                );
-            })
-            .toList();
+    private DashboardMetricDto metric(DashboardOverviewDisplayMapper.MetricDisplay display, String value, String trend) {
+        return new DashboardMetricDto(display.label(), value, trend, display.trendType(), display.color());
     }
 
-    private String formatAverageNumber(BigDecimal average) {
-        if (average == null || average.compareTo(BigDecimal.ZERO) <= 0) {
-            return "0";
-        }
-        return String.format(Locale.ROOT, "%.0f", average);
-    }
-
-    private String formatAverageCost(BigDecimal average) {
-        if (average == null || average.compareTo(BigDecimal.ZERO) <= 0) {
-            return "$0.000000";
-        }
-        return "$" + average.setScale(6, RoundingMode.HALF_UP).toPlainString();
-    }
-
-    private int toRoundedInt(BigDecimal value) {
-        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
-    }
-
-    private String percentage(long value, long total) {
-        if (total <= 0) {
-            return "0.0%";
-        }
-        return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
-    }
-
-    private String formatMilliseconds(int durationMs) {
-        if (durationMs <= 0) {
-            return "0 ms";
-        }
-        if (durationMs < 1000) {
-            return durationMs + " ms";
-        }
-        return String.format(Locale.ROOT, "%.1f s", durationMs / 1000.0);
-    }
-
-    private ChartSliceDto riskSlice(String name, long value, long total, String color) {
-        return new ChartSliceDto(name, value, color, percent(value, total));
-    }
-
-    private String statusText(String status) {
-        return switch (status) {
-            case "COMPLETED" -> "已完成";
-            case "REVIEWING" -> "审查中";
-            case "FAILED" -> "失败";
-            case "QUEUED" -> "排队中";
-            default -> status;
-        };
-    }
-
-    private String ruleName(String ruleId) {
-        return switch (ruleId) {
-            case "RG-SECRET-001" -> "硬编码密钥检测";
-            case "RG-API-001" -> "Controller 无测试";
-            case "RG-DB-001" -> "Entity 无迁移";
-            case "RG-CONFIG-001" -> "配置变更风险";
-            case "RG-CLEAN-001" -> "TODO/FIXME/System.out";
-            case "LLM" -> "LLM 审查";
-            default -> ruleId;
-        };
-    }
-
-    private String ruleColor(String ruleId) {
-        return switch (ruleId) {
-            case "RG-SECRET-001" -> "#ef4444";
-            case "RG-API-001" -> "#f59e0b";
-            case "RG-DB-001" -> "#2563eb";
-            case "RG-CONFIG-001" -> "#22c55e";
-            case "RG-CLEAN-001" -> "#6366f1";
-            default -> "#14b8a6";
-        };
+    private ChartSliceDto riskSlice(String riskLevel, long value, long total) {
+        DashboardOverviewDisplayMapper.RiskLevelDisplay display = overviewDisplayMapper.riskLevel(riskLevel);
+        return new ChartSliceDto(display.name(), value, display.color(), percent(value, total));
     }
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
-
-    private boolean equalsIgnoreCase(String first, String second) {
-        return first != null && second != null && first.equalsIgnoreCase(second);
     }
 
     private String percent(long value, long total) {
@@ -387,22 +293,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeHighRiskRuleHits(DashboardHighRiskReview review) {
         return review.getRuleHits() == null ? 0L : review.getRuleHits();
-    }
-
-    private long safeLlmTaskCount(DashboardLlmQualityTrendCount count) {
-        return count == null || count.getTaskCount() == null ? 0L : count.getTaskCount();
-    }
-
-    private long safeLlmParseSuccessCount(DashboardLlmQualityTrendCount count) {
-        return count == null || count.getParseSuccessCount() == null ? 0L : count.getParseSuccessCount();
-    }
-
-    private long safeLlmFallbackCount(DashboardLlmQualityTrendCount count) {
-        return count == null || count.getFallbackCount() == null ? 0L : count.getFallbackCount();
-    }
-
-    private long safeLlmPartialFallbackCount(DashboardLlmQualityTrendCount count) {
-        return count == null || count.getPartialFallbackCount() == null ? 0L : count.getPartialFallbackCount();
     }
 
     private long safeModelTaskCount(DashboardLlmQualityModelStat stat) {
@@ -463,10 +353,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
         return nullToEmpty(ruleHitCounts).stream().mapToLong(this::safeRuleTotal).sum();
-    }
-
-    private String defaultRuleId(String ruleId) {
-        return ruleId == null ? "LLM" : ruleId;
     }
 
     private <T> List<T> nullToEmpty(List<T> values) {

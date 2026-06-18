@@ -9,7 +9,6 @@ import com.repoguard.agent.dto.ChunkedReviewDto;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.dto.PrRiskFileDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
@@ -27,6 +26,8 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,6 +37,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -54,6 +56,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     private final ChangedFileMapper changedFileMapper;
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
+    private final ReviewRiskProfileBuilder riskProfileBuilder;
+    private final PrReviewSummaryBuilder reviewSummaryBuilder;
 
     public ReviewTaskQueryServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -61,10 +65,31 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         ReviewFindingMapper reviewFindingMapper,
         ReviewTimelineMapper reviewTimelineMapper
     ) {
+        this(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            new ReviewRiskProfileBuilder(),
+            new PrReviewSummaryBuilder()
+        );
+    }
+
+    @Autowired
+    public ReviewTaskQueryServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ChangedFileMapper changedFileMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewRiskProfileBuilder riskProfileBuilder,
+        PrReviewSummaryBuilder reviewSummaryBuilder
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
+        this.riskProfileBuilder = riskProfileBuilder;
+        this.reviewSummaryBuilder = reviewSummaryBuilder;
     }
 
     @Override
@@ -208,7 +233,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         List<ReviewTimelineItem> timeline
     ) {
         ReviewTaskListItem item = toListItem(task, resolveFailureSummary(task, timeline.stream().map(ReviewTimelineItem::label).toList()));
-        PrRiskProfileDto riskProfile = buildRiskProfile(item, findings, changedFiles);
+        PrRiskProfileDto riskProfile = riskProfileBuilder.build(item, findings, changedFiles);
         String effectiveRiskLevel = effectiveDetailRiskLevel(item.riskLevel(), riskProfile);
         return new ReviewTaskDetail(
             item.id(),
@@ -235,7 +260,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             changedFiles,
             timeline,
             riskProfile,
-            buildPrReviewSummary(item, findings, missingTests, changedFiles, riskProfile),
+            reviewSummaryBuilder.build(item, findings, missingTests, changedFiles, riskProfile),
             new LlmStatusDto(
                 item.llmStatus(),
                 item.duration(),
@@ -321,277 +346,12 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             .toList();
     }
 
-    private PrReviewSummaryDto buildPrReviewSummary(
-        ReviewTaskListItem task,
-        List<ReviewFindingDto> findings,
-        List<MissingTestDto> missingTests,
-        List<ChangedFileDto> changedFiles,
-        PrRiskProfileDto riskProfile
-    ) {
-        int criticalCount = countSeverity(findings, "critical");
-        int highCount = countSeverity(findings, "high");
-        int mediumCount = countSeverity(findings, "medium");
-        int totalFindings = findings.size();
-        String overallRisk = riskProfile == null ? "info" : riskProfile.level();
-        boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
-            || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
-        boolean recommendMerge = criticalCount == 0 && highCount == 0 && !humanReviewRequired;
-        String mergeRecommendation = mergeRecommendation(recommendMerge, criticalCount, highCount, mediumCount, humanReviewRequired);
-        List<String> keyRisks = buildPrSummaryRisks(riskProfile, missingTests, criticalCount, highCount, mediumCount);
-        List<String> focusFiles = buildPrSummaryFocusFiles(riskProfile, changedFiles);
-        String summary = "本次 PR 综合风险为 " + riskText(overallRisk)
-            + "，包含 " + changedFiles.size() + " 个变更文件、" + totalFindings + " 条审查发现"
-            + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
-            + "。";
-        String commentBody = buildPrSummaryCommentBody(task, overallRisk, summary, mergeRecommendation, keyRisks, focusFiles);
-        return new PrReviewSummaryDto(
-            overallRisk,
-            summary,
-            mergeRecommendation,
-            recommendMerge,
-            humanReviewRequired,
-            keyRisks,
-            focusFiles,
-            commentBody
-        );
-    }
-
-    private String mergeRecommendation(
-        boolean recommendMerge,
-        int criticalCount,
-        int highCount,
-        int mediumCount,
-        boolean humanReviewRequired
-    ) {
-        if (criticalCount > 0 || highCount > 0) {
-            return "暂不建议直接合并，请优先处理高风险发现后再评估。";
-        }
-        if (humanReviewRequired || mediumCount > 0) {
-            return "建议完成必要人工复核和中风险确认后再合并。";
-        }
-        return recommendMerge ? "未发现阻塞性风险，可按团队流程合并。" : "建议完成复核后再合并。";
-    }
-
-    private List<String> buildPrSummaryRisks(
-        PrRiskProfileDto riskProfile,
-        List<MissingTestDto> missingTests,
-        int criticalCount,
-        int highCount,
-        int mediumCount
-    ) {
-        List<String> risks = new java.util.ArrayList<>();
-        if (criticalCount > 0) {
-            risks.add("包含 " + criticalCount + " 条严重风险发现");
-        }
-        if (highCount > 0) {
-            risks.add("包含 " + highCount + " 条高风险发现");
-        }
-        if (mediumCount > 0) {
-            risks.add("包含 " + mediumCount + " 条中风险发现");
-        }
-        if (!missingTests.isEmpty()) {
-            risks.add("存在 " + missingTests.size() + " 条缺失测试建议");
-        }
-        if (riskProfile != null && riskProfile.signals() != null) {
-            riskProfile.signals().stream()
-                .filter(StringUtils::hasText)
-                .filter(signal -> risks.stream().noneMatch(existing -> existing.equals(signal)))
-                .limit(Math.max(0, 5 - risks.size()))
-                .forEach(risks::add);
-        }
-        if (risks.isEmpty()) {
-            risks.add("未发现明显阻塞性风险");
-        }
-        return risks.stream().limit(5).toList();
-    }
-
-    private List<String> buildPrSummaryFocusFiles(PrRiskProfileDto riskProfile, List<ChangedFileDto> changedFiles) {
-        List<String> files = new java.util.ArrayList<>();
-        if (riskProfile != null && riskProfile.highRiskFiles() != null) {
-            riskProfile.highRiskFiles().stream()
-                .map(PrRiskFileDto::file)
-                .filter(StringUtils::hasText)
-                .limit(3)
-                .forEach(files::add);
-        }
-        if (files.size() < 3) {
-            changedFiles.stream()
-                .sorted(Comparator.comparingInt(file -> -(safeInt(file.additions()) + safeInt(file.deletions()))))
-                .map(ChangedFileDto::path)
-                .filter(StringUtils::hasText)
-                .filter(file -> !files.contains(file))
-                .limit(3 - files.size())
-                .forEach(files::add);
-        }
-        return files;
-    }
-
-    private String buildPrSummaryCommentBody(
-        ReviewTaskListItem task,
-        String overallRisk,
-        String summary,
-        String mergeRecommendation,
-        List<String> keyRisks,
-        List<String> focusFiles
-    ) {
-        StringBuilder body = new StringBuilder();
-        body.append("## RepoGuard PR 总评");
-        body.append("\n\n").append(summary);
-        body.append("\n\n**合并建议**：").append(mergeRecommendation);
-        body.append("\n\n**关键风险**");
-        keyRisks.forEach(risk -> body.append("\n- ").append(risk));
-        if (!focusFiles.isEmpty()) {
-            body.append("\n\n**建议重点查看文件**");
-            focusFiles.forEach(file -> body.append("\n- `").append(file).append("`"));
-        }
-        body.append("\n\n> 任务 #").append(task.id()).append("，风险等级：").append(riskText(overallRisk)).append("。");
-        return body.toString();
-    }
-
-    private String riskText(String riskLevel) {
-        if (!StringUtils.hasText(riskLevel)) {
-            return "提示";
-        }
-        return switch (riskLevel.trim().toLowerCase(Locale.ROOT)) {
-            case "critical" -> "严重";
-            case "high" -> "高";
-            case "medium" -> "中";
-            case "low" -> "低";
-            default -> "提示";
-        };
-    }
-
-    private PrRiskProfileDto buildRiskProfile(
-        ReviewTaskListItem task,
-        List<ReviewFindingDto> findings,
-        List<ChangedFileDto> changedFiles
-    ) {
-        Map<String, Long> findingCountByFile = findings.stream()
-            .filter(finding -> StringUtils.hasText(finding.file()))
-            .collect(Collectors.groupingBy(ReviewFindingDto::file, Collectors.counting()));
-        int criticalCount = countSeverity(findings, "critical");
-        int highCount = countSeverity(findings, "high");
-        int mediumCount = countSeverity(findings, "medium");
-        int lowCount = countSeverity(findings, "low");
-        int totalChurn = changedFiles.stream()
-            .mapToInt(file -> safeInt(file.additions()) + safeInt(file.deletions()))
-            .sum();
-        int sensitiveFileCount = (int) changedFiles.stream().filter(file -> !riskReasons(file).isEmpty()).count();
-
-        int score = criticalCount * 35
-            + highCount * 25
-            + mediumCount * 12
-            + lowCount * 4
-            + Math.min(changedFiles.size() * 2, 20)
-            + Math.min(totalChurn / 50, 20)
-            + Math.min(sensitiveFileCount * 8, 24);
-        score = Math.min(score, 100);
-        String level = scoreToRiskLevel(score, task.riskLevel());
-
-        List<String> signals = new java.util.ArrayList<>();
-        if (criticalCount + highCount > 0) {
-            signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
-        }
-        if (mediumCount > 0) {
-            signals.add("包含 " + mediumCount + " 条中风险发现");
-        }
-        if (changedFiles.size() >= 8) {
-            signals.add("变更文件较多：" + changedFiles.size() + " 个文件");
-        }
-        if (totalChurn >= 300) {
-            signals.add("变更规模较大：" + totalChurn + " 行增删");
-        }
-        if (sensitiveFileCount > 0) {
-            signals.add("触及 " + sensitiveFileCount + " 个敏感文件");
-        }
-        if (signals.isEmpty()) {
-            signals.add("未发现明显放大风险的变更信号");
-        }
-
-        boolean recommendHumanReview = score >= 55 || Boolean.TRUE.equals(task.humanReviewRequired());
-        String humanReviewReason = recommendHumanReview
-            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
-            : "风险分较低，可按常规自动审查流程推进。";
-        List<PrRiskFileDto> highRiskFiles = changedFiles.stream()
-            .map(file -> toRiskFile(file, findingCountByFile.getOrDefault(file.path(), 0L).intValue()))
-            .filter(file -> file.score() > 0)
-            .sorted(Comparator.comparing(PrRiskFileDto::score).reversed())
-            .limit(5)
-            .toList();
-
-        return new PrRiskProfileDto(
-            score,
-            level,
-            buildRiskSummary(level, score, findings.size(), changedFiles.size(), totalChurn),
-            recommendHumanReview,
-            humanReviewReason,
-            signals,
-            highRiskFiles
-        );
-    }
-
-    private PrRiskFileDto toRiskFile(ChangedFileDto file, int findingCount) {
-        List<String> reasons = riskReasons(file);
-        int churn = safeInt(file.additions()) + safeInt(file.deletions());
-        int score = findingCount * 18 + Math.min(churn / 25, 20) + reasons.size() * 12;
-        return new PrRiskFileDto(
-            file.path(),
-            file.changeType(),
-            file.additions(),
-            file.deletions(),
-            findingCount,
-            Math.min(score, 100),
-            reasons
-        );
-    }
-
-    private List<String> riskReasons(ChangedFileDto file) {
-        String path = file.path() == null ? "" : file.path().toLowerCase(Locale.ROOT);
-        List<String> reasons = new java.util.ArrayList<>();
-        if (path.contains("db/migration") || path.endsWith(".sql")) {
-            reasons.add("数据库迁移");
-        }
-        if (path.contains("security") || path.contains("auth") || path.contains("token") || path.contains("permission")) {
-            reasons.add("认证或权限");
-        }
-        if (path.endsWith("application.yml") || path.endsWith("application-prod.yml") || path.contains("config")) {
-            reasons.add("运行配置");
-        }
-        if (path.contains(".github/") || path.contains("docker") || path.endsWith("pom.xml") || path.endsWith("package.json")) {
-            reasons.add("构建或发布链路");
-        }
-        return reasons;
-    }
-
     private int countSeverity(List<ReviewFindingDto> findings, String severity) {
         return (int) findings.stream().filter(finding -> severity.equalsIgnoreCase(finding.severity())).count();
     }
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private String scoreToRiskLevel(int score, String fallbackRiskLevel) {
-        if (score >= 80 || "critical".equalsIgnoreCase(fallbackRiskLevel)) {
-            return "critical";
-        }
-        if (score >= 55 || "high".equalsIgnoreCase(fallbackRiskLevel)) {
-            return "high";
-        }
-        if (score >= 30 || "medium".equalsIgnoreCase(fallbackRiskLevel)) {
-            return "medium";
-        }
-        if (score >= 10 || "low".equalsIgnoreCase(fallbackRiskLevel)) {
-            return "low";
-        }
-        return "info";
-    }
-
-    private String buildRiskSummary(String level, int score, int findingCount, int fileCount, int totalChurn) {
-        return "本次 PR 综合风险为 " + lower(level)
-            + "（" + score + "/100），覆盖 "
-            + fileCount + " 个变更文件、" + totalChurn + " 行增删，审查发现 "
-            + findingCount + " 条。";
     }
 
     private ReviewTaskListItem toListItem(ReviewTask task, FailureSummary failureSummary) {
