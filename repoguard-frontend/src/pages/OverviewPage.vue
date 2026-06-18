@@ -38,18 +38,18 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
-import DashboardBottomSection from "@/components/DashboardBottomSection.vue";
-import DashboardChartSection from "@/components/DashboardChartSection.vue";
-import LlmQualitySection from "@/components/LlmQualitySection.vue";
 import MetricGrid from "@/components/MetricGrid.vue";
-import { useDashboardOverview } from "@/composables/useDashboardOverview";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import DashboardBottomSection from "@/features/dashboard/components/DashboardBottomSection.vue";
+import DashboardChartSection from "@/features/dashboard/components/DashboardChartSection.vue";
+import LlmQualitySection from "@/features/dashboard/components/LlmQualitySection.vue";
+import { useDashboardOverview } from "@/features/dashboard/composables/useDashboardOverview";
 import {
   buildLlmQualityTrendOption,
   buildReviewTrendOption,
   buildRiskDistributionOption,
   buildRuleHitOption
-} from "./overviewChartOptions";
+} from "@/features/dashboard/overviewChartOptions";
 
 const metricIconMap = {
   blue: FileText,
