@@ -385,53 +385,23 @@
           />
         </main>
 
-        <aside class="detail-side">
-          <article class="dashboard-card">
-            <h2>任务时间线</h2>
-            <ol class="timeline">
-              <li v-for="item in localizedTimeline" :key="`${item.label}-${item.time}`" :class="`timeline-${item.status}`">
-                <span></span>
-                <b>{{ item.label }}</b>
-                <em>{{ item.time }}</em>
-              </li>
-            </ol>
-          </article>
-
-          <article class="dashboard-card side-card">
-            <h2>LLM 状态</h2>
-            <dl>
-              <dt>执行状态</dt><dd><span :class="`status-pill ${statusClass(selectedTask.llm.status)}`">{{ statusText(selectedTask.llm.status) }}</span></dd>
-              <dt>模型</dt><dd>{{ llmModelText }}</dd>
-              <dt>解析状态</dt><dd><span :class="`status-pill ${llmParseStatusClass}`">{{ llmParseStatusText }}</span></dd>
-              <dt>规则兜底</dt><dd>{{ selectedTask.llm.status === "fallback" ? "已启用" : "未触发" }}</dd>
-              <dt>耗时</dt><dd>{{ llmDurationText }}</dd>
-              <dt>风险级别</dt><dd>{{ riskText(selectedTask.llm.riskLevel) }}</dd>
-              <dt>Token 用量</dt><dd>{{ llmTokenUsageText }}</dd>
-              <dt>成本估算</dt><dd>{{ llmCostText }}</dd>
-              <dt>分片审查</dt><dd>{{ selectedTask.chunkedReview.enabled ? "已启用" : "未启用" }}</dd>
-              <dt v-if="selectedTask.chunkedReview.enabled">分片数量</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.chunkCount }}</dd>
-              <dt v-if="selectedTask.chunkedReview.enabled">聚合风险</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ chunkAggregateRiskText(selectedTask.chunkedReview.aggregateRisk) }}</dd>
-              <dt v-if="selectedTask.chunkedReview.enabled">聚合发现</dt><dd v-if="selectedTask.chunkedReview.enabled">{{ selectedTask.chunkedReview.aggregateFindings }}</dd>
-              <dt v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.failedChunks > 0">规则补位分片</dt><dd v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.failedChunks > 0">{{ selectedTask.chunkedReview.failedChunks }}</dd>
-              <dt v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length">分片原因</dt>
-              <dd v-if="selectedTask.chunkedReview.enabled && selectedTask.chunkedReview.reasons.length" class="chunk-reasons">
-                <span v-for="reason in selectedTask.chunkedReview.reasons" :key="reason">{{ chunkReasonText(reason) }}</span>
-              </dd>
-              <dt v-if="selectedTask.llm.fallbackReason">兜底原因</dt><dd v-if="selectedTask.llm.fallbackReason" class="status-reason">{{ selectedTask.llm.fallbackReason }}</dd>
-              <dt v-if="selectedTask.llm.promptSummary">Prompt 摘要</dt><dd v-if="selectedTask.llm.promptSummary" class="status-reason">{{ selectedTask.llm.promptSummary }}</dd>
-              <dt v-if="statusReason">原因</dt><dd v-if="statusReason" class="status-reason">{{ statusReason }}</dd>
-            </dl>
-          </article>
-
-          <article class="dashboard-card side-card">
-            <h2>RabbitMQ</h2>
-            <dl>
-              <dt>投递次数</dt><dd>{{ selectedTask.rabbitMq.deliveryCount }}</dd>
-              <dt>重试次数</dt><dd>{{ selectedTask.rabbitMq.retryCount }}</dd>
-              <dt>消费状态</dt><dd><span class="status-pill success">{{ consumeStatusText(selectedTask.rabbitMq.consumeStatus) }}</span></dd>
-            </dl>
-          </article>
-        </aside>
+        <ReviewDetailSidePanel
+          :task="selectedTask"
+          :timeline="localizedTimeline"
+          :llm-model-text="llmModelText"
+          :llm-parse-status-text="llmParseStatusText"
+          :llm-parse-status-class="llmParseStatusClass"
+          :llm-duration-text="llmDurationText"
+          :llm-token-usage-text="llmTokenUsageText"
+          :llm-cost-text="llmCostText"
+          :status-reason="statusReason"
+          :status-text="statusText"
+          :status-class="statusClass"
+          :risk-text="riskText"
+          :chunk-aggregate-risk-text="chunkAggregateRiskText"
+          :chunk-reason-text="chunkReasonText"
+          :consume-status-text="consumeStatusText"
+        />
       </div>
     </template>
     <el-empty v-else-if="!loading" :description="emptyDescription">
@@ -448,7 +418,7 @@ import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { ReviewDetailFilesSection, ReviewDetailKpiGrid, ReviewDetailSummaryCard } from "@/features/review-detail";
+import { ReviewDetailFilesSection, ReviewDetailKpiGrid, ReviewDetailSidePanel, ReviewDetailSummaryCard } from "@/features/review-detail";
 import {
   fetchGithubCommentPreview,
   fetchGithubCommentPublicationHistory,
