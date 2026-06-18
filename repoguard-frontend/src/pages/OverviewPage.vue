@@ -4,32 +4,14 @@
 
     <MetricGrid :metrics="overviewMetricItems" :resolve-icon="getMetricIcon" />
 
-    <section class="dashboard-grid">
-      <article class="dashboard-card chart-card chart-card--wide">
-        <h2>审查趋势</h2>
-        <EChartPanel v-if="reviewTrend.length" :option="trendOption" />
-        <el-empty v-else description="暂无审查趋势数据" />
-      </article>
-      <article class="dashboard-card chart-card">
-        <h2>风险分布</h2>
-        <EChartPanel v-if="riskDistribution.length" :option="riskOption" />
-        <el-empty v-else description="暂无风险分布数据" />
-      </article>
-      <article class="dashboard-card chart-card">
-        <h2>规则命中</h2>
-        <div v-if="ruleHits.length" class="donut-layout">
-          <EChartPanel :option="ruleOption" />
-          <ul class="rule-legend">
-            <li v-for="rule in ruleHits" :key="rule.name">
-              <span :style="{ background: rule.color }"></span>
-              <b>{{ rule.name }}</b>
-              <em>{{ rule.value }} ({{ rule.percent }})</em>
-            </li>
-          </ul>
-        </div>
-        <el-empty v-else description="暂无规则命中数据" />
-      </article>
-    </section>
+    <DashboardChartSection
+      :review-trend="reviewTrend"
+      :risk-distribution="riskDistribution"
+      :rule-hits="ruleHits"
+      :trend-option="trendOption"
+      :risk-option="riskOption"
+      :rule-option="ruleOption"
+    />
 
     <LlmQualitySection
       :loading="loading"
@@ -58,7 +40,7 @@ import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import DashboardBottomSection from "@/components/DashboardBottomSection.vue";
-import EChartPanel from "@/components/EChartPanel.vue";
+import DashboardChartSection from "@/components/DashboardChartSection.vue";
 import LlmQualitySection from "@/components/LlmQualitySection.vue";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchDashboardOverview } from "@/api/dashboard";
