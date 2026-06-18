@@ -81,24 +81,12 @@
         </el-button>
       </section>
 
-      <section class="detail-kpi-grid">
-        <div class="detail-kpi">
-          <div class="metric-icon metric-icon--blue"><Archive :size="26" /></div>
-          <div><p>仓库</p><strong>{{ selectedTask.repository }}</strong><span>{{ selectedTask.organization }}</span></div>
-        </div>
-        <div class="detail-kpi">
-          <div class="metric-icon metric-icon--purple"><GitBranch :size="26" /></div>
-          <div><p>Commit</p><strong>{{ selectedTask.commit }} <Copy :size="15" /></strong><span>{{ selectedTask.branch }}</span></div>
-        </div>
-        <div class="detail-kpi">
-          <div class="metric-icon metric-icon--green"><Clock :size="26" /></div>
-          <div><p>耗时</p><strong>{{ selectedTask.duration }}</strong><span>开始于 {{ reviewTimeline[0]?.time ?? "-" }}</span></div>
-        </div>
-        <div class="detail-kpi">
-          <div class="metric-icon metric-icon--orange"><MessagesSquare :size="26" /></div>
-          <div><p>审查发现</p><strong>{{ reviewFindings.length }} 条</strong><span>{{ changedFiles.length }} 个变更文件</span></div>
-        </div>
-      </section>
+      <ReviewDetailKpiGrid
+        :task="selectedTask"
+        :started-at="reviewTimeline[0]?.time ?? '-'"
+        :finding-count="reviewFindings.length"
+        :changed-file-count="changedFiles.length"
+      />
 
       <div class="detail-layout">
         <main class="detail-main">
@@ -538,9 +526,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
-import { Archive, ArrowLeft, Clock, Copy, ExternalLink, GitBranch, Github, MessagesSquare, RefreshCw, ShieldAlert } from "lucide-vue-next";
+import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
 import { RouterLink, useRoute, useRouter } from "vue-router";
+import { ReviewDetailKpiGrid } from "@/features/review-detail";
 import {
   fetchGithubCommentPreview,
   fetchGithubCommentPublicationHistory,
