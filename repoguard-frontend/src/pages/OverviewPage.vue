@@ -40,16 +40,16 @@ import { computed, onMounted } from "vue";
 import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
 import MetricGrid from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import DashboardBottomSection from "@/features/dashboard/components/DashboardBottomSection.vue";
-import DashboardChartSection from "@/features/dashboard/components/DashboardChartSection.vue";
-import LlmQualitySection from "@/features/dashboard/components/LlmQualitySection.vue";
-import { useDashboardOverview } from "@/features/dashboard/composables/useDashboardOverview";
 import {
+  DashboardBottomSection,
+  DashboardChartSection,
+  LlmQualitySection,
   buildLlmQualityTrendOption,
   buildReviewTrendOption,
   buildRiskDistributionOption,
-  buildRuleHitOption
-} from "@/features/dashboard/overviewChartOptions";
+  buildRuleHitOption,
+  useDashboardOverview
+} from "@/features/dashboard";
 
 const metricIconMap = {
   blue: FileText,
