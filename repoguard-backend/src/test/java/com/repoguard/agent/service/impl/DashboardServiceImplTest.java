@@ -252,11 +252,11 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewReportsLlmQualityByModelAndRepository() {
-        when(dashboardMapper.selectLlmQualityByModelStats()).thenReturn(List.of(
+        when(dashboardMapper.selectLlmQualityByModelStats(any())).thenReturn(List.of(
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L),
             llmQualityModelStat("openai / gpt-test", 1L, 800, 900, "0.000456", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
-        when(dashboardMapper.selectLlmQualityByRepositoryStats()).thenReturn(List.of(
+        when(dashboardMapper.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
             llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L),
             llmQualityRepositoryStat("octocat/web", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
@@ -266,6 +266,8 @@ class DashboardServiceImplTest {
 
         var overview = service.getOverview(30);
 
+        verify(dashboardMapper).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
+        verify(dashboardMapper).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
         assertThat(overview.llmQualityByModel()).hasSize(2);
         var qwen = overview.llmQualityByModel().stream()
             .filter(item -> "dashscope / qwen-plus".equals(item.model()))

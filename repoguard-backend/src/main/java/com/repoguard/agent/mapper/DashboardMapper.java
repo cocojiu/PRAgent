@@ -135,6 +135,7 @@ public interface DashboardMapper {
             where llm_status is not null
               and llm_status <> ''
               and llm_status <> 'PENDING'
+              and created_at >= #{startDate}
             group by modelLabel
         ) task_stats
         left join (
@@ -154,12 +155,13 @@ public interface DashboardMapper {
             where t.llm_status is not null
               and t.llm_status <> ''
               and t.llm_status <> 'PENDING'
+              and t.created_at >= #{startDate}
             group by modelLabel
         ) feedback_stats on feedback_stats.modelLabel = task_stats.modelLabel
         order by task_stats.taskCount desc
         limit 6
     """)
-    List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats();
+    List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select
@@ -188,6 +190,7 @@ public interface DashboardMapper {
             where llm_status is not null
               and llm_status <> ''
               and llm_status <> 'PENDING'
+              and created_at >= #{startDate}
             group by repositoryLabel
         ) task_stats
         left join (
@@ -207,10 +210,11 @@ public interface DashboardMapper {
             where t.llm_status is not null
               and t.llm_status <> ''
               and t.llm_status <> 'PENDING'
+              and t.created_at >= #{startDate}
             group by repositoryLabel
         ) feedback_stats on feedback_stats.repositoryLabel = task_stats.repositoryLabel
         order by task_stats.taskCount desc
         limit 6
         """)
-    List<DashboardLlmQualityRepositoryStat> selectLlmQualityByRepositoryStats();
+    List<DashboardLlmQualityRepositoryStat> selectLlmQualityByRepositoryStats(@Param("startDate") LocalDate startDate);
 }

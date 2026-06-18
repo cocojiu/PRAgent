@@ -91,13 +91,15 @@ class DashboardMapperSqlContractTest {
 
     @Test
     void llmQualityBreakdownQueriesKeepFeedbackJoinContract() throws Exception {
-        String byModelSql = sql("selectLlmQualityByModelStats");
-        String byRepositorySql = sql("selectLlmQualityByRepositoryStats");
+        String byModelSql = sql("selectLlmQualityByModelStats", LocalDate.class);
+        String byRepositorySql = sql("selectLlmQualityByRepositoryStats", LocalDate.class);
 
         assertThat(byModelSql)
             .contains("from review_task")
             .contains("llm_status is not null")
             .contains("llm_status <> 'pending'")
+            .contains("created_at >= #{startdate}")
+            .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
             .contains("feedback_status")
             .contains("order by task_stats.taskcount desc")
@@ -106,6 +108,8 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("llm_status is not null")
             .contains("llm_status <> 'pending'")
+            .contains("created_at >= #{startdate}")
+            .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
             .contains("feedback_status")
             .contains("order by task_stats.taskcount desc")
