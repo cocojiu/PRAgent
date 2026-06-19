@@ -196,7 +196,8 @@ import {
   ReviewDetailHumanReviewCard,
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
-  ReviewDetailSummaryCard
+  ReviewDetailSummaryCard,
+  useReviewDetailPolling
 } from "@/features/review-detail";
 import {
   fetchGithubCommentPreview,
@@ -264,7 +265,6 @@ const canPublishGithubComments = computed(() =>
       && isHumanReviewPublishAllowed.value
   )
 );
-let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
@@ -338,6 +338,14 @@ const currentPollIntervalMs = computed(() =>
   Math.min(POLL_INTERVAL_MS * 2 ** pollFailureCount.value, MAX_POLL_INTERVAL_MS)
 );
 const currentPollIntervalSeconds = computed(() => currentPollIntervalMs.value / 1000);
+
+const { cleanupPolling, stopPolling, syncPolling } = useReviewDetailPolling({
+  currentPollIntervalMs,
+  maxPollFailures: MAX_POLL_FAILURES,
+  pollFailureCount,
+  pollReviewStatus: () => pollReviewStatus(),
+  shouldPollTask
+});
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
   reviewFindings.value.reduce(
@@ -829,40 +837,6 @@ const loadGithubCommentPublicationHistory = async (id: number) => {
   } catch (error) {
     githubCommentPublicationHistory.value = null;
     historyError.value = getErrorMessage(error, "请求失败");
-  }
-};
-
-const stopPolling = () => {
-  if (!pollTimer) {
-    return;
-  }
-  clearTimeout(pollTimer);
-  pollTimer = undefined;
-};
-
-const cleanupPolling = () => {
-  stopPolling();
-};
-
-const startPolling = () => {
-  if (pollTimer || !shouldPollTask.value) {
-    return;
-  }
-  if (pollFailureCount.value >= MAX_POLL_FAILURES) {
-    stopPolling();
-    return;
-  }
-  pollTimer = setTimeout(() => {
-    pollTimer = undefined;
-    void pollReviewStatus();
-  }, currentPollIntervalMs.value);
-};
-
-const syncPolling = () => {
-  if (shouldPollTask.value) {
-    startPolling();
-  } else {
-    stopPolling();
   }
 };
 
