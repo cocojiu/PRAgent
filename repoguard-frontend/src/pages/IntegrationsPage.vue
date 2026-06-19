@@ -36,7 +36,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { Hexagon, Save } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
 import {
@@ -66,6 +65,7 @@ import {
   cloneIntegrationItems,
   defaultIntegrationItems,
   serviceIcons,
+  useIntegrationConfigPersistence,
   useIntegrationConnectionTest,
   type IntegrationFormState
 } from "@/features/integrations";
@@ -73,16 +73,9 @@ import type {
   ConnectionTestResult,
   GithubIntegrationConfig,
   ReviewPolicyConfig,
-  ServiceIntegrationConfig,
+  ServiceIntegrationConfig
 } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 
-const loading = ref(false);
-const saving = ref(false);
-const githubConfig = ref<GithubIntegrationConfig>();
-const mysqlConfig = ref<ServiceIntegrationConfig>();
-const rabbitMqConfig = ref<ServiceIntegrationConfig>();
-const reviewPolicyConfig = ref<ReviewPolicyConfig>();
 const integrationItems = ref(cloneIntegrationItems());
 
 const formState = reactive<IntegrationFormState>(
@@ -120,58 +113,6 @@ const { testConnection } = useIntegrationConnectionTest({
   testingConnections
 });
 
-const loadConfig = async () => {
-  loading.value = true;
-  try {
-    const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
-      fetchGithubIntegrationConfig(),
-      fetchMysqlIntegrationConfig(),
-      fetchRabbitMqIntegrationConfig(),
-      fetchReviewPolicyConfig()
-    ]);
-    githubConfig.value = github;
-    mysqlConfig.value = mysql;
-    rabbitMqConfig.value = rabbitMq;
-    reviewPolicyConfig.value = reviewPolicy;
-    applyGithubConfig(github);
-    applyServiceConfig("mysql", mysql);
-    applyServiceConfig("rabbitmq", rabbitMq);
-    applyReviewPolicyConfig(reviewPolicy);
-  } catch (error) {
-    ElMessage.warning(getErrorMessage(error, "Config load failed, using local defaults"));
-  } finally {
-    loading.value = false;
-  }
-};
-
-const saveConfig = async () => {
-  if (!canManage.value || saving.value) {
-    return;
-  }
-  saving.value = true;
-  try {
-    const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
-      updateGithubIntegrationConfig(githubPayload()),
-      updateMysqlIntegrationConfig(mysqlPayload()),
-      updateRabbitMqIntegrationConfig(rabbitMqPayload()),
-      updateReviewPolicyConfig(springAiPayload())
-    ]);
-    githubConfig.value = github;
-    mysqlConfig.value = mysql;
-    rabbitMqConfig.value = rabbitMq;
-    reviewPolicyConfig.value = reviewPolicy;
-    applyGithubConfig(github);
-    applyServiceConfig("mysql", mysql);
-    applyServiceConfig("rabbitmq", rabbitMq);
-    applyReviewPolicyConfig(reviewPolicy);
-    ElMessage.success("Config saved");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "Config save failed"));
-  } finally {
-    saving.value = false;
-  }
-};
-
 const githubPayload = () => buildGithubPayload(formState);
 
 const mysqlPayload = () => buildMysqlPayload(formState);
@@ -195,6 +136,29 @@ const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
 const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => {
   applyIntegrationPatch(id, buildConnectionTestPatch(id, result));
 };
+
+const { loading, saving, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
+  applyGithubConfig,
+  applyReviewPolicyConfig,
+  applyServiceConfig,
+  canManage,
+  payloads: {
+    githubPayload,
+    mysqlPayload,
+    rabbitMqPayload,
+    springAiPayload
+  },
+  requests: {
+    fetchGithubIntegrationConfig,
+    fetchMysqlIntegrationConfig,
+    fetchRabbitMqIntegrationConfig,
+    fetchReviewPolicyConfig,
+    updateGithubIntegrationConfig,
+    updateMysqlIntegrationConfig,
+    updateRabbitMqIntegrationConfig,
+    updateReviewPolicyConfig
+  }
+});
 
 onMounted(() => {
   void loadConfig();

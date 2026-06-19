@@ -20,3 +20,4 @@ export {
   type IntegrationFormState
 } from "./integrationPayloadBuilders";
 export { useIntegrationConnectionTest } from "./composables/useIntegrationConnectionTest";
+export { useIntegrationConfigPersistence } from "./composables/useIntegrationConfigPersistence";
