@@ -64,14 +64,14 @@ import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid from "@/components/MetricGrid.vue";
-import { retryReview, triggerManualReview } from "@/api/reviews";
+import { retryReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {
   canRetryReviewTask,
-  resolvePullRequestHeadSha,
   ReviewTaskFilterBar,
   ReviewTaskPullRequestDialog,
   ReviewTaskTable,
+  useReviewTaskCreation,
   useReviewTaskPullRequestPicker,
   useReviewTasksList
 } from "@/features/review-tasks";
@@ -80,7 +80,6 @@ import { getErrorMessage } from "@/utils/errors";
 
 const router = useRouter();
 const createDialogVisible = ref(false);
-const creatingTask = ref(false);
 const retryingTaskId = ref<number>();
 
 const {
@@ -117,6 +116,17 @@ const {
   reloadPullRequests,
   selectPullRequest
 } = useReviewTaskPullRequestPicker();
+
+const { creatingTask, createReviewFromSelectedPullRequest } = useReviewTaskCreation({
+  canManage,
+  onCreated: async (taskId) => {
+    createDialogVisible.value = false;
+    await router.push({ name: "task-detail", params: { id: taskId } });
+  },
+  pullRequestOrganization,
+  pullRequestRepository,
+  selectedPullRequest
+});
 
 const metricIconMap = {
   blue: ListTodo,
@@ -169,40 +179,6 @@ const openCreateDialog = () => {
   ensureDefaultPullRequestSelected();
   if (!pullRequestsLoaded.value && !loadingPullRequests.value) {
     void loadPullRequests();
-  }
-};
-
-const createReviewFromSelectedPullRequest = async () => {
-  if (!canManage.value) {
-    return;
-  }
-  const pullRequest = selectedPullRequest.value;
-  if (!pullRequest || !pullRequestOrganization.value || !pullRequestRepository.value) {
-    ElMessage.warning("请选择一个有效的 GitHub PR");
-    return;
-  }
-  creatingTask.value = true;
-  try {
-    const response = await triggerManualReview({
-      organization: pullRequestOrganization.value,
-      repository: pullRequestRepository.value,
-      prNumber: pullRequest.number,
-      title: pullRequest.title,
-      commit: resolvePullRequestHeadSha(pullRequest),
-      branch: pullRequest.branch,
-      source: "github_pr_picker"
-    });
-    createDialogVisible.value = false;
-    if (response.existing) {
-      ElMessage.info("该 PR commit 已有审查任务，已跳转到详情页");
-    } else {
-      ElMessage.success(response.message || "审查任务已创建");
-    }
-    await router.push({ name: "task-detail", params: { id: response.taskId } });
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    creatingTask.value = false;
   }
 };
 
