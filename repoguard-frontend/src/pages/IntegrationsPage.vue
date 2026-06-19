@@ -55,6 +55,10 @@ import {
 } from "@/api/config";
 import IntegrationCard from "@/components/IntegrationCard.vue";
 import {
+  buildConnectionTestPatch,
+  buildGithubIntegrationPatch,
+  buildReviewPolicyIntegrationPatch,
+  buildServiceIntegrationPatch,
   cloneIntegrationItems,
   defaultIntegrationItems,
   providerMap,
@@ -65,8 +69,6 @@ import type {
   ConnectionTestResult,
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
-  IntegrationDiagnosticItem,
-  IntegrationField,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
   ServiceIntegrationConfig,
@@ -91,6 +93,20 @@ const testingConnections = reactive<Record<string, boolean>>({});
 const reverseProviderMap = computed(() =>
   Object.fromEntries(Object.entries(providerMap).map(([value, label]) => [label, value]))
 );
+
+const formValues = (fields: { label: string; value: string }[]) =>
+  Object.fromEntries(fields.map((field) => [field.label, field.value]));
+
+const applyIntegrationPatch = (id: string, patch: Partial<typeof integrationItems.value[number]>) => {
+  const item = integrationItems.value.find((integration) => integration.id === id);
+  if (!item) {
+    return;
+  }
+  Object.assign(item, patch);
+  if (patch.fields) {
+    formState[id] = formValues(patch.fields);
+  }
+};
 
 const testActions: Record<string, () => Promise<ConnectionTestResult>> = {
   github: () => testGithubIntegrationConnection(githubPayload()),
@@ -240,171 +256,19 @@ const springAiPayload = (): ReviewPolicyConfigRequest => ({
 });
 
 const applyGithubConfig = (config: GithubIntegrationConfig) => {
-  const item = integrationItems.value.find((integration) => integration.id === "github");
-  if (!item) {
-    return;
-  }
-  item.status = config.status === "configured" ? "connected" : config.status === "failed" ? "failed" : "missing_secret";
-  item.statusText = config.status === "configured" ? "已连接" : config.status === "failed" ? "连接失败" : "缺少 Token";
-  item.metaLabel = "更新时间";
-  item.metaValue = config.updatedAt ?? "未更新";
-  item.message = config.lastError ?? (config.status === "configured" ? "GitHub 配置已保存" : "请配置 GitHub Token");
-  item.fields = [
-    { label: "API Base URL", value: config.baseUrl, type: "text" },
-    { label: "Token", value: config.token ?? "", type: "password", placeholder: "GitHub token" },
-    { label: "Default Owner", value: config.defaultOwner ?? "", type: "text" },
-    { label: "Default Repo", value: config.defaultRepo ?? "", type: "text" }
-  ];
-  formState.github = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
+  applyIntegrationPatch("github", buildGithubIntegrationPatch(config));
 };
 
 const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig) => {
-  const item = integrationItems.value.find((integration) => integration.id === id);
-  if (!item) {
-    return;
-  }
-  const isConfigured = config.status === "configured";
-  const isFailed = config.status === "failed";
-  const serviceName = id === "mysql" ? "MySQL" : "RabbitMQ";
-  item.status = isConfigured ? "connected" : isFailed ? "failed" : "missing_secret";
-  item.statusText = isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置";
-  item.metaLabel = config.lastCheckedAt ? "检测时间" : "更新时间";
-  item.metaValue = config.lastCheckedAt ?? config.updatedAt ?? "未更新";
-  item.message = config.lastError ?? (isConfigured
-    ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
-    : `请配置用于检测的 ${serviceName} 连接信息`);
-  item.diagnostics = [
-    {
-      label: "保存配置",
-      value: serviceConfigStatusText(config.status),
-      status: isConfigured ? "success" : isFailed ? "danger" : "warning"
-    }
-  ];
-  item.fields = serviceFields(id, config);
-  formState[id] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
-};
-
-const serviceFields = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig): IntegrationField[] => {
-  if (id === "mysql") {
-    return [
-      { label: "JDBC URL", value: config.baseUrl ?? "", type: "text", placeholder: "jdbc:mysql://localhost:3306/repoguard" },
-      { label: "Username", value: config.username ?? "", type: "text" },
-      { label: "Password", value: config.secret ?? "", type: "password", placeholder: "MySQL password" },
-      { label: "Database", value: config.resource ?? "", type: "text" }
-    ];
-  }
-  return [
-    { label: "AMQP URL", value: config.baseUrl ?? "", type: "text", placeholder: "amqp://localhost:5672" },
-    { label: "Username", value: config.username ?? "", type: "text" },
-    { label: "Password", value: config.secret ?? "", type: "password", placeholder: "RabbitMQ password" },
-    { label: "Virtual Host", value: config.resource ?? "/", type: "text" }
-  ];
+  applyIntegrationPatch(id, buildServiceIntegrationPatch(id, config));
 };
 
 const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
-  const item = integrationItems.value.find((integration) => integration.id === "spring-ai");
-  if (!item) {
-    return;
-  }
-  item.status = config.apiKey ? "connected" : "missing_secret";
-  item.statusText = config.apiKey ? "已连接" : "缺少 API Key";
-  item.metaLabel = "模型名称";
-  item.metaValue = config.modelName;
-  item.message = config.apiKey ? "LLM 配置已保存" : "请配置 LLM API Key";
-  item.fields = [
-    {
-      label: "Provider",
-      value: providerMap[config.llmProvider] ?? config.llmProvider,
-      type: "select",
-      options: Object.values(providerMap)
-    },
-    { label: "API Key", value: config.apiKey ?? "", type: "password", placeholder: "LLM API key" },
-    { label: "Model", value: config.modelName, type: "text" },
-    { label: "Base URL", value: config.baseUrl ?? "", type: "text" },
-    { label: "Chunk File Threshold", value: String(config.chunkFileThreshold ?? 6), type: "text" },
-    { label: "Chunk Line Threshold", value: String(config.chunkLineThreshold ?? 700), type: "text" },
-    { label: "Chunk Max Files", value: String(config.chunkMaxFiles ?? 4), type: "text" },
-    { label: "Chunk Max Lines", value: String(config.chunkMaxLines ?? 450), type: "text" },
-    { label: "Input $/1M Tokens", value: String(config.inputTokenPricePerMillion ?? 0), type: "text" },
-    { label: "Output $/1M Tokens", value: String(config.outputTokenPricePerMillion ?? 0), type: "text" }
-  ];
-  formState["spring-ai"] = Object.fromEntries(item.fields.map((field) => [field.label, field.value]));
+  applyIntegrationPatch("spring-ai", buildReviewPolicyIntegrationPatch(config));
 };
 
 const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => {
-  const item = integrationItems.value.find((integration) => integration.id === id);
-  if (!item) {
-    return;
-  }
-  item.status = result.success ? "connected" : "failed";
-  item.statusText = result.success ? "已连接" : "连接失败";
-  item.message = result.message;
-  item.metaLabel = "检测时间";
-  item.metaValue = result.checkedAt;
-  if (id === "mysql" || id === "rabbitmq") {
-    item.diagnostics = serviceDiagnostics(result);
-  }
-};
-
-const serviceDiagnostics = (result: ConnectionTestResult): IntegrationDiagnosticItem[] => [
-  {
-    label: "检测来源",
-    value: testedConfigSourceText(result.testedConfigSource),
-    status: "info"
-  },
-  {
-    label: "运行时",
-    value: healthText(result.runtimeHealthy, result.runtimeConnectionStatus),
-    status: healthStatus(result.runtimeHealthy)
-  },
-  {
-    label: "保存配置",
-    value: healthText(result.savedConfigHealthy, result.savedConfigStatus),
-    status: healthStatus(result.savedConfigHealthy)
-  },
-  {
-    label: "一致性",
-    value: result.mismatch == null ? "未比较" : result.mismatch ? "不一致" : "一致",
-    status: result.mismatch == null ? "info" : result.mismatch ? "warning" : "success"
-  }
-];
-
-const testedConfigSourceText = (source?: string) => {
-  switch (source) {
-    case "submitted_config":
-      return "当前表单";
-    case "saved_config":
-      return "保存配置";
-    case "runtime_config":
-      return "运行时配置";
-    default:
-      return "未标记";
-  }
-};
-
-const healthText = (healthy?: boolean | null, status?: string | null) => {
-  if (healthy == null) {
-    return status === "not_configured" ? "未配置" : "不可用";
-  }
-  return healthy ? "健康" : "异常";
-};
-
-const healthStatus = (healthy?: boolean | null): IntegrationDiagnosticItem["status"] => {
-  if (healthy == null) {
-    return "info";
-  }
-  return healthy ? "success" : "danger";
-};
-
-const serviceConfigStatusText = (status: ServiceIntegrationConfig["status"]) => {
-  switch (status) {
-    case "configured":
-      return "健康";
-    case "failed":
-      return "异常";
-    default:
-      return "未配置";
-  }
+  applyIntegrationPatch(id, buildConnectionTestPatch(id, result));
 };
 
 onMounted(() => {

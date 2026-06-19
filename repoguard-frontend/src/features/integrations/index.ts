@@ -5,3 +5,9 @@ export {
   serviceIcons,
   type IntegrationId
 } from "./integrationDefaults";
+export {
+  buildConnectionTestPatch,
+  buildGithubIntegrationPatch,
+  buildReviewPolicyIntegrationPatch,
+  buildServiceIntegrationPatch
+} from "./integrationConfigMappers";
