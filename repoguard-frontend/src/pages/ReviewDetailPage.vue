@@ -197,11 +197,10 @@ import {
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard,
+  useReviewDetailGithubComments,
   useReviewDetailPolling
 } from "@/features/review-detail";
 import {
-  fetchGithubCommentPreview,
-  fetchGithubCommentPublicationHistory,
   fetchReviewDetail,
   fetchReviewStatus,
   publishGithubComments,
@@ -214,9 +213,6 @@ import type {
   FindingFeedbackResponse,
   FindingFeedbackStatus,
   GithubCommentPreview,
-  GithubCommentPublicationBatch,
-  GithubCommentPublicationHistory,
-  GithubCommentPublish,
   HumanReviewRequest,
   HumanReviewStatus,
   ReviewStatus,
@@ -245,18 +241,24 @@ const submittingHumanReview = ref(false);
 const feedbackSavingId = ref<number | null>(null);
 const retryingTask = ref(false);
 const errorMessage = ref("");
-const previewError = ref("");
-const historyError = ref("");
 const pollErrorMessage = ref("");
 const pollFailureCount = ref(0);
 const lastRefreshedAt = ref("");
 const selectedTask = ref<ReviewTaskDetail | null>(null);
-const githubCommentPreview = ref<GithubCommentPreview | null>(null);
-const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | null>(null);
-const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
-const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
-const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
-const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
+const {
+  githubCommentPreview,
+  githubCommentPublishResult,
+  historyError,
+  loadGithubCommentPreview,
+  loadGithubCommentPublicationHistory,
+  previewError,
+  publicationHistoryBatches,
+  publishedCommentCount,
+  writebackCheck,
+  clearGithubCommentPreviewAndHistory,
+  clearGithubCommentState,
+  resetGithubCommentPublishResult
+} = useReviewDetailGithubComments();
 const canPublishGithubComments = computed(() =>
   Boolean(
     canManage.value
@@ -820,26 +822,6 @@ const formatRefreshTime = () =>
     second: "2-digit"
   }).format(new Date());
 
-const loadGithubCommentPreview = async (id: number) => {
-  previewError.value = "";
-  try {
-    githubCommentPreview.value = await fetchGithubCommentPreview(id);
-  } catch (error) {
-    githubCommentPreview.value = null;
-    previewError.value = getErrorMessage(error, "请求失败");
-  }
-};
-
-const loadGithubCommentPublicationHistory = async (id: number) => {
-  historyError.value = "";
-  try {
-    githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id);
-  } catch (error) {
-    githubCommentPublicationHistory.value = null;
-    historyError.value = getErrorMessage(error, "请求失败");
-  }
-};
-
 const loadDetail = async (options: LoadDetailOptions = {}) => {
   const id = Number(route.params.id);
   if (!Number.isFinite(id)) {
@@ -858,7 +840,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
   }
   errorMessage.value = "";
   if (options.resetPublishResult ?? true) {
-    githubCommentPublishResult.value = null;
+    resetGithubCommentPublishResult();
   }
   try {
     const task = normalizeStatusFields(await fetchReviewDetail(id));
@@ -872,10 +854,7 @@ const loadDetail = async (options: LoadDetailOptions = {}) => {
         loadGithubCommentPublicationHistory(id)
       ]);
     } else {
-      previewError.value = "";
-      githubCommentPreview.value = null;
-      historyError.value = "";
-      githubCommentPublicationHistory.value = null;
+      clearGithubCommentPreviewAndHistory();
     }
     syncPolling();
   } catch (error) {
@@ -1080,7 +1059,7 @@ const submitFindingFeedback = async (findingId: number, status: FindingFeedbackS
       note: promptResult.value?.trim()
     });
     applyFindingFeedback(response);
-    githubCommentPublishResult.value = null;
+    resetGithubCommentPublishResult();
     if (isTerminalTask.value) {
       await loadGithubCommentPreview(selectedTask.value.id);
     }
@@ -1119,9 +1098,7 @@ const confirmRetryReview = async () => {
   try {
     const response = await retryReview(selectedTask.value.id);
     ElMessage.success(response.message || "审查任务已重新入队");
-    githubCommentPreview.value = null;
-    githubCommentPublicationHistory.value = null;
-    githubCommentPublishResult.value = null;
+    clearGithubCommentState();
     pollFailureCount.value = 0;
     pollErrorMessage.value = "";
     await loadDetail({ silent: true, resetPublishResult: true });
