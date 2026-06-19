@@ -66,6 +66,7 @@ import {
   cloneIntegrationItems,
   defaultIntegrationItems,
   serviceIcons,
+  useIntegrationConnectionTest,
   type IntegrationFormState
 } from "@/features/integrations";
 import type {
@@ -112,38 +113,12 @@ const testActions: Record<string, () => Promise<ConnectionTestResult>> = {
   "spring-ai": () => testReviewPolicyConnection(springAiPayload())
 };
 
-const testConnection = async (id: string) => {
-  const action = testActions[id];
-  const item = integrationItems.value.find((integration) => integration.id === id);
-  if (!action || !item) {
-    ElMessage.warning("Connection test is not available");
-    return;
-  }
-  if (testingConnections[id]) {
-    return;
-  }
-  testingConnections[id] = true;
-  try {
-    const result = await action();
-    applyConnectionTestResult(id, result);
-    if (result.success) {
-      ElMessage.success(result.message);
-    } else {
-      ElMessage.error(result.message);
-    }
-  } catch (error) {
-    const message = getErrorMessage(error, "Connection test failed");
-    applyConnectionTestResult(id, {
-      success: false,
-      status: "failed",
-      message,
-      checkedAt: new Date().toLocaleString()
-    });
-    ElMessage.error(message);
-  } finally {
-    testingConnections[id] = false;
-  }
-};
+const { testConnection } = useIntegrationConnectionTest({
+  applyConnectionTestResult: (id, result) => applyConnectionTestResult(id, result),
+  hasIntegration: (id) => integrationItems.value.some((integration) => integration.id === id),
+  testActions,
+  testingConnections
+});
 
 const loadConfig = async () => {
   loading.value = true;

@@ -19,3 +19,4 @@ export {
   integrationFieldValue,
   type IntegrationFormState
 } from "./integrationPayloadBuilders";
+export { useIntegrationConnectionTest } from "./composables/useIntegrationConnectionTest";
