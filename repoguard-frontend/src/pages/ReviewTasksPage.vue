@@ -151,67 +151,20 @@
       </div>
     </section>
 
-    <el-dialog v-model="createDialogVisible" title="选择 GitHub PR" width="760px" append-to-body destroy-on-close>
-      <el-alert
-        v-if="pullRequestError"
-        class="page-alert"
-        type="warning"
-        :title="pullRequestError"
-        show-icon
-        :closable="false"
-      />
-      <div v-else class="pr-picker-meta">
-        <Github :size="18" />
-        <span>{{ pullRequestRepositoryText }}</span>
-        <span v-if="pullRequestsLoaded" class="pr-picker-cache">已预加载 {{ pullRequestOptions.length }} 个 open PR</span>
-        <el-button size="small" text :loading="loadingPullRequests" @click="reloadPullRequests">
-          <RefreshCw :size="14" />
-          刷新 PR
-        </el-button>
-      </div>
-      <el-table
-        v-loading="loadingPullRequests"
-        :data="pullRequestOptions"
-        class="rg-table"
-        size="large"
-        highlight-current-row
-        aria-label="GitHub PR 列表"
-        @current-change="selectPullRequest"
-      >
-        <el-table-column width="56">
-          <template #default="{ row }">
-            <el-radio v-model="selectedPullRequestNumber" :value="row.number" />
-          </template>
-        </el-table-column>
-        <el-table-column label="PR" min-width="340">
-          <template #default="{ row }">
-            <div class="pr-option-cell">
-              <strong>#{{ row.number }} {{ row.title }}</strong>
-              <span>{{ row.author || "-" }} · {{ row.updatedAt || "-" }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="分支" min-width="160">
-          <template #default="{ row }">
-            <code>{{ row.branch || "-" }}</code>
-          </template>
-        </el-table-column>
-        <el-table-column label="Commit" width="130">
-          <template #default="{ row }">
-            <code>{{ shortCommit(resolvePullRequestHeadSha(row)) }}</code>
-          </template>
-        </el-table-column>
-        <template #empty>
-          <el-empty description="当前配置仓库暂无 open PR" />
-        </template>
-      </el-table>
-      <template #footer>
-        <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creatingTask" :disabled="!canManage || creatingTask || !selectedPullRequest" @click="createReviewFromSelectedPullRequest">
-          创建审查任务
-        </el-button>
-      </template>
-    </el-dialog>
+    <ReviewTaskPullRequestDialog
+      v-model:visible="createDialogVisible"
+      v-model:selected-pull-request-number="selectedPullRequestNumber"
+      :can-create="canManage && !creatingTask && Boolean(selectedPullRequest)"
+      :creating-task="creatingTask"
+      :error="pullRequestError"
+      :loading-pull-requests="loadingPullRequests"
+      :pull-requests="pullRequestOptions"
+      :pull-requests-loaded="pullRequestsLoaded"
+      :repository-text="pullRequestRepositoryText"
+      @create="createReviewFromSelectedPullRequest"
+      @reload="reloadPullRequests"
+      @select="selectPullRequest"
+    />
   </div>
 </template>
 
@@ -225,6 +178,7 @@ import { CheckCircle, Clock, Copy, Github, GitPullRequestArrow, ListTodo, Refres
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchGithubPullRequestOptions, fetchReviews, retryReview, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import { ReviewTaskPullRequestDialog } from "@/features/review-tasks";
 import type { GithubPullRequestOption, ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
@@ -433,8 +387,6 @@ const retryTask = async (task: ReviewTask) => {
 };
 
 const resolvePullRequestHeadSha = (pullRequest: GithubPullRequestOption) => pullRequest.headSha || pullRequest.commit;
-
-const shortCommit = (commit?: string) => (commit ? commit.slice(0, 7) : "-");
 
 const openCreateDialog = () => {
   if (!canManage.value || creatingTask.value) {
