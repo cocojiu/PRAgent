@@ -188,34 +188,19 @@
               </div>
               <el-button type="primary" :disabled="!canManage" @click="openBindingDialog()">新增绑定</el-button>
             </div>
-            <el-table v-loading="bindingsLoading" :data="notificationBindings" class="rg-table task-table" size="large">
-              <el-table-column prop="name" label="名称" min-width="150" />
-              <el-table-column label="平台" width="120">
-                <template #default="{ row }">{{ providerText(row.provider) }}</template>
-              </el-table-column>
-              <el-table-column label="仓库" min-width="180">
-                <template #default="{ row }">{{ row.organization }}/{{ row.repository }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="120">
-                <template #default="{ row }">
-                  <span :class="`status-pill ${row.enabled ? 'success' : 'pending'}`">{{ row.enabled ? "启用" : "停用" }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="lastCheckedAt" label="最近检测" min-width="160" />
-              <el-table-column prop="lastError" label="最近错误" min-width="220" show-overflow-tooltip />
-              <el-table-column label="操作" width="292" fixed="right">
-                <template #default="{ row }">
-                  <div class="table-actions">
-                    <el-button size="small" :disabled="!canManage" @click="openBindingDialog(row)">编辑</el-button>
-                    <el-button size="small" :disabled="!canManage" :loading="testingBindingId === row.id" @click="runBindingTest(row.id)">测试</el-button>
-                    <el-button size="small" :disabled="!canManage" @click="toggleBinding(row)">
-                      {{ row.enabled ? "停用" : "启用" }}
-                    </el-button>
-                    <el-button size="small" type="danger" :disabled="!canManage" @click="removeBinding(row.id)">删除</el-button>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+            <NotificationBindingTable
+              :bindings="notificationBindings"
+              :can-manage="canManage"
+              :loading="bindingsLoading"
+              :testing-binding-id="testingBindingId"
+              action-layout="group"
+              table-class="rg-table task-table"
+              size="large"
+              @edit="openBindingDialog"
+              @remove="removeBinding"
+              @test="runBindingTest"
+              @toggle="toggleBinding"
+            />
           </article>
         </el-tab-pane>
 
@@ -373,6 +358,7 @@ import {
   deliveryCountText,
   eventTypeText,
   NotificationBindingDialog,
+  NotificationBindingTable,
   notificationStatusClass,
   notificationStatusText,
   providerText,
