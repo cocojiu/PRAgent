@@ -13,3 +13,4 @@ export {
 } from "./notificationOpsDisplayMappers";
 export { useNotificationOpsRecords } from "./composables/useNotificationOpsRecords";
 export { useNotificationOpsSettings } from "./composables/useNotificationOpsSettings";
+export { useNotificationOpsTestDialog } from "./composables/useNotificationOpsTestDialog";

@@ -407,7 +407,8 @@ import {
   notificationStatusText,
   providerText,
   useNotificationOpsRecords,
-  useNotificationOpsSettings
+  useNotificationOpsSettings,
+  useNotificationOpsTestDialog
 } from "@/features/notification-ops";
 import { canManage } from "@/stores/authState";
 
@@ -420,8 +421,6 @@ const maxRetryCount = ref(5);
 const retryInterval = ref("5");
 const retryIntervals = ["1", "5", "15", "30", "60"];
 
-const testDialogVisible = ref(false);
-const selectedTestBindingId = ref<number>();
 const {
   notificationBindings,
   bindingsLoading,
@@ -456,6 +455,16 @@ const {
   loadSystemSettings,
   saveNotificationSettings
 } = useNotificationOpsSettings({ canManage });
+const {
+  enabledNotificationBindings,
+  selectedTestBindingId,
+  testDialogVisible,
+  openTestDialog,
+  runSelectedBindingTest
+} = useNotificationOpsTestDialog({
+  notificationBindings,
+  runBindingTest
+});
 
 const metricItems = computed(() =>
   buildNotificationMetricItems({
@@ -464,21 +473,6 @@ const metricItems = computed(() =>
     notificationEventTotal: notificationEventTotal.value
   })
 );
-const enabledNotificationBindings = computed(() => notificationBindings.value.filter((binding) => binding.enabled));
-
-const openTestDialog = () => {
-  selectedTestBindingId.value = enabledNotificationBindings.value[0]?.id;
-  testDialogVisible.value = true;
-};
-
-const runSelectedBindingTest = async () => {
-  if (!selectedTestBindingId.value) {
-    return;
-  }
-  await runBindingTest(selectedTestBindingId.value);
-  testDialogVisible.value = false;
-};
-
 const loadPage = async () => {
   loading.value = true;
   try {
