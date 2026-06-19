@@ -10,3 +10,4 @@ export { useReviewDetailGithubComments } from "./composables/useReviewDetailGith
 export { useReviewDetailHumanReview } from "./composables/useReviewDetailHumanReview";
 export { useReviewDetailPolling } from "./composables/useReviewDetailPolling";
 export { useReviewDetailRetry } from "./composables/useReviewDetailRetry";
+export { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "./reviewDetailTaskMappers";
