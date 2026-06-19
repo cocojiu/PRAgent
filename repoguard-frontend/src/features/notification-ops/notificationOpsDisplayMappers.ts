@@ -1,5 +1,5 @@
-import { CheckCircle2, Mail, MessageCircle, Send } from "lucide-vue-next";
-import type { NotificationEvent } from "@/types";
+import { Bell, CheckCircle2, Mail, MessageCircle, RotateCcw, Send, XCircle } from "lucide-vue-next";
+import type { NotificationBinding, NotificationEvent } from "@/types";
 
 const FAILED_EVENT_STATUSES = ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"];
 const RETRYABLE_EVENT_STATUSES = ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD", "PENDING"];
@@ -101,4 +101,24 @@ export const channelIcon = (event: NotificationEvent) => {
     return Send;
   }
   return CheckCircle2;
+};
+
+export const buildNotificationMetricItems = ({
+  notificationBindings,
+  notificationEvents,
+  notificationEventTotal
+}: {
+  notificationBindings: NotificationBinding[];
+  notificationEvents: NotificationEvent[];
+  notificationEventTotal: number;
+}) => {
+  const failedCount = notificationEvents.filter((event) => isFailedNotificationEvent(event.status)).length;
+  const retryPendingCount = notificationEvents.filter((event) => isRetryPendingNotificationEvent(event.status)).length;
+  const enabledBindingCount = notificationBindings.filter((binding) => binding.enabled).length;
+  return [
+    { label: "今日通知", value: notificationEventTotal || notificationEvents.length, theme: "blue", icon: Send },
+    { label: "失败", value: failedCount, theme: "red", icon: XCircle },
+    { label: "待重试", value: retryPendingCount, theme: "orange", icon: RotateCcw },
+    { label: "启用渠道", value: enabledBindingCount, theme: "green", icon: Bell }
+  ];
 };

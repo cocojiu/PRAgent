@@ -1,4 +1,5 @@
 export {
+  buildNotificationMetricItems,
   canRetryNotificationEvent,
   channelIcon,
   channelText,

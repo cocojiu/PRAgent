@@ -391,22 +391,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import {
-  Bell,
   Plus,
   RefreshCw,
-  RotateCcw,
-  Send,
-  XCircle
+  Send
 } from "lucide-vue-next";
 import { useNotificationBindings } from "@/composables/useNotificationBindings";
 import {
+  buildNotificationMetricItems,
   canRetryNotificationEvent,
   channelIcon,
   channelText,
   deliveryCountText,
   eventTypeText,
-  isFailedNotificationEvent,
-  isRetryPendingNotificationEvent,
   notificationStatusClass,
   notificationStatusText,
   providerText,
@@ -461,18 +457,13 @@ const {
   saveNotificationSettings
 } = useNotificationOpsSettings({ canManage });
 
-const failedEvents = computed(() =>
-  notificationEvents.value.filter((event) => isFailedNotificationEvent(event.status))
+const metricItems = computed(() =>
+  buildNotificationMetricItems({
+    notificationBindings: notificationBindings.value,
+    notificationEvents: notificationEvents.value,
+    notificationEventTotal: notificationEventTotal.value
+  })
 );
-const retryEvents = computed(() =>
-  notificationEvents.value.filter((event) => isRetryPendingNotificationEvent(event.status))
-);
-const metricItems = computed(() => [
-  { label: "今日通知", value: notificationEventTotal.value || notificationEvents.value.length, theme: "blue", icon: Send },
-  { label: "失败", value: failedEvents.value.length, theme: "red", icon: XCircle },
-  { label: "待重试", value: retryEvents.value.length, theme: "orange", icon: RotateCcw },
-  { label: "启用渠道", value: notificationBindings.value.filter((binding) => binding.enabled).length, theme: "green", icon: Bell }
-]);
 const enabledNotificationBindings = computed(() => notificationBindings.value.filter((binding) => binding.enabled));
 
 const openTestDialog = () => {
