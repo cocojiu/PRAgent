@@ -57,37 +57,31 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid from "@/components/MetricGrid.vue";
-import { fetchGithubPullRequestOptions, retryReview, triggerManualReview } from "@/api/reviews";
+import { retryReview, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {
   canRetryReviewTask,
+  resolvePullRequestHeadSha,
   ReviewTaskFilterBar,
   ReviewTaskPullRequestDialog,
   ReviewTaskTable,
+  useReviewTaskPullRequestPicker,
   useReviewTasksList
 } from "@/features/review-tasks";
-import type { GithubPullRequestOption, ReviewTask } from "@/types";
+import type { ReviewTask } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 const router = useRouter();
-const pullRequestOptions = ref<GithubPullRequestOption[]>([]);
 const createDialogVisible = ref(false);
-const loadingPullRequests = ref(false);
-const pullRequestsLoaded = ref(false);
 const creatingTask = ref(false);
 const retryingTaskId = ref<number>();
-const pullRequestError = ref("");
-const pullRequestOrganization = ref("");
-const pullRequestRepository = ref("");
-const selectedPullRequestNumber = ref<number>();
-let pullRequestSeq = 0;
 
 const {
   currentPage,
@@ -108,6 +102,22 @@ const {
   refreshTasks
 } = useReviewTasksList();
 
+const {
+  loadingPullRequests,
+  pullRequestError,
+  pullRequestOptions,
+  pullRequestOrganization,
+  pullRequestRepository,
+  pullRequestRepositoryText,
+  pullRequestsLoaded,
+  selectedPullRequest,
+  selectedPullRequestNumber,
+  ensureDefaultPullRequestSelected,
+  loadPullRequests,
+  reloadPullRequests,
+  selectPullRequest
+} = useReviewTaskPullRequestPicker();
+
 const metricIconMap = {
   blue: ListTodo,
   red: ShieldAlert,
@@ -116,16 +126,6 @@ const metricIconMap = {
 } as const;
 
 const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
-
-const selectedPullRequest = computed(() =>
-  pullRequestOptions.value.find((item) => item.number === selectedPullRequestNumber.value)
-);
-const pullRequestRepositoryText = computed(() => {
-  if (!pullRequestOrganization.value || !pullRequestRepository.value) {
-    return "使用集成配置中的 GitHub 仓库";
-  }
-  return `${pullRequestOrganization.value} / ${pullRequestRepository.value}`;
-});
 
 onMounted(() => {
   initializeReviewTasksList();
@@ -161,8 +161,6 @@ const retryTask = async (task: ReviewTask) => {
   }
 };
 
-const resolvePullRequestHeadSha = (pullRequest: GithubPullRequestOption) => pullRequest.headSha || pullRequest.commit;
-
 const openCreateDialog = () => {
   if (!canManage.value || creatingTask.value) {
     return;
@@ -172,51 +170,6 @@ const openCreateDialog = () => {
   if (!pullRequestsLoaded.value && !loadingPullRequests.value) {
     void loadPullRequests();
   }
-};
-
-const ensureDefaultPullRequestSelected = () => {
-  if (!selectedPullRequestNumber.value && pullRequestOptions.value.length) {
-    selectedPullRequestNumber.value = pullRequestOptions.value[0].number;
-  }
-};
-
-const loadPullRequests = async (options: { preselect?: boolean } = {}) => {
-  const requestSeq = ++pullRequestSeq;
-  loadingPullRequests.value = true;
-  pullRequestError.value = "";
-  try {
-    const response = await fetchGithubPullRequestOptions();
-    if (requestSeq !== pullRequestSeq) {
-      return;
-    }
-    pullRequestOrganization.value = response.organization ?? "";
-    pullRequestRepository.value = response.repository ?? "";
-    pullRequestOptions.value = response.items;
-    pullRequestsLoaded.value = true;
-    if (options.preselect !== false) {
-      ensureDefaultPullRequestSelected();
-    }
-  } catch (error) {
-    if (requestSeq !== pullRequestSeq) {
-      return;
-    }
-    pullRequestOptions.value = [];
-    pullRequestsLoaded.value = false;
-    pullRequestError.value = getErrorMessage(error, "GitHub PR 列表加载失败");
-  } finally {
-    if (requestSeq === pullRequestSeq) {
-      loadingPullRequests.value = false;
-    }
-  }
-};
-
-const reloadPullRequests = () => {
-  selectedPullRequestNumber.value = undefined;
-  void loadPullRequests();
-};
-
-const selectPullRequest = (row?: GithubPullRequestOption) => {
-  selectedPullRequestNumber.value = row?.number;
 };
 
 const createReviewFromSelectedPullRequest = async () => {
