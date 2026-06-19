@@ -59,28 +59,22 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
 import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid from "@/components/MetricGrid.vue";
-import { retryReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {
-  canRetryReviewTask,
   ReviewTaskFilterBar,
   ReviewTaskPullRequestDialog,
   ReviewTaskTable,
   useReviewTaskCreation,
   useReviewTaskPullRequestPicker,
+  useReviewTaskRetry,
   useReviewTasksList
 } from "@/features/review-tasks";
-import type { ReviewTask } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 
 const router = useRouter();
 const createDialogVisible = ref(false);
-const retryingTaskId = ref<number>();
 
 const {
   currentPage,
@@ -128,6 +122,11 @@ const { creatingTask, createReviewFromSelectedPullRequest } = useReviewTaskCreat
   selectedPullRequest
 });
 
+const { retryingTaskId, retryTask } = useReviewTaskRetry({
+  canManage,
+  onRetried: loadTasks
+});
+
 const metricIconMap = {
   blue: ListTodo,
   red: ShieldAlert,
@@ -143,33 +142,6 @@ onMounted(() => {
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });
-
-const retryTask = async (task: ReviewTask) => {
-  if (!canManage.value || !canRetryReviewTask(task) || retryingTaskId.value) {
-    return;
-  }
-  try {
-    const failureText = task.failureReason ? `\n\n失败原因：${task.failureReason}` : "";
-    await ElMessageBox.confirm(`确认将 PR #${task.prNumber} 重新加入审查队列？${failureText}`, "确认重试审查任务", {
-      confirmButtonText: "确认重试",
-      cancelButtonText: "取消",
-      type: "warning"
-    });
-  } catch {
-    return;
-  }
-
-  retryingTaskId.value = task.id;
-  try {
-    const response = await retryReview(task.id);
-    ElMessage.success(response.message || "审查任务已重新入队");
-    await loadTasks();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    retryingTaskId.value = undefined;
-  }
-};
 
 const openCreateDialog = () => {
   if (!canManage.value || creatingTask.value) {
