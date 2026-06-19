@@ -152,7 +152,7 @@
                   </el-table-column>
                   <el-table-column label="操作" width="126" fixed="right">
                     <template #default="{ row }">
-                      <el-button v-if="canRetry(row.status)" link type="primary" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
+                      <el-button v-if="canRetryNotificationEvent(row.status)" link type="primary" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
                         重试
                       </el-button>
                       <el-button v-else link type="primary" @click="activeTab = 'events'">详情</el-button>
@@ -278,7 +278,7 @@
               <el-table-column prop="lastError" label="最近错误" min-width="240" show-overflow-tooltip />
               <el-table-column label="操作" width="120" fixed="right">
                 <template #default="{ row }">
-                  <el-button size="small" :disabled="!canManage || !canRetry(row.status)" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
+                  <el-button size="small" :disabled="!canManage || !canRetryNotificationEvent(row.status)" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
                     重试
                   </el-button>
                 </template>
@@ -393,9 +393,6 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   Bell,
-  CheckCircle2,
-  Mail,
-  MessageCircle,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -410,6 +407,18 @@ import {
   updateSystemSettings
 } from "@/api/config";
 import { useNotificationBindings } from "@/composables/useNotificationBindings";
+import {
+  canRetryNotificationEvent,
+  channelIcon,
+  channelText,
+  deliveryCountText,
+  eventTypeText,
+  isFailedNotificationEvent,
+  isRetryPendingNotificationEvent,
+  notificationStatusClass,
+  notificationStatusText,
+  providerText
+} from "@/features/notification-ops";
 import { canManage } from "@/stores/authState";
 import type {
   NotificationDelivery,
@@ -470,10 +479,10 @@ const {
 } = useNotificationBindings();
 
 const failedEvents = computed(() =>
-  notificationEvents.value.filter((event) => ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"].includes(event.status?.toUpperCase()))
+  notificationEvents.value.filter((event) => isFailedNotificationEvent(event.status))
 );
 const retryEvents = computed(() =>
-  notificationEvents.value.filter((event) => ["PENDING", "PUBLISH_FAILED", "DELIVERY_FAILED"].includes(event.status?.toUpperCase()))
+  notificationEvents.value.filter((event) => isRetryPendingNotificationEvent(event.status))
 );
 const metricItems = computed(() => [
   { label: "今日通知", value: notificationEventTotal.value || notificationEvents.value.length, theme: "blue", icon: Send },
@@ -584,96 +593,6 @@ const runSelectedBindingTest = async () => {
   }
   await runBindingTest(selectedTestBindingId.value);
   testDialogVisible.value = false;
-};
-
-const canRetry = (status: string) =>
-  ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD", "PENDING"].includes(status?.toUpperCase());
-
-const notificationStatusClass = (status: string) => {
-  const normalized = status?.toUpperCase();
-  if (["DELIVERED", "SUCCESS", "PUBLISHED"].includes(normalized)) {
-    return "success";
-  }
-  if (["PENDING", "DELIVERING"].includes(normalized)) {
-    return "processing";
-  }
-  if (["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"].includes(normalized)) {
-    return "danger";
-  }
-  if (["SKIPPED"].includes(normalized)) {
-    return "warning";
-  }
-  return "pending";
-};
-
-const notificationStatusText = (status: string) => {
-  const normalized = status?.toUpperCase();
-  if (["DELIVERED", "SUCCESS"].includes(normalized)) {
-    return "已送达";
-  }
-  if (["PUBLISHED", "DELIVERING"].includes(normalized)) {
-    return "待投递";
-  }
-  if (["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"].includes(normalized)) {
-    return "失败";
-  }
-  if (normalized === "PENDING") {
-    return "待重试";
-  }
-  if (normalized === "SKIPPED") {
-    return "已跳过";
-  }
-  return status || "-";
-};
-
-const eventTypeText = (type: string) => {
-  const map: Record<string, string> = {
-    REVIEW_COMPLETED: "审查完成",
-    REVIEW_FAILED: "审查失败",
-    HUMAN_REVIEW_REQUIRED: "需要人工复核",
-    GITHUB_COMMENT_PUBLISHED: "GitHub 回写完成"
-  };
-  return map[type] ?? type;
-};
-
-const deliveryCountText = (event: NotificationEvent) => {
-  const count = event.deliverySummary?.deliveryCount ?? 0;
-  return count > 0 ? `${count} 次` : "未投递";
-};
-
-const providerText = (provider: string) => {
-  if (provider === "DINGTALK") {
-    return "钉钉";
-  }
-  if (provider === "WECOM") {
-    return "企业微信";
-  }
-  if (provider === "EMAIL") {
-    return "邮件";
-  }
-  return provider || "-";
-};
-
-const channelText = (event: NotificationEvent) => {
-  const providers = event.deliverySummary?.providers ?? [];
-  if (!providers.length) {
-    return "-";
-  }
-  return providers.map(providerText).join(" / ");
-};
-
-const channelIcon = (event: NotificationEvent) => {
-  const channel = event.deliverySummary?.providers?.[0] ? providerText(event.deliverySummary.providers[0]) : "";
-  if (channel === "邮件") {
-    return Mail;
-  }
-  if (channel === "企业微信") {
-    return MessageCircle;
-  }
-  if (channel === "钉钉") {
-    return Send;
-  }
-  return CheckCircle2;
 };
 
 const loadPage = async () => {
