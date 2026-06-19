@@ -100,46 +100,15 @@
             :change-type-text="changeTypeText"
           />
 
-          <article v-if="selectedTask.humanReviewRequired" class="dashboard-card human-review-card">
-            <div class="card-title-row">
-              <h2>人工审查门禁</h2>
-              <span :class="`status-pill ${humanReviewStatusClass}`">{{ humanReviewStatusText }}</span>
-            </div>
-            <p class="human-review-note">
-              {{ selectedTask.humanReviewNote || "中高风险审查结果需要人工确认后才能回写 GitHub 评论。" }}
-            </p>
-            <dl v-if="selectedTask.humanReviewBy || selectedTask.humanReviewedAt" class="human-review-meta">
-              <dt>审查人</dt><dd>{{ selectedTask.humanReviewBy || "-" }}</dd>
-              <dt>审查时间</dt><dd>{{ selectedTask.humanReviewedAt || "-" }}</dd>
-            </dl>
-            <div class="human-review-actions">
-              <el-button
-                type="success"
-                :disabled="!canManage || !canSubmitHumanReview"
-                :loading="submittingHumanReview"
-                @click="submitHumanReviewDecision('approve')"
-              >
-                通过审查
-              </el-button>
-              <el-button
-                type="warning"
-                :disabled="!canManage || !canSubmitHumanReview"
-                :loading="submittingHumanReview"
-                @click="submitHumanReviewDecision('changes_requested')"
-              >
-                要求修改
-              </el-button>
-              <el-button
-                type="danger"
-                plain
-                :disabled="!canManage || !canSubmitHumanReview"
-                :loading="submittingHumanReview"
-                @click="submitHumanReviewDecision('reject')"
-              >
-                拒绝
-              </el-button>
-            </div>
-          </article>
+          <ReviewDetailHumanReviewCard
+            :can-manage="canManage"
+            :can-submit-human-review="canSubmitHumanReview"
+            :human-review-status-class="humanReviewStatusClass"
+            :human-review-status-text="humanReviewStatusText"
+            :submitting-human-review="submittingHumanReview"
+            :task="selectedTask"
+            @submit="submitHumanReviewDecision"
+          />
 
           <ReviewDetailFindingsCard
             :can-manage="canManage"
@@ -224,6 +193,7 @@ import {
   ReviewDetailFilesSection,
   ReviewDetailFindingsCard,
   ReviewDetailGithubCommentsCard,
+  ReviewDetailHumanReviewCard,
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard
