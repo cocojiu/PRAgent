@@ -197,6 +197,7 @@ import {
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard,
+  useReviewDetailFindingFeedback,
   useReviewDetailGithubComments,
   useReviewDetailPolling
 } from "@/features/review-detail";
@@ -204,12 +205,10 @@ import {
   fetchReviewDetail,
   fetchReviewStatus,
   retryReview,
-  submitHumanReview,
-  updateFindingFeedback
+  submitHumanReview
 } from "@/api/reviews";
 import type {
   ChangedFile,
-  FindingFeedbackResponse,
   FindingFeedbackStatus,
   GithubCommentPreview,
   HumanReviewRequest,
@@ -236,7 +235,6 @@ const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
 const submittingHumanReview = ref(false);
-const feedbackSavingId = ref<number | null>(null);
 const retryingTask = ref(false);
 const errorMessage = ref("");
 const pollErrorMessage = ref("");
@@ -652,6 +650,15 @@ const findingFeedbackPromptTitle = (status: FindingFeedbackStatus) => {
   return labels[status];
 };
 
+const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
+  canManage,
+  findingFeedbackPromptTitle,
+  isTerminalTask,
+  loadGithubCommentPreview,
+  resetGithubCommentPublishResult,
+  selectedTask
+});
+
 const publishStatusText = (status: string) => {
   const labels: Record<string, string> = {
     published: "已发布",
@@ -998,68 +1005,6 @@ const submitHumanReviewDecision = async (action: HumanReviewRequest["action"]) =
     ElMessage.error(getErrorMessage(error, "人工审查提交失败"));
   } finally {
     submittingHumanReview.value = false;
-  }
-};
-
-const applyFindingFeedback = (response: FindingFeedbackResponse) => {
-  if (!selectedTask.value) {
-    return;
-  }
-  selectedTask.value = {
-    ...selectedTask.value,
-    findings: selectedTask.value.findings.map((finding) =>
-      finding.id === response.findingId
-        ? {
-            ...finding,
-            feedbackStatus: response.feedbackStatus,
-            feedbackNote: response.feedbackNote,
-            feedbackBy: response.feedbackBy,
-            feedbackAt: response.feedbackAt
-          }
-        : finding
-    )
-  };
-};
-
-const submitFindingFeedback = async (findingId: number, status: FindingFeedbackStatus) => {
-  if (!selectedTask.value || !canManage.value || feedbackSavingId.value) {
-    return;
-  }
-  try {
-    const promptResult = await ElMessageBox.prompt(
-      "请输入判定备注",
-      findingFeedbackPromptTitle(status),
-      {
-        confirmButtonText: "提交",
-        cancelButtonText: "取消",
-        inputType: "textarea",
-        inputPlaceholder: status === "valid" || status === "fixed" ? "可选：记录确认依据" : "请说明判定原因",
-        inputValidator: (value) => {
-          if (status === "valid" || status === "fixed") {
-            return true;
-          }
-          return Boolean(value?.trim()) || "请填写判定原因";
-        }
-      }
-    );
-    feedbackSavingId.value = findingId;
-    const response = await updateFindingFeedback(selectedTask.value.id, findingId, {
-      status,
-      note: promptResult.value?.trim()
-    });
-    applyFindingFeedback(response);
-    resetGithubCommentPublishResult();
-    if (isTerminalTask.value) {
-      await loadGithubCommentPreview(selectedTask.value.id);
-    }
-    ElMessage.success(findingFeedbackPromptTitle(status));
-  } catch (error) {
-    if (error === "cancel" || error === "close") {
-      return;
-    }
-    ElMessage.error(getErrorMessage(error, "判定提交失败"));
-  } finally {
-    feedbackSavingId.value = null;
   }
 };
 
