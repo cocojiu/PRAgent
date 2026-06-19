@@ -200,12 +200,12 @@ import {
   useReviewDetailFindingFeedback,
   useReviewDetailGithubComments,
   useReviewDetailHumanReview,
-  useReviewDetailPolling
+  useReviewDetailPolling,
+  useReviewDetailRetry
 } from "@/features/review-detail";
 import {
   fetchReviewDetail,
-  fetchReviewStatus,
-  retryReview
+  fetchReviewStatus
 } from "@/api/reviews";
 import type {
   ChangedFile,
@@ -234,7 +234,6 @@ const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
-const retryingTask = ref(false);
 const errorMessage = ref("");
 const pollErrorMessage = ref("");
 const pollFailureCount = ref(0);
@@ -291,6 +290,18 @@ const retryTooltip = computed(() => {
     return "仅失败任务支持重试";
   }
   return failureSuggestion.value || "重新入队执行审查";
+});
+const { confirmRetryReview, retryingTask } = useReviewDetailRetry({
+  canManage,
+  canRetryTask,
+  clearGithubCommentState,
+  failureReason,
+  refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true }),
+  resetPollFailure: () => {
+    pollFailureCount.value = 0;
+    pollErrorMessage.value = "";
+  },
+  selectedTask
 });
 const humanReviewStatus = computed<HumanReviewStatus | string>(() => selectedTask.value?.humanReviewStatus ?? "not_required");
 const isHumanReviewPublishAllowed = computed(() => {
@@ -965,41 +976,6 @@ const confirmPublishGithubComments = async () => {
       loadGithubCommentPublicationHistory(taskId)
     ]);
   });
-};
-
-const confirmRetryReview = async () => {
-  if (!canManage.value || !selectedTask.value || !canRetryTask.value || retryingTask.value) {
-    return;
-  }
-
-  try {
-    const failureText = failureReason.value ? `\n\n失败原因：${failureReason.value}` : "";
-    await ElMessageBox.confirm(
-      `确认将 PR #${selectedTask.value.prNumber} 重新加入审查队列？${failureText}`,
-      "确认重试审查任务",
-      {
-        confirmButtonText: "确认重试",
-        cancelButtonText: "取消",
-        type: "warning"
-      }
-    );
-  } catch {
-    return;
-  }
-
-  retryingTask.value = true;
-  try {
-    const response = await retryReview(selectedTask.value.id);
-    ElMessage.success(response.message || "审查任务已重新入队");
-    clearGithubCommentState();
-    pollFailureCount.value = 0;
-    pollErrorMessage.value = "";
-    await loadDetail({ silent: true, resetPublishResult: true });
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    retryingTask.value = false;
-  }
 };
 
 const goBack = () => {

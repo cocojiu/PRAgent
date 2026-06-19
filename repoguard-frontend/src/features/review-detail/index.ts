@@ -9,3 +9,4 @@ export { useReviewDetailFindingFeedback } from "./composables/useReviewDetailFin
 export { useReviewDetailGithubComments } from "./composables/useReviewDetailGithubComments";
 export { useReviewDetailHumanReview } from "./composables/useReviewDetailHumanReview";
 export { useReviewDetailPolling } from "./composables/useReviewDetailPolling";
+export { useReviewDetailRetry } from "./composables/useReviewDetailRetry";
