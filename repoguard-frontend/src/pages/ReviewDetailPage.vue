@@ -183,8 +183,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
@@ -197,7 +196,6 @@ import {
   ReviewDetailKpiGrid,
   ReviewDetailSidePanel,
   ReviewDetailSummaryCard,
-  applyReviewStatusSnapshot,
   changeTypeText,
   chunkAggregateRiskText,
   chunkReasonText,
@@ -211,7 +209,6 @@ import {
   humanReviewActionText,
   humanReviewStatusClass as mapHumanReviewStatusClass,
   humanReviewStatusText as mapHumanReviewStatusText,
-  normalizeReviewTaskDetail,
   publicationBatchStatusClass,
   publicationBatchStatusText,
   publicationItemStatusClass,
@@ -223,28 +220,22 @@ import {
   useReviewDetailFindingFeedback,
   useReviewDetailGithubComments,
   useReviewDetailHumanReview,
+  useReviewDetailLoader,
   useReviewDetailPolling,
   useReviewDetailRetry,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
-import {
-  fetchReviewDetail,
-  fetchReviewStatus
-} from "@/api/reviews";
 import type {
   ChangedFile,
   HumanReviewStatus,
   ReviewStatus,
-  ReviewTaskDetail,
   RiskLevel,
   TimelineItem
 } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
-type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
@@ -252,13 +243,15 @@ const MAX_POLL_INTERVAL_MS = 30000;
 
 const router = useRouter();
 const route = useRoute();
-const loading = ref(false);
-const silentRefreshing = ref(false);
-const errorMessage = ref("");
-const pollErrorMessage = ref("");
-const pollFailureCount = ref(0);
-const lastRefreshedAt = ref("");
-const selectedTask = ref<ReviewTaskDetail | null>(null);
+
+const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
+  status === "completed"
+    || status === "failed"
+    || status === "pending_human_review"
+    || status === "approved"
+    || status === "changes_requested"
+    || status === "rejected";
+
 const {
   githubCommentPreview,
   githubCommentPublishResult,
@@ -275,6 +268,30 @@ const {
   publishGithubCommentsForTask,
   resetGithubCommentPublishResult
 } = useReviewDetailGithubComments();
+let stopPolling = () => {};
+let syncPolling = () => {};
+const {
+  errorMessage,
+  lastRefreshedAt,
+  loading,
+  loadDetail,
+  pollErrorMessage,
+  pollFailureCount,
+  pollReviewStatus,
+  refreshDetail,
+  selectedTask,
+  silentRefreshing
+} = useReviewDetailLoader({
+  clearGithubCommentPreviewAndHistory,
+  getTaskId: () => Number(route.params.id),
+  isTerminalReviewStatus,
+  loadGithubCommentPreview,
+  loadGithubCommentPublicationHistory,
+  maxPollFailures: MAX_POLL_FAILURES,
+  resetGithubCommentPublishResult,
+  stopPolling: () => stopPolling(),
+  syncPolling: () => syncPolling()
+});
 const canPublishGithubComments = computed(() =>
   Boolean(
     canManage.value
@@ -283,14 +300,6 @@ const canPublishGithubComments = computed(() =>
       && isHumanReviewPublishAllowed.value
   )
 );
-
-const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
-  status === "completed"
-    || status === "failed"
-    || status === "pending_human_review"
-    || status === "approved"
-    || status === "changes_requested"
-    || status === "rejected";
 
 const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
 const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
@@ -369,13 +378,16 @@ const currentPollIntervalMs = computed(() =>
 );
 const currentPollIntervalSeconds = computed(() => currentPollIntervalMs.value / 1000);
 
-const { cleanupPolling, stopPolling, syncPolling } = useReviewDetailPolling({
+const polling = useReviewDetailPolling({
   currentPollIntervalMs,
   maxPollFailures: MAX_POLL_FAILURES,
   pollFailureCount,
   pollReviewStatus: () => pollReviewStatus(),
   shouldPollTask
 });
+const { cleanupPolling } = polling;
+stopPolling = polling.stopPolling;
+syncPolling = polling.syncPolling;
 
 const findingCounts = computed<Record<RiskLevel, number>>(() =>
   reviewFindings.value.reduce(
@@ -515,116 +527,6 @@ const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedba
   resetGithubCommentPublishResult,
   selectedTask
 });
-
-const formatRefreshTime = () =>
-  new Intl.DateTimeFormat("zh-CN", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  }).format(new Date());
-
-const loadDetail = async (options: LoadDetailOptions = {}) => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id)) {
-    ElMessage.error("审查任务 ID 无效");
-    return;
-  }
-
-  if (options.silent && silentRefreshing.value && !options.force) {
-    return;
-  }
-
-  if (options.silent) {
-    silentRefreshing.value = true;
-  } else {
-    loading.value = true;
-  }
-  errorMessage.value = "";
-  if (options.resetPublishResult ?? true) {
-    resetGithubCommentPublishResult();
-  }
-  try {
-    const task = normalizeReviewTaskDetail(await fetchReviewDetail(id));
-    selectedTask.value = task;
-    pollErrorMessage.value = "";
-    pollFailureCount.value = 0;
-    lastRefreshedAt.value = formatRefreshTime();
-    if (isTerminalReviewStatus(task.status)) {
-      await Promise.all([
-        loadGithubCommentPreview(id),
-        loadGithubCommentPublicationHistory(id)
-      ]);
-    } else {
-      clearGithubCommentPreviewAndHistory();
-    }
-    syncPolling();
-  } catch (error) {
-    if (!options.silent) {
-      selectedTask.value = null;
-    }
-    errorMessage.value = getErrorMessage(error, "请求失败");
-    if (!options.silent) {
-      ElMessage.error(errorMessage.value);
-    } else {
-      pollFailureCount.value += 1;
-      if (pollFailureCount.value >= MAX_POLL_FAILURES) {
-        stopPolling();
-        pollErrorMessage.value = `自动刷新连续失败 ${MAX_POLL_FAILURES} 次，已暂停。请手动刷新。`;
-      } else {
-        pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
-        syncPolling();
-      }
-    }
-  } finally {
-    loading.value = false;
-    silentRefreshing.value = false;
-  }
-};
-
-const pollReviewStatus = async () => {
-  const id = Number(route.params.id);
-  if (!Number.isFinite(id)) {
-    return;
-  }
-  if (silentRefreshing.value) {
-    return;
-  }
-
-  silentRefreshing.value = true;
-  try {
-    const status = await fetchReviewStatus(id);
-    if (selectedTask.value) {
-      selectedTask.value = applyReviewStatusSnapshot(selectedTask.value, status);
-    }
-    pollErrorMessage.value = "";
-    pollFailureCount.value = 0;
-    lastRefreshedAt.value = formatRefreshTime();
-    if (isTerminalReviewStatus(status.status as ReviewStatus)) {
-      await loadDetail({ silent: true, resetPublishResult: false, force: true });
-      return;
-    }
-    syncPolling();
-  } catch (error) {
-    pollFailureCount.value += 1;
-    const message = getErrorMessage(error, "请求失败");
-    if (pollFailureCount.value >= MAX_POLL_FAILURES) {
-      stopPolling();
-      pollErrorMessage.value = `Automatic refresh failed ${MAX_POLL_FAILURES} times and has paused. Please refresh manually.`;
-    } else {
-      pollErrorMessage.value = `Automatic refresh failed: ${message}`;
-      syncPolling();
-    }
-  } finally {
-    silentRefreshing.value = false;
-  }
-};
-
-const refreshDetail = () => {
-  pollFailureCount.value = 0;
-  pollErrorMessage.value = "";
-  void loadDetail({ silent: true, resetPublishResult: false });
-};
 
 const confirmPublishGithubComments = async () => {
   const preview = githubCommentPreview.value;
