@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { Hexagon, Save } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
@@ -56,23 +56,23 @@ import {
 import IntegrationCard from "@/components/IntegrationCard.vue";
 import {
   buildConnectionTestPatch,
+  buildGithubPayload,
   buildGithubIntegrationPatch,
+  buildMysqlPayload,
+  buildRabbitMqPayload,
   buildReviewPolicyIntegrationPatch,
   buildServiceIntegrationPatch,
+  buildSpringAiPayload,
   cloneIntegrationItems,
   defaultIntegrationItems,
-  providerMap,
   serviceIcons,
-  type IntegrationId
+  type IntegrationFormState
 } from "@/features/integrations";
 import type {
   ConnectionTestResult,
   GithubIntegrationConfig,
-  GithubIntegrationConfigRequest,
   ReviewPolicyConfig,
-  ReviewPolicyConfigRequest,
   ServiceIntegrationConfig,
-  ServiceIntegrationConfigRequest
 } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -84,15 +84,12 @@ const rabbitMqConfig = ref<ServiceIntegrationConfig>();
 const reviewPolicyConfig = ref<ReviewPolicyConfig>();
 const integrationItems = ref(cloneIntegrationItems());
 
-const formState = reactive<Record<string, Record<string, string>>>(
+const formState = reactive<IntegrationFormState>(
   Object.fromEntries(defaultIntegrationItems.map((item) => [item.id, Object.fromEntries(item.fields.map((field) => [field.label, field.value]))]))
 );
 
 const visibleSecrets = reactive<Record<string, boolean>>({});
 const testingConnections = reactive<Record<string, boolean>>({});
-const reverseProviderMap = computed(() =>
-  Object.fromEntries(Object.entries(providerMap).map(([value, label]) => [label, value]))
-);
 
 const formValues = (fields: { label: string; value: string }[]) =>
   Object.fromEntries(fields.map((field) => [field.label, field.value]));
@@ -200,60 +197,13 @@ const saveConfig = async () => {
   }
 };
 
-const fieldValue = (id: IntegrationId, label: string) => formState[id]?.[label] ?? "";
+const githubPayload = () => buildGithubPayload(formState);
 
-const numberFieldValue = (id: IntegrationId, label: string, fallback: number) => {
-  const parsed = Number(fieldValue(id, label));
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+const mysqlPayload = () => buildMysqlPayload(formState);
 
-const githubPayload = (): GithubIntegrationConfigRequest => ({
-  baseUrl: fieldValue("github", "API Base URL").trim() || "https://api.github.com",
-  token: fieldValue("github", "Token"),
-  defaultOwner: fieldValue("github", "Default Owner"),
-  defaultRepo: fieldValue("github", "Default Repo")
-});
+const rabbitMqPayload = () => buildRabbitMqPayload(formState);
 
-const mysqlPayload = (): ServiceIntegrationConfigRequest => ({
-  baseUrl: fieldValue("mysql", "JDBC URL").trim(),
-  username: fieldValue("mysql", "Username"),
-  secret: fieldValue("mysql", "Password"),
-  resource: fieldValue("mysql", "Database")
-});
-
-const rabbitMqPayload = (): ServiceIntegrationConfigRequest => ({
-  baseUrl: fieldValue("rabbitmq", "AMQP URL").trim(),
-  username: fieldValue("rabbitmq", "Username"),
-  secret: fieldValue("rabbitmq", "Password"),
-  resource: fieldValue("rabbitmq", "Virtual Host")
-});
-
-const springAiPayload = (): ReviewPolicyConfigRequest => ({
-  llmEnabled: true,
-  llmProvider: reverseProviderMap.value[fieldValue("spring-ai", "Provider")] ?? "dashscope",
-  modelName: fieldValue("spring-ai", "Model").trim() || "qwen-plus",
-  baseUrl: fieldValue("spring-ai", "Base URL"),
-  apiKey: fieldValue("spring-ai", "API Key"),
-  timeoutSeconds: reviewPolicyConfig.value?.timeoutSeconds ?? 60,
-  temperature: reviewPolicyConfig.value?.temperature ?? 0.2,
-  maxTokens: reviewPolicyConfig.value?.maxTokens ?? 4096,
-  fallbackToRules: reviewPolicyConfig.value?.fallbackToRules ?? true,
-  workerConcurrency: reviewPolicyConfig.value?.workerConcurrency ?? 1,
-  chunkFileThreshold: numberFieldValue("spring-ai", "Chunk File Threshold", reviewPolicyConfig.value?.chunkFileThreshold ?? 6),
-  chunkLineThreshold: numberFieldValue("spring-ai", "Chunk Line Threshold", reviewPolicyConfig.value?.chunkLineThreshold ?? 700),
-  chunkMaxFiles: numberFieldValue("spring-ai", "Chunk Max Files", reviewPolicyConfig.value?.chunkMaxFiles ?? 4),
-  chunkMaxLines: numberFieldValue("spring-ai", "Chunk Max Lines", reviewPolicyConfig.value?.chunkMaxLines ?? 450),
-  inputTokenPricePerMillion: numberFieldValue(
-    "spring-ai",
-    "Input $/1M Tokens",
-    reviewPolicyConfig.value?.inputTokenPricePerMillion ?? 0
-  ),
-  outputTokenPricePerMillion: numberFieldValue(
-    "spring-ai",
-    "Output $/1M Tokens",
-    reviewPolicyConfig.value?.outputTokenPricePerMillion ?? 0
-  )
-});
+const springAiPayload = () => buildSpringAiPayload(formState, reviewPolicyConfig.value);
 
 const applyGithubConfig = (config: GithubIntegrationConfig) => {
   applyIntegrationPatch("github", buildGithubIntegrationPatch(config));
