@@ -16,37 +16,16 @@
     <MetricGrid :metrics="taskSummaryMetrics" :resolve-icon="getMetricIcon" />
 
     <section class="task-panel">
-      <div class="filter-bar">
-        <el-select v-model="repoFilter" placeholder="全部仓库" clearable>
-          <el-option label="全部仓库" value="" />
-          <el-option v-for="repo in repositories" :key="repo" :label="repo" :value="repo" />
-        </el-select>
-        <el-select v-model="statusFilter" placeholder="全部状态" clearable>
-          <el-option label="全部状态" value="" />
-          <el-option label="已完成" value="completed" />
-          <el-option label="审查中" value="reviewing" />
-          <el-option label="失败" value="failed" />
-        </el-select>
-        <el-select v-model="riskFilter" placeholder="全部风险等级" clearable>
-          <el-option label="全部风险等级" value="" />
-          <el-option label="高风险" value="high" />
-          <el-option label="中风险" value="medium" />
-          <el-option label="低风险" value="low" />
-        </el-select>
-        <el-select v-model="sourceFilter" placeholder="全部来源" clearable>
-          <el-option label="全部来源" value="" />
-          <el-option label="手动输入" value="manual_input" />
-          <el-option label="PR 选择" value="github_pr_picker" />
-          <el-option label="复用已有" value="existing_reused" />
-        </el-select>
-        <el-input v-model="keyword" class="search-input" placeholder="搜索 PR 标题、作者或 Commit ID" clearable>
-          <template #suffix><Search :size="18" /></template>
-        </el-input>
-        <el-button type="primary" plain :loading="loading" @click="refreshTasks">
-          <RefreshCw :size="16" />
-          刷新
-        </el-button>
-      </div>
+      <ReviewTaskFilterBar
+        v-model:keyword="keyword"
+        v-model:repository="repoFilter"
+        v-model:risk="riskFilter"
+        v-model:source="sourceFilter"
+        v-model:status="statusFilter"
+        :loading="loading"
+        :repositories="repositories"
+        @refresh="refreshTasks"
+      />
 
       <ReviewTaskTable
         v-model:current-page="currentPage"
@@ -83,11 +62,11 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { canManage } from "@/stores/authState";
-import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, RefreshCw, Search, ShieldAlert, XCircle } from "lucide-vue-next";
+import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { fetchGithubPullRequestOptions, fetchReviews, retryReview, triggerManualReview } from "@/api/reviews";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import { canRetryReviewTask, ReviewTaskPullRequestDialog, ReviewTaskTable } from "@/features/review-tasks";
+import { canRetryReviewTask, ReviewTaskFilterBar, ReviewTaskPullRequestDialog, ReviewTaskTable } from "@/features/review-tasks";
 import type { GithubPullRequestOption, ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
