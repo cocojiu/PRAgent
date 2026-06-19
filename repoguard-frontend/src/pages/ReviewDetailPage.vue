@@ -199,13 +199,13 @@ import {
   ReviewDetailSummaryCard,
   useReviewDetailFindingFeedback,
   useReviewDetailGithubComments,
+  useReviewDetailHumanReview,
   useReviewDetailPolling
 } from "@/features/review-detail";
 import {
   fetchReviewDetail,
   fetchReviewStatus,
-  retryReview,
-  submitHumanReview
+  retryReview
 } from "@/api/reviews";
 import type {
   ChangedFile,
@@ -234,7 +234,6 @@ const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
-const submittingHumanReview = ref(false);
 const retryingTask = ref(false);
 const errorMessage = ref("");
 const pollErrorMessage = ref("");
@@ -617,6 +616,13 @@ const humanReviewActionText = (action: HumanReviewRequest["action"]) => {
   return labels[action];
 };
 
+const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHumanReview({
+  canSubmitHumanReview,
+  humanReviewActionText,
+  refreshDetail: () => loadDetail({ silent: true, resetPublishResult: true, force: true }),
+  selectedTask
+});
+
 const findingFeedbackStatusText = (status?: FindingFeedbackStatus | string) => {
   const labels: Record<string, string> = {
     unreviewed: "未判定",
@@ -959,53 +965,6 @@ const confirmPublishGithubComments = async () => {
       loadGithubCommentPublicationHistory(taskId)
     ]);
   });
-};
-
-const submitHumanReviewDecision = async (action: HumanReviewRequest["action"]) => {
-  if (!selectedTask.value || !canSubmitHumanReview.value || submittingHumanReview.value) {
-    return;
-  }
-  try {
-    const promptResult = await ElMessageBox.prompt(
-      "请输入人工审查意见",
-      humanReviewActionText(action),
-      {
-        confirmButtonText: "提交",
-        cancelButtonText: "取消",
-        inputType: "textarea",
-        inputPlaceholder: action === "approve" ? "可选：记录通过原因" : "请说明需要修改或拒绝的原因",
-        inputValidator: (value) => {
-          if (action === "approve") {
-            return true;
-          }
-          return Boolean(value?.trim()) || "请填写审查意见";
-        }
-      }
-    );
-    submittingHumanReview.value = true;
-    const response = await submitHumanReview(selectedTask.value.id, {
-      action,
-      note: promptResult.value?.trim()
-    });
-    selectedTask.value = {
-      ...selectedTask.value,
-      status: response.status as ReviewStatus,
-      humanReviewRequired: response.humanReviewRequired,
-      humanReviewStatus: response.humanReviewStatus,
-      humanReviewNote: response.humanReviewNote,
-      humanReviewBy: response.humanReviewBy,
-      humanReviewedAt: response.humanReviewedAt
-    };
-    ElMessage.success(humanReviewActionText(action));
-    await loadDetail({ silent: true, resetPublishResult: true, force: true });
-  } catch (error) {
-    if (error === "cancel" || error === "close") {
-      return;
-    }
-    ElMessage.error(getErrorMessage(error, "人工审查提交失败"));
-  } finally {
-    submittingHumanReview.value = false;
-  }
 };
 
 const confirmRetryReview = async () => {

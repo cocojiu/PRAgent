@@ -7,4 +7,5 @@ export { default as ReviewDetailSidePanel } from "./components/ReviewDetailSideP
 export { default as ReviewDetailSummaryCard } from "./components/ReviewDetailSummaryCard.vue";
 export { useReviewDetailFindingFeedback } from "./composables/useReviewDetailFindingFeedback";
 export { useReviewDetailGithubComments } from "./composables/useReviewDetailGithubComments";
+export { useReviewDetailHumanReview } from "./composables/useReviewDetailHumanReview";
 export { useReviewDetailPolling } from "./composables/useReviewDetailPolling";
