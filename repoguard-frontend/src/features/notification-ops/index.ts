@@ -11,3 +11,4 @@ export {
   providerText
 } from "./notificationOpsDisplayMappers";
 export { useNotificationOpsRecords } from "./composables/useNotificationOpsRecords";
+export { useNotificationOpsSettings } from "./composables/useNotificationOpsSettings";

@@ -389,8 +389,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { computed, onMounted, ref } from "vue";
 import {
   Bell,
   Plus,
@@ -399,10 +398,6 @@ import {
   Send,
   XCircle
 } from "lucide-vue-next";
-import {
-  fetchSystemSettings,
-  updateSystemSettings
-} from "@/api/config";
 import { useNotificationBindings } from "@/composables/useNotificationBindings";
 import {
   canRetryNotificationEvent,
@@ -415,25 +410,13 @@ import {
   notificationStatusClass,
   notificationStatusText,
   providerText,
-  useNotificationOpsRecords
+  useNotificationOpsRecords,
+  useNotificationOpsSettings
 } from "@/features/notification-ops";
 import { canManage } from "@/stores/authState";
-import type {
-  NotificationSettings,
-  SystemSettings
-} from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 
 const activeTab = ref("settings");
 const loading = ref(false);
-const savingSettings = ref(false);
-const systemSettings = ref<SystemSettings>();
-const notificationForm = reactive<NotificationSettings>({
-  githubComment: true,
-  highRiskPr: true,
-  failedTask: true,
-  email: ""
-});
 const recipientTarget = ref("members");
 const recipientGroup = ref("ops");
 const quietHours = ref("off");
@@ -472,6 +455,11 @@ const {
   refreshNotificationData,
   retryEvent
 } = useNotificationOpsRecords({ loadNotificationBindings });
+const {
+  notificationForm,
+  loadSystemSettings,
+  saveNotificationSettings
+} = useNotificationOpsSettings({ canManage });
 
 const failedEvents = computed(() =>
   notificationEvents.value.filter((event) => isFailedNotificationEvent(event.status))
@@ -486,40 +474,6 @@ const metricItems = computed(() => [
   { label: "启用渠道", value: notificationBindings.value.filter((binding) => binding.enabled).length, theme: "green", icon: Bell }
 ]);
 const enabledNotificationBindings = computed(() => notificationBindings.value.filter((binding) => binding.enabled));
-
-const applySystemSettings = (settings: SystemSettings) => {
-  systemSettings.value = settings;
-  Object.assign(notificationForm, {
-    ...settings.notification,
-    email: settings.notification.email ?? ""
-  });
-};
-
-const loadSystemSettings = async () => {
-  const settings = await fetchSystemSettings();
-  applySystemSettings(settings);
-};
-
-const saveNotificationSettings = async () => {
-  if (!canManage.value || !systemSettings.value || savingSettings.value) {
-    return;
-  }
-  savingSettings.value = true;
-  try {
-    const saved = await updateSystemSettings({
-      base: systemSettings.value.base,
-      policy: systemSettings.value.policy,
-      security: systemSettings.value.security,
-      notification: { ...notificationForm }
-    });
-    applySystemSettings(saved);
-    ElMessage.success("通知设置已保存");
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "通知设置保存失败"));
-  } finally {
-    savingSettings.value = false;
-  }
-};
 
 const openTestDialog = () => {
   selectedTestBindingId.value = enabledNotificationBindings.value[0]?.id;
