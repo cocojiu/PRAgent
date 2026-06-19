@@ -203,7 +203,6 @@ import {
 import {
   fetchReviewDetail,
   fetchReviewStatus,
-  publishGithubComments,
   retryReview,
   submitHumanReview,
   updateFindingFeedback
@@ -236,7 +235,6 @@ const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
 const silentRefreshing = ref(false);
-const publishingComments = ref(false);
 const submittingHumanReview = ref(false);
 const feedbackSavingId = ref<number | null>(null);
 const retryingTask = ref(false);
@@ -254,9 +252,11 @@ const {
   previewError,
   publicationHistoryBatches,
   publishedCommentCount,
+  publishingComments,
   writebackCheck,
   clearGithubCommentPreviewAndHistory,
   clearGithubCommentState,
+  publishGithubCommentsForTask,
   resetGithubCommentPublishResult
 } = useReviewDetailGithubComments();
 const canPublishGithubComments = computed(() =>
@@ -945,24 +945,13 @@ const confirmPublishGithubComments = async () => {
     return;
   }
 
-  publishingComments.value = true;
-  try {
-    githubCommentPublishResult.value = await publishGithubComments(selectedTask.value.id);
-    const result = githubCommentPublishResult.value;
-    if (result.failedCount > 0) {
-      ElMessage.warning(`GitHub 评论回写完成：成功 ${result.succeededCount} 条，失败 ${result.failedCount} 条`);
-    } else {
-      ElMessage.success(`GitHub 评论回写成功：${result.succeededCount} 条`);
-    }
+  const taskId = selectedTask.value.id;
+  await publishGithubCommentsForTask(taskId, async () => {
     await Promise.all([
-      loadGithubCommentPreview(selectedTask.value.id),
-      loadGithubCommentPublicationHistory(selectedTask.value.id)
+      loadGithubCommentPreview(taskId),
+      loadGithubCommentPublicationHistory(taskId)
     ]);
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    publishingComments.value = false;
-  }
+  });
 };
 
 const submitHumanReviewDecision = async (action: HumanReviewRequest["action"]) => {
