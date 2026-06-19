@@ -80,7 +80,7 @@
 
 <script setup lang="ts">
 import { onMounted } from "vue";
-import { useNotificationBindings } from "@/composables/useNotificationBindings";
+import { useNotificationBindings } from "@/features/notification-ops";
 import { canManage } from "@/stores/authState";
 
 const {

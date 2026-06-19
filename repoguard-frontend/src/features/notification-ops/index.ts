@@ -11,6 +11,7 @@ export {
   notificationStatusText,
   providerText
 } from "./notificationOpsDisplayMappers";
+export { useNotificationBindings } from "./composables/useNotificationBindings";
 export { useNotificationOpsRecords } from "./composables/useNotificationOpsRecords";
 export { useNotificationOpsSettings } from "./composables/useNotificationOpsSettings";
 export { useNotificationOpsTestDialog } from "./composables/useNotificationOpsTestDialog";

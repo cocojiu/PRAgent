@@ -395,7 +395,6 @@ import {
   RefreshCw,
   Send
 } from "lucide-vue-next";
-import { useNotificationBindings } from "@/composables/useNotificationBindings";
 import {
   buildNotificationMetricItems,
   canRetryNotificationEvent,
@@ -406,6 +405,7 @@ import {
   notificationStatusClass,
   notificationStatusText,
   providerText,
+  useNotificationBindings,
   useNotificationOpsRecords,
   useNotificationOpsSettings,
   useNotificationOpsTestDialog
