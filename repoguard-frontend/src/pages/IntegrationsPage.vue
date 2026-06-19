@@ -52,7 +52,6 @@ import {
   updateRabbitMqIntegrationConfig,
   updateReviewPolicyConfig
 } from "@/api/config";
-import IntegrationCard from "@/components/IntegrationCard.vue";
 import {
   buildConnectionTestPatch,
   buildGithubPayload,
@@ -64,6 +63,7 @@ import {
   buildSpringAiPayload,
   cloneIntegrationItems,
   defaultIntegrationItems,
+  IntegrationCard,
   serviceIcons,
   useIntegrationConfigPersistence,
   useIntegrationConnectionTest,

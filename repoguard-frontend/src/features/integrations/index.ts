@@ -1,3 +1,4 @@
+export { default as IntegrationCard } from "./components/IntegrationCard.vue";
 export {
   cloneIntegrationItems,
   defaultIntegrationItems,
