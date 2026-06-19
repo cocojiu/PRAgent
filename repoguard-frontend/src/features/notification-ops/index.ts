@@ -1,5 +1,6 @@
 export { default as NotificationBindingDialog } from "./components/NotificationBindingDialog.vue";
 export { default as NotificationBindingTable } from "./components/NotificationBindingTable.vue";
+export { default as NotificationSettingsPanel } from "./components/NotificationSettingsPanel.vue";
 export {
   buildNotificationMetricItems,
   canRetryNotificationEvent,
