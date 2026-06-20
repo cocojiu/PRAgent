@@ -48,7 +48,6 @@ public class RuleBasedPullRequestReviewer {
         }
         diff.files().stream()
             .filter(file -> isControllerApiChange(file)
-                && !hasControllerSecurityFinding(file.filename(), findings)
                 && isApplicable("RG-API-001", file.filename(), configuredRules))
             .findFirst()
             .ifPresent(file -> findings.add(finding(
@@ -61,13 +60,6 @@ public class RuleBasedPullRequestReviewer {
             )));
     }
 
-    private boolean hasControllerSecurityFinding(String filePath, List<ReviewFindingResult> findings) {
-        String normalizedPath = normalizePath(filePath);
-        return findings.stream()
-            .anyMatch(finding -> normalizedPath.equals(normalizePath(finding.filePath()))
-                && "RG-AUTH-001".equals(finding.ruleId()));
-    }
-
     private void scanPatch(
         String filePath,
         String patch,
@@ -76,6 +68,7 @@ public class RuleBasedPullRequestReviewer {
     ) {
         String[] lines = patch.split("\\R");
         int currentLine = 0;
+        boolean hasAuthorizationGuard = patchHasAuthorizationGuard(lines);
         for (String line : lines) {
             if (line.startsWith("@@")) {
                 currentLine = parseNewFileStart(line);
@@ -83,7 +76,7 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                addFindingIfMatches(filePath, currentLine, added, configuredRules, findings);
+                addFindingIfMatches(filePath, currentLine, added, configuredRules, findings, hasAuthorizationGuard);
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -96,7 +89,8 @@ public class RuleBasedPullRequestReviewer {
         int lineNumber,
         String line,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<ReviewFindingResult> findings
+        List<ReviewFindingResult> findings,
+        boolean hasAuthorizationGuard
     ) {
         String trimmed = line.trim();
         if (isApplicable("RG-JAVA-001", filePath, configuredRules)
@@ -115,7 +109,9 @@ public class RuleBasedPullRequestReviewer {
         if (isApplicable("RG-SECRET-001", filePath, configuredRules) && containsSensitiveLiteral(trimmed)) {
             findings.add(finding("HIGH", "RG-SECRET-001", filePath, lineNumber, "新增代码疑似硬编码敏感信息", "请改用加密配置、环境变量或密钥管理服务，并确保响应和日志只返回脱敏值。"));
         }
-        if (isApplicable("RG-AUTH-001", filePath, configuredRules) && isMutatingControllerMapping(filePath, trimmed)) {
+        if (isApplicable("RG-AUTH-001", filePath, configuredRules)
+            && isMutatingControllerMapping(filePath, trimmed)
+            && !hasAuthorizationGuard) {
             findings.add(finding("HIGH", "RG-AUTH-001", filePath, lineNumber, "新增高危 Controller 写接口缺少显式权限门禁", "请为配置写入、评论回写、用户管理等写接口补充 @RequireRole 或等效网关权限控制。"));
         }
         if (isApplicable("RG-STATE-001", filePath, configuredRules) && writesTaskStatusString(trimmed)) {
@@ -167,10 +163,35 @@ public class RuleBasedPullRequestReviewer {
         if (patch == null || patch.isBlank()) {
             return false;
         }
-        String lowerPatch = patch.toLowerCase(Locale.ROOT);
-        return lowerPatch.contains("+@getmapping") || lowerPatch.contains("+@postmapping")
-            || lowerPatch.contains("+@putmapping") || lowerPatch.contains("+@patchmapping")
-            || lowerPatch.contains("+@deletemapping") || lowerPatch.contains("+@requestmapping");
+        for (String line : patch.split("\\R")) {
+            if (line.startsWith("+") && !line.startsWith("+++") && isControllerMapping(line.substring(1).trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean patchHasAuthorizationGuard(String[] lines) {
+        for (String line : lines) {
+            if (!line.startsWith("-") && hasAuthorizationGuard(line.replaceFirst("^[+ ]", "").trim())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAuthorizationGuard(String trimmed) {
+        return trimmed.contains("@RequireRole")
+            || trimmed.contains("@RequirePermission")
+            || trimmed.contains("@PreAuthorize")
+            || trimmed.contains("@Secured")
+            || trimmed.contains("@RolesAllowed");
+    }
+
+    private boolean isControllerMapping(String trimmed) {
+        return trimmed.contains("@GetMapping") || trimmed.contains("@PostMapping") || trimmed.contains("@PutMapping")
+            || trimmed.contains("@PatchMapping") || trimmed.contains("@DeleteMapping")
+            || trimmed.contains("@RequestMapping");
     }
 
     private boolean hasTestChange(List<GithubChangedFile> files) {

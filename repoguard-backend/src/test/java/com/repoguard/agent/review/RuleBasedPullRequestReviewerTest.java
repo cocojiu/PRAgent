@@ -132,7 +132,8 @@ class RuleBasedPullRequestReviewerTest {
                 "RG-MQ-001",
                 "RG-EXT-001",
                 "RG-SECRET-001",
-                "RG-LOG-001"
+                "RG-LOG-001",
+                "RG-API-001"
             );
         assertThat(result.findings())
             .filteredOn(finding -> "HIGH".equals(finding.severity()))
@@ -257,6 +258,54 @@ class RuleBasedPullRequestReviewerTest {
         assertThat(finding.confidence()).isEqualTo("MEDIUM");
         assertThat(finding.isBlocking()).isFalse();
         assertThat(finding.reviewDimension()).isEqualTo("API_CONTRACT_RULE");
+    }
+
+    @Test
+    void detectsIndentedControllerApiChangeWithoutTestCoverage() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/order/OrderController.java",
+                """
+                    @@ -18,0 +19,3 @@
+                    +    @GetMapping("/orders/{id}")
+                    +    public Order getOrder() {
+                    +    }
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .contains("RG-API-001");
+    }
+
+    @Test
+    void skipsAuthFindingWhenMutatingControllerHasAuthorizationGuardButStillReportsTestGap() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/order/OrderController.java",
+                """
+                    @@ -18,0 +19,4 @@
+                    +    @RequireRole("ADMIN")
+                    +    @PostMapping("/orders")
+                    +    public Order createOrder() {
+                    +    }
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .contains("RG-API-001")
+            .doesNotContain("RG-AUTH-001");
     }
 
     @Test

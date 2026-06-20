@@ -52,6 +52,8 @@ class ReviewTaskExecutorImplTest {
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
+        task.setPublishClaimedAt(LocalDateTime.parse("2026-06-05T17:59:00"));
+        task.setPublishClaimedBy("stale-publisher");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         GithubPullRequestDiff diff = new GithubPullRequestDiff(
@@ -76,6 +78,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getDurationSeconds()).isNotNull();
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
+        assertThat(task.getPublishClaimedAt()).isNull();
+        assertThat(task.getPublishClaimedBy()).isNull();
         verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
         verify(reviewTaskMapper).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));

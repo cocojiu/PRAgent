@@ -318,6 +318,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             if (updated <= 0) {
                 return false;
             }
+            task.setPublishClaimedAt(null);
+            task.setPublishClaimedBy(null);
             timelineAppender.append(task.getId(), "Review started", startedAt, "CURRENT", 2);
             return true;
         });
