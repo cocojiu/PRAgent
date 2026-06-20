@@ -12,10 +12,12 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.MDC;
 
 class ReviewTaskRecoveryCompensatorTest {
 
@@ -52,6 +54,7 @@ class ReviewTaskRecoveryCompensatorTest {
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getValue().getLabel()).contains("queued for recovery");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("CURRENT");
+        assertLogContextCleared();
     }
 
     @Test
@@ -63,14 +66,24 @@ class ReviewTaskRecoveryCompensatorTest {
         compensator.recover(task, recoveredAt, recoveredAt.minusMinutes(30));
 
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+        assertLogContextCleared();
     }
 
     private ReviewTask stuckTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setOrganization("octocat");
+        task.setRepository("Hello-World");
+        task.setPrNumber(1);
         task.setStatus("REVIEWING");
         task.setReviewClaimedAt(LocalDateTime.parse("2026-06-20T10:00:00"));
         task.setReviewClaimedBy("old-execution-token");
         return task;
+    }
+
+    private void assertLogContextCleared() {
+        assertThat(MDC.get(LogContext.TASK_ID)).isNull();
+        assertThat(MDC.get(LogContext.REPOSITORY)).isNull();
+        assertThat(MDC.get(LogContext.PR_NUMBER)).isNull();
     }
 }

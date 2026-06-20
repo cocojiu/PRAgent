@@ -13,12 +13,16 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ReviewTaskPublishCompensator {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskPublishCompensator.class);
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -117,34 +121,95 @@ public class ReviewTaskPublishCompensator {
     }
 
     void compensate(ReviewTask task) {
-        LocalDateTime claimedAt = LocalDateTime.now();
-        if (!claimTask(task, claimedAt)) {
-            return;
-        }
-        int nextAttempt = reviewTaskStateMachine.isPublishFailed(task.getStatus())
-            ? safeAttempts(task) + 1
-            : safeAttempts(task);
-        if (!markQueuedBeforePublish(task, claimedAt, nextAttempt)) {
-            return;
-        }
-        try {
-            reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
-            clearPublishClaim(task, claimedAt);
-            appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
-            if (metrics != null) {
-                metrics.rabbitPublishCompensationSucceeded();
-            }
-        } catch (MessagePublishException ex) {
-            if (markPublishFailed(task, claimedAt, ex)) {
-                appendTimeline(
+        try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
+            LocalDateTime claimedAt = LocalDateTime.now();
+            if (!claimTask(task, claimedAt)) {
+                LOGGER.info(
+                    "Review task publish compensation skipped taskId={} repository={} prNumber={} operation=review_publish_compensation result=claim_failed status={} attempts={} maxAttempts={}",
                     task.getId(),
-                    "Message publish retry failed: " + truncate(errorMessage(ex)),
-                    LocalDateTime.now(),
-                    "FAILED"
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    task.getStatus(),
+                    safeAttempts(task),
+                    maxAttempts()
                 );
+                return;
+            }
+            int nextAttempt = reviewTaskStateMachine.isPublishFailed(task.getStatus())
+                ? safeAttempts(task) + 1
+                : safeAttempts(task);
+            String recoverySource = reviewTaskStateMachine.isPublishFailed(task.getStatus())
+                ? "publish_failed"
+                : "stale_queued_claim";
+            LOGGER.info(
+                "Review task publish compensation claimed taskId={} repository={} prNumber={} operation=review_publish_compensation recoverySource={} currentStatus={} nextAttempt={} maxAttempts={} claimedAt={}",
+                task.getId(),
+                repositorySlug(task),
+                task.getPrNumber(),
+                recoverySource,
+                task.getStatus(),
+                nextAttempt,
+                maxAttempts(),
+                claimedAt
+            );
+            if (!markQueuedBeforePublish(task, claimedAt, nextAttempt)) {
+                LOGGER.warn(
+                    "Review task publish compensation skipped taskId={} repository={} prNumber={} operation=review_publish_compensation result=mark_queued_failed recoverySource={} claimedAt={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    recoverySource,
+                    claimedAt
+                );
+                return;
+            }
+            try {
+                reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
+                clearPublishClaim(task, claimedAt);
+                appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
                 if (metrics != null) {
-                    metrics.rabbitPublishCompensationFailed(errorMessage(ex));
+                    metrics.rabbitPublishCompensationSucceeded();
                 }
+                LOGGER.info(
+                    "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    recoverySource,
+                    safeAttempts(task)
+                );
+            } catch (MessagePublishException ex) {
+                String errorMessage = errorMessage(ex);
+                if (markPublishFailed(task, claimedAt, ex)) {
+                    appendTimeline(
+                        task.getId(),
+                        "Message publish retry failed: " + truncate(errorMessage),
+                        LocalDateTime.now(),
+                        "FAILED"
+                    );
+                    if (metrics != null) {
+                        metrics.rabbitPublishCompensationFailed(errorMessage);
+                    }
+                    LOGGER.warn(
+                        "Review task publish compensation failed taskId={} repository={} prNumber={} operation=review_publish_compensation result=publish_failed recoverySource={} attempts={} nextRetryAt={} error={}",
+                        task.getId(),
+                        repositorySlug(task),
+                        task.getPrNumber(),
+                        recoverySource,
+                        safeAttempts(task),
+                        task.getNextPublishRetryAt(),
+                        errorMessage
+                    );
+                    return;
+                }
+                LOGGER.warn(
+                    "Review task publish compensation failure discarded taskId={} repository={} prNumber={} operation=review_publish_compensation result=claim_lost recoverySource={} error={}",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber(),
+                    recoverySource,
+                    errorMessage
+                );
             }
         }
     }
@@ -286,6 +351,14 @@ public class ReviewTaskPublishCompensator {
 
     private int safeAttempts(ReviewTask task) {
         return task.getPublishAttempts() == null ? 0 : task.getPublishAttempts();
+    }
+
+    private String repositorySlug(ReviewTask task) {
+        return safePart(task.getOrganization()) + "/" + safePart(task.getRepository());
+    }
+
+    private String safePart(String value) {
+        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 
     private int maxAttempts() {

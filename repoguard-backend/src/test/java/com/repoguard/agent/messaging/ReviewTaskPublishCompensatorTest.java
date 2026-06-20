@@ -17,12 +17,14 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.observability.LogContext;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.MDC;
 
 class ReviewTaskPublishCompensatorTest {
 
@@ -63,6 +65,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(task.getPublishAttempts()).isEqualTo(2);
         assertThat(task.getNextPublishRetryAt()).isNull();
         assertThat(task.getLastPublishError()).isNull();
+        assertLogContextCleared();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -96,6 +99,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
         assertThat(task.getPublishClaimedAt()).isNull();
         assertThat(task.getPublishClaimedBy()).isNull();
+        assertLogContextCleared();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -230,5 +234,11 @@ class ReviewTaskPublishCompensatorTest {
         task.setLlmStatus("PENDING");
         task.setNextPublishRetryAt(LocalDateTime.now().minusMinutes(1));
         return task;
+    }
+
+    private void assertLogContextCleared() {
+        assertThat(MDC.get(LogContext.TASK_ID)).isNull();
+        assertThat(MDC.get(LogContext.REPOSITORY)).isNull();
+        assertThat(MDC.get(LogContext.PR_NUMBER)).isNull();
     }
 }
