@@ -19,6 +19,16 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+if [ -z "${BACKEND_IMAGE:-}" ]; then
+  echo "Missing BACKEND_IMAGE environment variable." >&2
+  exit 1
+fi
+
+if [ -z "${FRONTEND_IMAGE:-}" ]; then
+  echo "Missing FRONTEND_IMAGE environment variable." >&2
+  exit 1
+fi
+
 read_env_value() {
   key="$1"
   sed -n "s/^${key}=//p" "$ENV_FILE" | tail -n 1
@@ -42,6 +52,11 @@ compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
 
+print_backend_logs() {
+  echo "Recent backend logs:" >&2
+  compose logs --tail=120 backend >&2 || true
+}
+
 wait_health() {
   attempts="${1:-30}"
   i=1
@@ -57,8 +72,39 @@ wait_health() {
     i=$((i + 1))
   done
   echo "Health check failed after $attempts attempts: $HEALTH_URL" >&2
+  print_backend_logs
   return 1
 }
+
+assert_service_image() {
+  service="$1"
+  expected_image="$2"
+  container_id="$(compose ps -q "$service")"
+  if [ -z "$container_id" ]; then
+    echo "Missing running container for service: $service" >&2
+    compose ps >&2 || true
+    return 1
+  fi
+
+  actual_image="$(docker inspect "$container_id" --format '{{.Config.Image}}')"
+  if [ "$actual_image" != "$expected_image" ]; then
+    echo "Image mismatch for $service" >&2
+    echo "  expected: $expected_image" >&2
+    echo "  actual:   $actual_image" >&2
+    compose ps >&2 || true
+    return 1
+  fi
+}
+
+verify_deployment() {
+  wait_health "${1:-30}"
+  assert_service_image backend "$BACKEND_IMAGE"
+  assert_service_image frontend "$FRONTEND_IMAGE"
+}
+
+echo "Deploying RepoGuard images:"
+echo "  backend:  $BACKEND_IMAGE"
+echo "  frontend: $FRONTEND_IMAGE"
 
 compose pull backend frontend
 
@@ -67,6 +113,7 @@ if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   wait_health 45
   compose up -d --no-deps frontend
   compose ps
+  verify_deployment 15
   echo "RepoGuard deployment is healthy: $HEALTH_URL"
   exit 0
 fi
@@ -81,6 +128,6 @@ fi
 
 compose up -d
 compose ps
-wait_health 30
+verify_deployment 30
 
 echo "RepoGuard deployment is healthy: $HEALTH_URL"
