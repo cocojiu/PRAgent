@@ -11,6 +11,14 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 - 用户认证、管理员 API Key、RBAC、审计日志和敏感配置加密。
 - Dashboard 指标、LLM 质量趋势、通知运维、消息队列健康和日志观测。
 
+## 界面预览
+
+![总览页](assets/screenshots/overview.jpg)
+
+![登录页](assets/screenshots/login.jpg)
+
+![注册页](assets/screenshots/register.jpg)
+
 ## 技术栈
 
 后端：
