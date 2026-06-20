@@ -6,6 +6,8 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 
 This temporary README update is used to validate the RepoGuard online review flow on 2026-06-20.
 
+The second temporary README update validates publish failure recovery through RabbitMQ requeue.
+
 ## 核心功能
 
 - PR 审查任务创建、重试、状态追踪和详情展示。
