@@ -68,6 +68,9 @@ jobs:
           npm ci
           npm run build
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Resolve image names
         id: images
         shell: bash
@@ -122,6 +125,8 @@ jobs:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
           push: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
           tags: |
             ${{ env.BACKEND_IMAGE }}
             ${{ env.ALIYUN_BACKEND_IMAGE }}
@@ -132,6 +137,8 @@ jobs:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
           push: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
           tags: |
             ${{ env.FRONTEND_IMAGE }}
             ${{ env.ALIYUN_FRONTEND_IMAGE }}
