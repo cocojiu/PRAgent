@@ -23,6 +23,7 @@ repoguard-backend/config/application-dev-local.yml
 
 # Local runtime artifacts
 .downloads/
+.worktrees/
 .rabbitmq/
 .rabbitmq-dev/
 .rabbitmq-rabbitdev/
