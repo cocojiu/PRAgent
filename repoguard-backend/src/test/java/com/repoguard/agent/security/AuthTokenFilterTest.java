@@ -66,6 +66,22 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void protectedApiAllowsExistingAuthenticatedUserAttribute() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.setAttribute(
+            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+            new AuthTokenService.AuthenticatedUser(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
     void protectedApiRejectsInvalidToken() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
         request.addHeader("Authorization", "Bearer invalid");

@@ -35,6 +35,10 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
+        if (hasBearerToken(request)) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
         String actualKey = request.getHeader(properties.getHeaderName());
         if (actualKey == null || actualKey.isBlank()) {
@@ -45,7 +49,16 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
             writeError(response, HttpStatus.FORBIDDEN, "Admin API key is invalid");
             return;
         }
+        request.setAttribute(
+            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+            new AuthTokenService.AuthenticatedUser(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
+        );
         filterChain.doFilter(request, response);
+    }
+
+    private boolean hasBearerToken(HttpServletRequest request) {
+        String authorization = request.getHeader("Authorization");
+        return authorization != null && authorization.startsWith("Bearer ") && authorization.length() > "Bearer ".length();
     }
 
     private boolean requiresAdminKey(HttpServletRequest request) {

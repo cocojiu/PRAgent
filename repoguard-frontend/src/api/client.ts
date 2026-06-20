@@ -15,10 +15,6 @@ interface TokenPairResponse {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const ADMIN_KEY_HEADER = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY_HEADER ?? "X-RepoGuard-Admin-Key";
-const ADMIN_KEY_STORAGE_KEYS = [
-  "repoguard.adminApiKey",
-  "REPOGUARD_ADMIN_API_KEY"
-];
 const ACCESS_TOKEN_STORAGE_KEY = "repoguard.accessToken";
 const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
@@ -94,7 +90,7 @@ const doRequest = async (
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const adminApiKey = resolveAdminApiKey();
+  const adminApiKey = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY;
   if (adminApiKey && !headers.has(ADMIN_KEY_HEADER)) {
     headers.set(ADMIN_KEY_HEADER, adminApiKey);
   }
@@ -194,27 +190,6 @@ const redirectToLogin = () => {
 const isAuthPath = (path: string) => path.startsWith("/api/v1/auth/");
 
 const isRefreshTokenRemembered = () => Boolean(window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY));
-
-const resolveAdminApiKey = () => {
-  const envKey = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY;
-  if (envKey) {
-    return envKey;
-  }
-  if (typeof window === "undefined") {
-    return "";
-  }
-  for (const key of ADMIN_KEY_STORAGE_KEYS) {
-    const sessionValue = window.sessionStorage.getItem(key);
-    if (sessionValue) {
-      return sessionValue;
-    }
-    const localValue = window.localStorage.getItem(key);
-    if (localValue) {
-      return localValue;
-    }
-  }
-  return "";
-};
 
 const resolveAccessToken = () => {
   if (typeof window === "undefined") {

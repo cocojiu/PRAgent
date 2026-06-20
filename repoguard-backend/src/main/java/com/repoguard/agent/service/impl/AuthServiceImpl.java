@@ -34,7 +34,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    private static final String ROLE_ADMIN = "ADMIN";
+    private static final String ROLE_VIEWER = "VIEWER";
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_REVOKED = "REVOKED";
     private static final String TOKEN_TYPE_BEARER = "Bearer";
@@ -86,7 +86,7 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(username);
         user.setEmail(email);
         user.setPasswordHash(passwordHashService.hash(request.password()));
-        user.setRole(ROLE_ADMIN);
+        user.setRole(ROLE_VIEWER);
         user.setStatus(STATUS_ACTIVE);
         user.setFailedLoginCount(0);
         user.setCreatedAt(now);
