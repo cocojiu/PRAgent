@@ -18,6 +18,21 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+read_env_value() {
+  key="$1"
+  sed -n "s/^${key}=//p" "$ENV_FILE" | tail -n 1
+}
+
+if [ -z "$LEGACY_COMPOSE_FILE" ]; then
+  LEGACY_COMPOSE_FILE="$(read_env_value LEGACY_COMPOSE_FILE)"
+fi
+
+if [ -z "$LEGACY_ENV_FILE" ]; then
+  LEGACY_ENV_FILE="$(read_env_value LEGACY_ENV_FILE)"
+fi
+
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull backend frontend
+
 if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
   if [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
     docker compose --env-file "$LEGACY_ENV_FILE" -f "$LEGACY_COMPOSE_FILE" down
@@ -26,7 +41,6 @@ if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
   fi
 fi
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull backend frontend
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps
 
