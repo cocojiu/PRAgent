@@ -7,6 +7,7 @@ import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -32,6 +33,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
         BindException.class,
         ConstraintViolationException.class,
+        HttpMessageNotReadableException.class,
         MethodArgumentNotValidException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception exception) {

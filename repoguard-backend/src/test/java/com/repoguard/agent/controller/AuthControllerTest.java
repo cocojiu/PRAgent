@@ -190,6 +190,16 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
+    @Test
+    void loginWithMalformedJsonReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{account:admin,password:wrong}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
     private AuthResponse authResponse(String username, String email) {
         return new AuthResponse(
             "access-token-value",
