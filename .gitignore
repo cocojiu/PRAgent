@@ -11,6 +11,8 @@ target/
 .vscode/
 *.log
 logs/
+.deploy/
+releases/
 .DS_Store
 *.local
 .npm-cache/
