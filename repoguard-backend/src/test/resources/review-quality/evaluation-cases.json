@@ -236,9 +236,9 @@
     ],
     "expected": {
       "riskLevel": "HIGH",
-      "findingCount": 1,
-      "ruleIds": ["RG-AUTH-001"],
-      "sources": ["RULE"],
+      "findingCount": 2,
+      "ruleIds": ["RG-AUTH-001", "RG-API-001"],
+      "sources": ["RULE", "RULE"],
       "chunkReasons": ["standard"]
     }
   },
