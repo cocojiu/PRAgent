@@ -14,6 +14,10 @@ on:
         description: Optional image tag override
         required: false
         type: string
+      deploy_existing_tag:
+        description: Existing image tag to deploy without rebuilding, for rollback
+        required: false
+        type: string
       deploy:
         description: Deploy to the configured server after pushing images
         required: true
@@ -36,10 +40,7 @@ jobs:
   build:
     name: Build and Push Images
     runs-on: ubuntu-latest
-    outputs:
-      backend_image: ${{ steps.images.outputs.backend_image }}
-      frontend_image: ${{ steps.images.outputs.frontend_image }}
-      image_tag: ${{ steps.images.outputs.image_tag }}
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.deploy_existing_tag != '') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +79,6 @@ jobs:
           IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
         run: |
           test -n "${ALIYUN_REGISTRY}" || { echo "Missing ALIYUN_REGISTRY secret or variable"; exit 1; }
-          test -n "${ALIYUN_DEPLOY_REGISTRY}" || { echo "Missing ALIYUN_DEPLOY_REGISTRY secret or variable"; exit 1; }
           test -n "${ALIYUN_NAMESPACE}" || { echo "Missing ALIYUN_NAMESPACE secret or variable"; exit 1; }
           test -n "${ALIYUN_REPOSITORY}" || { echo "Missing ALIYUN_REPOSITORY secret or variable"; exit 1; }
           test -n "${ALIYUN_REGISTRY_USERNAME}" || { echo "Missing ALIYUN_REGISTRY_USERNAME secret or variable"; exit 1; }
@@ -93,13 +93,11 @@ jobs:
             ref_slug="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
             image_tag="${ref_slug}-${GITHUB_SHA::12}"
           fi
+          test -n "${image_tag}" || { echo "Missing resolved image tag"; exit 1; }
           backend_image="${REGISTRY}/${owner}/${repo}-backend:${image_tag}"
           frontend_image="${REGISTRY}/${owner}/${repo}-frontend:${image_tag}"
           aliyun_backend_image="${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
           aliyun_frontend_image="${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
-          echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
-          echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "BACKEND_IMAGE=${backend_image}" >> "$GITHUB_ENV"
           echo "FRONTEND_IMAGE=${frontend_image}" >> "$GITHUB_ENV"
           echo "ALIYUN_BACKEND_IMAGE=${aliyun_backend_image}" >> "$GITHUB_ENV"
@@ -147,7 +145,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy && (github.ref_name == 'main' || github.ref_name == 'master' || startsWith(github.ref, 'refs/tags/v')) }}
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.deploy && (github.ref_name == 'main' || github.ref_name == 'master' || startsWith(github.ref, 'refs/tags/v')) && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
     environment: production
     steps:
       - name: Checkout compose file
@@ -194,15 +192,27 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+          DEPLOY_EXISTING_TAG: ${{ inputs.deploy_existing_tag }}
+          IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
         run: |
           test -n "${ALIYUN_REGISTRY_PASSWORD}" || { echo "Missing ALIYUN_REGISTRY_PASSWORD secret"; exit 1; }
           test -n "${ALIYUN_DEPLOY_REGISTRY}" || { echo "Missing ALIYUN_DEPLOY_REGISTRY secret or variable"; exit 1; }
           test -n "${ALIYUN_NAMESPACE}" || { echo "Missing ALIYUN_NAMESPACE secret or variable"; exit 1; }
           test -n "${ALIYUN_REPOSITORY}" || { echo "Missing ALIYUN_REPOSITORY secret or variable"; exit 1; }
           test -n "${ALIYUN_REGISTRY_USERNAME}" || { echo "Missing ALIYUN_REGISTRY_USERNAME secret or variable"; exit 1; }
-          backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${IMAGE_TAG}"
-          frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${IMAGE_TAG}"
+          if [ -n "${DEPLOY_EXISTING_TAG}" ]; then
+            image_tag="${DEPLOY_EXISTING_TAG}"
+          elif [ -n "${IMAGE_TAG_INPUT}" ]; then
+            image_tag="${IMAGE_TAG_INPUT}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            image_tag="${GITHUB_REF_NAME}"
+          else
+            ref_slug="$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+|-+$//g')"
+            image_tag="${ref_slug}-${GITHUB_SHA::12}"
+          fi
+          test -n "${image_tag}" || { echo "Missing resolved image tag"; exit 1; }
+          backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
+          frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
           printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
