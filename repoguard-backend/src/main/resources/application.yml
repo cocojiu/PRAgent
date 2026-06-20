@@ -113,6 +113,7 @@ app:
       review-execution-timeout-ms: ${REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS:1800000}
       review-recovery-batch-size: ${REPOGUARD_REVIEW_RECOVERY_BATCH_SIZE:20}
       worker-concurrency: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}
+      health-check-timeout-ms: ${REPOGUARD_REVIEW_HEALTH_CHECK_TIMEOUT_MS:1500}
     notification:
       exchange: ${REPOGUARD_NOTIFICATION_EXCHANGE:repoguard.notification.exchange}
       queue: ${REPOGUARD_NOTIFICATION_QUEUE:repoguard.notification.queue}

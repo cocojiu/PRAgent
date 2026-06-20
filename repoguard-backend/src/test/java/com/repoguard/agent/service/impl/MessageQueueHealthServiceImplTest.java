@@ -96,6 +96,24 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
+    void healthReturnsDisconnectedWhenRuntimeProbeTimesOut() {
+        properties.setHealthCheckTimeoutMs(50);
+        when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenAnswer(invocation -> {
+            Thread.sleep(500);
+            return true;
+        });
+
+        long startedAt = System.nanoTime();
+        MessageQueueHealthResponse health = service.getHealth();
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+
+        assertThat(health.activeConfig().runtimeConnectionStatus()).isEqualTo("DISCONNECTED");
+        assertThat(elapsedMs).isLessThan(450);
+    }
+
+    @Test
     void requeueTaskPublishesMessageAndMarksTaskQueued() {
         ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
         ReviewTimeline latest = new ReviewTimeline();

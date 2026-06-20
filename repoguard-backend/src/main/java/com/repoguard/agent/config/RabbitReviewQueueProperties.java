@@ -23,6 +23,7 @@ public class RabbitReviewQueueProperties {
     private long reviewExecutionTimeoutMs = 1800000;
     private int reviewRecoveryBatchSize = 20;
     private int workerConcurrency = 1;
+    private long healthCheckTimeoutMs = 1500;
 
     public String getExchange() {
         return exchange;
@@ -166,5 +167,13 @@ public class RabbitReviewQueueProperties {
 
     public void setWorkerConcurrency(int workerConcurrency) {
         this.workerConcurrency = workerConcurrency;
+    }
+
+    public long getHealthCheckTimeoutMs() {
+        return healthCheckTimeoutMs;
+    }
+
+    public void setHealthCheckTimeoutMs(long healthCheckTimeoutMs) {
+        this.healthCheckTimeoutMs = healthCheckTimeoutMs;
     }
 }

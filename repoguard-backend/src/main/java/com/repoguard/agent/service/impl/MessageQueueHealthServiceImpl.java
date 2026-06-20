@@ -32,6 +32,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -277,12 +281,23 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private String runtimeConnectionStatus() {
+        CompletableFuture<Boolean> probe = CompletableFuture.supplyAsync(
+            () -> rabbitTemplate.execute(channel -> channel.isOpen())
+        );
         try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
+            Boolean open = probe.get(runtimeConnectionTimeoutMs(), TimeUnit.MILLISECONDS);
             return Boolean.TRUE.equals(open) ? "CONNECTED" : "DISCONNECTED";
-        } catch (RuntimeException ex) {
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return "DISCONNECTED";
+        } catch (ExecutionException | RuntimeException | TimeoutException ex) {
+            probe.cancel(true);
             return "DISCONNECTED";
         }
+    }
+
+    private long runtimeConnectionTimeoutMs() {
+        return Math.max(100, properties.getHealthCheckTimeoutMs());
     }
 
     private RabbitMqTopologyDto topology() {
