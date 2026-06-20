@@ -21,6 +21,7 @@ import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -216,7 +217,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             }
 
             LocalDateTime startedAt = LocalDateTime.now();
-            if (!markReviewing(task, startedAt)) {
+            String claimId = UUID.randomUUID().toString();
+            if (!markReviewing(task, startedAt, claimId)) {
                 LOGGER.info(
                     "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=claim_failed",
                     task.getId(),
@@ -235,9 +237,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
             try {
                 GithubPullRequestDiff diff = fetchPullRequestDiff(task);
-                replaceChangedFiles(task.getId(), diff);
                 LOGGER.info(
-                    "Review task diff persisted taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
+                    "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
                     task.getId(),
                     repositorySlug(task),
                     task.getPrNumber(),
@@ -246,7 +247,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     totalDeletions(diff)
                 );
                 ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
-                int findingCount = completeReview(task, reviewResult, startedAt);
+                int findingCount = completeReview(task, diff, reviewResult, startedAt, claimId);
                 publishReviewNotification(task, findingCount);
                 LOGGER.info(
                     "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} findingCount={} durationMs={} humanReviewRequired={}",
@@ -259,8 +260,24 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     Duration.between(startedAt, LocalDateTime.now()).toMillis(),
                     completionApplier.requiresHumanReview(reviewResult.riskLevel())
                 );
+            } catch (ReviewTaskClaimLostException ex) {
+                LOGGER.warn(
+                    "Review task result discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost",
+                    task.getId(),
+                    repositorySlug(task),
+                    task.getPrNumber()
+                );
             } catch (RuntimeException ex) {
-                failReview(task, startedAt, ex);
+                if (!failReview(task, startedAt, claimId, ex)) {
+                    LOGGER.warn(
+                        "Review task failure discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost exceptionType={}",
+                        task.getId(),
+                        repositorySlug(task),
+                        task.getPrNumber(),
+                        ex.getClass().getName()
+                    );
+                    return;
+                }
                 if (metrics != null) {
                     metrics.reviewTaskFailed(ex);
                 }
@@ -281,16 +298,20 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         return diffFetcher.fetch(task);
     }
 
-    private boolean markReviewing(ReviewTask task, LocalDateTime startedAt) {
+    private boolean markReviewing(ReviewTask task, LocalDateTime startedAt, String claimId) {
         return inTransaction(() -> {
             task.setStatus(reviewTaskStateMachine.statusWhenReviewing());
             task.setStartedAt(startedAt);
+            task.setReviewClaimedAt(startedAt);
+            task.setReviewClaimedBy(claimId);
             int updated = reviewTaskMapper.update(
                 new UpdateWrapper<ReviewTask>()
                     .eq("id", task.getId())
                     .eq("status", reviewTaskStateMachine.statusWhenQueued())
                     .set("status", reviewTaskStateMachine.statusWhenReviewing())
                     .set("started_at", startedAt)
+                    .set("review_claimed_at", startedAt)
+                    .set("review_claimed_by", claimId)
             );
             if (updated <= 0) {
                 return false;
@@ -300,21 +321,24 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         });
     }
 
-    private void replaceChangedFiles(Long taskId, GithubPullRequestDiff diff) {
-        inTransaction(() -> {
-            changedFileReplacementService.replace(taskId, diff);
-            timelineAppender.append(taskId, "GitHub diff fetched", LocalDateTime.now(), "DONE", 3);
-        });
-    }
-
-    private int completeReview(ReviewTask task, ReviewResult reviewResult, LocalDateTime startedAt) {
+    private int completeReview(
+        ReviewTask task,
+        GithubPullRequestDiff diff,
+        ReviewResult reviewResult,
+        LocalDateTime startedAt,
+        String claimId
+    ) {
         return inTransaction(() -> {
-            int findingCount = findingReplacementService.replace(task.getId(), reviewResult);
-            timelineAppender.append(task.getId(), reviewGeneratedLabel(reviewResult), LocalDateTime.now(), "DONE", 4);
-
             LocalDateTime finishedAt = LocalDateTime.now();
             boolean humanReviewRequired = completionApplier.applyCompleted(task, reviewResult, startedAt, finishedAt);
+            ensureClaimOwnedAndFenceTerminalStatus(task, claimId);
+            task.setReviewClaimedAt(null);
+            task.setReviewClaimedBy(null);
             reviewTaskMapper.updateById(task);
+            changedFileReplacementService.replace(task.getId(), diff);
+            timelineAppender.append(task.getId(), "GitHub diff fetched", finishedAt, "DONE", 3);
+            int findingCount = findingReplacementService.replace(task.getId(), reviewResult);
+            timelineAppender.append(task.getId(), reviewGeneratedLabel(reviewResult), finishedAt, "DONE", 4);
             timelineAppender.append(
                 task.getId(),
                 humanReviewRequired ? "Human review required" : "Review completed",
@@ -331,18 +355,47 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         });
     }
 
-    private void failReview(ReviewTask task, LocalDateTime startedAt, RuntimeException ex) {
-        inTransaction(() -> {
+    private boolean failReview(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
+        Boolean failed = inTransaction(() -> {
             LocalDateTime failedAt = LocalDateTime.now();
             completionApplier.applyFailed(task, startedAt, failedAt);
+            if (!fenceTerminalStatus(task, claimId)) {
+                return false;
+            }
+            task.setReviewClaimedAt(null);
+            task.setReviewClaimedBy(null);
             reviewTaskMapper.updateById(task);
             timelineAppender.append(task.getId(), failureLabel(ex), failedAt, "FAILED", 5);
             if (metrics != null) {
                 metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
             }
             evictDashboardOverview();
+            return true;
         });
-        publishReviewFailedNotification(task);
+        if (Boolean.TRUE.equals(failed)) {
+            publishReviewFailedNotification(task);
+            return true;
+        }
+        return false;
+    }
+
+    private void ensureClaimOwnedAndFenceTerminalStatus(ReviewTask task, String claimId) {
+        if (!fenceTerminalStatus(task, claimId)) {
+            throw new ReviewTaskClaimLostException();
+        }
+    }
+
+    private boolean fenceTerminalStatus(ReviewTask task, String claimId) {
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", reviewTaskStateMachine.statusWhenReviewing())
+                .eq("review_claimed_by", claimId)
+                .set("status", task.getStatus())
+                .set("review_claimed_at", null)
+                .set("review_claimed_by", null)
+        );
+        return updated > 0;
     }
 
     private void evictDashboardOverview() {
@@ -448,5 +501,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 throw new IllegalStateException(ex);
             }
         });
+    }
+
+    private static final class ReviewTaskClaimLostException extends RuntimeException {
     }
 }

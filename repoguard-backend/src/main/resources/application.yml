@@ -109,6 +109,9 @@ app:
       publish-compensation-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
       publish-compensation-batch-size: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_BATCH_SIZE:20}
       publish-compensation-lease-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_LEASE_MS:120000}
+      review-recovery-interval-ms: ${REPOGUARD_REVIEW_RECOVERY_INTERVAL_MS:60000}
+      review-execution-timeout-ms: ${REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS:1800000}
+      review-recovery-batch-size: ${REPOGUARD_REVIEW_RECOVERY_BATCH_SIZE:20}
       worker-concurrency: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}
     notification:
       exchange: ${REPOGUARD_NOTIFICATION_EXCHANGE:repoguard.notification.exchange}

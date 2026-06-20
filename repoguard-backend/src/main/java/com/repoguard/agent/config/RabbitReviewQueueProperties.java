@@ -19,6 +19,9 @@ public class RabbitReviewQueueProperties {
     private long publishCompensationIntervalMs = 60000;
     private int publishCompensationBatchSize = 20;
     private long publishCompensationLeaseMs = 120000;
+    private long reviewRecoveryIntervalMs = 60000;
+    private long reviewExecutionTimeoutMs = 1800000;
+    private int reviewRecoveryBatchSize = 20;
     private int workerConcurrency = 1;
 
     public String getExchange() {
@@ -131,6 +134,30 @@ public class RabbitReviewQueueProperties {
 
     public void setPublishCompensationLeaseMs(long publishCompensationLeaseMs) {
         this.publishCompensationLeaseMs = publishCompensationLeaseMs;
+    }
+
+    public long getReviewRecoveryIntervalMs() {
+        return reviewRecoveryIntervalMs;
+    }
+
+    public void setReviewRecoveryIntervalMs(long reviewRecoveryIntervalMs) {
+        this.reviewRecoveryIntervalMs = reviewRecoveryIntervalMs;
+    }
+
+    public long getReviewExecutionTimeoutMs() {
+        return reviewExecutionTimeoutMs;
+    }
+
+    public void setReviewExecutionTimeoutMs(long reviewExecutionTimeoutMs) {
+        this.reviewExecutionTimeoutMs = reviewExecutionTimeoutMs;
+    }
+
+    public int getReviewRecoveryBatchSize() {
+        return reviewRecoveryBatchSize;
+    }
+
+    public void setReviewRecoveryBatchSize(int reviewRecoveryBatchSize) {
+        this.reviewRecoveryBatchSize = reviewRecoveryBatchSize;
     }
 
     public int getWorkerConcurrency() {
