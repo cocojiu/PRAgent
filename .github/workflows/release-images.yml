@@ -26,6 +26,11 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY || vars.ALIYUN_REGISTRY }}
+  ALIYUN_DEPLOY_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
+  ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
+  ALIYUN_REPOSITORY: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
+  ALIYUN_REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
 
 jobs:
   build:
@@ -69,6 +74,11 @@ jobs:
         env:
           IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
         run: |
+          test -n "${ALIYUN_REGISTRY}" || { echo "Missing ALIYUN_REGISTRY secret or variable"; exit 1; }
+          test -n "${ALIYUN_DEPLOY_REGISTRY}" || { echo "Missing ALIYUN_DEPLOY_REGISTRY secret or variable"; exit 1; }
+          test -n "${ALIYUN_NAMESPACE}" || { echo "Missing ALIYUN_NAMESPACE secret or variable"; exit 1; }
+          test -n "${ALIYUN_REPOSITORY}" || { echo "Missing ALIYUN_REPOSITORY secret or variable"; exit 1; }
+          test -n "${ALIYUN_REGISTRY_USERNAME}" || { echo "Missing ALIYUN_REGISTRY_USERNAME secret or variable"; exit 1; }
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           repo="${GITHUB_REPOSITORY#*/}"
           repo="${repo,,}"
@@ -82,11 +92,15 @@ jobs:
           fi
           backend_image="${REGISTRY}/${owner}/${repo}-backend:${image_tag}"
           frontend_image="${REGISTRY}/${owner}/${repo}-frontend:${image_tag}"
+          aliyun_backend_image="${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
+          aliyun_frontend_image="${ALIYUN_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
           echo "backend_image=${backend_image}" >> "$GITHUB_OUTPUT"
           echo "frontend_image=${frontend_image}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
           echo "BACKEND_IMAGE=${backend_image}" >> "$GITHUB_ENV"
           echo "FRONTEND_IMAGE=${frontend_image}" >> "$GITHUB_ENV"
+          echo "ALIYUN_BACKEND_IMAGE=${aliyun_backend_image}" >> "$GITHUB_ENV"
+          echo "ALIYUN_FRONTEND_IMAGE=${aliyun_frontend_image}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -95,13 +109,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Aliyun ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ALIYUN_REGISTRY }}
+          username: ${{ env.ALIYUN_REGISTRY_USERNAME }}
+          password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+
       - name: Build and push backend image
         uses: docker/build-push-action@v6
         with:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
           push: true
-          tags: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            ${{ env.BACKEND_IMAGE }}
+            ${{ env.ALIYUN_BACKEND_IMAGE }}
 
       - name: Build and push frontend image
         uses: docker/build-push-action@v6
@@ -109,7 +132,9 @@ jobs:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
           push: true
-          tags: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}
+            ${{ env.ALIYUN_FRONTEND_IMAGE }}
 
   deploy:
     name: Deploy
@@ -153,21 +178,26 @@ jobs:
       - name: Pull and restart
         shell: bash
         env:
-          BACKEND_IMAGE: ${{ needs.build.outputs.backend_image }}
+          ALIYUN_DEPLOY_REGISTRY: ${{ env.ALIYUN_DEPLOY_REGISTRY }}
+          ALIYUN_NAMESPACE: ${{ env.ALIYUN_NAMESPACE }}
+          ALIYUN_REPOSITORY: ${{ env.ALIYUN_REPOSITORY }}
+          ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          ALIYUN_REGISTRY_USERNAME: ${{ env.ALIYUN_REGISTRY_USERNAME }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
-          FRONTEND_IMAGE: ${{ needs.build.outputs.frontend_image }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REMOTE_REGISTRY_USERNAME: ${{ secrets.REMOTE_REGISTRY_USERNAME }}
-          REMOTE_REGISTRY_PASSWORD: ${{ secrets.REMOTE_REGISTRY_PASSWORD }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
         run: |
-          registry_username="${REMOTE_REGISTRY_USERNAME:-${GITHUB_ACTOR}}"
-          registry_password="${REMOTE_REGISTRY_PASSWORD:-${GITHUB_TOKEN}}"
-          printf '%s' "${registry_password}" | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "docker login ghcr.io -u '${registry_username}' --password-stdin"
+          test -n "${ALIYUN_REGISTRY_PASSWORD}" || { echo "Missing ALIYUN_REGISTRY_PASSWORD secret"; exit 1; }
+          test -n "${ALIYUN_DEPLOY_REGISTRY}" || { echo "Missing ALIYUN_DEPLOY_REGISTRY secret or variable"; exit 1; }
+          test -n "${ALIYUN_NAMESPACE}" || { echo "Missing ALIYUN_NAMESPACE secret or variable"; exit 1; }
+          test -n "${ALIYUN_REPOSITORY}" || { echo "Missing ALIYUN_REPOSITORY secret or variable"; exit 1; }
+          test -n "${ALIYUN_REGISTRY_USERNAME}" || { echo "Missing ALIYUN_REGISTRY_USERNAME secret or variable"; exit 1; }
+          backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${IMAGE_TAG}"
+          frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${IMAGE_TAG}"
+          printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd '${DEPLOY_PATH}' && \
-             BACKEND_IMAGE='${BACKEND_IMAGE}' FRONTEND_IMAGE='${FRONTEND_IMAGE}' sh scripts/deploy-prod.sh"
+             BACKEND_IMAGE='${backend_image}' FRONTEND_IMAGE='${frontend_image}' sh scripts/deploy-prod.sh"
