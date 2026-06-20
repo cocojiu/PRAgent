@@ -92,4 +92,6 @@ services:
 
 volumes:
   repoguard_mysql_data:
+    name: ${MYSQL_VOLUME_NAME:-repoguard_mysql_data}
   repoguard_rabbitmq_data:
+    name: ${RABBITMQ_VOLUME_NAME:-repoguard_rabbitmq_data}
