@@ -3,6 +3,7 @@ package com.repoguard.agent.notification;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,6 +14,7 @@ class NotificationPublishFailurePolicy {
 
     private final Clock clock;
 
+    @Autowired
     NotificationPublishFailurePolicy() {
         this(Clock.systemDefaultZone());
     }

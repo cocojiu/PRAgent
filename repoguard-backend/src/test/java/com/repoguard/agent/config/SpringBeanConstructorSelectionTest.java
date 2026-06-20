@@ -9,6 +9,7 @@ import com.repoguard.agent.review.LlmPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
+import com.repoguard.agent.service.impl.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPublishServiceImpl;
@@ -26,7 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 class SpringBeanConstructorSelectionTest {
 
     @Test
-    void springManagedBeansWithMultipleConstructorsDeclareSingleAutowiredConstructor() {
+    void springManagedBeansWithMultipleConstructorsDeclareSingleAutowiredConstructor() throws ClassNotFoundException {
         List<Class<?>> springManagedTypes = List.of(
             GithubPullRequestClientImpl.class,
             RabbitReviewTaskPublisher.class,
@@ -35,6 +36,7 @@ class SpringBeanConstructorSelectionTest {
             AuthTokenService.class,
             SecretCryptoService.class,
             DataRetentionServiceImpl.class,
+            DashboardLlmQualityTrendBuilder.class,
             GithubCommentApplicationServiceImpl.class,
             GithubCommentPreviewServiceImpl.class,
             GithubCommentPublishServiceImpl.class,
@@ -44,8 +46,15 @@ class SpringBeanConstructorSelectionTest {
             ReviewServiceImpl.class,
             ReviewTaskExecutorImpl.class
         );
+        List<Class<?>> packagePrivateSpringManagedTypes = List.of(
+            Class.forName("com.repoguard.agent.notification.DingTalkWebhookSigner"),
+            Class.forName("com.repoguard.agent.notification.NotificationDeliveryEventStateUpdater"),
+            Class.forName("com.repoguard.agent.notification.NotificationDeliveryFailurePolicy"),
+            Class.forName("com.repoguard.agent.notification.NotificationDeliveryLogFactory"),
+            Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy")
+        );
 
-        for (Class<?> type : springManagedTypes) {
+        for (Class<?> type : concat(springManagedTypes, packagePrivateSpringManagedTypes)) {
             Constructor<?>[] constructors = type.getDeclaredConstructors();
             if (constructors.length <= 1) {
                 continue;
@@ -57,5 +66,9 @@ class SpringBeanConstructorSelectionTest {
                 .as(type.getName() + " must expose exactly one @Autowired constructor")
                 .isEqualTo(1);
         }
+    }
+
+    private List<Class<?>> concat(List<Class<?>> first, List<Class<?>> second) {
+        return java.util.stream.Stream.concat(first.stream(), second.stream()).toList();
     }
 }
