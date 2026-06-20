@@ -12,6 +12,6 @@ public class E2eReviewTestController {
 
     @PostMapping("/config")
     public Map<String, Object> updateConfig(@RequestBody Map<String, Object> request) {
-        return Map.of("accepted", true, "size", request.size(), "validated", false);
+        return Map.of("accepted", true, "size", request.size(), "validated", false, "reviewOnly", true);
     }
 }
