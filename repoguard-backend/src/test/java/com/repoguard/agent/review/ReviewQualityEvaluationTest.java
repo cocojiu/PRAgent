@@ -26,10 +26,10 @@ class ReviewQualityEvaluationTest {
     }
 
     @Test
-    void datasetProvidesTenRepresentativeOfflineCases() {
+    void datasetProvidesTwentyTwoRepresentativeOfflineCases() {
         var cases = runner.loadCases();
 
-        assertThat(cases).hasSize(10);
+        assertThat(cases).hasSize(22);
         assertThat(cases)
             .extracting(ReviewQualityEvaluationRunner.EvaluationCase::category)
             .contains(
@@ -38,7 +38,11 @@ class ReviewQualityEvaluationTest {
                 "CLEAN_PR",
                 "DATABASE_MIGRATION",
                 "MESSAGE_QUEUE",
-                "EXTERNAL_CALL"
+                "EXTERNAL_CALL",
+                "ACCESS_CONTROL",
+                "OBSERVABILITY",
+                "GITHUB_WRITEBACK",
+                "API_CONTRACT"
             );
         assertThat(cases)
             .allSatisfy(evaluationCase -> {
@@ -73,5 +77,15 @@ class ReviewQualityEvaluationTest {
             .containsExactlyInAnyOrderElementsOf(expected.sources());
         assertThat(Set.copyOf(actual.chunkReasons()))
             .containsAll(expected.chunkReasons());
+        assertThat(actual.findings())
+            .filteredOn(finding -> "RULE".equals(finding.source()) && "HIGH".equals(finding.severity()))
+            .allSatisfy(finding -> {
+                assertThat(finding.confidence()).isEqualTo("HIGH");
+                assertThat(finding.isBlocking()).isTrue();
+                assertThat(finding.evidence()).isNotBlank();
+                assertThat(finding.impact()).isNotBlank();
+                assertThat(finding.fixExample()).isNotBlank();
+                assertThat(finding.reviewDimension()).isNotBlank();
+            });
     }
 }

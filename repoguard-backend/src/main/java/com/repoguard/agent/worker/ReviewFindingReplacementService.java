@@ -38,6 +38,12 @@ class ReviewFindingReplacementService {
             finding.setLineNumber(findingResult.lineNumber());
             finding.setMessage(findingResult.message());
             finding.setRecommendation(findingResult.recommendation());
+            finding.setConfidence(findingResult.confidence());
+            finding.setEvidence(findingResult.evidence());
+            finding.setImpact(findingResult.impact());
+            finding.setFixExample(findingResult.fixExample());
+            finding.setIsBlocking(findingResult.isBlocking());
+            finding.setReviewDimension(findingResult.reviewDimension());
             reviewFindingMapper.insert(finding);
         }
         return findings.size();

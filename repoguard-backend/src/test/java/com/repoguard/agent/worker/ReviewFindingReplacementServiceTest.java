@@ -48,6 +48,10 @@ class ReviewFindingReplacementServiceTest {
         assertThat(merged.getSource()).isEqualTo("LLM+RULE");
         assertThat(merged.getRuleId()).isEqualTo("LLM / RG-JAVA-002");
         assertThat(merged.getRecommendation()).isEqualTo("Replace stdout / Use structured logger");
+        assertThat(merged.getConfidence()).isEqualTo("HIGH");
+        assertThat(merged.getIsBlocking()).isTrue();
+        assertThat(merged.getFixExample()).isEqualTo("Replace stdout / Use structured logger");
+        assertThat(merged.getReviewDimension()).contains("LLM").contains("PROJECT_RULE");
     }
 
     @Test

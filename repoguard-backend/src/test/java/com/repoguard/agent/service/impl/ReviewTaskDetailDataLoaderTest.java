@@ -41,6 +41,12 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.changedFiles().getFirst().path()).isEqualTo("src/SecurityConfig.java");
         assertThat(result.findings()).hasSize(1);
         assertThat(result.findings().getFirst().severity()).isEqualTo("high");
+        assertThat(result.findings().getFirst().confidence()).isEqualTo("HIGH");
+        assertThat(result.findings().getFirst().evidence()).isEqualTo("Rule RG-AUTH-001 hit line 20");
+        assertThat(result.findings().getFirst().impact()).isEqualTo("Unauthorized access");
+        assertThat(result.findings().getFirst().fixExample()).isEqualTo("@RequireRole");
+        assertThat(result.findings().getFirst().isBlocking()).isTrue();
+        assertThat(result.findings().getFirst().reviewDimension()).isEqualTo("SECURITY_RULE");
         assertThat(result.findings().getFirst().feedbackStatus()).isEqualTo("unreviewed");
         assertThat(result.findings().getFirst().feedbackAt()).isEqualTo("2026-06-19 10:20:00");
         assertThat(result.missingTests()).hasSize(1);
@@ -67,6 +73,12 @@ class ReviewTaskDetailDataLoaderTest {
         finding.setLineNumber(20);
         finding.setMessage("permission bypass");
         finding.setRecommendation("tighten policy");
+        finding.setConfidence("HIGH");
+        finding.setEvidence("Rule RG-AUTH-001 hit line 20");
+        finding.setImpact("Unauthorized access");
+        finding.setFixExample("@RequireRole");
+        finding.setIsBlocking(true);
+        finding.setReviewDimension("SECURITY_RULE");
         finding.setFeedbackAt(LocalDateTime.of(2026, 6, 19, 10, 20));
         return finding;
     }

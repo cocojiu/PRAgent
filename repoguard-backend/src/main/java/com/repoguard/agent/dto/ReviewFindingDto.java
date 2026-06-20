@@ -10,6 +10,12 @@ public record ReviewFindingDto(
     Integer line,
     String message,
     String recommendation,
+    String confidence,
+    String evidence,
+    String impact,
+    String fixExample,
+    Boolean isBlocking,
+    String reviewDimension,
     String feedbackStatus,
     String feedbackNote,
     String feedbackBy,
@@ -22,6 +28,23 @@ public record ReviewFindingDto(
         String message,
         String recommendation
     ) {
-        this(null, severity, file, line, message, recommendation, "unreviewed", null, null, null);
+        this(
+            null,
+            severity,
+            file,
+            line,
+            message,
+            recommendation,
+            "LOW",
+            "",
+            "",
+            recommendation,
+            false,
+            "",
+            "unreviewed",
+            null,
+            null,
+            null
+        );
     }
 }

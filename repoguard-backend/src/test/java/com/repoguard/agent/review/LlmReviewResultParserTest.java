@@ -32,6 +32,41 @@ class LlmReviewResultParserTest {
         assertThat(result.findings()).hasSize(1);
         assertThat(result.findings().getFirst().filePath()).isEqualTo("src/App.vue");
         assertThat(result.findings().getFirst().lineNumber()).isEqualTo(42);
+        assertThat(result.findings().getFirst().confidence()).isEqualTo("MEDIUM");
+        assertThat(result.findings().getFirst().isBlocking()).isFalse();
+        assertThat(result.findings().getFirst().reviewDimension()).isEqualTo("LLM");
+    }
+
+    @Test
+    void parsesExplainabilityFieldsWhenPresent() {
+        ReviewResult result = parser.parse("""
+            {
+              "riskLevel": "HIGH",
+              "findings": [
+                {
+                  "severity": "HIGH",
+                  "filePath": "src/Gateway.java",
+                  "lineNumber": 20,
+                  "message": "Missing authorization",
+                  "recommendation": "Add a role gate",
+                  "confidence": "high",
+                  "evidence": "POST /admin is public",
+                  "impact": "Unauthorized users can change settings",
+                  "fixExample": "@RequireRole(\\"ADMIN\\")",
+                  "isBlocking": true,
+                  "reviewDimension": "ACCESS_CONTROL"
+                }
+              ]
+            }
+            """);
+
+        ReviewFindingResult finding = result.findings().getFirst();
+        assertThat(finding.confidence()).isEqualTo("HIGH");
+        assertThat(finding.evidence()).isEqualTo("POST /admin is public");
+        assertThat(finding.impact()).isEqualTo("Unauthorized users can change settings");
+        assertThat(finding.fixExample()).isEqualTo("@RequireRole(\"ADMIN\")");
+        assertThat(finding.isBlocking()).isTrue();
+        assertThat(finding.reviewDimension()).isEqualTo("ACCESS_CONTROL");
     }
 
     @Test

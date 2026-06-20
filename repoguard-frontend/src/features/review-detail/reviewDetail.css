@@ -434,6 +434,45 @@
   font-weight: 700;
 }
 
+.confidence-pill,
+.blocking-pill,
+.dimension-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.confidence-pill.high {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.confidence-pill.medium {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.confidence-pill.low {
+  color: #075985;
+  background: #e0f2fe;
+}
+
+.blocking-pill {
+  color: #ffffff;
+  background: #b91c1c;
+}
+
+.dimension-pill {
+  color: #334155;
+  background: #e2e8f0;
+}
+
 .finding-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -447,6 +486,29 @@
 }
 
 .finding-body p {
+  margin: 0;
+  color: #1e293b;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.finding-explainability {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.finding-explainability h3 {
+  margin: 0 0 6px;
+  color: #475569;
+  font-size: 13px;
+}
+
+.finding-explainability p {
   margin: 0;
   color: #1e293b;
   line-height: 1.7;
@@ -1008,6 +1070,7 @@
   .detail-kpi-grid,
   .detail-layout,
   .finding-body,
+  .finding-explainability,
   .summary-stats {
     grid-template-columns: minmax(0, 1fr);
   }
