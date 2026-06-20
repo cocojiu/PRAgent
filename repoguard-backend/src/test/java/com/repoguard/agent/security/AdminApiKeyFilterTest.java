@@ -41,6 +41,21 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
+    void bearerAuthenticatedRequestBypassesAdminKeyAndUsesRbacLater() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/config/review-policy");
+        request.addHeader("Authorization", "Bearer user-token");
+        request.addHeader("X-RepoGuard-Admin-Key", "wrong-key");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
     void protectedMessageQueueRequeueEndpointRejectsMissingAdminKey() throws ServletException, IOException {
         AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/message-queue/tasks/42/requeue");
@@ -64,6 +79,8 @@ class AdminApiKeyFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(chain.getRequest()).isSameAs(request);
+        assertThat(request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE))
+            .isEqualTo(new AuthTokenService.AuthenticatedUser(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE));
     }
 
     @Test

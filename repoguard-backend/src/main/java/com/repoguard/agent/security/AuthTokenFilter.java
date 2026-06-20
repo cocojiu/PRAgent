@@ -36,6 +36,10 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
+        if (request.getAttribute(AUTHENTICATED_USER_ATTRIBUTE) instanceof AuthTokenService.AuthenticatedUser) {
+            filterChain.doFilter(request, response);
+            return;
+        }
         String header = request.getHeader("Authorization");
         if (header == null || !header.startsWith("Bearer ")) {
             writeUnauthorized(response, "Authentication token is required");

@@ -67,10 +67,12 @@ class AuthServiceImplTest {
         assertThat(saved.getEmail()).isEqualTo("admin@repoguard.dev");
         assertThat(saved.getPasswordHash()).startsWith("$2");
         assertThat(saved.getPasswordHash()).doesNotContain("Secure123");
+        assertThat(saved.getRole()).isEqualTo("VIEWER");
         assertThat(saved.getFailedLoginCount()).isZero();
         assertThat(response.accessToken()).isNotBlank();
         assertThat(response.refreshToken()).isNotBlank();
         assertThat(response.user().username()).isEqualTo("admin");
+        assertThat(response.user().role()).isEqualTo("VIEWER");
 
         ArgumentCaptor<UserRefreshToken> refreshCaptor = ArgumentCaptor.forClass(UserRefreshToken.class);
         verify(userRefreshTokenMapper).insert(refreshCaptor.capture());
