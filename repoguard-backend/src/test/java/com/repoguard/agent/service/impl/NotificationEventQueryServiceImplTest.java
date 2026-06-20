@@ -26,7 +26,8 @@ class NotificationEventQueryServiceImplTest {
     private final NotificationEventQueryServiceImpl service = new NotificationEventQueryServiceImpl(
         eventMapper,
         deliveryLogMapper,
-        dispatchService
+        dispatchService,
+        new NotificationEventResponseAssembler()
     );
 
     @Test

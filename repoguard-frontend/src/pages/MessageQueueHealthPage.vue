@@ -185,10 +185,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed } from "vue";
 import { RouterLink, useRouter } from "vue-router";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import {
   Boxes,
   CircleAlert,
@@ -203,22 +201,27 @@ import {
   Workflow
 } from "lucide-vue-next";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
-import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQueue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import { useMessageQueueHealth } from "@/features/message-queue/composables/useMessageQueueHealth";
 import { routeNames } from "@/router/names";
-import type { MessageQueueExceptionTask, MessageQueueHealth, MessageQueueMetric } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
+import type { MessageQueueMetric } from "@/types";
 
 const router = useRouter();
-const loading = ref(false);
-const errorMessage = ref("");
-const health = ref<MessageQueueHealth>();
-const statusFilter = ref("");
-const repositoryFilter = ref("");
-const keyword = ref("");
-const autoRefresh = ref(false);
-const requeueingTaskId = ref<number>();
-let refreshTimer: ReturnType<typeof setInterval> | undefined;
+const {
+  autoRefresh,
+  errorMessage,
+  filteredTasks,
+  health,
+  keyword,
+  loading,
+  repositoryFilter,
+  repositories,
+  requeueingTaskId,
+  statusFilter,
+  canRequeue,
+  loadHealth,
+  requeueTask
+} = useMessageQueueHealth();
 
 const metricIconMap = {
   blue: Send,
@@ -272,35 +275,6 @@ const runtimeStatusClass = computed(() => (health.value?.activeConfig.runtimeCon
 const dlqBacklog = computed(() => Number(health.value?.metrics.find((metric) => metric.label === "DLQ backlog")?.value ?? 0));
 const queueBacklogText = computed(() => (dlqBacklog.value > 0 ? "存在积压" : "堆积低"));
 const queueBacklogClass = computed(() => (dlqBacklog.value > 0 ? "warning" : "success"));
-
-const repositories = computed(() =>
-  Array.from(new Set((health.value?.exceptionTasks ?? []).map((task) => task.repository).filter(Boolean) as string[])).sort()
-);
-
-const filteredTasks = computed(() => {
-  const search = keyword.value.trim().toLowerCase();
-  return (health.value?.exceptionTasks ?? []).filter((task) => {
-    const matchesStatus = !statusFilter.value || task.status === statusFilter.value;
-    const matchesRepo = !repositoryFilter.value || task.repository === repositoryFilter.value;
-    const matchesKeyword = !search || [task.taskId, task.repository, task.organization, task.lastError, task.claimedBy]
-      .filter((value) => value !== undefined && value !== null)
-      .some((value) => String(value).toLowerCase().includes(search));
-    return matchesStatus && matchesRepo && matchesKeyword;
-  });
-});
-
-const loadHealth = async () => {
-  loading.value = true;
-  errorMessage.value = "";
-  try {
-    health.value = await fetchMessageQueueHealth();
-  } catch (error) {
-    errorMessage.value = getErrorMessage(error, "消息队列健康数据加载失败");
-    ElMessage.error(errorMessage.value);
-  } finally {
-    loading.value = false;
-  }
-};
 
 const goIntegrations = () => {
   router.push({ name: routeNames.integrations });
@@ -368,58 +342,4 @@ const queueStatusClass = (status: string) => {
   return classes[status] ?? "pending";
 };
 
-const canRequeue = (status: MessageQueueExceptionTask["status"]) => status === "PUBLISH_FAILED" || status === "RETRY_EXHAUSTED";
-
-const requeueTask = async (task: MessageQueueExceptionTask) => {
-  if (!canRequeue(task.status) || requeueingTaskId.value) {
-    return;
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确认将任务 #${task.taskId} 重新发布到 RabbitMQ 队列？`,
-      "确认重新入队",
-      {
-        confirmButtonText: "重新入队",
-        cancelButtonText: "取消",
-        type: "warning"
-      }
-    );
-  } catch {
-    return;
-  }
-
-  requeueingTaskId.value = task.taskId;
-  try {
-    const response = await requeueMessageQueueTask(task.taskId);
-    if (response.status === "queued") {
-      ElMessage.success("任务已重新入队");
-    } else {
-      ElMessage.warning(response.message || "任务仍等待发布补偿");
-    }
-    await loadHealth();
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "消息队列操作失败"));
-  } finally {
-    requeueingTaskId.value = undefined;
-  }
-};
-
-const stopAutoRefresh = () => {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = undefined;
-  }
-};
-
-watch(autoRefresh, (enabled) => {
-  stopAutoRefresh();
-  if (enabled) {
-    refreshTimer = setInterval(() => {
-      void loadHealth();
-    }, 30000);
-  }
-});
-
-onMounted(loadHealth);
-onBeforeUnmount(stopAutoRefresh);
 </script>

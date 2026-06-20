@@ -205,7 +205,7 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
             reviewTaskMapper,
             githubCommentPublicationBatchMapper,
             githubCommentPublicationBatchItemMapper,
-            new GithubWritebackFailureClassifier()
+            new GithubCommentPublicationHistoryAssembler(new GithubWritebackFailureClassifier())
         );
     }
 }

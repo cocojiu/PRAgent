@@ -16,9 +16,10 @@ public class DingTalkNotificationAdapter extends AbstractWebhookNotificationAdap
         WebhookNotificationContentBuilder contentBuilder,
         WebhookNotificationResponseEvaluator responseEvaluator,
         WebhookNotificationPayloadFactory payloadFactory,
-        DingTalkWebhookSigner webhookSigner
+        DingTalkWebhookSigner webhookSigner,
+        WebhookNotificationRequestFactory requestFactory
     ) {
-        super(restClientBuilder, secretCryptoService, contentBuilder, responseEvaluator);
+        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory);
         this.payloadFactory = payloadFactory;
         this.webhookSigner = webhookSigner;
     }

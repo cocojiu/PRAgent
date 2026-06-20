@@ -1,0 +1,353 @@
+import type { RiskLevel } from "./shared";
+
+export type ReviewStatus =
+  | "completed"
+  | "reviewing"
+  | "failed"
+  | "queued"
+  | "fallback"
+  | "pending"
+  | "pending_human_review"
+  | "approved"
+  | "changes_requested"
+  | "rejected";
+export type HumanReviewStatus = "not_required" | "pending" | "approved" | "changes_requested" | "rejected";
+export type FindingFeedbackStatus = "unreviewed" | "valid" | "false_positive" | "fixed" | "ignored";
+export type ReviewTaskSource = "manual_input" | "github_pr_picker";
+export type ReviewTaskTriggerSource = ReviewTaskSource | "existing_reused";
+
+export interface ReviewTask {
+  id: number;
+  prNumber: number;
+  title: string;
+  repository: string;
+  organization: string;
+  commit: string;
+  branch: string;
+  status: ReviewStatus;
+  riskLevel: RiskLevel;
+  mqRetries: number;
+  llmStatus: ReviewStatus;
+  source: ReviewTaskSource | string;
+  triggerSource: ReviewTaskTriggerSource | string;
+  createdAt: string;
+  duration: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
+}
+
+export interface ReviewTaskDetail extends ReviewTask {
+  prUrl: string;
+  findings: ReviewFinding[];
+  missingTests: MissingTest[];
+  changedFiles: ChangedFile[];
+  timeline: TimelineItem[];
+  riskProfile: PrRiskProfile;
+  prSummary: PrReviewSummary;
+  llm: LlmStatus;
+  chunkedReview: ChunkedReview;
+  rabbitMq: RabbitMqStatus;
+}
+
+export interface ReviewTaskStatus {
+  id: number;
+  status: ReviewStatus;
+  riskLevel: RiskLevel;
+  llmStatus: ReviewStatus;
+  duration: string;
+  updatedAt?: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
+  latestTimeline?: TimelineItem;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
+}
+
+export interface HumanReviewRequest {
+  action: "approve" | "changes_requested" | "reject";
+  note?: string;
+}
+
+export interface HumanReviewResponse {
+  taskId: number;
+  status: ReviewStatus | string;
+  humanReviewRequired: boolean;
+  humanReviewStatus: HumanReviewStatus | string;
+  humanReviewNote?: string;
+  humanReviewBy?: string;
+  humanReviewedAt?: string;
+  message: string;
+}
+
+export interface GithubCommentPreview {
+  taskId: number;
+  prNumber: number;
+  prUrl: string;
+  writebackCheck: GithubCommentWritebackCheck;
+  totalFindings: number;
+  commentableCount: number;
+  blockedCount: number;
+  items: GithubCommentPreviewItem[];
+}
+
+export interface GithubCommentWritebackCheck {
+  status:
+    | "ready"
+    | "repository_mismatch"
+    | "repository_not_configured"
+    | "token_missing"
+    | "connection_failed"
+    | string;
+  level: "success" | "warning" | "danger" | string;
+  taskOwner?: string;
+  taskRepository?: string;
+  configuredOwner?: string;
+  configuredRepository?: string;
+  repositoryMatched: boolean;
+  tokenConfigured: boolean;
+  connectionHealthy: boolean;
+  lastError?: string;
+  messages: string[];
+}
+
+export interface GithubCommentPreviewItem {
+  findingId?: number | null;
+  severity: RiskLevel;
+  file: string;
+  line?: number;
+  message: string;
+  recommendation: string;
+  commentBody: string;
+  commentable: boolean;
+  targetType: "line" | "pull_request" | string;
+  reason?: string;
+  published?: boolean;
+  publicationStatus?: string;
+  publicationUrl?: string;
+  publicationMessage?: string;
+  publishedAt?: string;
+  feedbackStatus?: FindingFeedbackStatus | string;
+}
+
+export interface FindingFeedbackRequest {
+  status: FindingFeedbackStatus;
+  note?: string;
+}
+
+export interface FindingFeedbackResponse {
+  findingId: number;
+  taskId: number;
+  feedbackStatus: FindingFeedbackStatus | string;
+  feedbackNote?: string;
+  feedbackBy?: string;
+  feedbackAt?: string;
+}
+
+export interface GithubCommentPublish {
+  taskId: number;
+  totalFindings: number;
+  attemptedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  items: GithubCommentPublishItem[];
+}
+
+export interface GithubCommentPublishItem {
+  findingId?: number | null;
+  file: string;
+  line?: number;
+  targetType: "line" | "pull_request" | string;
+  success: boolean;
+  status: "published" | "failed" | "skipped" | "already_published" | "downgraded_to_pr_comment" | string;
+  message?: string;
+  failureCategory?: string;
+  failureReason?: string;
+  failureSuggestion?: string;
+  url?: string;
+  githubCommentId?: number;
+  publishedAt?: string;
+}
+
+export interface GithubCommentPublicationHistory {
+  taskId: number;
+  total: number;
+  page: number;
+  pageSize: number;
+  status?: string;
+  batches: GithubCommentPublicationBatch[];
+}
+
+export interface GithubCommentPublicationBatch {
+  batchId: number;
+  status: "completed" | "partial_failed" | "failed" | "skipped" | "empty" | string;
+  totalFindings: number;
+  attemptedCount: number;
+  succeededCount: number;
+  failedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  completedAt?: string;
+  items: GithubCommentPublicationHistoryItem[];
+}
+
+export interface GithubCommentPublicationHistoryItem extends GithubCommentPublishItem {}
+
+export interface ReviewFinding {
+  id: number;
+  severity: RiskLevel;
+  file: string;
+  line: number;
+  message: string;
+  recommendation: string;
+  feedbackStatus: FindingFeedbackStatus | string;
+  feedbackNote?: string;
+  feedbackBy?: string;
+  feedbackAt?: string;
+}
+
+export interface MissingTest {
+  file: string;
+  method: string;
+  type: string;
+  suggestion: string;
+}
+
+export interface ChangedFile {
+  path: string;
+  changeType: "A" | "M" | "D" | "ADD" | "MODIFY" | "DELETE" | "RENAMED";
+  additions: number;
+  deletions: number;
+}
+
+export interface PrRiskProfile {
+  score: number;
+  level: RiskLevel;
+  summary: string;
+  recommendHumanReview: boolean;
+  humanReviewReason: string;
+  signals: string[];
+  highRiskFiles: PrRiskFile[];
+}
+
+export interface PrRiskFile {
+  file: string;
+  changeType: string;
+  additions: number;
+  deletions: number;
+  findingCount: number;
+  score: number;
+  reasons: string[];
+}
+
+export interface PrReviewSummary {
+  overallRisk: RiskLevel | string;
+  summary: string;
+  mergeRecommendation: string;
+  recommendMerge: boolean;
+  humanReviewRequired: boolean;
+  keyRisks: string[];
+  focusFiles: string[];
+  githubCommentBody: string;
+}
+
+export interface TimelineItem {
+  label: string;
+  time: string;
+  status: "done" | "current" | "pending";
+}
+
+export interface LlmStatus {
+  status: ReviewStatus;
+  duration: string;
+  riskLevel: RiskLevel;
+  provider?: string;
+  model?: string;
+  durationMs?: number;
+  parseStatus?: string;
+  fallbackReason?: string;
+  promptSummary?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: string;
+}
+
+export interface ChunkedReview {
+  enabled: boolean;
+  chunkCount: number;
+  aggregateRisk?: RiskLevel | string;
+  aggregateFindings: number;
+  failedChunks: number;
+  reasons: string[];
+}
+
+export interface RabbitMqStatus {
+  deliveryCount: number;
+  retryCount: number;
+  consumeStatus: string;
+}
+
+export interface ReviewQuery {
+  page: number;
+  pageSize: number;
+  repository?: string;
+  status?: ReviewStatus | "";
+  riskLevel?: RiskLevel | "";
+  source?: ReviewTaskSource | "";
+  triggerSource?: ReviewTaskTriggerSource | "";
+  keyword?: string;
+}
+
+export interface ManualReviewRequest {
+  organization: string;
+  repository: string;
+  prNumber: number;
+  title?: string;
+  commit?: string;
+  branch?: string;
+  source?: ReviewTaskSource | string;
+}
+
+export interface ManualReviewResponse {
+  taskId: number;
+  status: ReviewStatus;
+  message: string;
+  existing?: boolean;
+  source?: string;
+  triggerSource?: string;
+}
+
+export interface ReviewRetryResponse {
+  taskId: number;
+  status: ReviewStatus;
+  message: string;
+  retryCount: number;
+}
+
+export interface GithubPullRequestOptions {
+  organization?: string;
+  repository?: string;
+  items: GithubPullRequestOption[];
+}
+
+export interface GithubPullRequestOption {
+  number: number;
+  title: string;
+  branch?: string;
+  commit?: string;
+  headSha?: string;
+  author?: string;
+  url?: string;
+  updatedAt?: string;
+}

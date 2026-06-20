@@ -10,6 +10,8 @@ import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
+import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
+import com.repoguard.agent.service.impl.GithubCommentPublishServiceImpl;
 import com.repoguard.agent.service.impl.MessageQueueHealthServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskQueryServiceImpl;
@@ -34,6 +36,8 @@ class SpringBeanConstructorSelectionTest {
             SecretCryptoService.class,
             DataRetentionServiceImpl.class,
             GithubCommentApplicationServiceImpl.class,
+            GithubCommentPreviewServiceImpl.class,
+            GithubCommentPublishServiceImpl.class,
             MessageQueueHealthServiceImpl.class,
             ReviewTaskCommandServiceImpl.class,
             ReviewTaskQueryServiceImpl.class,

@@ -5,29 +5,28 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
-import com.repoguard.agent.notification.NotificationBindingStatus;
 import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.notification.NotificationSendResult;
 import com.repoguard.agent.service.NotificationBindingConnectionTestService;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class NotificationBindingConnectionTestServiceImpl implements NotificationBindingConnectionTestService {
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
     private final NotificationChannelBindingMapper bindingMapper;
     private final NotificationChannelAdapterRegistry adapterRegistry;
+    private final NotificationBindingConnectionTestResultApplier resultApplier;
 
     public NotificationBindingConnectionTestServiceImpl(
         NotificationChannelBindingMapper bindingMapper,
-        NotificationChannelAdapterRegistry adapterRegistry
+        NotificationChannelAdapterRegistry adapterRegistry,
+        NotificationBindingConnectionTestResultApplier resultApplier
     ) {
         this.bindingMapper = bindingMapper;
         this.adapterRegistry = adapterRegistry;
+        this.resultApplier = resultApplier;
     }
 
     @Override
@@ -35,14 +34,9 @@ public class NotificationBindingConnectionTestServiceImpl implements Notificatio
     public ConnectionTestResultDto testBinding(Long id) {
         NotificationChannelBinding binding = requireBinding(id);
         NotificationSendResult result = adapterRegistry.get(binding.getProvider()).test(binding);
-        binding.setLastCheckedAt(LocalDateTime.now());
-        binding.setStatus(result.success()
-            ? NotificationBindingStatus.CONNECTED.code()
-            : NotificationBindingStatus.FAILED.code());
-        binding.setLastError(result.success() ? null : truncate(result.message(), 1024));
-        binding.setUpdatedAt(LocalDateTime.now());
+        ConnectionTestResultDto response = resultApplier.apply(binding, result, LocalDateTime.now());
         bindingMapper.updateById(binding);
-        return new ConnectionTestResultDto(result.success(), result.success() ? "connected" : "failed", result.message(), format(binding.getLastCheckedAt()));
+        return response;
     }
 
     private NotificationChannelBinding requireBinding(Long id) {
@@ -53,14 +47,4 @@ public class NotificationBindingConnectionTestServiceImpl implements Notificatio
         return binding;
     }
 
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
-    }
-
-    private String format(LocalDateTime value) {
-        return value == null ? null : value.format(DATE_TIME_FORMATTER);
-    }
 }

@@ -13,11 +13,13 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Persists GitHub comment publication records and batch history.
  */
+@Component
 public class GithubCommentPublicationRecorder {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

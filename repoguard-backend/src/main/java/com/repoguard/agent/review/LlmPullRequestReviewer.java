@@ -7,7 +7,6 @@ import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
-import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
@@ -32,8 +31,33 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     private final RepoGuardMetrics metrics;
     private final ExternalCallResilience resilience;
     private final PullRequestDiffChunker diffChunker;
+    private final LlmReviewPromptBuilder promptBuilder;
+    private final LlmRuleReviewMerger reviewMerger;
 
     @Autowired
+    public LlmPullRequestReviewer(
+        ReviewPolicyProvider reviewPolicyProvider,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmRuleReviewMerger reviewMerger
+    ) {
+        this(
+            reviewPolicyProvider,
+            ruleBasedReviewer,
+            restClientBuilder,
+            objectMapper,
+            metrics,
+            resilience,
+            new PullRequestDiffChunker(),
+            promptBuilder,
+            reviewMerger
+        );
+    }
+
     public LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
         RuleBasedPullRequestReviewer ruleBasedReviewer,
@@ -49,7 +73,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             objectMapper,
             metrics,
             resilience,
-            new PullRequestDiffChunker()
+            new PullRequestDiffChunker(),
+            null,
+            null
         );
     }
 
@@ -62,6 +88,30 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         ExternalCallResilience resilience,
         PullRequestDiffChunker diffChunker
     ) {
+        this(
+            reviewPolicyProvider,
+            ruleBasedReviewer,
+            restClientBuilder,
+            objectMapper,
+            metrics,
+            resilience,
+            diffChunker,
+            null,
+            null
+        );
+    }
+
+    LlmPullRequestReviewer(
+        ReviewPolicyProvider reviewPolicyProvider,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience,
+        PullRequestDiffChunker diffChunker,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmRuleReviewMerger reviewMerger
+    ) {
         this.reviewPolicyProvider = reviewPolicyProvider;
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.restClientBuilder = restClientBuilder;
@@ -69,6 +119,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         this.metrics = metrics;
         this.resilience = resilience;
         this.diffChunker = diffChunker;
+        this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
+        this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger() : reviewMerger;
         this.reviewResultParser = new LlmReviewResultParser(objectMapper);
     }
 
@@ -76,7 +128,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
     public ReviewResult review(ReviewTask task, GithubPullRequestDiff diff) {
         long startedAt = System.nanoTime();
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
-        String promptSummary = promptSummary(diff);
+        String promptSummary = promptBuilder.promptSummary(diff);
         if (!isLlmReady(settings)) {
             return fallbackReview(diff, "LLM config is incomplete", settings, startedAt, promptSummary);
         }
@@ -84,7 +136,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         try {
             ReviewResult parsed = reviewWithOptionalChunks(settings, task, diff);
             ReviewResult ruleReview = ruleBasedReviewer.review(diff);
-            ReviewResult merged = mergeWithRuleReview(parsed, ruleReview);
+            ReviewResult merged = reviewMerger.mergeWithRuleReview(parsed, ruleReview);
             return ReviewResult.completed(
                 merged.riskLevel(),
                 merged.findings(),
@@ -92,7 +144,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 settings.modelName(),
                 elapsedMillis(startedAt),
                 parsed.llmParseStatus() == null ? "parsed" : parsed.llmParseStatus(),
-                hybridPromptSummary(parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(), ruleReview, merged),
+                reviewMerger.hybridPromptSummary(parsed.llmPromptSummary() == null ? promptSummary : parsed.llmPromptSummary(), ruleReview, merged),
                 parsed.llmPromptTokens(),
                 parsed.llmCompletionTokens(),
                 parsed.llmTotalTokens(),
@@ -104,27 +156,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             }
             throw ex;
         }
-    }
-
-    private ReviewResult mergeWithRuleReview(ReviewResult llmReview, ReviewResult ruleReview) {
-        if (ruleReview == null || ruleReview.findings() == null || ruleReview.findings().isEmpty()) {
-            return llmReview;
-        }
-        List<ReviewFindingResult> findings = new java.util.ArrayList<>();
-        if (llmReview.findings() != null) {
-            findings.addAll(llmReview.findings());
-        }
-        findings.addAll(ruleReview.findings());
-        return ReviewResult.completed(maxRisk(llmReview.riskLevel(), ruleReview.riskLevel()), findings);
-    }
-
-    private String hybridPromptSummary(String promptSummary, ReviewResult ruleReview, ReviewResult merged) {
-        int ruleFindings = ruleReview == null || ruleReview.findings() == null ? 0 : ruleReview.findings().size();
-        int mergedFindings = merged == null || merged.findings() == null ? 0 : merged.findings().size();
-        return promptSummary
-            + "; rulesApplied=true"
-            + "; ruleFindings=" + ruleFindings
-            + "; mergedFindings=" + mergedFindings;
     }
 
     private ReviewResult reviewWithOptionalChunks(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
@@ -139,7 +170,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                 null,
                 null,
                 null,
-                promptSummary(diff),
+                promptBuilder.promptSummary(diff),
                 callResult.promptTokens(),
                 callResult.completionTokens(),
                 callResult.totalTokens(),
@@ -157,7 +188,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             try {
                 LlmCallResult callResult = callLlm(settings, task, chunk.diff());
                 ReviewResult parsed = reviewResultParser.parse(callResult.content());
-                riskLevel = maxRisk(riskLevel, parsed.riskLevel());
+                riskLevel = reviewMerger.maxRisk(riskLevel, parsed.riskLevel());
                 promptTokens += safeInt(callResult.promptTokens());
                 completionTokens += safeInt(callResult.completionTokens());
                 totalTokens += safeInt(callResult.totalTokens());
@@ -170,7 +201,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
                     metrics.llmFallback("chunk_partial_failure");
                 }
                 ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
-                riskLevel = maxRisk(riskLevel, ruleReview.riskLevel());
+                riskLevel = reviewMerger.maxRisk(riskLevel, ruleReview.riskLevel());
                 if (ruleReview.findings() != null) {
                     findings.addAll(ruleReview.findings());
                 }
@@ -183,7 +214,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             null,
             null,
             failedChunks > 0 ? "partial_fallback" : null,
-            chunkedPromptSummary(diff, chunks, findings.size(), riskLevel, failedChunks),
+            promptBuilder.chunkedPromptSummary(diff, chunks, findings.size(), riskLevel, failedChunks),
             zeroToNull(promptTokens),
             zeroToNull(completionTokens),
             zeroToNull(totalTokens),
@@ -238,7 +269,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
             "max_tokens", settings.maxTokens(),
             "messages", List.of(
                 Map.of("role", "system", "content", "你是资深代码审查助手，只输出严格 JSON。"),
-                Map.of("role", "user", "content", buildPrompt(task, diff))
+                Map.of("role", "user", "content", promptBuilder.buildPrompt(task, diff))
             )
         );
 
@@ -309,115 +340,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         return resilience == null ? supplier.get() : resilience.llm(operation, supplier);
     }
 
-    private String buildPrompt(ReviewTask task, GithubPullRequestDiff diff) {
-        return """
-            请审查下面的 GitHub PR diff，并只返回 JSON 对象：
-            {
-              "riskLevel": "INFO|LOW|MEDIUM|HIGH",
-              "findings": [
-                {
-                  "severity": "LOW|MEDIUM|HIGH",
-                  "filePath": "文件路径",
-                  "lineNumber": 变更后的行号或 null,
-                  "message": "问题描述",
-                  "recommendation": "修复建议"
-                }
-              ]
-            }
-            PR: %s/%s#%d
-            标题：%s
-            Diff:
-            %s
-            """.formatted(diff.owner(), diff.repository(), diff.prNumber(), task.getTitle(), compactDiff(diff));
-    }
-
-    private String compactDiff(GithubPullRequestDiff diff) {
-        StringBuilder builder = new StringBuilder();
-        for (GithubChangedFile file : diff.files()) {
-            builder.append("\n--- ").append(file.filename()).append('\n');
-            if (file.patch() != null) {
-                builder.append(file.patch(), 0, Math.min(file.patch().length(), 6000)).append('\n');
-            }
-            if (builder.length() > 20000) {
-                builder.append("\n[diff truncated]\n");
-                break;
-            }
-        }
-        return builder.toString();
-    }
-
-    private String promptSummary(GithubPullRequestDiff diff) {
-        int fileCount = diff.files() == null ? 0 : diff.files().size();
-        int additions = 0;
-        int deletions = 0;
-        StringBuilder files = new StringBuilder();
-        if (diff.files() != null) {
-            for (int i = 0; i < diff.files().size(); i++) {
-                GithubChangedFile file = diff.files().get(i);
-                additions += file.additions() == null ? 0 : file.additions();
-                deletions += file.deletions() == null ? 0 : file.deletions();
-                if (i < 5) {
-                    if (!files.isEmpty()) {
-                        files.append(", ");
-                    }
-                    files.append(file.filename());
-                }
-            }
-        }
-        if (fileCount > 5) {
-            files.append(", ...");
-        }
-        return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
-            + "; files=" + fileCount
-            + "; additions=" + additions
-            + "; deletions=" + deletions
-            + "; sampleFiles=" + files;
-    }
-
-    private String chunkedPromptSummary(
-        GithubPullRequestDiff diff,
-        List<PullRequestDiffChunk> chunks,
-        int findingCount,
-        String riskLevel,
-        int failedChunks
-    ) {
-        int additions = chunks.stream().mapToInt(chunk -> chunk.additions() == null ? 0 : chunk.additions()).sum();
-        int deletions = chunks.stream().mapToInt(chunk -> chunk.deletions() == null ? 0 : chunk.deletions()).sum();
-        String reasons = chunks.stream()
-            .flatMap(chunk -> chunk.reasons().stream())
-            .distinct()
-            .limit(6)
-            .reduce((first, second) -> first + "," + second)
-            .orElse("standard");
-        return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
-            + "; chunked=true"
-            + "; chunks=" + chunks.size()
-            + "; files=" + (diff.files() == null ? 0 : diff.files().size())
-            + "; additions=" + additions
-            + "; deletions=" + deletions
-            + "; aggregateRisk=" + riskLevel
-            + "; aggregateFindings=" + findingCount
-            + "; failedChunks=" + failedChunks
-            + "; chunkReasons=" + reasons;
-    }
-
-    private String maxRisk(String current, String candidate) {
-        return riskRank(candidate) > riskRank(current) ? candidate : current;
-    }
-
-    private int riskRank(String riskLevel) {
-        if (riskLevel == null) {
-            return 0;
-        }
-        return switch (riskLevel.trim().toUpperCase()) {
-            case "CRITICAL" -> 4;
-            case "HIGH" -> 3;
-            case "MEDIUM" -> 2;
-            case "LOW" -> 1;
-            default -> 0;
-        };
-    }
-
     private Integer elapsedMillis(long startedAt) {
         long elapsed = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
         return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
@@ -454,5 +376,4 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         Integer totalTokens
     ) {
     }
-
 }

@@ -255,7 +255,9 @@ class LlmPullRequestReviewerTest {
                 new ObjectMapper(),
                 null,
                 null,
-                new PullRequestDiffChunker()
+                new PullRequestDiffChunker(),
+                null,
+                null
             );
             this.reviewedChunks = reviewedChunks;
             this.failingFilePart = failingFilePart;

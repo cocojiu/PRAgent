@@ -14,9 +14,10 @@ public class WeComNotificationAdapter extends AbstractWebhookNotificationAdapter
         SecretCryptoService secretCryptoService,
         WebhookNotificationContentBuilder contentBuilder,
         WebhookNotificationResponseEvaluator responseEvaluator,
-        WebhookNotificationPayloadFactory payloadFactory
+        WebhookNotificationPayloadFactory payloadFactory,
+        WebhookNotificationRequestFactory requestFactory
     ) {
-        super(restClientBuilder, secretCryptoService, contentBuilder, responseEvaluator);
+        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory);
         this.payloadFactory = payloadFactory;
     }
 

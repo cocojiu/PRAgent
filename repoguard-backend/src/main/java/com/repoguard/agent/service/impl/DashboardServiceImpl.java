@@ -1,8 +1,6 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
@@ -19,7 +17,6 @@ import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
-import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
@@ -33,7 +30,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -42,38 +38,32 @@ public class DashboardServiceImpl implements DashboardService {
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final DashboardMapper dashboardMapper;
-    private final GithubIntegrationProvider githubIntegrationProvider;
-    private final ReviewPolicyProvider reviewPolicyProvider;
-    private final RabbitTemplate rabbitTemplate;
     private final DashboardStatusMapper statusMapper;
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
     private final DashboardLlmQualityFormatter llmQualityFormatter;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
+    private final DashboardSystemHealthProbe systemHealthProbe;
 
     public DashboardServiceImpl(
         DashboardMapper dashboardMapper,
-        GithubIntegrationProvider githubIntegrationProvider,
-        ReviewPolicyProvider reviewPolicyProvider,
-        RabbitTemplate rabbitTemplate,
         DashboardStatusMapper statusMapper,
         DashboardRuleDisplayMapper ruleDisplayMapper,
         DashboardOverviewDisplayMapper overviewDisplayMapper,
         DashboardLlmQualityFormatter llmQualityFormatter,
         DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
-        DashboardReviewTrendWindow reviewTrendWindow
+        DashboardReviewTrendWindow reviewTrendWindow,
+        DashboardSystemHealthProbe systemHealthProbe
     ) {
         this.dashboardMapper = dashboardMapper;
-        this.githubIntegrationProvider = githubIntegrationProvider;
-        this.reviewPolicyProvider = reviewPolicyProvider;
-        this.rabbitTemplate = rabbitTemplate;
         this.statusMapper = statusMapper;
         this.ruleDisplayMapper = ruleDisplayMapper;
         this.overviewDisplayMapper = overviewDisplayMapper;
         this.llmQualityFormatter = llmQualityFormatter;
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
+        this.systemHealthProbe = systemHealthProbe;
     }
 
     @Override
@@ -96,7 +86,7 @@ public class DashboardServiceImpl implements DashboardService {
             buildRuleHits(ruleHitCounts),
             buildHighRiskReviews(highRiskReviews),
             buildFailedRules(ruleHitCounts),
-            buildSystemHealth(),
+            systemHealthProbe.probe(),
             buildLlmQualityByModel(llmQualityByModelStats),
             buildLlmQualityByRepository(llmQualityByRepositoryStats),
             llmQualityTrendBuilder.build(llmQualityTrendCounts, llmTrendWindow)
@@ -110,40 +100,6 @@ public class DashboardServiceImpl implements DashboardService {
         long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
         int averageDurationSeconds = metricStat == null ? 0 : safeAverageDuration(metricStat.getAverageDurationSeconds());
         return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
-    }
-
-    private List<SystemHealthItemDto> buildSystemHealth() {
-        return List.of(
-            new SystemHealthItemDto("MySQL", DashboardStatusMapper.HEALTH_NORMAL),
-            new SystemHealthItemDto("RabbitMQ", rabbitMqHealthStatus()),
-            new SystemHealthItemDto("GitHub", githubHealthStatus()),
-            new SystemHealthItemDto("Spring AI", llmHealthStatus())
-        );
-    }
-
-    private String rabbitMqHealthStatus() {
-        try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            return statusMapper.rabbitMqHealth(open);
-        } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
-        }
-    }
-
-    private String githubHealthStatus() {
-        try {
-            return statusMapper.githubHealth(githubIntegrationProvider.getSettings());
-        } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
-        }
-    }
-
-    private String llmHealthStatus() {
-        try {
-            return statusMapper.llmHealth(reviewPolicyProvider.getSettings());
-        } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
-        }
     }
 
     private List<DashboardMetricDto> buildMetrics(DashboardMetricStats stats) {

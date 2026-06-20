@@ -19,7 +19,8 @@ class NotificationBindingConnectionTestServiceImplTest {
     private final NotificationChannelAdapterRegistry adapterRegistry = org.mockito.Mockito.mock(NotificationChannelAdapterRegistry.class);
     private final NotificationBindingConnectionTestServiceImpl service = new NotificationBindingConnectionTestServiceImpl(
         bindingMapper,
-        adapterRegistry
+        adapterRegistry,
+        new NotificationBindingConnectionTestResultApplier()
     );
 
     @Test

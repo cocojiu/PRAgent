@@ -1,12 +1,8 @@
 package com.repoguard.agent.worker;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
@@ -20,18 +16,11 @@ import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
-import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
-import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,19 +32,20 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
-    private static final String HUMAN_REVIEW_THRESHOLD = "MEDIUM";
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
-    private final ChangedFileMapper changedFileMapper;
-    private final GithubPullRequestClient githubPullRequestClient;
     private final PullRequestReviewer pullRequestReviewer;
     private final PlatformTransactionManager transactionManager;
     private final RepoGuardMetrics metrics;
     private final NotificationDispatchService notificationDispatchService;
     private final CacheEvictionService cacheEvictionService;
+    private final GithubPullRequestDiffFetcher diffFetcher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final ReviewFindingDeduplicator findingDeduplicator;
+    private final ReviewTimelineAppender timelineAppender;
+    private final ChangedFileReplacementService changedFileReplacementService;
+    private final ReviewFindingReplacementService findingReplacementService;
+    private final ReviewTaskCompletionApplier completionApplier;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -69,21 +59,41 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService,
         CacheEvictionService cacheEvictionService,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        GithubPullRequestDiffFetcher diffFetcher,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewFindingDeduplicator findingDeduplicator,
+        ReviewTimelineAppender timelineAppender,
+        ChangedFileReplacementService changedFileReplacementService,
+        ReviewFindingReplacementService findingReplacementService,
+        ReviewTaskCompletionApplier completionApplier
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.changedFileMapper = changedFileMapper;
-        this.githubPullRequestClient = githubPullRequestClient;
         this.pullRequestReviewer = pullRequestReviewer;
         this.transactionManager = transactionManager;
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
         this.cacheEvictionService = cacheEvictionService;
+        this.diffFetcher = diffFetcher == null
+            ? new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics)
+            : diffFetcher;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
+        this.findingDeduplicator = findingDeduplicator == null
+            ? new ReviewFindingDeduplicator()
+            : findingDeduplicator;
+        this.timelineAppender = timelineAppender == null
+            ? new ReviewTimelineAppender(reviewTimelineMapper)
+            : timelineAppender;
+        this.changedFileReplacementService = changedFileReplacementService == null
+            ? new ChangedFileReplacementService(changedFileMapper)
+            : changedFileReplacementService;
+        this.findingReplacementService = findingReplacementService == null
+            ? new ReviewFindingReplacementService(reviewFindingMapper, this.findingDeduplicator)
+            : findingReplacementService;
+        this.completionApplier = completionApplier == null
+            ? new ReviewTaskCompletionApplier(this.reviewTaskStateMachine)
+            : completionApplier;
     }
 
     public ReviewTaskExecutorImpl(
@@ -107,6 +117,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             transactionManager,
             metrics,
             notificationDispatchService,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null,
             null
         );
@@ -133,6 +149,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             metrics,
             null,
             null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null
         );
     }
@@ -152,6 +174,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             changedFileMapper,
             githubPullRequestClient,
             pullRequestReviewer,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
             null,
             null,
             null,
@@ -227,9 +255,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     task.getPrNumber(),
                     reviewResult.riskLevel(),
                     reviewResult.llmStatus(),
-                    reviewResult.findings() == null ? 0 : deduplicateFindings(reviewResult.findings()).size(),
+                    findingCount,
                     Duration.between(startedAt, LocalDateTime.now()).toMillis(),
-                    requiresHumanReview(reviewResult.riskLevel())
+                    completionApplier.requiresHumanReview(reviewResult.riskLevel())
                 );
             } catch (RuntimeException ex) {
                 failReview(task, startedAt, ex);
@@ -250,42 +278,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     }
 
     private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
-        LocalDateTime startedAt = LocalDateTime.now();
-        try {
-            LOGGER.info(
-                "GitHub diff fetch started taskId={} repository={} prNumber={} operation=github_diff_fetch",
-                task.getId(),
-                repositorySlug(task),
-                task.getPrNumber()
-            );
-            GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
-            if (metrics != null) {
-                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "success");
-            }
-            LOGGER.info(
-                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
-                task.getId(),
-                repositorySlug(task),
-                task.getPrNumber(),
-                Duration.between(startedAt, LocalDateTime.now()).toMillis(),
-                diff.files() == null ? 0 : diff.files().size()
-            );
-            return diff;
-        } catch (RuntimeException ex) {
-            if (metrics != null) {
-                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "failed");
-            }
-            LOGGER.warn(
-                "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
-                task.getId(),
-                repositorySlug(task),
-                task.getPrNumber(),
-                failureCategory(ex),
-                ex.getClass().getName(),
-                Duration.between(startedAt, LocalDateTime.now()).toMillis()
-            );
-            throw ex;
-        }
+        return diffFetcher.fetch(task);
     }
 
     private boolean markReviewing(ReviewTask task, LocalDateTime startedAt) {
@@ -302,56 +295,27 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             if (updated <= 0) {
                 return false;
             }
-            appendTimeline(task.getId(), "Review started", startedAt, "CURRENT", 2);
+            timelineAppender.append(task.getId(), "Review started", startedAt, "CURRENT", 2);
             return true;
         });
     }
 
     private void replaceChangedFiles(Long taskId, GithubPullRequestDiff diff) {
         inTransaction(() -> {
-            changedFileMapper.delete(new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId));
-            for (GithubChangedFile file : diff.files()) {
-                ChangedFile changedFile = new ChangedFile();
-                changedFile.setTaskId(taskId);
-                changedFile.setFilePath(file.filename());
-                changedFile.setChangeType(normalizeChangeType(file.status()));
-                changedFile.setAdditions(file.additions() == null ? 0 : file.additions());
-                changedFile.setDeletions(file.deletions() == null ? 0 : file.deletions());
-                changedFileMapper.insert(changedFile);
-            }
-            appendTimeline(taskId, "GitHub diff fetched", LocalDateTime.now(), "DONE", 3);
+            changedFileReplacementService.replace(taskId, diff);
+            timelineAppender.append(taskId, "GitHub diff fetched", LocalDateTime.now(), "DONE", 3);
         });
     }
 
     private int completeReview(ReviewTask task, ReviewResult reviewResult, LocalDateTime startedAt) {
         return inTransaction(() -> {
-            int findingCount = deduplicateFindings(reviewResult.findings()).size();
-            replaceFindings(task.getId(), reviewResult);
+            int findingCount = findingReplacementService.replace(task.getId(), reviewResult);
+            timelineAppender.append(task.getId(), reviewGeneratedLabel(reviewResult), LocalDateTime.now(), "DONE", 4);
 
             LocalDateTime finishedAt = LocalDateTime.now();
-            boolean humanReviewRequired = requiresHumanReview(reviewResult.riskLevel());
-            task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
-            task.setRiskLevel(reviewResult.riskLevel());
-            task.setLlmStatus(reviewResult.llmStatus());
-            task.setLlmProvider(reviewResult.llmProvider());
-            task.setLlmModel(reviewResult.llmModel());
-            task.setLlmDurationMs(reviewResult.llmDurationMs());
-            task.setLlmParseStatus(reviewResult.llmParseStatus());
-            task.setLlmFallbackReason(reviewResult.statusDetail());
-            task.setLlmPromptSummary(reviewResult.llmPromptSummary());
-            task.setLlmPromptTokens(reviewResult.llmPromptTokens());
-            task.setLlmCompletionTokens(reviewResult.llmCompletionTokens());
-            task.setLlmTotalTokens(reviewResult.llmTotalTokens());
-            task.setLlmEstimatedCost(reviewResult.llmEstimatedCost());
-            task.setHumanReviewRequired(humanReviewRequired);
-            task.setHumanReviewStatus(HumanReviewStatus.defaultForRequired(humanReviewRequired).code());
-            task.setHumanReviewNote(null);
-            task.setHumanReviewBy(null);
-            task.setHumanReviewedAt(null);
-            task.setFinishedAt(finishedAt);
-            task.setDurationSeconds((int) Duration.between(startedAt, finishedAt).toSeconds());
+            boolean humanReviewRequired = completionApplier.applyCompleted(task, reviewResult, startedAt, finishedAt);
             reviewTaskMapper.updateById(task);
-            appendTimeline(
+            timelineAppender.append(
                 task.getId(),
                 humanReviewRequired ? "Human review required" : "Review completed",
                 finishedAt,
@@ -367,111 +331,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         });
     }
 
-    private void replaceFindings(Long taskId, ReviewResult reviewResult) {
-        reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
-        List<ReviewFindingResult> findings = deduplicateFindings(reviewResult.findings());
-        for (ReviewFindingResult findingResult : findings) {
-            ReviewFinding finding = new ReviewFinding();
-            finding.setTaskId(taskId);
-            finding.setCategory("FINDING");
-            finding.setSeverity(findingResult.severity());
-            finding.setSource(findingResult.source());
-            finding.setRuleId(findingResult.ruleId());
-            finding.setFilePath(findingResult.filePath());
-            finding.setLineNumber(findingResult.lineNumber());
-            finding.setMessage(findingResult.message());
-            finding.setRecommendation(findingResult.recommendation());
-            reviewFindingMapper.insert(finding);
-        }
-        appendTimeline(taskId, reviewGeneratedLabel(reviewResult), LocalDateTime.now(), "DONE", 4);
-    }
-
-    private List<ReviewFindingResult> deduplicateFindings(List<ReviewFindingResult> findings) {
-        if (findings == null || findings.isEmpty()) {
-            return List.of();
-        }
-        Map<String, ReviewFindingResult> byKey = new LinkedHashMap<>();
-        for (ReviewFindingResult finding : findings) {
-            String key = findingKey(finding);
-            ReviewFindingResult existing = byKey.get(key);
-            byKey.put(key, existing == null ? finding : mergeFinding(existing, finding));
-        }
-        return new ArrayList<>(byKey.values());
-    }
-
-    private String findingKey(ReviewFindingResult finding) {
-        return normalizeKeyPart(finding.filePath())
-            + "|" + (finding.lineNumber() == null ? "" : finding.lineNumber())
-            + "|" + normalizeKeyPart(finding.message());
-    }
-
-    private ReviewFindingResult mergeFinding(ReviewFindingResult first, ReviewFindingResult second) {
-        ReviewFindingResult stronger = riskRank(second.severity()) > riskRank(first.severity()) ? second : first;
-        return new ReviewFindingResult(
-            stronger.severity(),
-            mergeSource(first.source(), second.source()),
-            mergeText(first.ruleId(), second.ruleId()),
-            stronger.filePath(),
-            stronger.lineNumber(),
-            stronger.message(),
-            mergeText(first.recommendation(), second.recommendation())
-        );
-    }
-
-    private String mergeSource(String first, String second) {
-        String left = trimToNull(first);
-        String right = trimToNull(second);
-        if (left == null) {
-            return right;
-        }
-        if (right == null || left.equalsIgnoreCase(right)) {
-            return left;
-        }
-        if (containsSource(left, "LLM") && containsSource(right, "RULE")
-            || containsSource(left, "RULE") && containsSource(right, "LLM")) {
-            return "LLM+RULE";
-        }
-        return left + " / " + right;
-    }
-
-    private boolean containsSource(String value, String source) {
-        return value != null && value.toUpperCase(Locale.ROOT).contains(source);
-    }
-
-    private String mergeText(String first, String second) {
-        String left = trimToNull(first);
-        String right = trimToNull(second);
-        if (left == null) {
-            return right;
-        }
-        if (right == null || left.equalsIgnoreCase(right)) {
-            return left;
-        }
-        return left + " / " + right;
-    }
-
-    private String trimToNull(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-        return value.trim();
-    }
-
-    private String normalizeKeyPart(String value) {
-        String trimmed = trimToNull(value);
-        return trimmed == null ? "" : trimmed.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
-    }
-
     private void failReview(ReviewTask task, LocalDateTime startedAt, RuntimeException ex) {
         inTransaction(() -> {
             LocalDateTime failedAt = LocalDateTime.now();
-            task.setStatus(reviewTaskStateMachine.statusWhenFailed());
-            task.setRiskLevel("HIGH");
-            task.setLlmStatus(LlmStatus.FAILED.code());
-            task.setFinishedAt(failedAt);
-            task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
+            completionApplier.applyFailed(task, startedAt, failedAt);
             reviewTaskMapper.updateById(task);
-            appendTimeline(task.getId(), failureLabel(ex), failedAt, "FAILED", 5);
+            timelineAppender.append(task.getId(), failureLabel(ex), failedAt, "FAILED", 5);
             if (metrics != null) {
                 metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
             }
@@ -496,36 +361,6 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         if (notificationDispatchService != null) {
             notificationDispatchService.reviewFailed(task);
         }
-    }
-
-    private String normalizeChangeType(String status) {
-        if (status == null) {
-            return "MODIFY";
-        }
-        return switch (status.toLowerCase()) {
-            case "added" -> "ADD";
-            case "removed" -> "DELETE";
-            case "renamed" -> "RENAME";
-            default -> "MODIFY";
-        };
-    }
-
-    private boolean requiresHumanReview(String riskLevel) {
-        return riskRank(riskLevel) >= riskRank(HUMAN_REVIEW_THRESHOLD);
-    }
-
-    private int riskRank(String riskLevel) {
-        if (riskLevel == null) {
-            return 0;
-        }
-        return switch (riskLevel.toUpperCase()) {
-            case "CRITICAL" -> 5;
-            case "HIGH" -> 4;
-            case "MEDIUM" -> 3;
-            case "LOW" -> 2;
-            case "INFO" -> 1;
-            default -> 0;
-        };
     }
 
     private String reviewGeneratedLabel(ReviewResult reviewResult) {
@@ -585,33 +420,6 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             .map(GithubChangedFile::deletions)
             .mapToInt(value -> value == null ? 0 : value)
             .sum();
-    }
-
-    private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status, int sortOrder) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(label);
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(Math.max(sortOrder, nextTimelineSortOrder(taskId)));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 
     private void inTransaction(Runnable action) {

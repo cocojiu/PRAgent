@@ -4,10 +4,12 @@ import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
+import org.springframework.stereotype.Component;
 
 /**
  * Converts a comment preview into a concrete publish plan.
  */
+@Component
 public class GithubCommentPublishPlanBuilder {
 
     public GithubCommentPublishPlan build(GithubCommentPreviewResponse preview) {

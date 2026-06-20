@@ -30,7 +30,7 @@ class GithubCommentHistoryQueryServiceImplTest {
         reviewTaskMapper,
         batchMapper,
         batchItemMapper,
-        new GithubWritebackFailureClassifier()
+        new GithubCommentPublicationHistoryAssembler(new GithubWritebackFailureClassifier())
     );
 
     @Test

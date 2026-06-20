@@ -1,0 +1,183 @@
+.message-queue-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.mq-config-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.mq-config-main {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.mq-config-main svg {
+  flex: 0 0 auto;
+  color: #1268ff;
+}
+
+.mq-config-main div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+.mq-config-main strong,
+.mq-config-main span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mq-config-main span {
+  color: #64748b;
+}
+
+.mq-config-tags {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mq-dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 22px;
+}
+
+.mq-topology-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mq-topology-card h2 {
+  margin-bottom: 0;
+}
+
+.mq-topology-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.mq-topology-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: #f1f5f9;
+  font-weight: 700;
+}
+
+.mq-flow {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mq-flow-node {
+  position: relative;
+  min-height: 118px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  padding: 14px 10px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #fbfdff;
+  text-align: center;
+}
+
+.mq-flow-node:not(:last-child)::after {
+  position: absolute;
+  top: 50%;
+  right: -10px;
+  width: 10px;
+  height: 1px;
+  background: #cbd5e1;
+  content: "";
+}
+
+.mq-flow-node svg {
+  color: #1268ff;
+}
+
+.mq-flow-node strong {
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.mq-dlq-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fff7f7;
+  color: #7f1d1d;
+  font-weight: 700;
+}
+
+.mq-filter-bar {
+  grid-template-columns: 180px 180px 240px minmax(260px, 1fr) auto;
+}
+
+@media (max-width: 1280px) {
+  .mq-dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mq-filter-bar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mq-flow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mq-flow-node::after {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .mq-dashboard-grid,
+  .mq-flow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mq-filter-bar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mq-config-alert {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .mq-config-tags {
+    justify-content: flex-start;
+  }
+}

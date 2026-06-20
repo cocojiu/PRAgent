@@ -31,7 +31,8 @@ class NotificationBindingConfigServiceImplTest {
         bindingMapper,
         adapterRegistry,
         connectionTestService,
-        secretCryptoService
+        new NotificationBindingRequestApplier(secretCryptoService),
+        new NotificationBindingResponseAssembler(secretCryptoService)
     );
 
     @Test

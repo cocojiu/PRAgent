@@ -1,38 +1,26 @@
 package com.repoguard.agent.notification;
 
-import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class NotificationDispatchServiceImpl implements NotificationDispatchService {
 
     private final NotificationOutboxEventStore outboxEventStore;
-    private final NotificationEventPublisher eventPublisher;
-    private final RabbitNotificationQueueProperties properties;
     private final NotificationEventPayloadBuilder payloadBuilder;
-    private final NotificationPublishFailurePolicy publishFailurePolicy;
-    private final NotificationPublishEventStateUpdater publishEventStateUpdater;
+    private final NotificationEventPublishCoordinator publishCoordinator;
 
     public NotificationDispatchServiceImpl(
         NotificationOutboxEventStore outboxEventStore,
-        NotificationEventPublisher eventPublisher,
-        RabbitNotificationQueueProperties properties,
         NotificationEventPayloadBuilder payloadBuilder,
-        NotificationPublishFailurePolicy publishFailurePolicy,
-        NotificationPublishEventStateUpdater publishEventStateUpdater
+        NotificationEventPublishCoordinator publishCoordinator
     ) {
         this.outboxEventStore = outboxEventStore;
-        this.eventPublisher = eventPublisher;
-        this.properties = properties;
         this.payloadBuilder = payloadBuilder;
-        this.publishFailurePolicy = publishFailurePolicy;
-        this.publishEventStateUpdater = publishEventStateUpdater;
+        this.publishCoordinator = publishCoordinator;
     }
 
     @Override
@@ -75,7 +63,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             || NotificationEventStatus.PUBLISHED == eventStatus) {
             return;
         }
-        publishEvent(event);
+        publishCoordinator.publish(event);
     }
 
     private void createAndPublish(
@@ -100,34 +88,6 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             commentSkippedCount
         );
         NotificationEvent event = outboxEventStore.createPendingEvent(eventType, task, batchId, payload);
-        NotificationEvent created = event;
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    publishEvent(created);
-                }
-            });
-        } else {
-            publishEvent(created);
-        }
-    }
-
-    private void publishEvent(NotificationEvent event) {
-        try {
-            eventPublisher.publish(new NotificationEventMessage(event.getId(), event.getEventKey(), event.getEventType(), event.getTaskId(), event.getBatchId()));
-            publishEventStateUpdater.markPublished(event);
-        } catch (RuntimeException ex) {
-            markPublishFailed(event, ex);
-        }
-    }
-
-    private void markPublishFailed(NotificationEvent event, RuntimeException ex) {
-        NotificationPublishFailureDecision decision = publishFailurePolicy.decide(
-            event,
-            ex,
-            properties.getPublishCompensationMaxAttempts()
-        );
-        publishEventStateUpdater.markPublishFailed(event, decision);
+        publishCoordinator.publishAfterCommit(event);
     }
 }

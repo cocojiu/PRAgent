@@ -52,15 +52,18 @@ class DashboardServiceImplTest {
     private final DashboardReviewTrendWindow reviewTrendWindow = DashboardReviewTrendWindow.forTest(FIXED_CLOCK);
     private final DashboardServiceImpl service = new DashboardServiceImpl(
         dashboardMapper,
-        githubIntegrationProvider,
-        reviewPolicyProvider,
-        rabbitTemplate,
         statusMapper,
         ruleDisplayMapper,
         overviewDisplayMapper,
         llmQualityFormatter,
         llmQualityTrendBuilder,
-        reviewTrendWindow
+        reviewTrendWindow,
+        new DashboardSystemHealthProbe(
+            githubIntegrationProvider,
+            reviewPolicyProvider,
+            rabbitTemplate,
+            statusMapper
+        )
     );
 
     @BeforeEach

@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { onMounted, reactive } from "vue";
 import { Hexagon, Save } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
 import {
@@ -53,65 +53,21 @@ import {
   updateReviewPolicyConfig
 } from "@/api/config";
 import {
-  buildConnectionTestPatch,
   buildGithubPayload,
-  buildGithubIntegrationPatch,
+  buildIntegrationConfigApplyActions,
+  buildIntegrationConnectionTestActions,
   buildMysqlPayload,
   buildRabbitMqPayload,
-  buildReviewPolicyIntegrationPatch,
-  buildServiceIntegrationPatch,
   buildSpringAiPayload,
-  cloneIntegrationItems,
-  defaultIntegrationItems,
   IntegrationCard,
   serviceIcons,
   useIntegrationConfigPersistence,
   useIntegrationConnectionTest,
-  type IntegrationFormState
+  useIntegrationFormState
 } from "@/features/integrations";
-import type {
-  ConnectionTestResult,
-  GithubIntegrationConfig,
-  ReviewPolicyConfig,
-  ServiceIntegrationConfig
-} from "@/types";
 
-const integrationItems = ref(cloneIntegrationItems());
-
-const formState = reactive<IntegrationFormState>(
-  Object.fromEntries(defaultIntegrationItems.map((item) => [item.id, Object.fromEntries(item.fields.map((field) => [field.label, field.value]))]))
-);
-
-const visibleSecrets = reactive<Record<string, boolean>>({});
+const { formState, integrationItems, visibleSecrets, applyIntegrationPatch } = useIntegrationFormState();
 const testingConnections = reactive<Record<string, boolean>>({});
-
-const formValues = (fields: { label: string; value: string }[]) =>
-  Object.fromEntries(fields.map((field) => [field.label, field.value]));
-
-const applyIntegrationPatch = (id: string, patch: Partial<typeof integrationItems.value[number]>) => {
-  const item = integrationItems.value.find((integration) => integration.id === id);
-  if (!item) {
-    return;
-  }
-  Object.assign(item, patch);
-  if (patch.fields) {
-    formState[id] = formValues(patch.fields);
-  }
-};
-
-const testActions: Record<string, () => Promise<ConnectionTestResult>> = {
-  github: () => testGithubIntegrationConnection(githubPayload()),
-  mysql: () => testMysqlConnection(mysqlPayload()),
-  rabbitmq: () => testRabbitMqConnection(rabbitMqPayload()),
-  "spring-ai": () => testReviewPolicyConnection(springAiPayload())
-};
-
-const { testConnection } = useIntegrationConnectionTest({
-  applyConnectionTestResult: (id, result) => applyConnectionTestResult(id, result),
-  hasIntegration: (id) => integrationItems.value.some((integration) => integration.id === id),
-  testActions,
-  testingConnections
-});
 
 const githubPayload = () => buildGithubPayload(formState);
 
@@ -121,33 +77,41 @@ const rabbitMqPayload = () => buildRabbitMqPayload(formState);
 
 const springAiPayload = () => buildSpringAiPayload(formState, reviewPolicyConfig.value);
 
-const applyGithubConfig = (config: GithubIntegrationConfig) => {
-  applyIntegrationPatch("github", buildGithubIntegrationPatch(config));
+const integrationPayloads = {
+  githubPayload,
+  mysqlPayload,
+  rabbitMqPayload,
+  springAiPayload
 };
 
-const applyServiceConfig = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig) => {
-  applyIntegrationPatch(id, buildServiceIntegrationPatch(id, config));
+const connectionTestRequests = {
+  testGithubIntegrationConnection,
+  testMysqlConnection,
+  testRabbitMqConnection,
+  testReviewPolicyConnection
 };
 
-const applyReviewPolicyConfig = (config: ReviewPolicyConfig) => {
-  applyIntegrationPatch("spring-ai", buildReviewPolicyIntegrationPatch(config));
-};
+const { applyConnectionTestResult, applyGithubConfig, applyReviewPolicyConfig, applyServiceConfig } =
+  buildIntegrationConfigApplyActions({
+    applyIntegrationPatch
+  });
 
-const applyConnectionTestResult = (id: string, result: ConnectionTestResult) => {
-  applyIntegrationPatch(id, buildConnectionTestPatch(id, result));
-};
+const { testConnection } = useIntegrationConnectionTest({
+  applyConnectionTestResult: (id, result) => applyConnectionTestResult(id, result),
+  hasIntegration: (id) => integrationItems.value.some((integration) => integration.id === id),
+  testActions: buildIntegrationConnectionTestActions({
+    payloads: integrationPayloads,
+    requests: connectionTestRequests
+  }),
+  testingConnections
+});
 
 const { loading, saving, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
   applyGithubConfig,
   applyReviewPolicyConfig,
   applyServiceConfig,
   canManage,
-  payloads: {
-    githubPayload,
-    mysqlPayload,
-    rabbitMqPayload,
-    springAiPayload
-  },
+  payloads: integrationPayloads,
   requests: {
     fetchGithubIntegrationConfig,
     fetchMysqlIntegrationConfig,

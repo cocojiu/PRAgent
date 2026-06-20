@@ -1,33 +1,31 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
-import com.repoguard.agent.security.SecretCryptoService;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 abstract class AbstractWebhookNotificationAdapter implements NotificationChannelAdapter {
 
     private final RestClient restClient;
-    private final SecretCryptoService secretCryptoService;
     private final WebhookNotificationContentBuilder contentBuilder;
     private final WebhookNotificationResponseEvaluator responseEvaluator;
+    private final WebhookNotificationRequestFactory requestFactory;
 
     AbstractWebhookNotificationAdapter(
         RestClient.Builder restClientBuilder,
-        SecretCryptoService secretCryptoService,
         WebhookNotificationContentBuilder contentBuilder,
-        WebhookNotificationResponseEvaluator responseEvaluator
+        WebhookNotificationResponseEvaluator responseEvaluator,
+        WebhookNotificationRequestFactory requestFactory
     ) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(5000);
-        requestFactory.setReadTimeout(8000);
-        this.restClient = restClientBuilder.requestFactory(requestFactory).build();
-        this.secretCryptoService = secretCryptoService;
+        SimpleClientHttpRequestFactory httpRequestFactory = new SimpleClientHttpRequestFactory();
+        httpRequestFactory.setConnectTimeout(5000);
+        httpRequestFactory.setReadTimeout(8000);
+        this.restClient = restClientBuilder.requestFactory(httpRequestFactory).build();
         this.contentBuilder = contentBuilder;
         this.responseEvaluator = responseEvaluator;
+        this.requestFactory = requestFactory;
     }
 
     @Override
@@ -45,13 +43,13 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
     protected abstract Object payload(String title, String markdown);
 
     protected NotificationSendResult doPost(NotificationChannelBinding binding, Object payload) {
-        String webhookUrl = secretCryptoService.decrypt(binding.getWebhookUrlValue());
-        if (!StringUtils.hasText(webhookUrl)) {
-            return NotificationSendResult.failed(null, "Webhook URL is empty");
+        WebhookNotificationRequest request = requestFactory.create(binding);
+        if (!request.ready()) {
+            return NotificationSendResult.failed(null, request.failureMessage());
         }
         try {
             Object response = restClient.post()
-                .uri(signedWebhookUrl(webhookUrl, secretCryptoService.decrypt(binding.getSecretValue())))
+                .uri(signedWebhookUrl(request.webhookUrl(), request.secret()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
