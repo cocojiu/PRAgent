@@ -18,6 +18,12 @@ public class ReviewFinding {
     private Integer lineNumber;
     private String message;
     private String recommendation;
+    private String confidence;
+    private String evidence;
+    private String impact;
+    private String fixExample;
+    private Boolean isBlocking;
+    private String reviewDimension;
     private String methodName;
     private String testType;
     private String feedbackStatus;
@@ -103,6 +109,54 @@ public class ReviewFinding {
 
     public void setRecommendation(String recommendation) {
         this.recommendation = recommendation;
+    }
+
+    public String getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(String confidence) {
+        this.confidence = confidence;
+    }
+
+    public String getEvidence() {
+        return evidence;
+    }
+
+    public void setEvidence(String evidence) {
+        this.evidence = evidence;
+    }
+
+    public String getImpact() {
+        return impact;
+    }
+
+    public void setImpact(String impact) {
+        this.impact = impact;
+    }
+
+    public String getFixExample() {
+        return fixExample;
+    }
+
+    public void setFixExample(String fixExample) {
+        this.fixExample = fixExample;
+    }
+
+    public Boolean getIsBlocking() {
+        return isBlocking;
+    }
+
+    public void setIsBlocking(Boolean isBlocking) {
+        this.isBlocking = isBlocking;
+    }
+
+    public String getReviewDimension() {
+        return reviewDimension;
+    }
+
+    public void setReviewDimension(String reviewDimension) {
+        this.reviewDimension = reviewDimension;
     }
 
     public String getMethodName() {

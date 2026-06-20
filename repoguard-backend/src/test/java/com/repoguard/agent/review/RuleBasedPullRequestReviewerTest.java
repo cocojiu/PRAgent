@@ -70,11 +70,283 @@ class RuleBasedPullRequestReviewerTest {
             .doesNotContain("RG-JAVA-002");
     }
 
+    @Test
+    void detectsProjectSpecificGovernanceRules() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(
+                file(
+                    "src/main/java/com/example/UserController.java",
+                    """
+                        @@ -10,0 +11,1 @@
+                        +@PostMapping("/users")
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/ReviewTaskService.java",
+                    """
+                        @@ -20,0 +21,1 @@
+                        +task.setStatus("REVIEWING");
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/RabbitPublisher.java",
+                    """
+                        @@ -30,0 +31,1 @@
+                        +rabbitTemplate.convertAndSend(exchange, routingKey, message);
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/ProfileClient.java",
+                    """
+                        @@ -40,0 +41,1 @@
+                        +return restClient.get().uri(url).retrieve().body(Profile.class);
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/SecurityConfig.java",
+                    """
+                        @@ -50,0 +51,1 @@
+                        +String githubToken = "ghp_demo";
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/AuditLogger.java",
+                    """
+                        @@ -60,0 +61,1 @@
+                        +log.info("webhook secret {}", webhookSecret);
+                        """
+                )
+            )
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .containsExactlyInAnyOrder(
+                "RG-AUTH-001",
+                "RG-STATE-001",
+                "RG-MQ-001",
+                "RG-EXT-001",
+                "RG-SECRET-001",
+                "RG-LOG-001",
+                "RG-API-001"
+            );
+        assertThat(result.findings())
+            .filteredOn(finding -> "HIGH".equals(finding.severity()))
+            .allSatisfy(finding -> {
+                assertThat(finding.confidence()).isEqualTo("HIGH");
+                assertThat(finding.isBlocking()).isTrue();
+                assertThat(finding.evidence()).contains(finding.ruleId());
+                assertThat(finding.impact()).isNotBlank();
+                assertThat(finding.fixExample()).isEqualTo(finding.recommendation());
+                assertThat(finding.reviewDimension()).isNotBlank();
+            });
+    }
+
+    @Test
+    void honorsDisabledProjectSpecificRules() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-AUTH-001", disabledRule("RG-AUTH-001")));
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/AdminController.java",
+                """
+                    @@ -10,0 +11,1 @@
+                    +@DeleteMapping("/users/{id}")
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .doesNotContain("RG-AUTH-001");
+    }
+
+    @Test
+    void detectsMigrationAndGithubWritebackGovernanceRules() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(
+                file(
+                    "src/main/resources/db/migration/V31__drop_legacy_table.sql",
+                    """
+                        @@ -0,0 +1,1 @@
+                        +drop table legacy_review_task;
+                        """
+                ),
+                file(
+                    "src/main/resources/db/migration/V32__add_required_column.sql",
+                    """
+                        @@ -0,0 +1,1 @@
+                        +alter table review_task add column reviewer_id bigint not null;
+                        """
+                ),
+                file(
+                    "src/main/java/com/example/github/CommentPublisher.java",
+                    """
+                        @@ -20,0 +21,1 @@
+                        +githubPullRequestClient.publishPullRequestComments(task, drafts);
+                        """
+                )
+            )
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .containsExactlyInAnyOrder("RG-DB-002", "RG-DB-003", "RG-GH-001");
+        assertThat(result.findings())
+            .allSatisfy(finding -> {
+                assertThat(finding.isBlocking()).isTrue();
+                assertThat(finding.confidence()).isEqualTo("HIGH");
+                assertThat(finding.impact()).isNotBlank();
+            });
+    }
+
+    @Test
+    void allowsCompatibleMigrationWithDefaultValue() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/resources/db/migration/V33__add_status.sql",
+                """
+                    @@ -0,0 +1,1 @@
+                    +alter table review_task add column review_source varchar(32) not null default 'manual';
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .doesNotContain("RG-DB-003");
+    }
+
+    @Test
+    void detectsControllerApiChangeWithoutTestCoverageInSamePullRequest() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/order/OrderController.java",
+                """
+                    @@ -18,0 +19,1 @@
+                    +@GetMapping("/orders/{id}")
+                    """
+            ))
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .containsExactly("RG-API-001");
+        ReviewFindingResult finding = result.findings().getFirst();
+        assertThat(finding.lineNumber()).isEqualTo(19);
+        assertThat(finding.confidence()).isEqualTo("MEDIUM");
+        assertThat(finding.isBlocking()).isFalse();
+        assertThat(finding.reviewDimension()).isEqualTo("API_CONTRACT_RULE");
+    }
+
+    @Test
+    void detectsIndentedControllerApiChangeWithoutTestCoverage() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/order/OrderController.java",
+                """
+                    @@ -18,0 +19,3 @@
+                    +    @GetMapping("/orders/{id}")
+                    +    public Order getOrder() {
+                    +    }
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .contains("RG-API-001");
+    }
+
+    @Test
+    void skipsAuthFindingWhenMutatingControllerHasAuthorizationGuardButStillReportsTestGap() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/order/OrderController.java",
+                """
+                    @@ -18,0 +19,4 @@
+                    +    @RequireRole("ADMIN")
+                    +    @PostMapping("/orders")
+                    +    public Order createOrder() {
+                    +    }
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .contains("RG-API-001")
+            .doesNotContain("RG-AUTH-001");
+    }
+
+    @Test
+    void skipsControllerApiTestGapWhenPullRequestContainsTestChange() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+
+        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(
+                file(
+                    "src/main/java/com/example/order/OrderController.java",
+                    """
+                        @@ -18,0 +19,1 @@
+                        +@GetMapping("/orders/{id}")
+                        """
+                ),
+                file(
+                    "src/test/java/com/example/order/OrderControllerTest.java",
+                    """
+                        @@ -30,0 +31,1 @@
+                        +mockMvc.perform(get("/orders/1")).andExpect(status().isOk());
+                        """
+                )
+            )
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .doesNotContain("RG-API-001");
+    }
+
     private ReviewRuleSettings disabledRule(String id) {
         return rule(id, "DISABLED", "");
     }
 
     private ReviewRuleSettings rule(String id, String status, String filePatterns) {
         return new ReviewRuleSettings(id, status, filePatterns);
+    }
+
+    private GithubChangedFile file(String filename, String patch) {
+        return new GithubChangedFile(filename, "modified", 1, 0, patch);
     }
 }

@@ -5,6 +5,7 @@ import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -14,6 +15,7 @@ class NotificationDeliveryLogFactory {
 
     private final Clock clock;
 
+    @Autowired
     NotificationDeliveryLogFactory() {
         this(Clock.systemDefaultZone());
     }

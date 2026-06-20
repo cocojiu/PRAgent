@@ -11,6 +11,9 @@ target/
 .vscode/
 *.log
 logs/
+.deploy/
+.deploy-runtime/
+releases/
 .DS_Store
 *.local
 .npm-cache/
@@ -23,6 +26,7 @@ repoguard-backend/config/application-dev-local.yml
 
 # Local runtime artifacts
 .downloads/
+.worktrees/
 .rabbitmq/
 .rabbitmq-dev/
 .rabbitmq-rabbitdev/

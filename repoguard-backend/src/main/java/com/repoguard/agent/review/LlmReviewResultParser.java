@@ -31,7 +31,13 @@ public class LlmReviewResultParser {
                     defaultText(readText(finding, "filePath", "file", "path"), "unknown"),
                     readLineNumber(finding),
                     defaultText(readText(finding, "message", "description", "issue"), "LLM 审查发现潜在问题"),
-                    defaultText(readText(finding, "recommendation", "suggestion", "fix"), "请结合上下文确认并修复。")
+                    defaultText(readText(finding, "recommendation", "suggestion", "fix"), "请结合上下文确认并修复。"),
+                    defaultText(readText(finding, "confidence"), "MEDIUM").toUpperCase(),
+                    defaultText(readText(finding, "evidence"), ""),
+                    defaultText(readText(finding, "impact"), ""),
+                    defaultText(readText(finding, "fixExample", "fix_example"), defaultText(readText(finding, "recommendation", "suggestion", "fix"), "请结合上下文确认并修复。")),
+                    readBoolean(finding, "isBlocking", "is_blocking", "blocking"),
+                    defaultText(readText(finding, "reviewDimension", "review_dimension"), "LLM")
                 ));
             }
             return ReviewResult.completed(riskLevel, findings);
@@ -116,6 +122,19 @@ public class LlmReviewResultParser {
             }
         }
         return null;
+    }
+
+    private boolean readBoolean(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.path(field);
+            if (value.isBoolean()) {
+                return value.asBoolean();
+            }
+            if (value.isTextual() && StringUtils.hasText(value.asText())) {
+                return Boolean.parseBoolean(value.asText().trim());
+            }
+        }
+        return false;
     }
 
     private String failureSummary(String content, Exception ex) {

@@ -39,7 +39,13 @@ class ReviewFindingDeduplicator {
             stronger.filePath(),
             stronger.lineNumber(),
             stronger.message(),
-            mergeText(first.recommendation(), second.recommendation())
+            mergeText(first.recommendation(), second.recommendation()),
+            stronger.confidence(),
+            mergeText(first.evidence(), second.evidence()),
+            mergeText(first.impact(), second.impact()),
+            mergeText(first.fixExample(), second.fixExample()),
+            first.isBlocking() || second.isBlocking(),
+            mergeText(first.reviewDimension(), second.reviewDimension())
         );
     }
 

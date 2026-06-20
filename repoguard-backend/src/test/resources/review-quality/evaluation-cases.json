@@ -1,0 +1,483 @@
+[
+  {
+    "id": "java-broad-exception",
+    "category": "STABILITY",
+    "description": "新增代码捕获过宽异常时应触发稳定性规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/OrderService.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 0,
+        "patch": "@@ -20,0 +21,3 @@\n+try {\n+    reserve();\n+} catch (Exception ex) {"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "production-console-output",
+    "category": "STABILITY",
+    "description": "生产代码使用标准输出时应产生低风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/PaymentController.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -8,0 +9,1 @@\n+System.out.println(\"payment accepted\");"
+      }
+    ],
+    "expected": {
+      "riskLevel": "LOW",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-002"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "fixed-sleep-retry",
+    "category": "EXTERNAL_CALL",
+    "description": "外部调用使用固定休眠重试时应触发治理规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/BillingClient.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 0,
+        "patch": "@@ -40,0 +41,2 @@\n+Thread.sleep(1000);\n+callBillingApi();"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-003"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "unfinished-todo",
+    "category": "STABILITY",
+    "description": "未收敛 TODO 不应静默进入主干",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/SettlementJob.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -12,0 +13,1 @@\n+// TODO add compensation before release"
+      }
+    ],
+    "expected": {
+      "riskLevel": "LOW",
+      "findingCount": 1,
+      "ruleIds": ["RG-GEN-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "clean-null-guard",
+    "category": "CLEAN_PR",
+    "description": "小型空值保护改动应保持无发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/UserNameFormatter.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 1,
+        "patch": "@@ -5,1 +5,3 @@\n-return user.getName();\n+if (user == null) {\n+    return \"unknown\";\n+}"
+      }
+    ],
+    "expected": {
+      "riskLevel": "INFO",
+      "findingCount": 0,
+      "ruleIds": [],
+      "sources": [],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "hardcoded-security-secret",
+    "category": "SECURITY",
+    "description": "固定模型响应应识别硬编码密钥并通过解析器生成高风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/security/TokenSigner.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -10,0 +11,1 @@\n+private static final String SECRET = \"demo-secret\";"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/security/TokenSigner.java\",\"lineNumber\":11,\"message\":\"Secret is hardcoded\",\"recommendation\":\"Load it from encrypted configuration\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 2,
+      "ruleIds": ["RG-SECRET-001"],
+      "sources": ["LLM", "RULE"],
+      "chunkReasons": ["security_sensitive"]
+    }
+  },
+  {
+    "id": "unsafe-database-migration",
+    "category": "DATABASE_MIGRATION",
+    "description": "数据库迁移应优先分块并识别无条件删除风险",
+    "files": [
+      {
+        "filename": "src/main/resources/db/migration/V30__drop_legacy_orders.sql",
+        "status": "added",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,1 @@\n+DROP TABLE legacy_orders;"
+      },
+      {
+        "filename": "src/main/java/com/example/OrderRepository.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 1,
+        "patch": "@@ -15,1 +15,2 @@\n-return findLegacy();\n+return findCurrent();\n+"
+      }
+    ],
+    "llmResponse": "{\"risk_level\":\"high\",\"findings\":[{\"level\":\"high\",\"file\":\"src/main/resources/db/migration/V30__drop_legacy_orders.sql\",\"line\":\"1\",\"description\":\"Destructive migration has no compatibility window\",\"suggestion\":\"Use a phased expand-and-contract migration\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 2,
+      "ruleIds": ["RG-DB-002"],
+      "sources": ["LLM", "RULE"],
+      "chunkReasons": ["database_migration", "multi_file"]
+    }
+  },
+  {
+    "id": "mq-consumer-without-idempotency",
+    "category": "MESSAGE_QUEUE",
+    "description": "消息消费缺少幂等保护时应产生高风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/messaging/PaymentConsumer.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 0,
+        "patch": "@@ -22,0 +23,3 @@\n+public void consume(PaymentMessage message) {\n+    paymentService.charge(message);\n+}"
+      }
+    ],
+    "llmResponse": "```json\n{\"risk\":\"high\",\"findings\":[{\"severity\":\"HIGH\",\"path\":\"src/main/java/com/example/messaging/PaymentConsumer.java\",\"line_number\":24,\"issue\":\"Consumer side effect is not idempotent\",\"fix\":\"Persist and check a message idempotency key\"}]}\n```",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": [],
+      "sources": ["LLM"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "external-call-without-timeout",
+    "category": "EXTERNAL_CALL",
+    "description": "外部 HTTP 调用缺少超时与隔离策略时应产生中风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/ProfileClient.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -18,0 +19,1 @@\n+return restClient.get().uri(url).retrieve().body(Profile.class);"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"MEDIUM\",\"findings\":[{\"severity\":\"MEDIUM\",\"filePath\":\"src/main/java/com/example/client/ProfileClient.java\",\"lineNumber\":19,\"message\":\"Remote call has no explicit timeout\",\"recommendation\":\"Configure timeout, retry boundary and circuit breaker\"}]}",
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 2,
+      "ruleIds": ["RG-EXT-001"],
+      "sources": ["LLM", "RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "hybrid-timeout-and-fixed-backoff",
+    "category": "EXTERNAL_CALL",
+    "description": "混合评测应合并模型发现与规则发现并保留最高风险",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/InventoryClient.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 0,
+        "patch": "@@ -31,0 +32,2 @@\n+Thread.sleep(500);\n+return inventoryApi.reserve(request);"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/client/InventoryClient.java\",\"lineNumber\":33,\"message\":\"Retry can duplicate a non-idempotent reservation\",\"recommendation\":\"Use an idempotency key and bounded retry policy\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 2,
+      "ruleIds": ["RG-JAVA-003"],
+      "sources": ["LLM", "RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "controller-mutating-api-without-role-gate",
+    "category": "ACCESS_CONTROL",
+    "description": "新增写接口应显式提醒补充角色门禁或网关权限控制",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/admin/UserController.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -18,0 +19,1 @@\n+@PostMapping(\"/users/{id}/disable\")"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 2,
+      "ruleIds": ["RG-AUTH-001", "RG-API-001"],
+      "sources": ["RULE", "RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "direct-review-task-status-write",
+    "category": "STABILITY",
+    "description": "任务状态绕过状态机直接写字符串时应提示状态语义风险",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/review/ReviewTaskService.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -44,0 +45,1 @@\n+task.setStatus(\"REVIEWING\");"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-STATE-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "rabbit-message-publish-without-visible-compensation",
+    "category": "MESSAGE_QUEUE",
+    "description": "新增 MQ 发布调用应提醒补偿、重试次数和失败原因落库",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/messaging/ReviewPublisher.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -31,0 +32,1 @@\n+rabbitTemplate.convertAndSend(exchange, routingKey, message);"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-MQ-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "raw-rest-client-call-without-resilience-boundary",
+    "category": "EXTERNAL_CALL",
+    "description": "新增外部调用应提示超时、错误分类、限流熔断和指标治理",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/github/GithubProbe.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -26,0 +27,1 @@\n+return restClient.get().uri(apiUrl).retrieve().body(String.class);"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-EXT-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "hardcoded-github-token-literal",
+    "category": "SECURITY",
+    "description": "新增疑似 GitHub token 字面量应触发敏感信息规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/security/GithubTokenProvider.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -12,0 +13,1 @@\n+String githubToken = \"ghp_demo_token\";"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-SECRET-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["security_sensitive"]
+    }
+  },
+  {
+    "id": "sensitive-webhook-secret-log",
+    "category": "OBSERVABILITY",
+    "description": "日志输出 webhook secret 时应触发敏感日志规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/notification/WebhookSender.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -52,0 +53,1 @@\n+log.info(\"webhook secret {}\", webhookSecret);"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-LOG-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "destructive-drop-table-migration",
+    "category": "DATABASE_MIGRATION",
+    "description": "破坏性 DROP TABLE 迁移应触发兼容发布风险",
+    "files": [
+      {
+        "filename": "src/main/resources/db/migration/V31__drop_old_reviews.sql",
+        "status": "added",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,1 @@\n+drop table old_review_task;"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-DB-002"],
+      "sources": ["RULE"],
+      "chunkReasons": ["database_migration"]
+    }
+  },
+  {
+    "id": "required-column-without-default",
+    "category": "DATABASE_MIGRATION",
+    "description": "新增 NOT NULL 字段缺少默认值应触发历史数据兼容风险",
+    "files": [
+      {
+        "filename": "src/main/resources/db/migration/V32__add_required_reviewer.sql",
+        "status": "added",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,1 @@\n+alter table review_task add column reviewer_id bigint not null;"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-DB-003"],
+      "sources": ["RULE"],
+      "chunkReasons": ["database_migration"]
+    }
+  },
+  {
+    "id": "compatible-required-column-with-default",
+    "category": "DATABASE_MIGRATION",
+    "description": "带默认值的新增 NOT NULL 字段不应触发缺默认值规则",
+    "files": [
+      {
+        "filename": "src/main/resources/db/migration/V33__add_source.sql",
+        "status": "added",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,1 @@\n+alter table review_task add column review_source varchar(32) not null default 'manual';"
+      }
+    ],
+    "expected": {
+      "riskLevel": "INFO",
+      "findingCount": 0,
+      "ruleIds": [],
+      "sources": [],
+      "chunkReasons": ["database_migration"]
+    }
+  },
+  {
+    "id": "github-comment-direct-publish-without-idempotency",
+    "category": "GITHUB_WRITEBACK",
+    "description": "直接调用 GitHub 评论发布入口应提示补充 publication/batch 幂等记录",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/github/UnsafeGithubCommentPublisher.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -28,0 +29,1 @@\n+githubPullRequestClient.publishPullRequestComments(task, drafts);"
+      }
+    ],
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": ["RG-GH-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "controller-api-change-without-test",
+    "category": "API_CONTRACT",
+    "description": "Controller/API change should be flagged when the same PR does not include test coverage",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/order/OrderController.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -18,0 +19,1 @@\n+@GetMapping(\"/orders/{id}\")"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-API-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "controller-api-change-with-test",
+    "category": "API_CONTRACT",
+    "description": "Controller/API change should pass when the same PR includes related test changes",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/order/OrderController.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -18,0 +19,1 @@\n+@GetMapping(\"/orders/{id}\")"
+      },
+      {
+        "filename": "src/test/java/com/example/order/OrderControllerTest.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -30,0 +31,1 @@\n+mockMvc.perform(get(\"/orders/1\")).andExpect(status().isOk());"
+      }
+    ],
+    "expected": {
+      "riskLevel": "INFO",
+      "findingCount": 0,
+      "ruleIds": [],
+      "sources": [],
+      "chunkReasons": ["multi_file"]
+    }
+  }
+]

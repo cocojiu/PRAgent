@@ -86,6 +86,12 @@ public class GithubCommentPreviewDataLoader {
             finding.getLineNumber(),
             finding.getMessage(),
             finding.getRecommendation(),
+            defaultString(finding.getConfidence()),
+            defaultString(finding.getEvidence()),
+            defaultString(finding.getImpact()),
+            defaultString(finding.getFixExample()),
+            Boolean.TRUE.equals(finding.getIsBlocking()),
+            defaultString(finding.getReviewDimension()),
             lower(resolveFindingFeedbackStatus(finding)),
             finding.getFeedbackNote(),
             finding.getFeedbackBy(),
@@ -112,6 +118,10 @@ public class GithubCommentPreviewDataLoader {
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private String defaultString(String value) {
+        return StringUtils.hasText(value) ? value : "";
     }
 
     public record GithubCommentPreviewData(

@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +52,8 @@ class ReviewTaskExecutorImplTest {
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
+        task.setPublishClaimedAt(LocalDateTime.parse("2026-06-05T17:59:00"));
+        task.setPublishClaimedBy("stale-publisher");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         GithubPullRequestDiff diff = new GithubPullRequestDiff(
@@ -73,7 +76,11 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStartedAt()).isNotNull();
         assertThat(task.getFinishedAt()).isNotNull();
         assertThat(task.getDurationSeconds()).isNotNull();
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        assertThat(task.getReviewClaimedAt()).isNull();
+        assertThat(task.getReviewClaimedBy()).isNull();
+        assertThat(task.getPublishClaimedAt()).isNull();
+        assertThat(task.getPublishClaimedBy()).isNull();
+        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
         verify(reviewTaskMapper).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));
         verify(reviewFindingMapper).insert(any(ReviewFinding.class));
@@ -226,6 +233,33 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeDiscardsResultWhenRecoveryHasReplacedExecutionClaim() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 0);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+
+        executor.execute(message());
+
+        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        verify(changedFileMapper, never()).insert(any(ChangedFile.class));
+        verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
+        verify(reviewTimelineMapper, times(1)).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
     void executeMarksTaskFailedWhenDiffFetchFails() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
@@ -241,7 +275,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getRiskLevel()).isEqualTo("HIGH");
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
         verify(reviewTaskMapper).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());

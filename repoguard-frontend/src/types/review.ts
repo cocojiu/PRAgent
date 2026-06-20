@@ -210,6 +210,12 @@ export interface ReviewFinding {
   line: number;
   message: string;
   recommendation: string;
+  confidence?: "HIGH" | "MEDIUM" | "LOW" | string;
+  evidence?: string;
+  impact?: string;
+  fixExample?: string;
+  isBlocking?: boolean;
+  reviewDimension?: string;
   feedbackStatus: FindingFeedbackStatus | string;
   feedbackNote?: string;
   feedbackBy?: string;
