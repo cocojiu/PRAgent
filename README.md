@@ -2,6 +2,10 @@
 
 RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包含 Spring Boot 后端与 Vue 3 管理台。系统通过 RabbitMQ 异步执行审查任务，拉取 GitHub diff，结合规则和 LLM 生成审查发现，并支持结果展示、人工确认、评论预览、GitHub 回写和运维观测。
 
+## E2E Review Test Note
+
+This temporary README update is used to validate the RepoGuard online review flow on 2026-06-20.
+
 ## 核心功能
 
 - PR 审查任务创建、重试、状态追踪和详情展示。
