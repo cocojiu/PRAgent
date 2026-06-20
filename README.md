@@ -145,6 +145,43 @@ npm run dev
 - 本地 `application-local.yml`、真实 `.env`、真实密钥文件不得提交。
 - 生产环境必须使用独立加密密钥和认证 Token 密钥。
 
+## 镜像发布与回滚
+
+生产发布通过 GitHub Actions 的 `Release Images` workflow 执行。镜像会推送到 GHCR 和阿里云 ACR，生产服务器部署时从阿里云 ACR 拉取镜像。
+
+需要在 GitHub Actions Repository secrets 或 variables 中配置：
+
+- `ALIYUN_REGISTRY`
+- `ALIYUN_DEPLOY_REGISTRY`
+- `ALIYUN_NAMESPACE`
+- `ALIYUN_REPOSITORY`
+- `ALIYUN_REGISTRY_USERNAME`
+- `ALIYUN_REGISTRY_PASSWORD`
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_PORT`
+- `DEPLOY_PATH`
+- `DEPLOY_SSH_KEY`
+
+正常发布：
+
+1. 打开 GitHub Actions。
+2. 选择 `Release Images`。
+3. 点击 `Run workflow`。
+4. 分支选择 `main`。
+5. 勾选 `Deploy to the configured server after pushing images`。
+6. 运行 workflow。
+
+快速回滚：
+
+1. 打开 `Release Images` 的 `Run workflow`。
+2. 分支选择 `main`。
+3. 在 `Existing image tag to deploy without rebuilding, for rollback` 填入已有镜像 tag，例如 `main-<commit12>`。
+4. 勾选 `Deploy to the configured server after pushing images`。
+5. 运行 workflow。
+
+填写 `deploy_existing_tag` 时，workflow 会跳过镜像构建，直接部署 ACR 中已有的 `backend-<tag>` 和 `frontend-<tag>` 镜像。部署脚本会校验实际运行容器镜像与目标镜像一致，并在健康检查失败时输出后端最近日志。
+
 ## API 入口
 
 主要后端接口前缀为 `/api/v1`：
