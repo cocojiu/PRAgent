@@ -24,6 +24,8 @@ public class ReviewTask {
     private String lastPublishError;
     private LocalDateTime publishClaimedAt;
     private String publishClaimedBy;
+    private LocalDateTime reviewClaimedAt;
+    private String reviewClaimedBy;
     private String llmStatus;
     private String llmProvider;
     private String llmModel;
@@ -168,6 +170,22 @@ public class ReviewTask {
 
     public void setPublishClaimedBy(String publishClaimedBy) {
         this.publishClaimedBy = publishClaimedBy;
+    }
+
+    public LocalDateTime getReviewClaimedAt() {
+        return reviewClaimedAt;
+    }
+
+    public void setReviewClaimedAt(LocalDateTime reviewClaimedAt) {
+        this.reviewClaimedAt = reviewClaimedAt;
+    }
+
+    public String getReviewClaimedBy() {
+        return reviewClaimedBy;
+    }
+
+    public void setReviewClaimedBy(String reviewClaimedBy) {
+        this.reviewClaimedBy = reviewClaimedBy;
     }
 
     public String getLlmStatus() {

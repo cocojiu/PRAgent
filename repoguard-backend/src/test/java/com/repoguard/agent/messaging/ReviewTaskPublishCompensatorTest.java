@@ -2,18 +2,25 @@ package com.repoguard.agent.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -37,20 +44,25 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(1);
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(3);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        List<String> events = new ArrayList<>();
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenAnswer(invocation -> {
+            events.add("database");
+            return 1;
+        });
+        doAnswer(invocation -> {
+            events.add("publish");
+            return null;
+        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("QUEUED");
-        assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(2);
-        assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNull();
-        assertThat(taskCaptor.getValue().getLastPublishError()).isNull();
-        assertThat(taskCaptor.getValue().getPublishClaimedAt()).isNull();
-        assertThat(taskCaptor.getValue().getPublishClaimedBy()).isNull();
+        assertThat(events).containsExactly("database", "database", "publish", "database");
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getPublishAttempts()).isEqualTo(2);
+        assertThat(task.getNextPublishRetryAt()).isNull();
+        assertThat(task.getLastPublishError()).isNull();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -64,21 +76,26 @@ class ReviewTaskPublishCompensatorTest {
         ReviewTask task = task();
         task.setPublishAttempts(1);
         properties.setPublishCompensationIntervalMs(1000);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        doThrow(new MessagePublishException("publisher confirm timed out"))
-            .when(reviewTaskPublisher)
-            .publish(any(ReviewTaskMessage.class));
+        List<String> events = new ArrayList<>();
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenAnswer(invocation -> {
+            events.add("database");
+            return 1;
+        });
+        doAnswer(invocation -> {
+            events.add("publish");
+            throw new MessagePublishException("publisher confirm timed out");
+        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
-        assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(2);
-        assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
-        assertThat(taskCaptor.getValue().getLastPublishError()).contains("publisher confirm timed out");
-        assertThat(taskCaptor.getValue().getPublishClaimedAt()).isNull();
-        assertThat(taskCaptor.getValue().getPublishClaimedBy()).isNull();
+        assertThat(events).containsExactly("database", "database", "publish", "database");
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getPublishAttempts()).isEqualTo(2);
+        assertThat(task.getNextPublishRetryAt()).isNotNull();
+        assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
+        assertThat(task.getPublishClaimedAt()).isNull();
+        assertThat(task.getPublishClaimedBy()).isNull();
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -99,6 +116,21 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void compensateDoesNotOverwriteConsumerWhenAmbiguousPublishFailureWasAlreadyConsumed() {
+        ReviewTask task = task();
+        task.setPublishAttempts(1);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 0);
+        doThrow(new MessagePublishException("publisher confirm timed out"))
+            .when(reviewTaskPublisher)
+            .publish(any(ReviewTaskMessage.class));
+
+        compensator.compensate(task);
+
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
     void compensateClaimUsesLeaseAwareConditionalUpdate() {
         ReviewTask task = task();
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
@@ -114,6 +146,77 @@ class ReviewTaskPublishCompensatorTest {
             .contains("status")
             .contains("next_publish_retry_at")
             .contains("publish_attempts");
+    }
+
+    @Test
+    void compensateCanReclaimQueuedTaskLeftByCrashBeforePublish() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(1);
+        task.setPublishClaimedAt(LocalDateTime.now().minusMinutes(5));
+        task.setPublishClaimedBy("dead-instance");
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+    }
+
+    @Test
+    void compensateReclaimsLastQueuedAttemptWithoutExceedingMaxAttempts() {
+        properties.setPublishCompensationMaxAttempts(3);
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(3);
+        task.setPublishClaimedAt(LocalDateTime.now().minusMinutes(5));
+        task.setPublishClaimedBy("dead-instance");
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        assertThat(task.getPublishAttempts()).isEqualTo(3);
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+    }
+
+    @Test
+    void compensateDoesNotRetryPublishFailedTaskAtMaxAttempts() {
+        properties.setPublishCompensationMaxAttempts(3);
+        ReviewTask task = task();
+        task.setPublishAttempts(3);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment())
+            .contains("publish_attempts")
+            .contains("<");
+    }
+
+    @Test
+    void compensationQueryLimitsFailedAttemptsWithoutExcludingStaleQueuedAttempt() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+
+        compensator.compensatePublishFailures();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(reviewTaskMapper).selectList(wrapperCaptor.capture());
+        String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
+        int attemptsLimit = sqlSegment.indexOf("publish_attempts");
+        int staleQueuedBranch = sqlSegment.indexOf("OR");
+        assertThat(attemptsLimit).isGreaterThanOrEqualTo(0);
+        assertThat(staleQueuedBranch).isGreaterThan(attemptsLimit);
+        assertThat(sqlSegment.indexOf("publish_attempts", staleQueuedBranch)).isEqualTo(-1);
     }
 
     private ReviewTask task() {
