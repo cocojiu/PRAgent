@@ -99,6 +99,7 @@ public class ReviewTaskPublishCompensator {
                     .and(failed -> failed
                         .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
                         .le(ReviewTask::getNextPublishRetryAt, now)
+                        .lt(ReviewTask::getPublishAttempts, maxAttempts())
                     )
                     .or(staleQueued -> staleQueued
                         .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
@@ -106,7 +107,6 @@ public class ReviewTaskPublishCompensator {
                         .le(ReviewTask::getPublishClaimedAt, expiredBefore)
                     )
                 )
-                .lt(ReviewTask::getPublishAttempts, maxAttempts())
                 .orderByAsc(ReviewTask::getPublishClaimedAt)
                 .orderByAsc(ReviewTask::getNextPublishRetryAt)
                 .last("limit " + batchSize())
@@ -121,7 +121,9 @@ public class ReviewTaskPublishCompensator {
         if (!claimTask(task, claimedAt)) {
             return;
         }
-        int nextAttempt = safeAttempts(task) + 1;
+        int nextAttempt = reviewTaskStateMachine.isPublishFailed(task.getStatus())
+            ? safeAttempts(task) + 1
+            : safeAttempts(task);
         if (!markQueuedBeforePublish(task, claimedAt, nextAttempt)) {
             return;
         }
@@ -152,11 +154,11 @@ public class ReviewTaskPublishCompensator {
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
-                .lt("publish_attempts", maxAttempts())
                 .and(wrapper -> wrapper
                     .and(failed -> failed
                         .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
                         .le("next_publish_retry_at", claimedAt)
+                        .lt("publish_attempts", maxAttempts())
                         .and(claim -> claim
                             .isNull("publish_claimed_at")
                             .or()
