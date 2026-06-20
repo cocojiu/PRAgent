@@ -312,6 +312,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     .set("started_at", startedAt)
                     .set("review_claimed_at", startedAt)
                     .set("review_claimed_by", claimId)
+                    .set("publish_claimed_at", null)
+                    .set("publish_claimed_by", null)
             );
             if (updated <= 0) {
                 return false;

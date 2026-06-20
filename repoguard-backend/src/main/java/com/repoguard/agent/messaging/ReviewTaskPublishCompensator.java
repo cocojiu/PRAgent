@@ -91,11 +91,23 @@ public class ReviewTaskPublishCompensator {
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
     public void compensatePublishFailures() {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime expiredBefore = now.minusNanos(leaseMs() * 1_000_000);
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
-                .le(ReviewTask::getNextPublishRetryAt, LocalDateTime.now())
+                .and(wrapper -> wrapper
+                    .and(failed -> failed
+                        .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
+                        .le(ReviewTask::getNextPublishRetryAt, now)
+                    )
+                    .or(staleQueued -> staleQueued
+                        .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
+                        .isNotNull(ReviewTask::getPublishClaimedAt)
+                        .le(ReviewTask::getPublishClaimedAt, expiredBefore)
+                    )
+                )
                 .lt(ReviewTask::getPublishAttempts, maxAttempts())
+                .orderByAsc(ReviewTask::getPublishClaimedAt)
                 .orderByAsc(ReviewTask::getNextPublishRetryAt)
                 .last("limit " + batchSize())
         );
@@ -110,30 +122,27 @@ public class ReviewTaskPublishCompensator {
             return;
         }
         int nextAttempt = safeAttempts(task) + 1;
+        if (!markQueuedBeforePublish(task, claimedAt, nextAttempt)) {
+            return;
+        }
         try {
             reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
-            task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-            task.setLlmStatus("PENDING");
-            task.setPublishAttempts(nextAttempt);
-            task.setNextPublishRetryAt(null);
-            task.setLastPublishError(null);
-            task.setPublishClaimedAt(null);
-            task.setPublishClaimedBy(null);
-            reviewTaskMapper.updateById(task);
+            clearPublishClaim(task, claimedAt);
             appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
             if (metrics != null) {
                 metrics.rabbitPublishCompensationSucceeded();
             }
         } catch (MessagePublishException ex) {
-            task.setPublishAttempts(nextAttempt);
-            task.setNextPublishRetryAt(LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000));
-            task.setLastPublishError(truncate(errorMessage(ex)));
-            task.setPublishClaimedAt(null);
-            task.setPublishClaimedBy(null);
-            reviewTaskMapper.updateById(task);
-            appendTimeline(task.getId(), "Message publish retry failed: " + truncate(errorMessage(ex)), LocalDateTime.now(), "FAILED");
-            if (metrics != null) {
-                metrics.rabbitPublishCompensationFailed(errorMessage(ex));
+            if (markPublishFailed(task, claimedAt, ex)) {
+                appendTimeline(
+                    task.getId(),
+                    "Message publish retry failed: " + truncate(errorMessage(ex)),
+                    LocalDateTime.now(),
+                    "FAILED"
+                );
+                if (metrics != null) {
+                    metrics.rabbitPublishCompensationFailed(errorMessage(ex));
+                }
             }
         }
     }
@@ -143,13 +152,22 @@ public class ReviewTaskPublishCompensator {
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
-                .le("next_publish_retry_at", claimedAt)
                 .lt("publish_attempts", maxAttempts())
                 .and(wrapper -> wrapper
-                    .isNull("publish_claimed_at")
-                    .or()
-                    .le("publish_claimed_at", expiredBefore)
+                    .and(failed -> failed
+                        .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
+                        .le("next_publish_retry_at", claimedAt)
+                        .and(claim -> claim
+                            .isNull("publish_claimed_at")
+                            .or()
+                            .le("publish_claimed_at", expiredBefore)
+                        )
+                    )
+                    .or(staleQueued -> staleQueued
+                        .eq("status", reviewTaskStateMachine.statusWhenQueued())
+                        .isNotNull("publish_claimed_at")
+                        .le("publish_claimed_at", expiredBefore)
+                    )
                 )
                 .set("publish_claimed_at", claimedAt)
                 .set("publish_claimed_by", instanceId)
@@ -160,6 +178,76 @@ public class ReviewTaskPublishCompensator {
             return true;
         }
         return false;
+    }
+
+    private boolean markQueuedBeforePublish(ReviewTask task, LocalDateTime claimedAt, int nextAttempt) {
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .in(
+                    "status",
+                    reviewTaskStateMachine.statusWhenPublishFailed(),
+                    reviewTaskStateMachine.statusWhenQueued()
+                )
+                .eq("publish_claimed_at", claimedAt)
+                .eq("publish_claimed_by", instanceId)
+                .set("status", reviewTaskStateMachine.statusWhenQueued())
+                .set("llm_status", "PENDING")
+                .set("publish_attempts", nextAttempt)
+                .set("next_publish_retry_at", null)
+                .set("last_publish_error", null)
+        );
+        if (updated <= 0) {
+            return false;
+        }
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
+        task.setLlmStatus("PENDING");
+        task.setPublishAttempts(nextAttempt);
+        task.setNextPublishRetryAt(null);
+        task.setLastPublishError(null);
+        return true;
+    }
+
+    private void clearPublishClaim(ReviewTask task, LocalDateTime claimedAt) {
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", reviewTaskStateMachine.statusWhenQueued())
+                .eq("publish_claimed_at", claimedAt)
+                .eq("publish_claimed_by", instanceId)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
+        );
+        if (updated > 0) {
+            task.setPublishClaimedAt(null);
+            task.setPublishClaimedBy(null);
+        }
+    }
+
+    private boolean markPublishFailed(ReviewTask task, LocalDateTime claimedAt, MessagePublishException ex) {
+        LocalDateTime nextRetryAt = LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000);
+        String error = truncate(errorMessage(ex));
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", reviewTaskStateMachine.statusWhenQueued())
+                .eq("publish_claimed_at", claimedAt)
+                .eq("publish_claimed_by", instanceId)
+                .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
+                .set("next_publish_retry_at", nextRetryAt)
+                .set("last_publish_error", error)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
+        );
+        if (updated <= 0) {
+            return false;
+        }
+        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
+        task.setNextPublishRetryAt(nextRetryAt);
+        task.setLastPublishError(error);
+        task.setPublishClaimedAt(null);
+        task.setPublishClaimedBy(null);
+        return true;
     }
 
     private ReviewTaskMessage toMessage(ReviewTask task, LocalDateTime queuedAt) {
