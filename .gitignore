@@ -1,7 +1,8 @@
-# Ignore all .md files except README.md
+# Only the repository-root README.md may be tracked.
+# Existing tracked Markdown files must be removed from the index with:
+# git rm --cached <path>
 *.md
-!README.md
-docs/**/*.md
+!/README.md
 
 node_modules/
 dist/
