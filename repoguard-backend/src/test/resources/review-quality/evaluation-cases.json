@@ -1,0 +1,224 @@
+[
+  {
+    "id": "java-broad-exception",
+    "category": "STABILITY",
+    "description": "新增代码捕获过宽异常时应触发稳定性规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/OrderService.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 0,
+        "patch": "@@ -20,0 +21,3 @@\n+try {\n+    reserve();\n+} catch (Exception ex) {"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "production-console-output",
+    "category": "STABILITY",
+    "description": "生产代码使用标准输出时应产生低风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/PaymentController.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -8,0 +9,1 @@\n+System.out.println(\"payment accepted\");"
+      }
+    ],
+    "expected": {
+      "riskLevel": "LOW",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-002"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "fixed-sleep-retry",
+    "category": "EXTERNAL_CALL",
+    "description": "外部调用使用固定休眠重试时应触发治理规则",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/BillingClient.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 0,
+        "patch": "@@ -40,0 +41,2 @@\n+Thread.sleep(1000);\n+callBillingApi();"
+      }
+    ],
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": ["RG-JAVA-003"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "unfinished-todo",
+    "category": "STABILITY",
+    "description": "未收敛 TODO 不应静默进入主干",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/SettlementJob.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -12,0 +13,1 @@\n+// TODO add compensation before release"
+      }
+    ],
+    "expected": {
+      "riskLevel": "LOW",
+      "findingCount": 1,
+      "ruleIds": ["RG-GEN-001"],
+      "sources": ["RULE"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "clean-null-guard",
+    "category": "CLEAN_PR",
+    "description": "小型空值保护改动应保持无发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/UserNameFormatter.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 1,
+        "patch": "@@ -5,1 +5,3 @@\n-return user.getName();\n+if (user == null) {\n+    return \"unknown\";\n+}"
+      }
+    ],
+    "expected": {
+      "riskLevel": "INFO",
+      "findingCount": 0,
+      "ruleIds": [],
+      "sources": [],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "hardcoded-security-secret",
+    "category": "SECURITY",
+    "description": "固定模型响应应识别硬编码密钥并通过解析器生成高风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/security/TokenSigner.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -10,0 +11,1 @@\n+private static final String SECRET = \"demo-secret\";"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/security/TokenSigner.java\",\"lineNumber\":11,\"message\":\"Secret is hardcoded\",\"recommendation\":\"Load it from encrypted configuration\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": [],
+      "sources": ["LLM"],
+      "chunkReasons": ["security_sensitive"]
+    }
+  },
+  {
+    "id": "unsafe-database-migration",
+    "category": "DATABASE_MIGRATION",
+    "description": "数据库迁移应优先分块并识别无条件删除风险",
+    "files": [
+      {
+        "filename": "src/main/resources/db/migration/V30__drop_legacy_orders.sql",
+        "status": "added",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -0,0 +1,1 @@\n+DROP TABLE legacy_orders;"
+      },
+      {
+        "filename": "src/main/java/com/example/OrderRepository.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 1,
+        "patch": "@@ -15,1 +15,2 @@\n-return findLegacy();\n+return findCurrent();\n+"
+      }
+    ],
+    "llmResponse": "{\"risk_level\":\"high\",\"findings\":[{\"level\":\"high\",\"file\":\"src/main/resources/db/migration/V30__drop_legacy_orders.sql\",\"line\":\"1\",\"description\":\"Destructive migration has no compatibility window\",\"suggestion\":\"Use a phased expand-and-contract migration\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": [],
+      "sources": ["LLM"],
+      "chunkReasons": ["database_migration", "multi_file"]
+    }
+  },
+  {
+    "id": "mq-consumer-without-idempotency",
+    "category": "MESSAGE_QUEUE",
+    "description": "消息消费缺少幂等保护时应产生高风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/messaging/PaymentConsumer.java",
+        "status": "modified",
+        "additions": 3,
+        "deletions": 0,
+        "patch": "@@ -22,0 +23,3 @@\n+public void consume(PaymentMessage message) {\n+    paymentService.charge(message);\n+}"
+      }
+    ],
+    "llmResponse": "```json\n{\"risk\":\"high\",\"findings\":[{\"severity\":\"HIGH\",\"path\":\"src/main/java/com/example/messaging/PaymentConsumer.java\",\"line_number\":24,\"issue\":\"Consumer side effect is not idempotent\",\"fix\":\"Persist and check a message idempotency key\"}]}\n```",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 1,
+      "ruleIds": [],
+      "sources": ["LLM"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "external-call-without-timeout",
+    "category": "EXTERNAL_CALL",
+    "description": "外部 HTTP 调用缺少超时与隔离策略时应产生中风险发现",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/ProfileClient.java",
+        "status": "modified",
+        "additions": 1,
+        "deletions": 0,
+        "patch": "@@ -18,0 +19,1 @@\n+return restClient.get().uri(url).retrieve().body(Profile.class);"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"MEDIUM\",\"findings\":[{\"severity\":\"MEDIUM\",\"filePath\":\"src/main/java/com/example/client/ProfileClient.java\",\"lineNumber\":19,\"message\":\"Remote call has no explicit timeout\",\"recommendation\":\"Configure timeout, retry boundary and circuit breaker\"}]}",
+    "expected": {
+      "riskLevel": "MEDIUM",
+      "findingCount": 1,
+      "ruleIds": [],
+      "sources": ["LLM"],
+      "chunkReasons": ["standard"]
+    }
+  },
+  {
+    "id": "hybrid-timeout-and-fixed-backoff",
+    "category": "EXTERNAL_CALL",
+    "description": "混合评测应合并模型发现与规则发现并保留最高风险",
+    "files": [
+      {
+        "filename": "src/main/java/com/example/client/InventoryClient.java",
+        "status": "modified",
+        "additions": 2,
+        "deletions": 0,
+        "patch": "@@ -31,0 +32,2 @@\n+Thread.sleep(500);\n+return inventoryApi.reserve(request);"
+      }
+    ],
+    "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/client/InventoryClient.java\",\"lineNumber\":33,\"message\":\"Retry can duplicate a non-idempotent reservation\",\"recommendation\":\"Use an idempotency key and bounded retry policy\"}]}",
+    "expected": {
+      "riskLevel": "HIGH",
+      "findingCount": 2,
+      "ruleIds": ["RG-JAVA-003"],
+      "sources": ["LLM", "RULE"],
+      "chunkReasons": ["standard"]
+    }
+  }
+]
