@@ -1,29 +1,30 @@
 package com.repoguard.agent.review;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.config.ReviewRuleProvider;
+import com.repoguard.agent.config.ReviewRuleSettings;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
 public class RuleBasedPullRequestReviewer {
 
-    private final ReviewRuleConfigMapper reviewRuleConfigMapper;
+    private final ReviewRuleProvider reviewRuleProvider;
 
-    public RuleBasedPullRequestReviewer(ReviewRuleConfigMapper reviewRuleConfigMapper) {
-        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
+    public RuleBasedPullRequestReviewer(ReviewRuleProvider reviewRuleProvider) {
+        this.reviewRuleProvider = reviewRuleProvider;
     }
 
     public ReviewResult review(GithubPullRequestDiff diff) {
-        Map<String, ReviewRuleConfig> configuredRules = loadConfiguredRules();
+        Map<String, ReviewRuleSettings> configuredRules = reviewRuleProvider.getRulesById();
+        if (configuredRules == null) {
+            configuredRules = Map.of();
+        }
         List<ReviewFindingResult> findings = new ArrayList<>();
         for (GithubChangedFile file : diff.files()) {
             String patch = file.patch();
@@ -35,7 +36,12 @@ public class RuleBasedPullRequestReviewer {
         return ReviewResult.completed(resolveRisk(findings), findings);
     }
 
-    private void scanPatch(String filePath, String patch, Map<String, ReviewRuleConfig> configuredRules, List<ReviewFindingResult> findings) {
+    private void scanPatch(
+        String filePath,
+        String patch,
+        Map<String, ReviewRuleSettings> configuredRules,
+        List<ReviewFindingResult> findings
+    ) {
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         for (String line : lines) {
@@ -53,7 +59,13 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private void addFindingIfMatches(String filePath, int lineNumber, String line, Map<String, ReviewRuleConfig> configuredRules, List<ReviewFindingResult> findings) {
+    private void addFindingIfMatches(
+        String filePath,
+        int lineNumber,
+        String line,
+        Map<String, ReviewRuleSettings> configuredRules,
+        List<ReviewFindingResult> findings
+    ) {
         String trimmed = line.trim();
         if (isApplicable("RG-JAVA-001", filePath, configuredRules)
             && (trimmed.contains("catch (Exception") || trimmed.contains("catch(Throwable") || trimmed.contains("catch (Throwable"))) {
@@ -70,29 +82,21 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private boolean isApplicable(String ruleId, String filePath, Map<String, ReviewRuleConfig> configuredRules) {
-        ReviewRuleConfig rule = configuredRules.get(ruleId);
+    private boolean isApplicable(String ruleId, String filePath, Map<String, ReviewRuleSettings> configuredRules) {
+        ReviewRuleSettings rule = configuredRules.get(ruleId);
         if (rule == null) {
             return true;
         }
-        if ("DISABLED".equalsIgnoreCase(rule.getStatus())) {
+        if (rule.disabled()) {
             return false;
         }
-        if (!StringUtils.hasText(rule.getFilePatterns())) {
+        if (!rule.hasFilePatterns()) {
             return true;
         }
-        return List.of(rule.getFilePatterns().split("[,\\n]")).stream()
+        return List.of(rule.filePatterns().split("[,\\n]")).stream()
             .map(String::trim)
             .filter(StringUtils::hasText)
             .anyMatch(pattern -> matchesPattern(filePath, pattern));
-    }
-
-    private Map<String, ReviewRuleConfig> loadConfiguredRules() {
-        return reviewRuleConfigMapper.selectList(
-                new LambdaQueryWrapper<ReviewRuleConfig>()
-            )
-            .stream()
-            .collect(Collectors.toMap(ReviewRuleConfig::getId, rule -> rule, (first, ignored) -> first));
     }
 
     private boolean matchesPattern(String filePath, String pattern) {

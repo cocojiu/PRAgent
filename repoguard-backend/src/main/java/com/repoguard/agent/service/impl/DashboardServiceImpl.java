@@ -1,480 +1,223 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChartSliceDto;
+import com.repoguard.agent.dto.DashboardHighRiskReview;
+import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
+import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
+import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
+import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
+import com.repoguard.agent.dto.DashboardReviewTrendCount;
+import com.repoguard.agent.dto.DashboardRiskLevelCount;
+import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
-import com.repoguard.agent.dto.LlmQualityTrendPointDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
-import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewFinding;
-import com.repoguard.agent.entity.ReviewPolicyConfig;
-import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
-    private static final DateTimeFormatter TREND_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM-dd");
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
-    private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
-    private final RabbitTemplate rabbitTemplate;
-    private final SecretCryptoService secretCryptoService;
+    private final DashboardMapper dashboardMapper;
+    private final DashboardStatusMapper statusMapper;
+    private final DashboardRuleDisplayMapper ruleDisplayMapper;
+    private final DashboardOverviewDisplayMapper overviewDisplayMapper;
+    private final DashboardLlmQualityFormatter llmQualityFormatter;
+    private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
+    private final DashboardReviewTrendWindow reviewTrendWindow;
+    private final DashboardSystemHealthProbe systemHealthProbe;
 
     public DashboardServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService
+        DashboardMapper dashboardMapper,
+        DashboardStatusMapper statusMapper,
+        DashboardRuleDisplayMapper ruleDisplayMapper,
+        DashboardOverviewDisplayMapper overviewDisplayMapper,
+        DashboardLlmQualityFormatter llmQualityFormatter,
+        DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
+        DashboardReviewTrendWindow reviewTrendWindow,
+        DashboardSystemHealthProbe systemHealthProbe
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
+        this.dashboardMapper = dashboardMapper;
+        this.statusMapper = statusMapper;
+        this.ruleDisplayMapper = ruleDisplayMapper;
+        this.overviewDisplayMapper = overviewDisplayMapper;
+        this.llmQualityFormatter = llmQualityFormatter;
+        this.llmQualityTrendBuilder = llmQualityTrendBuilder;
+        this.reviewTrendWindow = reviewTrendWindow;
+        this.systemHealthProbe = systemHealthProbe;
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays")
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        int normalizedLlmTrendDays = normalizeLlmTrendDays(llmTrendDays);
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>().orderByAsc(ReviewTask::getCreatedAt)
-        );
-        List<ReviewFinding> findings = reviewFindingMapper.selectList(
-            new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getCategory, "FINDING")
-        );
+        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays);
+        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();
+        DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
+        List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
+        List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate);
+        List<DashboardLlmQualityModelStat> llmQualityByModelStats = dashboardMapper.selectLlmQualityByModelStats(reviewTrendStartDate);
+        List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats(reviewTrendStartDate);
+        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());
+        List<DashboardRuleHitCount> ruleHitCounts = dashboardMapper.selectRuleHitCounts(reviewTrendStartDate);
 
         return new DashboardOverviewResponse(
-            buildMetrics(tasks),
-            buildTrend(tasks),
-            buildRiskDistribution(tasks),
-            buildRuleHits(findings),
-            buildHighRiskReviews(tasks, findings),
-            buildFailedRules(findings),
-            buildSystemHealth(),
-            buildLlmQualityByModel(tasks, findings),
-            buildLlmQualityByRepository(tasks, findings),
-            buildLlmQualityTrend(tasks, normalizedLlmTrendDays)
+            buildMetrics(metricStats),
+            buildTrend(reviewTrendCounts),
+            buildRiskDistribution(reviewTrendStartDate),
+            buildRuleHits(ruleHitCounts),
+            buildHighRiskReviews(highRiskReviews),
+            buildFailedRules(ruleHitCounts),
+            systemHealthProbe.probe(),
+            buildLlmQualityByModel(llmQualityByModelStats),
+            buildLlmQualityByRepository(llmQualityByRepositoryStats),
+            llmQualityTrendBuilder.build(llmQualityTrendCounts, llmTrendWindow)
         );
     }
 
-    private int normalizeLlmTrendDays(Integer days) {
-        if (days == null) {
-            return 7;
-        }
-        return switch (days) {
-            case 30 -> 30;
-            case 90 -> 90;
-            default -> 7;
-        };
+    private DashboardMetricStats loadMetricStats(LocalDate startDate) {
+        DashboardMetricStat metricStat = dashboardMapper.selectMetricStat(startDate);
+        long total = metricStat == null ? 0L : safeCount(metricStat.getTotal());
+        long highRisk = metricStat == null ? 0L : safeCount(metricStat.getHighRisk());
+        long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
+        int averageDurationSeconds = metricStat == null ? 0 : safeAverageDuration(metricStat.getAverageDurationSeconds());
+        return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
     }
 
-    private List<SystemHealthItemDto> buildSystemHealth() {
+    private List<DashboardMetricDto> buildMetrics(DashboardMetricStats stats) {
+        DashboardOverviewDisplayMapper.MetricDisplay totalReviews = overviewDisplayMapper.totalReviewsMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay highRiskPullRequests = overviewDisplayMapper.highRiskPullRequestsMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay failedTasks = overviewDisplayMapper.failedTasksMetric();
+        DashboardOverviewDisplayMapper.MetricDisplay averageReviewDuration = overviewDisplayMapper.averageReviewDurationMetric();
         return List.of(
-            new SystemHealthItemDto("MySQL", "正常"),
-            new SystemHealthItemDto("RabbitMQ", rabbitMqHealthStatus()),
-            new SystemHealthItemDto("GitHub", githubHealthStatus()),
-            new SystemHealthItemDto("Spring AI", llmHealthStatus())
+            metric(totalReviews, String.valueOf(stats.total()), "0.0%"),
+            metric(highRiskPullRequests, String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total())),
+            metric(failedTasks, String.valueOf(stats.failed()), percent(stats.failed(), stats.total())),
+            metric(averageReviewDuration, formatDuration(stats.averageDurationSeconds()), "0.0%")
         );
     }
 
-    private String rabbitMqHealthStatus() {
-        try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            return Boolean.TRUE.equals(open) ? "正常" : "异常";
-        } catch (RuntimeException ex) {
-            return "异常";
-        }
-    }
-
-    private String githubHealthStatus() {
-        try {
-            IntegrationConfig config = integrationConfigMapper.selectOne(
-                new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-            );
-            if (config == null || !StringUtils.hasText(secretCryptoService.decrypt(config.getTokenValue()))) {
-                return "未接入";
-            }
-            return "FAILED".equalsIgnoreCase(config.getStatus()) ? "异常" : "正常";
-        } catch (RuntimeException ex) {
-            return "异常";
-        }
-    }
-
-    private String llmHealthStatus() {
-        try {
-            ReviewPolicyConfig config = reviewPolicyConfigMapper.selectById(1L);
-            if (config == null) {
-                return "未接入";
-            }
-            if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
-                return "已禁用";
-            }
-            boolean configured = StringUtils.hasText(config.getBaseUrl())
-                && StringUtils.hasText(config.getModelName())
-                && StringUtils.hasText(secretCryptoService.decrypt(config.getApiKeyValue()))
-                && !"mock".equalsIgnoreCase(config.getLlmProvider());
-            return configured ? "正常" : "未接入";
-        } catch (RuntimeException ex) {
-            return "异常";
-        }
-    }
-
-    private List<DashboardMetricDto> buildMetrics(List<ReviewTask> tasks) {
-        long total = tasks.size();
-        long highRisk = tasks.stream().filter(task -> isHighRisk(task.getRiskLevel())).count();
-        long failed = tasks.stream().filter(task -> "FAILED".equals(task.getStatus())).count();
-        int avgSeconds = total == 0
-            ? 0
-            : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getDurationSeconds())).average().orElse(0));
-
-        return List.of(
-            new DashboardMetricDto("本周审查", String.valueOf(total), "0.0%", "up", "blue"),
-            new DashboardMetricDto("高风险 PR", String.valueOf(highRisk), percent(highRisk, total), "up-danger", "red"),
-            new DashboardMetricDto("失败任务", String.valueOf(failed), percent(failed, total), "down", "orange"),
-            new DashboardMetricDto("平均审查耗时", formatDuration(avgSeconds), "0.0%", "down", "green")
-        );
-    }
-
-    private List<ReviewTrendPointDto> buildTrend(List<ReviewTask> tasks) {
+    private List<ReviewTrendPointDto> buildTrend(List<DashboardReviewTrendCount> reviewTrendCounts) {
         // 当前仪表盘图表直接消费展示标签，因此这里按格式化后的日期聚合。
-        Map<String, Long> countByDate = tasks.stream()
-            .collect(Collectors.groupingBy(task -> task.getCreatedAt().format(TREND_DATE_FORMATTER), Collectors.counting()));
-
-        return countByDate.entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
-            .map(entry -> new ReviewTrendPointDto(entry.getKey(), entry.getValue()))
+        return nullToEmpty(reviewTrendCounts).stream()
+            .map(count -> new ReviewTrendPointDto(count.getDayLabel(), safeTrendTotal(count)))
             .toList();
     }
 
-    private List<ChartSliceDto> buildRiskDistribution(List<ReviewTask> tasks) {
-        long total = tasks.size();
-        Map<String, Long> countByRisk = tasks.stream()
-            .collect(Collectors.groupingBy(ReviewTask::getRiskLevel, Collectors.counting()));
+    private List<ChartSliceDto> buildRiskDistribution(LocalDate startDate) {
+        List<DashboardRiskLevelCount> riskLevelCounts = dashboardMapper.selectRiskLevelCounts(startDate);
+        Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
+            .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
+        long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();
 
         return List.of(
-            riskSlice("高风险", countByRisk.getOrDefault("HIGH", 0L), total, "#ef4444"),
-            riskSlice("中风险", countByRisk.getOrDefault("MEDIUM", 0L), total, "#f59e0b"),
-            riskSlice("低风险", countByRisk.getOrDefault("LOW", 0L), total, "#2563eb"),
-            riskSlice("提示", countByRisk.getOrDefault("INFO", 0L), total, "#22c55e")
+            riskSlice("HIGH", countByRisk.getOrDefault("HIGH", 0L), total),
+            riskSlice("MEDIUM", countByRisk.getOrDefault("MEDIUM", 0L), total),
+            riskSlice("LOW", countByRisk.getOrDefault("LOW", 0L), total),
+            riskSlice("INFO", countByRisk.getOrDefault("INFO", 0L), total)
         );
     }
 
-    private List<ChartSliceDto> buildRuleHits(List<ReviewFinding> findings) {
-        long total = findings.size();
+    private List<ChartSliceDto> buildRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
+        long total = totalRuleHits(ruleHitCounts);
         // 没有确定规则编号的问题统一归类为 LLM 审查结果。
-        Map<String, Long> countByRule = findings.stream()
-            .map(finding -> finding.getRuleId() == null ? "LLM" : finding.getRuleId())
-            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        return countByRule.entrySet().stream()
-            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-            .map(entry -> new ChartSliceDto(ruleName(entry.getKey()), entry.getValue(), ruleColor(entry.getKey()), percent(entry.getValue(), total)))
-            .toList();
-    }
-
-    private List<HighRiskReviewDto> buildHighRiskReviews(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, Long> findingCountByTask = findings.stream()
-            .collect(Collectors.groupingBy(ReviewFinding::getTaskId, Collectors.counting()));
-
-        return tasks.stream()
-            .filter(task -> isHighRisk(task.getRiskLevel()))
-            .sorted(Comparator.comparing(ReviewTask::getCreatedAt).reversed())
-            .limit(5)
-            .map(task -> new HighRiskReviewDto(
-                task.getTitle(),
-                task.getRepository(),
-                lower(task.getRiskLevel()),
-                findingCountByTask.getOrDefault(task.getId(), 0L),
-                task.getCreatedAt().format(REVIEWED_AT_FORMATTER),
-                statusText(task.getStatus())
+        return nullToEmpty(ruleHitCounts).stream()
+            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
+            .map(count -> new ChartSliceDto(
+                ruleDisplayMapper.ruleName(count.getRuleId()),
+                safeRuleTotal(count),
+                ruleDisplayMapper.ruleColor(count.getRuleId()),
+                percent(safeRuleTotal(count), total)
             ))
             .toList();
     }
 
-    private List<FailedRuleStatDto> buildFailedRules(List<ReviewFinding> findings) {
-        long total = findings.size();
-        Map<String, Long> countByRule = findings.stream()
-            .map(finding -> finding.getRuleId() == null ? "LLM" : finding.getRuleId())
-            .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
-
-        return countByRule.entrySet().stream()
-            .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
-            .map(entry -> new FailedRuleStatDto(ruleName(entry.getKey()), entry.getValue(), "0.0%", "down", percent(entry.getValue(), total)))
+    private List<HighRiskReviewDto> buildHighRiskReviews(List<DashboardHighRiskReview> highRiskReviews) {
+        return nullToEmpty(highRiskReviews).stream()
+            .map(review -> new HighRiskReviewDto(
+                review.getTitle(),
+                review.getRepository(),
+                lower(review.getRiskLevel()),
+                safeHighRiskRuleHits(review),
+                formatReviewedAt(review.getCreatedAt()),
+                statusMapper.reviewTaskStatusText(review.getStatus())
+            ))
             .toList();
     }
 
-    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
-        return llmQualityTasks(tasks).stream()
-            .collect(Collectors.groupingBy(this::llmModelLabel))
-            .entrySet()
-            .stream()
-            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
-            .limit(6)
-            .map(entry -> {
-                List<ReviewTask> modelTasks = entry.getValue();
-                Set<Long> taskIds = taskIds(modelTasks);
-                List<ReviewFinding> modelFindings = findingsForTasks(findingsByTask, taskIds);
-                long reviewedCount = reviewedFeedbackCount(modelFindings);
-                return new LlmQualityByModelDto(
-                    entry.getKey(),
-                    modelTasks.size(),
-                    formatMilliseconds(averageLlmDuration(modelTasks)),
-                    formatAverageTokens(modelTasks),
-                    formatAverageCost(modelTasks),
-                    percentage(parseSuccessCount(modelTasks), modelTasks.size()),
-                    percentage(fallbackCount(modelTasks), modelTasks.size()),
-                    percentage(partialFallbackCount(modelTasks), modelTasks.size()),
-                    percentage(feedbackCount(modelFindings, "VALID"), reviewedCount),
-                    percentage(feedbackCount(modelFindings, "FALSE_POSITIVE"), reviewedCount)
-                );
-            })
+    private List<FailedRuleStatDto> buildFailedRules(List<DashboardRuleHitCount> ruleHitCounts) {
+        long total = totalRuleHits(ruleHitCounts);
+        return nullToEmpty(ruleHitCounts).stream()
+            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
+            .map(count -> new FailedRuleStatDto(
+                ruleDisplayMapper.ruleName(count.getRuleId()),
+                safeRuleTotal(count),
+                "0.0%",
+                "down",
+                percent(safeRuleTotal(count), total)
+            ))
             .toList();
     }
 
-    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<ReviewTask> tasks, List<ReviewFinding> findings) {
-        Map<Long, List<ReviewFinding>> findingsByTask = findingsByTask(findings);
-        return llmQualityTasks(tasks).stream()
-            .collect(Collectors.groupingBy(this::repositoryLabel))
-            .entrySet()
-            .stream()
-            .sorted(Comparator.<Map.Entry<String, List<ReviewTask>>>comparingInt(entry -> entry.getValue().size()).reversed())
-            .limit(6)
-            .map(entry -> {
-                List<ReviewTask> repositoryTasks = entry.getValue();
-                Set<Long> taskIds = taskIds(repositoryTasks);
-                List<ReviewFinding> repositoryFindings = findingsForTasks(findingsByTask, taskIds);
-                long reviewedCount = reviewedFeedbackCount(repositoryFindings);
-                return new LlmQualityByRepositoryDto(
-                    entry.getKey(),
-                    repositoryTasks.size(),
-                    percentage(fallbackCount(repositoryTasks), repositoryTasks.size()),
-                    percentage(partialFallbackCount(repositoryTasks), repositoryTasks.size()),
-                    percentage(feedbackCount(repositoryFindings, "VALID"), reviewedCount),
-                    percentage(feedbackCount(repositoryFindings, "FALSE_POSITIVE"), reviewedCount)
-                );
-            })
+    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<DashboardLlmQualityModelStat> stats) {
+        return nullToEmpty(stats).stream()
+            .map(stat -> new LlmQualityByModelDto(
+                stat.getModelLabel(),
+                safeModelTaskCount(stat),
+                llmQualityFormatter.averageDuration(stat.getAverageDurationMs()),
+                llmQualityFormatter.averageTokens(stat.getAverageTokens()),
+                llmQualityFormatter.averageCost(stat.getAverageCost()),
+                llmQualityFormatter.rate(safeModelParseSuccessCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelFallbackCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelPartialFallbackCount(stat), safeModelTaskCount(stat)),
+                llmQualityFormatter.rate(safeModelValidFeedbackCount(stat), safeModelReviewedFeedbackCount(stat)),
+                llmQualityFormatter.rate(safeModelFalsePositiveFeedbackCount(stat), safeModelReviewedFeedbackCount(stat))
+            ))
             .toList();
     }
 
-    private List<LlmQualityTrendPointDto> buildLlmQualityTrend(List<ReviewTask> tasks, int days) {
-        LocalDate today = LocalDate.now();
-        Map<LocalDate, List<ReviewTask>> tasksByDate = llmQualityTasks(tasks).stream()
-            .filter(task -> task.getCreatedAt() != null)
-            .collect(Collectors.groupingBy(task -> task.getCreatedAt().toLocalDate()));
-        return java.util.stream.IntStream.rangeClosed(0, days - 1)
-            .mapToObj(today.minusDays(days - 1L)::plusDays)
-            .map(date -> {
-                List<ReviewTask> dateTasks = tasksByDate.getOrDefault(date, List.of());
-                return new LlmQualityTrendPointDto(
-                    date.format(TREND_DATE_FORMATTER),
-                    dateTasks.size(),
-                    percentage(parseSuccessCount(dateTasks), dateTasks.size()),
-                    percentage(fallbackCount(dateTasks), dateTasks.size()),
-                    percentage(partialFallbackCount(dateTasks), dateTasks.size())
-                );
-            })
+    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<DashboardLlmQualityRepositoryStat> stats) {
+        return nullToEmpty(stats).stream()
+            .map(stat -> new LlmQualityByRepositoryDto(
+                stat.getRepositoryLabel(),
+                safeRepositoryTaskCount(stat),
+                llmQualityFormatter.rate(safeRepositoryFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryPartialFallbackCount(stat), safeRepositoryTaskCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryValidFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat)),
+                llmQualityFormatter.rate(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
+            ))
             .toList();
     }
 
-    private List<ReviewTask> llmQualityTasks(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> StringUtils.hasText(task.getLlmStatus()))
-            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "PENDING"))
-            .toList();
+    private DashboardMetricDto metric(DashboardOverviewDisplayMapper.MetricDisplay display, String value, String trend) {
+        return new DashboardMetricDto(display.label(), value, trend, display.trendType(), display.color());
     }
 
-    private String llmModelLabel(ReviewTask task) {
-        String provider = StringUtils.hasText(task.getLlmProvider()) ? task.getLlmProvider().trim() : "unknown";
-        String model = StringUtils.hasText(task.getLlmModel()) ? task.getLlmModel().trim() : "unknown";
-        return provider + " / " + model;
-    }
-
-    private String repositoryLabel(ReviewTask task) {
-        if (!StringUtils.hasText(task.getOrganization())) {
-            return StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown";
-        }
-        return task.getOrganization().trim() + "/" + (StringUtils.hasText(task.getRepository()) ? task.getRepository().trim() : "unknown");
-    }
-
-    private Set<Long> taskIds(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .map(ReviewTask::getId)
-            .filter(java.util.Objects::nonNull)
-            .collect(Collectors.toSet());
-    }
-
-    private Map<Long, List<ReviewFinding>> findingsByTask(List<ReviewFinding> findings) {
-        return findings.stream()
-            .filter(finding -> finding.getTaskId() != null)
-            .collect(Collectors.groupingBy(ReviewFinding::getTaskId));
-    }
-
-    private List<ReviewFinding> findingsForTasks(Map<Long, List<ReviewFinding>> findingsByTask, Set<Long> taskIds) {
-        return taskIds.stream()
-            .flatMap(taskId -> findingsByTask.getOrDefault(taskId, List.of()).stream())
-            .toList();
-    }
-
-    private long parseSuccessCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARSED")
-                || (!StringUtils.hasText(task.getLlmParseStatus()) && equalsIgnoreCase(task.getLlmStatus(), "COMPLETED")))
-            .filter(task -> !equalsIgnoreCase(task.getLlmStatus(), "FALLBACK"))
-            .count();
-    }
-
-    private long fallbackCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmStatus(), "FALLBACK") || equalsIgnoreCase(task.getLlmParseStatus(), "FALLBACK"))
-            .count();
-    }
-
-    private long partialFallbackCount(List<ReviewTask> tasks) {
-        return tasks.stream()
-            .filter(task -> equalsIgnoreCase(task.getLlmParseStatus(), "PARTIAL_FALLBACK"))
-            .count();
-    }
-
-    private int averageLlmDuration(List<ReviewTask> tasks) {
-        return tasks.isEmpty()
-            ? 0
-            : (int) Math.round(tasks.stream().mapToInt(task -> nullToZero(task.getLlmDurationMs())).average().orElse(0));
-    }
-
-    private String formatAverageTokens(List<ReviewTask> tasks) {
-        double average = tasks.stream()
-            .filter(task -> task.getLlmTotalTokens() != null && task.getLlmTotalTokens() > 0)
-            .mapToInt(ReviewTask::getLlmTotalTokens)
-            .average()
-            .orElse(0);
-        return average <= 0 ? "0" : String.format(Locale.ROOT, "%.0f", average);
-    }
-
-    private String formatAverageCost(List<ReviewTask> tasks) {
-        List<BigDecimal> costs = tasks.stream()
-            .map(ReviewTask::getLlmEstimatedCost)
-            .filter(java.util.Objects::nonNull)
-            .toList();
-        if (costs.isEmpty()) {
-            return "$0.000000";
-        }
-        BigDecimal total = costs.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal average = total.divide(BigDecimal.valueOf(costs.size()), 6, RoundingMode.HALF_UP);
-        return "$" + average.toPlainString();
-    }
-
-    private long reviewedFeedbackCount(List<ReviewFinding> findings) {
-        return findings.stream()
-            .filter(finding -> StringUtils.hasText(finding.getFeedbackStatus()))
-            .filter(finding -> !equalsIgnoreCase(finding.getFeedbackStatus(), "UNREVIEWED"))
-            .count();
-    }
-
-    private long feedbackCount(List<ReviewFinding> findings, String status) {
-        return findings.stream().filter(finding -> equalsIgnoreCase(finding.getFeedbackStatus(), status)).count();
-    }
-
-    private String percentage(long value, long total) {
-        if (total <= 0) {
-            return "0.0%";
-        }
-        return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
-    }
-
-    private String formatMilliseconds(int durationMs) {
-        if (durationMs <= 0) {
-            return "0 ms";
-        }
-        if (durationMs < 1000) {
-            return durationMs + " ms";
-        }
-        return String.format(Locale.ROOT, "%.1f s", durationMs / 1000.0);
-    }
-
-    private ChartSliceDto riskSlice(String name, long value, long total, String color) {
-        return new ChartSliceDto(name, value, color, percent(value, total));
-    }
-
-    private boolean isHighRisk(String riskLevel) {
-        return "HIGH".equals(riskLevel) || "CRITICAL".equals(riskLevel);
-    }
-
-    private String statusText(String status) {
-        return switch (status) {
-            case "COMPLETED" -> "已完成";
-            case "REVIEWING" -> "审查中";
-            case "FAILED" -> "失败";
-            case "QUEUED" -> "排队中";
-            default -> status;
-        };
-    }
-
-    private String ruleName(String ruleId) {
-        return switch (ruleId) {
-            case "RG-SECRET-001" -> "硬编码密钥检测";
-            case "RG-API-001" -> "Controller 无测试";
-            case "RG-DB-001" -> "Entity 无迁移";
-            case "RG-CONFIG-001" -> "配置变更风险";
-            case "RG-CLEAN-001" -> "TODO/FIXME/System.out";
-            case "LLM" -> "LLM 审查";
-            default -> ruleId;
-        };
-    }
-
-    private String ruleColor(String ruleId) {
-        return switch (ruleId) {
-            case "RG-SECRET-001" -> "#ef4444";
-            case "RG-API-001" -> "#f59e0b";
-            case "RG-DB-001" -> "#2563eb";
-            case "RG-CONFIG-001" -> "#22c55e";
-            case "RG-CLEAN-001" -> "#6366f1";
-            default -> "#14b8a6";
-        };
+    private ChartSliceDto riskSlice(String riskLevel, long value, long total) {
+        DashboardOverviewDisplayMapper.RiskLevelDisplay display = overviewDisplayMapper.riskLevel(riskLevel);
+        return new ChartSliceDto(display.name(), value, display.color(), percent(value, total));
     }
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
-
-    private boolean equalsIgnoreCase(String first, String second) {
-        return first != null && second != null && first.equalsIgnoreCase(second);
     }
 
     private String percent(long value, long total) {
@@ -484,13 +227,100 @@ public class DashboardServiceImpl implements DashboardService {
         return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
     }
 
-    private int nullToZero(Integer value) {
-        return value == null ? 0 : value;
+    private long safeCount(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    private int safeAverageDuration(BigDecimal value) {
+        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
+    }
+
+    private long safeTotal(DashboardRiskLevelCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeTrendTotal(DashboardReviewTrendCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeRuleTotal(DashboardRuleHitCount count) {
+        return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private long safeHighRiskRuleHits(DashboardHighRiskReview review) {
+        return review.getRuleHits() == null ? 0L : review.getRuleHits();
+    }
+
+    private long safeModelTaskCount(DashboardLlmQualityModelStat stat) {
+        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
+    }
+
+    private long safeModelParseSuccessCount(DashboardLlmQualityModelStat stat) {
+        return stat.getParseSuccessCount() == null ? 0L : stat.getParseSuccessCount();
+    }
+
+    private long safeModelFallbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
+    }
+
+    private long safeModelPartialFallbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
+    }
+
+    private long safeModelReviewedFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
+    }
+
+    private long safeModelValidFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
+    }
+
+    private long safeModelFalsePositiveFeedbackCount(DashboardLlmQualityModelStat stat) {
+        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
+    }
+
+    private long safeRepositoryTaskCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
+    }
+
+    private long safeRepositoryFallbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
+    }
+
+    private long safeRepositoryPartialFallbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
+    }
+
+    private long safeRepositoryReviewedFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
+    }
+
+    private long safeRepositoryValidFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
+    }
+
+    private long safeRepositoryFalsePositiveFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
+        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
+    }
+
+    private String formatReviewedAt(LocalDateTime reviewedAt) {
+        return reviewedAt == null ? "" : reviewedAt.format(REVIEWED_AT_FORMATTER);
+    }
+
+    private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
+        return nullToEmpty(ruleHitCounts).stream().mapToLong(this::safeRuleTotal).sum();
+    }
+
+    private <T> List<T> nullToEmpty(List<T> values) {
+        return values == null ? List.of() : values;
     }
 
     private String formatDuration(int durationSeconds) {
         int minutes = durationSeconds / 60;
         int seconds = durationSeconds % 60;
         return minutes + "分 " + seconds + "秒";
+    }
+
+    private record DashboardMetricStats(long total, long highRisk, long failed, int averageDurationSeconds) {
     }
 }

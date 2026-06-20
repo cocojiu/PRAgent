@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.RabbitMqIntegrationProvider;
+import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
@@ -12,11 +14,9 @@ import com.repoguard.agent.dto.MessageQueueMetricDto;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.dto.RabbitMqTopologyDto;
 import com.repoguard.agent.dto.RetryCompensationStatusDto;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
@@ -25,6 +25,8 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -38,9 +40,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
 
-    private static final String RABBITMQ_PROVIDER = "RABBITMQ";
-    private static final String STATUS_PUBLISH_FAILED = "PUBLISH_FAILED";
-    private static final String STATUS_QUEUED = "QUEUED";
     private static final String STATUS_DLQ = "DLQ";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -48,18 +47,18 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
     private final SystemSettingLogMapper systemSettingLogMapper;
-    private final IntegrationConfigMapper integrationConfigMapper;
+    private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider;
     private final RabbitReviewQueueProperties properties;
     private final RabbitTemplate rabbitTemplate;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
-    @Autowired
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         SystemSettingLogMapper systemSettingLogMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher
@@ -68,10 +67,58 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             reviewTaskMapper,
             reviewTimelineMapper,
             systemSettingLogMapper,
-            integrationConfigMapper,
+            rabbitMqIntegrationProvider,
             properties,
             rabbitTemplate,
             reviewTaskPublisher,
+            null,
+            null
+        );
+    }
+
+    @Autowired
+    public MessageQueueHealthServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
+        RabbitReviewQueueProperties properties,
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher,
+        ReviewTaskStateMachine reviewTaskStateMachine
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            null,
+            reviewTaskStateMachine
+        );
+    }
+
+    public MessageQueueHealthServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        SystemSettingLogMapper systemSettingLogMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
+        RabbitReviewQueueProperties properties,
+        RabbitTemplate rabbitTemplate,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RepoGuardMetrics metrics
+    ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            metrics,
             null
         );
     }
@@ -80,20 +127,24 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         SystemSettingLogMapper systemSettingLogMapper,
-        IntegrationConfigMapper integrationConfigMapper,
+        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
-        this.integrationConfigMapper = integrationConfigMapper;
+        this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
         this.properties = properties;
         this.rabbitTemplate = rabbitTemplate;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.metrics = metrics;
+        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+            ? new ReviewTaskStateMachine()
+            : reviewTaskStateMachine;
     }
 
     @Override
@@ -101,12 +152,13 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>().orderByDesc(ReviewTask::getCreatedAt)
         );
-        IntegrationConfig activeConfig = integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, RABBITMQ_PROVIDER)
-        );
+        RabbitMqIntegrationSettings settings = rabbitMqIntegrationProvider.getSettings();
+        if (settings == null) {
+            settings = RabbitMqIntegrationSettings.empty();
+        }
 
         return new MessageQueueHealthResponse(
-            activeConfig(activeConfig),
+            activeConfig(settings),
             topology(),
             metrics(tasks),
             retryCompensation(tasks),
@@ -124,18 +176,20 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             recordAudit(taskId, "FAILED", "not found");
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
         }
-        if (!isPublishFailed(task)) {
-            recordAudit(taskId, "FAILED", "status=" + task.getStatus());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
-        }
-        if (task.getPublishClaimedAt() != null) {
-            recordAudit(taskId, "FAILED", "claimedBy=" + task.getPublishClaimedBy());
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
+        try {
+            reviewTaskStateMachine.ensurePublishRequeueAllowed(task.getStatus(), task.getPublishClaimedAt() != null);
+        } catch (BusinessException ex) {
+            if (task.getPublishClaimedAt() != null) {
+                recordAudit(taskId, "FAILED", "claimedBy=" + task.getPublishClaimedBy());
+            } else {
+                recordAudit(taskId, "FAILED", "status=" + task.getStatus());
+            }
+            throw ex;
         }
 
         LocalDateTime queuedAt = LocalDateTime.now();
-        task.setStatus(STATUS_QUEUED);
-        task.setLlmStatus("PENDING");
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
+        task.setLlmStatus(LlmStatus.PENDING.code());
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);
@@ -168,27 +222,27 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         }
     }
 
-    private ActiveRabbitMqConfigDto activeConfig(IntegrationConfig config) {
+    private ActiveRabbitMqConfigDto activeConfig(RabbitMqIntegrationSettings settings) {
         return new ActiveRabbitMqConfigDto(
-            RABBITMQ_PROVIDER,
-            config == null ? "NOT_CONFIGURED" : config.getStatus(),
+            settings.provider(),
+            settings.status(),
             runtimeConnectionStatus(),
-            config == null ? null : config.getBaseUrl(),
-            config == null ? null : config.getDefaultOwner(),
-            config == null ? null : config.getDefaultRepo(),
-            config == null ? null : format(config.getLastCheckedAt()),
-            config == null ? null : config.getLastError(),
-            config == null ? null : format(config.getUpdatedAt()),
-            configVersion(config),
+            settings.baseUrl(),
+            settings.username(),
+            settings.virtualHost(),
+            format(settings.lastCheckedAt()),
+            settings.lastError(),
+            format(settings.updatedAt()),
+            configVersion(settings),
             "Testing a connection does not switch the active configuration; save integration settings to take effect."
         );
     }
 
-    private String configVersion(IntegrationConfig config) {
-        if (config == null || config.getUpdatedAt() == null) {
+    private String configVersion(RabbitMqIntegrationSettings settings) {
+        if (settings == null || settings.updatedAt() == null) {
             return "runtime-default";
         }
-        return "cfg-" + config.getUpdatedAt().format(VERSION_FORMATTER);
+        return "cfg-" + settings.updatedAt().format(VERSION_FORMATTER);
     }
 
     private String runtimeConnectionStatus() {
@@ -296,8 +350,8 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(STATUS_PUBLISH_FAILED);
-        task.setLlmStatus("PENDING");
+        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
+        task.setLlmStatus(LlmStatus.PENDING.code());
         task.setPublishAttempts(safeAttempts(task) + 1);
         task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, properties.getPublishCompensationIntervalMs()) * 1_000_000));
         task.setLastPublishError(truncate(errorMessage(ex)));
@@ -340,7 +394,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private boolean isPublishFailed(ReviewTask task) {
-        return STATUS_PUBLISH_FAILED.equals(task.getStatus());
+        return reviewTaskStateMachine.isPublishFailed(task.getStatus());
     }
 
     private boolean isRetryExhausted(ReviewTask task) {

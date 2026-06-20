@@ -13,11 +13,12 @@ import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
+import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
+import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.dto.SecuritySettingsRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.SystemSettingLog;
@@ -403,11 +404,11 @@ class SystemConfigServiceImplTest {
             rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88),
             rule("RG-SECRET-001", "硬编码密钥检测", "HIGH", "DISABLED", 96)
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
-            finding("RG-JAVA-001", "VALID"),
-            finding("RG-JAVA-001", "FALSE_POSITIVE"),
-            finding("RG-SECRET-001", "UNREVIEWED")
+        when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of(
+            ruleHitCount("RG-JAVA-001", 2L),
+            ruleHitCount("RG-SECRET-001", 1L)
         ));
+        when(reviewFindingMapper.selectReviewRuleFeedbackStat()).thenReturn(ruleFeedbackStat(3L, 1L, 1L, 2L));
 
         var result = service.getReviewRules();
 
@@ -428,7 +429,7 @@ class SystemConfigServiceImplTest {
     void updateReviewRuleStatusPersistsNormalizedStatus() {
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
 
         var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
 
@@ -533,17 +534,20 @@ class SystemConfigServiceImplTest {
         return rule;
     }
 
-    private ReviewFinding finding(String ruleId) {
-        ReviewFinding finding = new ReviewFinding();
-        finding.setCategory("FINDING");
-        finding.setRuleId(ruleId);
-        return finding;
+    private ReviewRuleHitCount ruleHitCount(String ruleId, Long total) {
+        ReviewRuleHitCount count = new ReviewRuleHitCount();
+        count.setRuleId(ruleId);
+        count.setTotal(total);
+        return count;
     }
 
-    private ReviewFinding finding(String ruleId, String feedbackStatus) {
-        ReviewFinding finding = finding(ruleId);
-        finding.setFeedbackStatus(feedbackStatus);
-        return finding;
+    private ReviewRuleFeedbackStat ruleFeedbackStat(Long totalHits, Long validCount, Long falsePositiveCount, Long reviewedCount) {
+        ReviewRuleFeedbackStat stat = new ReviewRuleFeedbackStat();
+        stat.setTotalHits(totalHits);
+        stat.setValidCount(validCount);
+        stat.setFalsePositiveCount(falsePositiveCount);
+        stat.setReviewedCount(reviewedCount);
+        return stat;
     }
 
     private ProbeServer startLlmProbeServer(String responseBody) throws IOException {

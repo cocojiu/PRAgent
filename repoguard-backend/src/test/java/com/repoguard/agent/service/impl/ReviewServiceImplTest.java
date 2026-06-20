@@ -13,11 +13,12 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -27,7 +28,6 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -55,7 +55,7 @@ class ReviewServiceImplTest {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
-    private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
+    private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
@@ -66,10 +66,10 @@ class ReviewServiceImplTest {
         githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
-        integrationConfigMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
-        githubPullRequestClient
+        githubPullRequestClient,
+        githubIntegrationProvider
     );
 
     @Test
@@ -77,7 +77,8 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "CONFIGURED", "enc:v1:test", null));
+        when(githubIntegrationProvider.getSettings())
+            .thenReturn(githubSettings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", 3, "文档可读性不足", "补充分隔符"),
@@ -108,7 +109,8 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("other-owner", "other-repo", "CONFIGURED", "enc:v1:test", null));
+        when(githubIntegrationProvider.getSettings())
+            .thenReturn(githubSettings("other-owner", "other-repo", "CONFIGURED", "ghp_test", null));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
         ));
@@ -127,7 +129,8 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "NOT_CONFIGURED", null, null));
+        when(githubIntegrationProvider.getSettings())
+            .thenReturn(githubSettings("octocat", "Hello-World", "NOT_CONFIGURED", null, null));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
         ));
@@ -146,11 +149,11 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig(
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(
             "octocat",
             "Hello-World",
             "FAILED",
-            "enc:v1:test",
+            "ghp_test",
             "404 Not Found"
         ));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
@@ -338,7 +341,8 @@ class ReviewServiceImplTest {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
         when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(integrationConfigMapper.selectOne(any())).thenReturn(githubConfig("octocat", "Hello-World", "CONFIGURED", "enc:v1:test", null));
+        when(githubIntegrationProvider.getSettings())
+            .thenReturn(githubSettings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, falsePositive));
 
         var preview = service.getGithubCommentPreview(521L);
@@ -987,14 +991,22 @@ class ReviewServiceImplTest {
         return timeline;
     }
 
-    private IntegrationConfig githubConfig(String owner, String repository, String status, String token, String lastError) {
-        IntegrationConfig config = new IntegrationConfig();
-        config.setProvider("GITHUB");
-        config.setDefaultOwner(owner);
-        config.setDefaultRepo(repository);
-        config.setStatus(status);
-        config.setTokenValue(token);
-        config.setLastError(lastError);
-        return config;
+    private GithubIntegrationSettings githubSettings(
+        String owner,
+        String repository,
+        String status,
+        String token,
+        String lastError
+    ) {
+        return new GithubIntegrationSettings(
+            "GITHUB",
+            status,
+            "https://api.github.com",
+            token,
+            lastError,
+            owner,
+            repository,
+            1L
+        );
     }
 }

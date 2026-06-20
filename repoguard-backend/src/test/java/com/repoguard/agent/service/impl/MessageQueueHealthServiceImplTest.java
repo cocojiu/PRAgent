@@ -8,14 +8,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.RabbitMqIntegrationProvider;
+import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
-import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
@@ -35,7 +35,7 @@ class MessageQueueHealthServiceImplTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
-    private final IntegrationConfigMapper integrationConfigMapper = org.mockito.Mockito.mock(IntegrationConfigMapper.class);
+    private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider = org.mockito.Mockito.mock(RabbitMqIntegrationProvider.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
@@ -43,7 +43,7 @@ class MessageQueueHealthServiceImplTest {
         reviewTaskMapper,
         reviewTimelineMapper,
         systemSettingLogMapper,
-        integrationConfigMapper,
+        rabbitMqIntegrationProvider,
         properties,
         rabbitTemplate,
         reviewTaskPublisher
@@ -58,7 +58,7 @@ class MessageQueueHealthServiceImplTest {
         properties.setPublishCompensationBatchSize(20);
         properties.setPublishCompensationLeaseMs(120000);
 
-        when(integrationConfigMapper.selectOne(any())).thenReturn(rabbitConfig());
+        when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "QUEUED", 0, null, null, null, LocalDateTime.of(2026, 6, 10, 20, 0)),
@@ -103,6 +103,7 @@ class MessageQueueHealthServiceImplTest {
 
         assertThat(response.status()).isEqualTo("queued");
         assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
         assertThat(task.getPublishAttempts()).isZero();
         assertThat(task.getNextPublishRetryAt()).isNull();
         assertThat(task.getLastPublishError()).isNull();
@@ -125,6 +126,7 @@ class MessageQueueHealthServiceImplTest {
 
         assertThat(response.status()).isEqualTo("publish_failed");
         assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getNextPublishRetryAt()).isNotNull();
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
@@ -142,16 +144,17 @@ class MessageQueueHealthServiceImplTest {
         verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 
-    private IntegrationConfig rabbitConfig() {
-        IntegrationConfig config = new IntegrationConfig();
-        config.setProvider("RABBITMQ");
-        config.setStatus("CONNECTED");
-        config.setBaseUrl("amqp://localhost:5672");
-        config.setDefaultOwner("repoguard");
-        config.setDefaultRepo("/");
-        config.setLastCheckedAt(LocalDateTime.of(2026, 6, 10, 21, 2, 12));
-        config.setUpdatedAt(LocalDateTime.of(2026, 6, 10, 20, 58));
-        return config;
+    private RabbitMqIntegrationSettings rabbitSettings() {
+        return new RabbitMqIntegrationSettings(
+            "RABBITMQ",
+            "CONNECTED",
+            "amqp://localhost:5672",
+            "repoguard",
+            "/",
+            LocalDateTime.of(2026, 6, 10, 21, 2, 12),
+            null,
+            LocalDateTime.of(2026, 6, 10, 20, 58)
+        );
     }
 
     private ReviewTask task(
@@ -169,6 +172,7 @@ class MessageQueueHealthServiceImplTest {
         task.setRepository("PRAgent");
         task.setPrNumber(100 + id.intValue());
         task.setStatus(status);
+        task.setLlmStatus("FAILED");
         task.setPublishAttempts(publishAttempts);
         task.setNextPublishRetryAt(nextRetryAt);
         task.setPublishClaimedBy(claimedBy);

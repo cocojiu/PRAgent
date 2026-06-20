@@ -1,0 +1,78 @@
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.settings-card {
+  min-height: 330px;
+}
+
+.settings-card .el-select,
+.settings-card .el-input,
+.settings-card .el-input-number {
+  width: 100%;
+}
+
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-handoff {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
+.settings-handoff p {
+  margin: 0;
+  color: #334155;
+  line-height: 1.7;
+}
+
+.settings-handoff-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-alert {
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.settings-form-gap {
+  margin-top: 16px;
+}
+
+.settings-bottom-grid {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1280px) {
+  .settings-grid,
+  .settings-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .settings-grid,
+  .settings-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

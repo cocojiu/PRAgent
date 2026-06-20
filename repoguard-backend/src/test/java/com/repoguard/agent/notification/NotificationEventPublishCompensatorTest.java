@@ -15,6 +15,8 @@ class NotificationEventPublishCompensatorTest {
     private final NotificationEventMapper eventMapper = org.mockito.Mockito.mock(NotificationEventMapper.class);
     private final NotificationDispatchService dispatchService = org.mockito.Mockito.mock(NotificationDispatchService.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
+    private final NotificationPublishCompensationQuery compensationQuery =
+        new NotificationPublishCompensationQuery(eventMapper, properties);
 
     @Test
     void compensatesDeliveryFailedEventsForThirdPartyRetry() {
@@ -24,7 +26,7 @@ class NotificationEventPublishCompensatorTest {
         event.setRetryCount(1);
         when(eventMapper.selectList(any())).thenReturn(List.of(event));
 
-        new NotificationEventPublishCompensator(eventMapper, dispatchService, properties).compensate();
+        new NotificationEventPublishCompensator(compensationQuery, dispatchService).compensate();
 
         verify(dispatchService).publishExistingEvent(7L);
     }

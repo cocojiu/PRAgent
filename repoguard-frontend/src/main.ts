@@ -21,6 +21,14 @@ import { ElTable, ElTableColumn } from "element-plus/es/components/table/index.m
 import { ElTooltip } from "element-plus/es/components/tooltip/index.mjs";
 import "element-plus/dist/index.css";
 import "./styles/main.css";
+import "./features/integrations/integrations.css";
+import "./features/message-queue/messageQueue.css";
+import "./features/notification-ops/notificationOps.css";
+import "./features/rule-config/ruleConfig.css";
+import "./features/review-detail/reviewDetail.css";
+import "./features/review-tasks/reviewTasks.css";
+import "./features/system-settings/systemSettings.css";
+import "./features/user-management/userManagement.css";
 import App from "./App.vue";
 import { router } from "./router";
 

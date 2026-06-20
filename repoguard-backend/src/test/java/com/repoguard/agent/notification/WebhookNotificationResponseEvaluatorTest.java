@@ -1,0 +1,66 @@
+package com.repoguard.agent.notification;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class WebhookNotificationResponseEvaluatorTest {
+
+    private final WebhookNotificationResponseEvaluator evaluator = new WebhookNotificationResponseEvaluator();
+
+    @Test
+    void errcodeZeroMapResponseIsSuccessful() {
+        NotificationSendResult result = evaluator.evaluate(Map.of("errcode", 0, "errmsg", "ok"));
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.message()).contains("errcode=0");
+    }
+
+    @Test
+    void jsonErrcodeZeroResponseIsSuccessful() {
+        NotificationSendResult result = evaluator.evaluate("{\"errcode\":0,\"errmsg\":\"ok\"}");
+
+        assertThat(result.success()).isTrue();
+        assertThat(result.message()).contains("\"errcode\":0");
+    }
+
+    @Test
+    void okMessageResponseIsSuccessfulIgnoringCase() {
+        NotificationSendResult result = evaluator.evaluate("{\"errmsg\":\"OK\"}");
+
+        assertThat(result.success()).isTrue();
+    }
+
+    @Test
+    void nonSuccessResponseIsFailed() {
+        NotificationSendResult result = evaluator.evaluate("{\"errcode\":400,\"errmsg\":\"invalid webhook\"}");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("invalid webhook");
+    }
+
+    @Test
+    void nullResponseIsFailedWithEmptyBody() {
+        NotificationSendResult result = evaluator.evaluate(null);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).isEmpty();
+    }
+
+    @Test
+    void longResponseBodyIsTruncated() {
+        NotificationSendResult result = evaluator.evaluate("x".repeat(600));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).hasSize(512);
+    }
+
+    @Test
+    void exceptionMessageIsTruncated() {
+        NotificationSendResult result = evaluator.failure(new RuntimeException("x".repeat(600)));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).hasSize(512);
+    }
+}

@@ -1,0 +1,277 @@
+.integration-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.integration-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.integration-header h1 {
+  margin: 0;
+  font-size: 30px;
+}
+
+.integration-alert {
+  --el-alert-padding: 13px 18px;
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+}
+
+.integration-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.integration-card {
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr) 270px;
+  min-height: 188px;
+  border: 1px solid #e5eaf3;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.04);
+}
+
+.integration-service {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  align-content: center;
+  gap: 12px 18px;
+  padding: 28px 22px;
+  border-right: 1px solid #e5eaf3;
+}
+
+.service-logo {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  color: #0f172a;
+}
+
+.service-logo--mysql {
+  color: #087c9f;
+}
+
+.service-logo--rabbitmq {
+  color: #f97316;
+}
+
+.service-logo--spring-ai {
+  color: #6366f1;
+}
+
+.integration-service h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.integration-service p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #64748b;
+  line-height: 1.7;
+}
+
+.integration-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.integration-status.connected {
+  color: #16a34a;
+  background: #dcfce7;
+  border: 1px solid #bbf7d0;
+}
+
+.integration-status.missing_secret {
+  color: #d97706;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.integration-status.failed {
+  color: #dc2626;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+}
+
+.integration-form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 22px 28px;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.config-row label {
+  color: #334155;
+  font-weight: 600;
+}
+
+.suffix-icon {
+  color: #64748b;
+  cursor: pointer;
+}
+
+.connection-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin-left: 136px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.connection-message.connected {
+  color: #16803d;
+  background: #effaf3;
+}
+
+.connection-message.missing_secret {
+  color: #b45309;
+  background: #fff7ed;
+}
+
+.connection-message.failed {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.integration-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 30px;
+  border-left: 1px solid #e5eaf3;
+}
+
+.integration-side p {
+  margin: 0;
+  color: #334155;
+  font-weight: 600;
+}
+
+.integration-side strong {
+  margin-bottom: 10px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.integration-diagnostics {
+  display: grid;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.integration-diagnostic {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  font-size: 12px;
+}
+
+.integration-diagnostic span {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.integration-diagnostic strong {
+  margin: 0;
+  color: #334155;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.integration-diagnostic.success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.integration-diagnostic.success strong {
+  color: #15803d;
+}
+
+.integration-diagnostic.warning {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.integration-diagnostic.warning strong {
+  color: #b45309;
+}
+
+.integration-diagnostic.danger {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.integration-diagnostic.danger strong {
+  color: #b91c1c;
+}
+
+.side-caret {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  color: #334155;
+}
+
+@media (max-width: 1280px) {
+  .integration-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .integration-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .integration-service,
+  .integration-side {
+    border: 0;
+  }
+
+  .integration-form {
+    border-top: 1px solid #e5eaf3;
+    border-bottom: 1px solid #e5eaf3;
+  }
+
+  .config-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .connection-message {
+    margin-left: 0;
+  }
+}

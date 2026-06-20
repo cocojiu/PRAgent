@@ -1,0 +1,84 @@
+package com.repoguard.agent.review;
+
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
+import java.util.List;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ReviewTaskStateMachine {
+
+    public boolean canStartReview(String status) {
+        return ReviewTaskStatus.QUEUED == ReviewTaskStatus.from(status);
+    }
+
+    public String statusWhenReviewing() {
+        return ReviewTaskStatus.REVIEWING.code();
+    }
+
+    public String statusWhenQueued() {
+        return ReviewTaskStatus.QUEUED.code();
+    }
+
+    public String statusWhenPublishFailed() {
+        return ReviewTaskStatus.PUBLISH_FAILED.code();
+    }
+
+    public String statusWhenFailed() {
+        return ReviewTaskStatus.FAILED.code();
+    }
+
+    public String statusAfterReviewCompleted(boolean humanReviewRequired) {
+        return humanReviewRequired
+            ? ReviewTaskStatus.PENDING_HUMAN_REVIEW.code()
+            : ReviewTaskStatus.COMPLETED.code();
+    }
+
+    public void ensureRetryAllowed(String status) {
+        if (ReviewTaskStatus.FAILED != ReviewTaskStatus.from(status)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
+        }
+    }
+
+    public void ensurePublishRequeueAllowed(String status, boolean publishClaimed) {
+        if (ReviewTaskStatus.PUBLISH_FAILED != ReviewTaskStatus.from(status)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
+        }
+        if (publishClaimed) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
+        }
+    }
+
+    public boolean isPublishFailed(String status) {
+        return ReviewTaskStatus.PUBLISH_FAILED == ReviewTaskStatus.from(status);
+    }
+
+    public List<String> dataRetentionCandidateStatuses() {
+        return List.of(ReviewTaskStatus.COMPLETED.code(), ReviewTaskStatus.FAILED.code());
+    }
+
+    public void ensureHumanReviewAllowed(boolean humanReviewRequired, String humanReviewStatus) {
+        if (!humanReviewRequired) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review is not required for this task");
+        }
+        if (HumanReviewStatus.PENDING != HumanReviewStatus.from(humanReviewStatus)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Human review has already been decided");
+        }
+    }
+
+    public boolean canPublishGithubComments(boolean humanReviewRequired, String humanReviewStatus) {
+        if (!humanReviewRequired) {
+            return true;
+        }
+        return HumanReviewStatus.from(humanReviewStatus).allowsGithubCommentPublish();
+    }
+
+    public String statusAfterHumanReview(String humanReviewStatus) {
+        return switch (HumanReviewStatus.from(humanReviewStatus)) {
+            case APPROVED -> ReviewTaskStatus.APPROVED.code();
+            case CHANGES_REQUESTED -> ReviewTaskStatus.CHANGES_REQUESTED.code();
+            case REJECTED -> ReviewTaskStatus.REJECTED.code();
+            default -> ReviewTaskStatus.PENDING_HUMAN_REVIEW.code();
+        };
+    }
+}
