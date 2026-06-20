@@ -54,6 +54,9 @@ class AuthControllerTest {
 
         @Override
         public AuthResponse refresh(AuthRefreshRequest request) {
+            if ("invalid-refresh-token".equals(request.refreshToken())) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "refresh token expired or invalid");
+            }
             return authResponse("admin", "admin@repoguard.dev");
         }
 
@@ -144,6 +147,30 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"));
+    }
+
+    @Test
+    void refreshWithInvalidTokenReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "invalid-refresh-token"
+                    }
+                    """))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void refreshWithMalformedJsonReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{refreshToken:invalid-refresh-token}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
