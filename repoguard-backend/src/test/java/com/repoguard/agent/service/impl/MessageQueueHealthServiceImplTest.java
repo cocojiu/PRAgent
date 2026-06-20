@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -29,6 +30,9 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class MessageQueueHealthServiceImplTest {
 
@@ -114,6 +118,38 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
+    void requeueTaskPublishesOnlyAfterQueuedStateTransactionCommits() {
+        RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+        MessageQueueHealthServiceImpl transactionalService = new MessageQueueHealthServiceImpl(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            transactionManager,
+            null,
+            null
+        );
+        ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
+        ReviewTimeline latest = new ReviewTimeline();
+        latest.setSortOrder(4);
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
+        doAnswer(invocation -> {
+            assertThat(transactionManager.committed).isTrue();
+            return null;
+        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+
+        MessageQueueRequeueResponse response = transactionalService.requeueTask(42L);
+
+        assertThat(response.status()).isEqualTo("queued");
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+    }
+
+    @Test
     void requeueTaskRestoresPublishFailedWhenPublishFailsAgain() {
         properties.setPublishCompensationIntervalMs(1000);
         ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
@@ -180,5 +216,29 @@ class MessageQueueHealthServiceImplTest {
         task.setLastPublishError(lastError);
         task.setCreatedAt(createdAt);
         return task;
+    }
+
+    private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+        private boolean committed;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+            committed = false;
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            committed = true;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            committed = false;
+        }
     }
 }
