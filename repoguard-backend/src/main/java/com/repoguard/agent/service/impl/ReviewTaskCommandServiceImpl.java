@@ -116,10 +116,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         String repository = request.repository().trim();
         String commit = resolveCommit(request);
         String source = resolveTaskSource(request.source());
-        ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
-        if (existingTask != null) {
-            return reuseExistingTask(existingTask);
-        }
 
         String idempotencyKey = manualIdempotencyKey(organization, repository, request.prNumber(), commit);
         CompletableFuture<ReviewTask> ownerFuture = new CompletableFuture<>();
@@ -127,6 +123,13 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         if (existingFuture != null) {
             ReviewTask concurrentTask = awaitConcurrentManualTask(idempotencyKey, existingFuture);
             return reusedTaskResponse(concurrentTask);
+        }
+
+        ReviewTask existingTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
+        if (existingTask != null) {
+            ownerFuture.complete(existingTask);
+            IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, ownerFuture);
+            return reuseExistingTask(existingTask);
         }
 
         LocalDateTime createdAt = LocalDateTime.now();
