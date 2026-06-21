@@ -1,0 +1,158 @@
+name: Worker Concurrency Retest
+
+on:
+  workflow_dispatch:
+    inputs:
+      concurrency:
+        description: Review Worker concurrency under test
+        required: true
+        default: "2"
+        type: choice
+        options:
+          - "2"
+          - "4"
+      start_pr_number:
+        description: First unique PR number used by this run
+        required: true
+        type: string
+      task_count:
+        description: Number of unique Mock review tasks
+        required: true
+        default: "12"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  retest:
+    name: Retest Worker concurrency
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${DEPLOY_PORT:-22}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Upload retest helpers
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "mkdir -p '${DEPLOY_PATH}/performance'"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            performance/remote/set-review-worker-concurrency.sh \
+            performance/remote/verify-worker-comparison.sh \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/"
+
+      - name: Switch Worker concurrency
+        shell: bash
+        env:
+          CONCURRENCY: ${{ inputs.concurrency }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod +x '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' \
+             '${DEPLOY_PATH}/performance/verify-worker-comparison.sh' && \
+             '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' '${CONCURRENCY}'"
+
+      - name: Load admin key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          admin_key="$(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "docker exec repoguard-backend printenv REPOGUARD_ADMIN_API_KEY")"
+          test -n "${admin_key}" || { echo "Missing runtime admin API key"; exit 1; }
+          echo "::add-mask::${admin_key}"
+          echo "ADMIN_API_KEY=${admin_key}" >> "$GITHUB_ENV"
+
+      - name: Run Mock task burst
+        shell: bash
+        env:
+          CONCURRENCY: ${{ inputs.task_count }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          START_PR_NUMBER: ${{ inputs.start_pr_number }}
+        run: |
+          mkdir -p performance/reports/worker-retest
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/work" \
+            -w /work \
+            grafana/k6:0.54.0 run \
+            -e BASE_URL="http://${DEPLOY_HOST}" \
+            -e ADMIN_API_KEY="${ADMIN_API_KEY}" \
+            -e CONCURRENCY="${CONCURRENCY}" \
+            -e START_PR_NUMBER="${START_PR_NUMBER}" \
+            -e RUN_SUFFIX="worker-c${{ inputs.concurrency }}-${GITHUB_RUN_ID}" \
+            -e SUMMARY_FILE="performance/reports/worker-retest/worker-c${{ inputs.concurrency }}-${GITHUB_RUN_ID}.json" \
+            performance/k6/review-burst-100.js
+
+      - name: Verify database, queue, and logs
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          START_PR_NUMBER: ${{ inputs.start_pr_number }}
+          TASK_COUNT: ${{ inputs.task_count }}
+        run: |
+          sleep 15
+          verify_output="$(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "'${DEPLOY_PATH}/performance/verify-worker-comparison.sh' '${START_PR_NUMBER}' '${TASK_COUNT}'")"
+          printf '%s\n' "${verify_output}"
+          failed_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "FAILED" { print $2 }')"
+          unfinished_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "unfinished_tasks" { print $2 }')"
+          duplicate_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "duplicate_pr_groups" { print $2 }')"
+          test "${failed_count:-0}" = "0"
+          test "${unfinished_count:-0}" = "0"
+          test "${duplicate_count:-0}" = "0"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "if docker logs --since 10m repoguard-backend 2>&1 | grep -q 'DeadlockLoserDataAccessException'; then
+               echo 'DeadlockLoserDataAccessException found in backend logs' >&2
+               exit 1
+             fi"
+
+      - name: Upload k6 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-c${{ inputs.concurrency }}-${{ github.run_id }}
+          path: performance/reports/worker-retest/*.json
+          if-no-files-found: warn
+
+      - name: Restore Worker concurrency 1
+        if: always()
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "'${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' 1"
