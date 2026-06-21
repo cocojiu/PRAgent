@@ -33,6 +33,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -54,10 +55,14 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
+    private static final long COMPLETED_MANUAL_CREATE_RETENTION_SECONDS = 5;
     private static final ConcurrentMap<String, CompletableFuture<ReviewTask>> IN_FLIGHT_MANUAL_CREATES = new ConcurrentHashMap<>();
     private static final ExecutorService REVIEW_PUBLISH_EXECUTOR = Executors.newFixedThreadPool(
         2,
         new ManualReviewPublishThreadFactory()
+    );
+    private static final ScheduledExecutorService MANUAL_CREATE_CLEANUP_EXECUTOR = Executors.newSingleThreadScheduledExecutor(
+        new ManualReviewCleanupThreadFactory()
     );
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -452,8 +457,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             public void afterCompletion(int status) {
                 if (status != STATUS_COMMITTED) {
                     future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
+                    IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+                    return;
                 }
-                IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+                scheduleManualCreateCleanup(idempotencyKey, future);
             }
         });
     }
@@ -468,10 +475,20 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             public void afterCompletion(int status) {
                 if (status != STATUS_COMMITTED && !future.isCompletedExceptionally()) {
                     future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
+                    IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+                    return;
                 }
-                IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+                scheduleManualCreateCleanup(idempotencyKey, future);
             }
         });
+    }
+
+    private void scheduleManualCreateCleanup(String idempotencyKey, CompletableFuture<ReviewTask> future) {
+        MANUAL_CREATE_CLEANUP_EXECUTOR.schedule(
+            () -> IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future),
+            COMPLETED_MANUAL_CREATE_RETENTION_SECONDS,
+            TimeUnit.SECONDS
+        );
     }
 
     private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {
@@ -706,6 +723,17 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         @Override
         public Thread newThread(Runnable runnable) {
             Thread thread = new Thread(runnable, "manual-review-publish-" + sequence.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
+    }
+
+    private static class ManualReviewCleanupThreadFactory implements ThreadFactory {
+        private final AtomicInteger sequence = new AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "manual-review-cleanup-" + sequence.incrementAndGet());
             thread.setDaemon(true);
             return thread;
         }
