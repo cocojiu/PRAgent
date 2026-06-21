@@ -292,8 +292,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     private ManualReviewResponse reuseExistingTask(ReviewTask existingTask) {
-        existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
-        reviewTaskMapper.updateById(existingTask);
         evictDashboardOverview();
         return reusedTaskResponse(existingTask);
     }
