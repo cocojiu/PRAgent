@@ -27,6 +27,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
 
 class ReviewTaskExecutorImplTest {
 
@@ -280,6 +284,52 @@ class ReviewTaskExecutorImplTest {
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getAllValues().get(1).getLabel()).contains("github unavailable");
+    }
+
+    @Test
+    void executeRetriesConcurrencyFailureUsingReadCommittedTransactions() {
+        PlatformTransactionManager transactionManager = org.mockito.Mockito.mock(PlatformTransactionManager.class);
+        TransactionStatus transactionStatus = org.mockito.Mockito.mock(TransactionStatus.class);
+        when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(transactionStatus);
+        ReviewTaskExecutorImpl transactionalExecutor = new ReviewTaskExecutorImpl(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewFindingMapper,
+            changedFileMapper,
+            githubPullRequestClient,
+            pullRequestReviewer,
+            transactionManager,
+            null
+        );
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class)))
+            .thenThrow(new CannotAcquireLockException("deadlock"))
+            .thenReturn(1, 1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+
+        transactionalExecutor.execute(message());
+
+        assertThat(task.getStatus()).isEqualTo("COMPLETED");
+        verify(transactionManager).rollback(transactionStatus);
+        verify(transactionManager, times(2)).commit(transactionStatus);
+        ArgumentCaptor<TransactionDefinition> definitionCaptor =
+            ArgumentCaptor.forClass(TransactionDefinition.class);
+        verify(transactionManager, times(3)).getTransaction(definitionCaptor.capture());
+        assertThat(definitionCaptor.getAllValues())
+            .allSatisfy(definition -> assertThat(definition.getIsolationLevel())
+                .isEqualTo(TransactionDefinition.ISOLATION_READ_COMMITTED));
     }
 
     private ReviewTaskMessage message() {

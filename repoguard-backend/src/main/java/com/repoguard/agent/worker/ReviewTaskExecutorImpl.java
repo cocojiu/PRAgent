@@ -23,16 +23,19 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
+    private static final int TRANSACTION_MAX_ATTEMPTS = 3;
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final PullRequestReviewer pullRequestReviewer;
@@ -496,15 +499,32 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                 throw new IllegalStateException(ex);
             }
         }
-        return new TransactionTemplate(transactionManager).execute(status -> {
+        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+        transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        for (int attempt = 1; attempt <= TRANSACTION_MAX_ATTEMPTS; attempt++) {
             try {
-                return action.call();
-            } catch (RuntimeException ex) {
-                throw ex;
-            } catch (Exception ex) {
-                throw new IllegalStateException(ex);
+                return transactionTemplate.execute(status -> {
+                    try {
+                        return action.call();
+                    } catch (RuntimeException ex) {
+                        throw ex;
+                    } catch (Exception ex) {
+                        throw new IllegalStateException(ex);
+                    }
+                });
+            } catch (ConcurrencyFailureException ex) {
+                if (attempt >= TRANSACTION_MAX_ATTEMPTS) {
+                    throw ex;
+                }
+                LOGGER.warn(
+                    "Review task transaction concurrency conflict operation=review_transaction_retry attempt={} maxAttempts={} exceptionType={}",
+                    attempt,
+                    TRANSACTION_MAX_ATTEMPTS,
+                    ex.getClass().getName()
+                );
             }
-        });
+        }
+        throw new IllegalStateException("Review transaction retry loop exited unexpectedly");
     }
 
     private static final class ReviewTaskClaimLostException extends RuntimeException {
