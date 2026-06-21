@@ -91,6 +91,7 @@ jobs:
           echo "ADMIN_API_KEY=${admin_key}" >> "$GITHUB_ENV"
 
       - name: Run Mock task burst
+        continue-on-error: true
         shell: bash
         env:
           CONCURRENCY: ${{ inputs.task_count }}
@@ -99,6 +100,7 @@ jobs:
         run: |
           mkdir -p performance/reports/worker-retest
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "${GITHUB_WORKSPACE}:/work" \
             -w /work \
             grafana/k6:0.54.0 run \
@@ -126,8 +128,12 @@ jobs:
             "'${DEPLOY_PATH}/performance/verify-worker-comparison.sh' '${START_PR_NUMBER}' '${TASK_COUNT}'")"
           printf '%s\n' "${verify_output}"
           failed_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "FAILED" { print $2 }')"
+          completed_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "COMPLETED" { print $2 }')"
+          total_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "total_tasks" { print $2 }')"
           unfinished_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "unfinished_tasks" { print $2 }')"
           duplicate_count="$(printf '%s\n' "${verify_output}" | awk '$1 == "duplicate_pr_groups" { print $2 }')"
+          test "${total_count:-0}" = "${TASK_COUNT}"
+          test "${completed_count:-0}" = "${TASK_COUNT}"
           test "${failed_count:-0}" = "0"
           test "${unfinished_count:-0}" = "0"
           test "${duplicate_count:-0}" = "0"
