@@ -339,10 +339,13 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
+            public void afterCommit() {
+                future.complete(task);
+            }
+
+            @Override
             public void afterCompletion(int status) {
-                if (status == STATUS_COMMITTED) {
-                    future.complete(task);
-                } else {
+                if (status != STATUS_COMMITTED) {
                     future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
                 }
                 IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
