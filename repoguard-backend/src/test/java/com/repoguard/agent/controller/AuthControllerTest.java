@@ -54,6 +54,9 @@ class AuthControllerTest {
 
         @Override
         public AuthResponse refresh(AuthRefreshRequest request) {
+            if ("invalid-refresh-token".equals(request.refreshToken())) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "refresh token expired or invalid");
+            }
             return authResponse("admin", "admin@repoguard.dev");
         }
 
@@ -147,6 +150,30 @@ class AuthControllerTest {
     }
 
     @Test
+    void refreshWithInvalidTokenReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "invalid-refresh-token"
+                    }
+                    """))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void refreshWithMalformedJsonReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{refreshToken:invalid-refresh-token}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
     void resetRefreshTokenReturnsNewTokenPair() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh-token/reset")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -188,6 +215,16 @@ class AuthControllerTest {
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void loginWithMalformedJsonReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{account:admin,password:wrong}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     private AuthResponse authResponse(String username, String email) {

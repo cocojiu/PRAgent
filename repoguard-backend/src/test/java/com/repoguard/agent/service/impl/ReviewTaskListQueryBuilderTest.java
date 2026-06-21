@@ -32,11 +32,14 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.triggerSource()).isEqualTo("GITHUB_WEBHOOK");
         assertThat(criteria.keyword()).isEqualTo("42");
         assertThat(criteria.prNumber()).isEqualTo(42);
+        assertThat(criteria.commitPrefix()).isNull();
+        assertThat(criteria.textKeyword()).isNull();
         assertThat(wrapper.getSqlSegment()).contains("ORDER BY");
+        assertThat(wrapper.getSqlSegment()).contains("pr_number");
     }
 
     @Test
-    void skipsBlankFiltersAndDoesNotAddPrNumberConditionForTextKeyword() {
+    void normalizesTextKeywordWhenItIsSelectiveEnough() {
         var criteria = builder.normalize(new ReviewQuery(
             1,
             20,
@@ -55,5 +58,30 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.triggerSource()).isNull();
         assertThat(criteria.keyword()).isEqualTo("security");
         assertThat(criteria.prNumber()).isNull();
+        assertThat(criteria.commitPrefix()).isNull();
+        assertThat(criteria.textKeyword()).isEqualTo("security");
+    }
+
+    @Test
+    void skipsShortTextKeywordToAvoidWideTableScan() {
+        var criteria = builder.normalize(new ReviewQuery(1, 20, null, null, null, null, null, "ab"));
+        var wrapper = builder.build(new ReviewQuery(1, 20, null, null, null, null, null, "ab"));
+
+        assertThat(criteria.keyword()).isEqualTo("ab");
+        assertThat(criteria.prNumber()).isNull();
+        assertThat(criteria.commitPrefix()).isNull();
+        assertThat(criteria.textKeyword()).isNull();
+        assertThat(wrapper.getSqlSegment()).doesNotContain("LIKE");
+    }
+
+    @Test
+    void treatsLongHexKeywordAsCommitPrefix() {
+        var criteria = builder.normalize(new ReviewQuery(1, 20, null, null, null, null, null, "abcdef0"));
+        var wrapper = builder.build(new ReviewQuery(1, 20, null, null, null, null, null, "abcdef0"));
+
+        assertThat(criteria.prNumber()).isNull();
+        assertThat(criteria.commitPrefix()).isEqualTo("abcdef0");
+        assertThat(criteria.textKeyword()).isNull();
+        assertThat(wrapper.getSqlSegment()).contains("commit_sha");
     }
 }

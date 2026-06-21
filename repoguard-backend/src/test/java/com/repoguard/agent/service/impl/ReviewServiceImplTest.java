@@ -43,7 +43,6 @@ import java.util.List;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -704,7 +703,7 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isTrue();
         assertThat(result.triggerSource()).isEqualTo("existing_reused");
         assertThat(result.message()).isEqualTo("Review task already exists");
-        verify(reviewTaskMapper, never()).insert(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
         verify(reviewTaskMapper).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
@@ -712,6 +711,11 @@ class ReviewServiceImplTest {
     @Test
     void triggerManualReviewStoresGithubPrPickerSourceForNewTask() {
         when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setId(522L);
+            return 1;
+        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
 
         var result = service.triggerManualReview(new ManualReviewRequest(
             "octocat",
@@ -726,7 +730,7 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isFalse();
         assertThat(result.source()).isEqualTo("github_pr_picker");
         assertThat(result.triggerSource()).isEqualTo("github_pr_picker");
-        verify(reviewTaskMapper).insert(org.mockito.Mockito.argThat((ReviewTask task) ->
+        verify(reviewTaskMapper).insertManualReviewOrReuse(org.mockito.Mockito.argThat((ReviewTask task) ->
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
@@ -739,7 +743,7 @@ class ReviewServiceImplTest {
             ReviewTask task = invocation.getArgument(0);
             task.setId(522L);
             return 1;
-        }).when(reviewTaskMapper).insert(any(ReviewTask.class));
+        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -758,8 +762,9 @@ class ReviewServiceImplTest {
             verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
 
             List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
-            assertThat(synchronizations).hasSize(1);
-            synchronizations.getFirst().afterCommit();
+            assertThat(synchronizations).hasSize(2);
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+            synchronizations.forEach(synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
 
             ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
             verify(reviewTaskPublisher).publish(messageCaptor.capture());
@@ -775,9 +780,7 @@ class ReviewServiceImplTest {
         ReviewTask existing = task();
         existing.setStatus("QUEUED");
         when(reviewTaskMapper.selectOne(any())).thenReturn(null, existing);
-        org.mockito.Mockito.doThrow(new DuplicateKeyException("uk_review_task_pr_commit"))
-            .when(reviewTaskMapper)
-            .insert(any(ReviewTask.class));
+        when(reviewTaskMapper.insertManualReviewOrReuse(any(ReviewTask.class))).thenReturn(0);
 
         var result = service.triggerManualReview(new ManualReviewRequest(
             "octocat",
@@ -793,10 +796,8 @@ class ReviewServiceImplTest {
         assertThat(result.existing()).isTrue();
         assertThat(result.status()).isEqualTo("queued");
         assertThat(result.triggerSource()).isEqualTo("existing_reused");
-        verify(reviewTaskMapper).insert(any(ReviewTask.class));
-        verify(reviewTaskMapper).updateById(org.mockito.ArgumentMatchers.<ReviewTask>argThat(task ->
-            "EXISTING_REUSED".equals(task.getTriggerSource())
-        ));
+        verify(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
@@ -821,13 +822,18 @@ class ReviewServiceImplTest {
         assertThat(result.taskId()).isEqualTo(521L);
         assertThat(result.existing()).isTrue();
         assertThat(result.status()).isEqualTo("queued");
-        verify(reviewTaskMapper, never()).insert(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
     @Test
     void triggerManualReviewMarksPublishFailedWhenMessageCannotBePublished() {
         when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setId(522L);
+            return 1;
+        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(reviewTaskPublisher)
             .publish(any(ReviewTaskMessage.class));

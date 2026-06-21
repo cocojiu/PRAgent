@@ -128,7 +128,10 @@ class DashboardMapperSqlContractTest {
             .contains("idx_review_finding_task")
             .contains("idx_review_task_llm_quality")
             .contains("idx_review_task_llm_model_window")
-            .contains("idx_review_task_llm_repository_window");
+            .contains("idx_review_task_llm_repository_window")
+            .contains("idx_review_task_pr_created")
+            .contains("idx_review_task_commit_created")
+            .contains("idx_review_task_mq_health");
     }
 
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {

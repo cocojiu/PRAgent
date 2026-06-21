@@ -19,6 +19,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -32,10 +33,15 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class MessageQueueHealthServiceImpl implements MessageQueueHealthService {
@@ -53,6 +59,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final TransactionTemplate transactionTemplate;
 
     public MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -72,6 +79,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             rabbitTemplate,
             reviewTaskPublisher,
             null,
+            null,
             null
         );
     }
@@ -85,6 +93,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher,
+        PlatformTransactionManager transactionManager,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
@@ -95,6 +104,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             properties,
             rabbitTemplate,
             reviewTaskPublisher,
+            transactionManager,
             null,
             reviewTaskStateMachine
         );
@@ -118,6 +128,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             properties,
             rabbitTemplate,
             reviewTaskPublisher,
+            null,
             metrics,
             null
         );
@@ -131,6 +142,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         RabbitReviewQueueProperties properties,
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher,
+        PlatformTransactionManager transactionManager,
         RepoGuardMetrics metrics,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
@@ -145,13 +157,14 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
+        this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
     @Override
     public MessageQueueHealthResponse getHealth() {
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>().orderByDesc(ReviewTask::getCreatedAt)
-        );
+        MessageQueueHealthSummary summary = reviewTaskMapper.selectMessageQueueHealthSummary();
+        List<ReviewTask> exceptionTasks = reviewTaskMapper.selectMessageQueueExceptionTasks();
+        String latestFailureReason = reviewTaskMapper.selectLatestPublishFailureReason();
         RabbitMqIntegrationSettings settings = rabbitMqIntegrationProvider.getSettings();
         if (settings == null) {
             settings = RabbitMqIntegrationSettings.empty();
@@ -160,17 +173,41 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         return new MessageQueueHealthResponse(
             activeConfig(settings),
             topology(),
-            metrics(tasks),
-            retryCompensation(tasks),
-            exceptionTasks(tasks),
+            metrics(summary),
+            retryCompensation(summary, latestFailureReason),
+            exceptionTasks(exceptionTasks),
             format(LocalDateTime.now()),
             "DATABASE_TASK_STATE"
         );
     }
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
     public MessageQueueRequeueResponse requeueTask(Long taskId) {
+        RequeuePublishContext context = executeInTransaction(() -> prepareRequeue(taskId));
+
+        try {
+            reviewTaskPublisher.publish(context.message());
+            recordAudit(context.taskId(), "SUCCESS", "queued");
+            return new MessageQueueRequeueResponse(context.taskId(), "queued", "Message task requeued", context.publishAttempts());
+        } catch (MessagePublishException ex) {
+            executeInTransaction(() -> {
+                ReviewTask failedTask = reviewTaskMapper.selectById(context.taskId());
+                if (failedTask != null) {
+                    markPublishFailed(failedTask, ex, context.queuedAt());
+                }
+                return null;
+            });
+            recordAudit(context.taskId(), "FAILED", truncate(errorMessage(ex)));
+            return new MessageQueueRequeueResponse(
+                context.taskId(),
+                "publish_failed",
+                "Message task saved, waiting for publish compensation",
+                context.publishAttempts() + 1
+            );
+        }
+    }
+
+    private RequeuePublishContext prepareRequeue(Long taskId) {
         ReviewTask task = reviewTaskMapper.selectById(taskId);
         if (task == null) {
             recordAudit(taskId, "FAILED", "not found");
@@ -198,8 +235,11 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         reviewTaskMapper.updateById(task);
         appendTimeline(task.getId(), "Message manually requeued", queuedAt, "CURRENT");
 
-        try {
-            reviewTaskPublisher.publish(new ReviewTaskMessage(
+        return new RequeuePublishContext(
+            task.getId(),
+            task.getPublishAttempts(),
+            queuedAt,
+            new ReviewTaskMessage(
                 task.getId(),
                 task.getOrganization(),
                 task.getRepository(),
@@ -207,19 +247,15 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 task.getCommitSha(),
                 queuedAt,
                 LogContext.currentTraceId()
-            ));
-            recordAudit(task.getId(), "SUCCESS", "queued");
-            return new MessageQueueRequeueResponse(task.getId(), "queued", "Message task requeued", task.getPublishAttempts());
-        } catch (MessagePublishException ex) {
-            markPublishFailed(task, ex, queuedAt);
-            recordAudit(task.getId(), "FAILED", truncate(errorMessage(ex)));
-            return new MessageQueueRequeueResponse(
-                task.getId(),
-                "publish_failed",
-                "Message task saved, waiting for publish compensation",
-                task.getPublishAttempts()
-            );
+            )
+        );
+    }
+
+    private <T> T executeInTransaction(TransactionCallback<T> callback) {
+        if (transactionTemplate == null) {
+            return callback.execute();
         }
+        return transactionTemplate.execute(status -> callback.execute());
     }
 
     private ActiveRabbitMqConfigDto activeConfig(RabbitMqIntegrationSettings settings) {
@@ -246,12 +282,23 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     private String runtimeConnectionStatus() {
+        CompletableFuture<Boolean> probe = CompletableFuture.supplyAsync(
+            () -> rabbitTemplate.execute(channel -> channel.isOpen())
+        );
         try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
+            Boolean open = probe.get(runtimeConnectionTimeoutMs(), TimeUnit.MILLISECONDS);
             return Boolean.TRUE.equals(open) ? "CONNECTED" : "DISCONNECTED";
-        } catch (RuntimeException ex) {
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return "DISCONNECTED";
+        } catch (ExecutionException | RuntimeException | TimeoutException ex) {
+            probe.cancel(true);
             return "DISCONNECTED";
         }
+    }
+
+    private long runtimeConnectionTimeoutMs() {
+        return Math.max(100, properties.getHealthCheckTimeoutMs());
     }
 
     private RabbitMqTopologyDto topology() {
@@ -265,11 +312,12 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         );
     }
 
-    private List<MessageQueueMetricDto> metrics(List<ReviewTask> tasks) {
-        long publishFailed = tasks.stream().filter(this::isPublishFailed).count();
-        long claimed = tasks.stream().filter(task -> task.getPublishClaimedAt() != null).count();
-        long dlqBacklog = tasks.stream().filter(task -> STATUS_DLQ.equals(task.getStatus())).count();
-        long publishSucceeded = Math.max(0, tasks.size() - publishFailed - dlqBacklog);
+    private List<MessageQueueMetricDto> metrics(MessageQueueHealthSummary summary) {
+        long total = safeCount(summary == null ? null : summary.getTotal());
+        long publishFailed = safeCount(summary == null ? null : summary.getPublishFailed());
+        long claimed = safeCount(summary == null ? null : summary.getClaimed());
+        long dlqBacklog = safeCount(summary == null ? null : summary.getDlqBacklog());
+        long publishSucceeded = Math.max(0, total - publishFailed - dlqBacklog);
         recordQueueDepth(publishFailed, claimed, dlqBacklog);
 
         return List.of(
@@ -289,20 +337,13 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         metrics.rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", dlqBacklog);
     }
 
-    private RetryCompensationStatusDto retryCompensation(List<ReviewTask> tasks) {
-        long claimed = tasks.stream().filter(task -> task.getPublishClaimedAt() != null).count();
-        String latestFailureReason = tasks.stream()
-            .filter(task -> task.getLastPublishError() != null && !task.getLastPublishError().isBlank())
-            .max(Comparator.comparing(ReviewTask::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
-            .map(ReviewTask::getLastPublishError)
-            .orElse(null);
-
+    private RetryCompensationStatusDto retryCompensation(MessageQueueHealthSummary summary, String latestFailureReason) {
         return new RetryCompensationStatusDto(
             maxAttempts(),
             Math.max(1000, properties.getPublishCompensationIntervalMs()),
             Math.max(1, properties.getPublishCompensationBatchSize()),
             Math.max(1000, properties.getPublishCompensationLeaseMs()),
-            claimed,
+            safeCount(summary == null ? null : summary.getClaimed()),
             null,
             latestFailureReason
         );
@@ -326,6 +367,10 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 task.getLastPublishError()
             ))
             .toList();
+    }
+
+    private long safeCount(Long value) {
+        return value == null ? 0L : value;
     }
 
     private boolean isExceptionTask(ReviewTask task) {
@@ -421,5 +466,18 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
     private String format(LocalDateTime value) {
         return value == null ? null : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private record RequeuePublishContext(
+        Long taskId,
+        int publishAttempts,
+        LocalDateTime queuedAt,
+        ReviewTaskMessage message
+    ) {
+    }
+
+    @FunctionalInterface
+    private interface TransactionCallback<T> {
+        T execute();
     }
 }

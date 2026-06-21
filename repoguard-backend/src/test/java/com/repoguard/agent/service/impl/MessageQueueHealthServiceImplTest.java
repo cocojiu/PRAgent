@@ -3,7 +3,9 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -18,6 +20,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -29,6 +32,9 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class MessageQueueHealthServiceImplTest {
 
@@ -60,7 +66,9 @@ class MessageQueueHealthServiceImplTest {
 
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
+        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(5L, 3L, 1L, 1L));
+        when(reviewTaskMapper.selectLatestPublishFailureReason()).thenReturn("routing failed");
+        when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of(
             task(1L, "QUEUED", 0, null, null, null, LocalDateTime.of(2026, 6, 10, 20, 0)),
             task(2L, "PUBLISH_FAILED", 2, LocalDateTime.of(2026, 6, 10, 21, 10), null, "publisher confirm timed out", LocalDateTime.of(2026, 6, 10, 21, 0)),
             task(3L, "PUBLISH_FAILED", 1, LocalDateTime.of(2026, 6, 10, 21, 12), "repoguard-a1", "broker unavailable", LocalDateTime.of(2026, 6, 10, 21, 1)),
@@ -89,6 +97,26 @@ class MessageQueueHealthServiceImplTest {
         assertThat(health.exceptionTasks()).anyMatch(task -> "RETRY_EXHAUSTED".equals(task.status()));
         assertThat(health.exceptionTasks()).anyMatch(task -> "PUBLISH_CLAIMED".equals(task.status()));
         assertThat(health.dataSource()).isEqualTo("DATABASE_TASK_STATE");
+        verify(reviewTaskMapper, never()).selectList(any());
+    }
+
+    @Test
+    void healthReturnsDisconnectedWhenRuntimeProbeTimesOut() {
+        properties.setHealthCheckTimeoutMs(50);
+        when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
+        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(0L, 0L, 0L, 0L));
+        when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenAnswer(invocation -> {
+            Thread.sleep(500);
+            return true;
+        });
+
+        long startedAt = System.nanoTime();
+        MessageQueueHealthResponse health = service.getHealth();
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
+
+        assertThat(health.activeConfig().runtimeConnectionStatus()).isEqualTo("DISCONNECTED");
+        assertThat(elapsedMs).isLessThan(450);
     }
 
     @Test
@@ -111,6 +139,38 @@ class MessageQueueHealthServiceImplTest {
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
         verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
+    }
+
+    @Test
+    void requeueTaskPublishesOnlyAfterQueuedStateTransactionCommits() {
+        RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+        MessageQueueHealthServiceImpl transactionalService = new MessageQueueHealthServiceImpl(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            systemSettingLogMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            rabbitTemplate,
+            reviewTaskPublisher,
+            transactionManager,
+            null,
+            null
+        );
+        ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
+        ReviewTimeline latest = new ReviewTimeline();
+        latest.setSortOrder(4);
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
+        doAnswer(invocation -> {
+            assertThat(transactionManager.committed).isTrue();
+            return null;
+        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+
+        MessageQueueRequeueResponse response = transactionalService.requeueTask(42L);
+
+        assertThat(response.status()).isEqualTo("queued");
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
     }
 
     @Test
@@ -157,6 +217,35 @@ class MessageQueueHealthServiceImplTest {
         );
     }
 
+    private MessageQueueHealthSummary summary(Long total, Long publishFailed, Long claimed, Long dlqBacklog) {
+        return new MessageQueueHealthSummary() {
+            @Override
+            public Long getTotal() {
+                return total;
+            }
+
+            @Override
+            public Long getPublishFailed() {
+                return publishFailed;
+            }
+
+            @Override
+            public Long getClaimed() {
+                return claimed;
+            }
+
+            @Override
+            public Long getDlqBacklog() {
+                return dlqBacklog;
+            }
+
+            @Override
+            public LocalDateTime getLatestFailureCreatedAt() {
+                return LocalDateTime.of(2026, 6, 10, 21, 3);
+            }
+        };
+    }
+
     private ReviewTask task(
         Long id,
         String status,
@@ -180,5 +269,29 @@ class MessageQueueHealthServiceImplTest {
         task.setLastPublishError(lastError);
         task.setCreatedAt(createdAt);
         return task;
+    }
+
+    private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+        private boolean committed;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+            committed = false;
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            committed = true;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            committed = false;
+        }
     }
 }
