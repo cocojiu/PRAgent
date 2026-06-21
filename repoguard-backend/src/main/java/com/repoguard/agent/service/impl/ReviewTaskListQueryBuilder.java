@@ -10,6 +10,9 @@ import org.springframework.util.StringUtils;
 @Component
 public class ReviewTaskListQueryBuilder {
 
+    private static final int MIN_TEXT_KEYWORD_LENGTH = 3;
+    private static final int MIN_COMMIT_PREFIX_LENGTH = 7;
+
     public LambdaQueryWrapper<ReviewTask> build(ReviewQuery query) {
         ReviewTaskListQueryCriteria criteria = normalize(query);
         LambdaQueryWrapper<ReviewTask> wrapper = new LambdaQueryWrapper<ReviewTask>()
@@ -30,17 +33,17 @@ public class ReviewTaskListQueryBuilder {
         if (StringUtils.hasText(criteria.triggerSource())) {
             wrapper.eq(ReviewTask::getTriggerSource, criteria.triggerSource());
         }
-        if (StringUtils.hasText(criteria.keyword())) {
+        if (criteria.prNumber() != null) {
+            wrapper.eq(ReviewTask::getPrNumber, criteria.prNumber());
+        } else if (StringUtils.hasText(criteria.commitPrefix())) {
+            wrapper.likeRight(ReviewTask::getCommitSha, criteria.commitPrefix());
+        } else if (StringUtils.hasText(criteria.textKeyword())) {
             wrapper.and(nested -> nested
-                .like(ReviewTask::getTitle, criteria.keyword())
+                .like(ReviewTask::getTitle, criteria.textKeyword())
                 .or()
-                .like(ReviewTask::getRepository, criteria.keyword())
+                .like(ReviewTask::getRepository, criteria.textKeyword())
                 .or()
-                .like(ReviewTask::getOrganization, criteria.keyword())
-                .or()
-                .like(ReviewTask::getCommitSha, criteria.keyword())
-                .or(criteria.prNumber() != null)
-                .eq(criteria.prNumber() != null, ReviewTask::getPrNumber, criteria.prNumber())
+                .like(ReviewTask::getOrganization, criteria.textKeyword())
             );
         }
         return wrapper;
@@ -54,6 +57,8 @@ public class ReviewTaskListQueryBuilder {
         String triggerSource = upperTrimToNull(query.triggerSource());
         String keyword = trimToNull(query.keyword());
         Integer prNumber = StringUtils.hasText(keyword) ? parseIntegerOrNull(keyword) : null;
+        String commitPrefix = prNumber == null && isCommitPrefix(keyword) ? keyword : null;
+        String textKeyword = prNumber == null && commitPrefix == null && isUsableTextKeyword(keyword) ? keyword : null;
         return new ReviewTaskListQueryCriteria(
             repository,
             status,
@@ -61,7 +66,9 @@ public class ReviewTaskListQueryBuilder {
             source,
             triggerSource,
             keyword,
-            prNumber
+            prNumber,
+            commitPrefix,
+            textKeyword
         );
     }
 
@@ -81,6 +88,16 @@ public class ReviewTaskListQueryBuilder {
         }
     }
 
+    private boolean isCommitPrefix(String value) {
+        return StringUtils.hasText(value)
+            && value.length() >= MIN_COMMIT_PREFIX_LENGTH
+            && value.matches("[0-9a-fA-F]+");
+    }
+
+    private boolean isUsableTextKeyword(String value) {
+        return StringUtils.hasText(value) && value.length() >= MIN_TEXT_KEYWORD_LENGTH;
+    }
+
     record ReviewTaskListQueryCriteria(
         String repository,
         String status,
@@ -88,7 +105,9 @@ public class ReviewTaskListQueryBuilder {
         String source,
         String triggerSource,
         String keyword,
-        Integer prNumber
+        Integer prNumber,
+        String commitPrefix,
+        String textKeyword
     ) {
     }
 }

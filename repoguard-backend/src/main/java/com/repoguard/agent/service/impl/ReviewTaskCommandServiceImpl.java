@@ -26,9 +26,15 @@ import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -41,6 +47,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
+    private static final ConcurrentMap<String, CompletableFuture<ReviewTask>> IN_FLIGHT_MANUAL_CREATES = new ConcurrentHashMap<>();
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -79,7 +86,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     }
 
     @Override
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
         String organization = request.organization().trim();
         String repository = request.repository().trim();
@@ -90,44 +97,61 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             return reuseExistingTask(existingTask);
         }
 
+        String idempotencyKey = manualIdempotencyKey(organization, repository, request.prNumber(), commit);
+        CompletableFuture<ReviewTask> ownerFuture = new CompletableFuture<>();
+        CompletableFuture<ReviewTask> existingFuture = IN_FLIGHT_MANUAL_CREATES.putIfAbsent(idempotencyKey, ownerFuture);
+        if (existingFuture != null) {
+            ReviewTask concurrentTask = awaitConcurrentManualTask(idempotencyKey, existingFuture);
+            evictDashboardOverview();
+            return reusedTaskResponse(concurrentTask);
+        }
+
         LocalDateTime createdAt = LocalDateTime.now();
         ReviewTask task = buildReviewTask(request, organization, repository, commit, source, createdAt);
         try {
-            reviewTaskMapper.insert(task);
-        } catch (DuplicateKeyException ex) {
-            ReviewTask concurrentTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
-            if (concurrentTask != null) {
-                return reuseExistingTask(concurrentTask);
+            int affectedRows = reviewTaskMapper.insertManualReviewOrReuse(task);
+            if (affectedRows != 1) {
+                ReviewTask concurrentTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
+                if (concurrentTask == null) {
+                    throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Review task idempotency conflict could not be resolved");
+                }
+                completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, concurrentTask);
+                evictDashboardOverview();
+                return reusedTaskResponse(concurrentTask);
             }
-            throw ex;
-        }
-        insertInitialTimeline(task.getId(), createdAt);
-        evictDashboardOverview();
-        if (metrics != null) {
-            metrics.reviewTaskCreated(source);
-        }
-        ReviewTaskMessage message = new ReviewTaskMessage(
-            task.getId(),
-            organization,
-            repository,
-            request.prNumber(),
-            commit,
-            createdAt,
-            LogContext.currentTraceId()
-        );
-        try {
-            publishReviewTaskAfterCommit(task, message, createdAt);
-            return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
-        } catch (MessagePublishException ex) {
-            markPublishFailed(task, ex, createdAt);
-            return new ManualReviewResponse(
+            insertInitialTimeline(task.getId(), createdAt);
+            completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, task);
+            evictDashboardOverview();
+            if (metrics != null) {
+                metrics.reviewTaskCreated(source);
+            }
+            ReviewTaskMessage message = new ReviewTaskMessage(
                 task.getId(),
-                "publish_failed",
-                "Review task saved, waiting for message publish compensation",
-                false,
-                lower(source),
-                lower(source)
+                organization,
+                repository,
+                request.prNumber(),
+                commit,
+                createdAt,
+                LogContext.currentTraceId()
             );
+            try {
+                publishReviewTaskAfterCommit(task, message, createdAt);
+                return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
+            } catch (MessagePublishException ex) {
+                markPublishFailed(task, ex, createdAt);
+                return new ManualReviewResponse(
+                    task.getId(),
+                    "publish_failed",
+                    "Review task saved, waiting for message publish compensation",
+                    false,
+                    lower(source),
+                    lower(source)
+                );
+            }
+        } catch (RuntimeException ex) {
+            ownerFuture.completeExceptionally(ex);
+            IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, ownerFuture);
+            throw ex;
         }
     }
 
@@ -220,6 +244,8 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setPrUrl(buildPrUrl(request));
         task.setSource(source);
         task.setTriggerSource(source);
+        task.setHumanReviewRequired(false);
+        task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
         task.setCreatedAt(createdAt);
         task.setDurationSeconds(0);
         return task;
@@ -269,6 +295,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         existingTask.setTriggerSource(SOURCE_EXISTING_REUSED);
         reviewTaskMapper.updateById(existingTask);
         evictDashboardOverview();
+        return reusedTaskResponse(existingTask);
+    }
+
+    private ManualReviewResponse reusedTaskResponse(ReviewTask existingTask) {
         return new ManualReviewResponse(
             existingTask.getId(),
             lower(existingTask.getStatus()),
@@ -277,6 +307,47 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             lower(resolveStoredSource(existingTask.getSource())),
             lower(SOURCE_EXISTING_REUSED)
         );
+    }
+
+    private String manualIdempotencyKey(String organization, String repository, Integer prNumber, String commit) {
+        return organization + '\n' + repository + '\n' + prNumber + '\n' + commit;
+    }
+
+    private ReviewTask awaitConcurrentManualTask(String idempotencyKey, CompletableFuture<ReviewTask> future) {
+        try {
+            return future.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Interrupted while waiting for existing review task");
+        } catch (ExecutionException ex) {
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Concurrent review task creation failed");
+        } catch (TimeoutException ex) {
+            IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Timed out waiting for existing review task");
+        }
+    }
+
+    private void completeManualCreateAfterTransaction(
+        String idempotencyKey,
+        CompletableFuture<ReviewTask> future,
+        ReviewTask task
+    ) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            future.complete(task);
+            IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_COMMITTED) {
+                    future.complete(task);
+                } else {
+                    future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
+                }
+                IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+            }
+        });
     }
 
     private ReviewTask findExistingManualTask(String organization, String repository, Integer prNumber, String commit) {

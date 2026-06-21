@@ -19,6 +19,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -161,9 +162,9 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
 
     @Override
     public MessageQueueHealthResponse getHealth() {
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>().orderByDesc(ReviewTask::getCreatedAt)
-        );
+        MessageQueueHealthSummary summary = reviewTaskMapper.selectMessageQueueHealthSummary();
+        List<ReviewTask> exceptionTasks = reviewTaskMapper.selectMessageQueueExceptionTasks();
+        String latestFailureReason = reviewTaskMapper.selectLatestPublishFailureReason();
         RabbitMqIntegrationSettings settings = rabbitMqIntegrationProvider.getSettings();
         if (settings == null) {
             settings = RabbitMqIntegrationSettings.empty();
@@ -172,9 +173,9 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         return new MessageQueueHealthResponse(
             activeConfig(settings),
             topology(),
-            metrics(tasks),
-            retryCompensation(tasks),
-            exceptionTasks(tasks),
+            metrics(summary),
+            retryCompensation(summary, latestFailureReason),
+            exceptionTasks(exceptionTasks),
             format(LocalDateTime.now()),
             "DATABASE_TASK_STATE"
         );
@@ -311,11 +312,12 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         );
     }
 
-    private List<MessageQueueMetricDto> metrics(List<ReviewTask> tasks) {
-        long publishFailed = tasks.stream().filter(this::isPublishFailed).count();
-        long claimed = tasks.stream().filter(task -> task.getPublishClaimedAt() != null).count();
-        long dlqBacklog = tasks.stream().filter(task -> STATUS_DLQ.equals(task.getStatus())).count();
-        long publishSucceeded = Math.max(0, tasks.size() - publishFailed - dlqBacklog);
+    private List<MessageQueueMetricDto> metrics(MessageQueueHealthSummary summary) {
+        long total = safeCount(summary == null ? null : summary.getTotal());
+        long publishFailed = safeCount(summary == null ? null : summary.getPublishFailed());
+        long claimed = safeCount(summary == null ? null : summary.getClaimed());
+        long dlqBacklog = safeCount(summary == null ? null : summary.getDlqBacklog());
+        long publishSucceeded = Math.max(0, total - publishFailed - dlqBacklog);
         recordQueueDepth(publishFailed, claimed, dlqBacklog);
 
         return List.of(
@@ -335,20 +337,13 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         metrics.rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", dlqBacklog);
     }
 
-    private RetryCompensationStatusDto retryCompensation(List<ReviewTask> tasks) {
-        long claimed = tasks.stream().filter(task -> task.getPublishClaimedAt() != null).count();
-        String latestFailureReason = tasks.stream()
-            .filter(task -> task.getLastPublishError() != null && !task.getLastPublishError().isBlank())
-            .max(Comparator.comparing(ReviewTask::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
-            .map(ReviewTask::getLastPublishError)
-            .orElse(null);
-
+    private RetryCompensationStatusDto retryCompensation(MessageQueueHealthSummary summary, String latestFailureReason) {
         return new RetryCompensationStatusDto(
             maxAttempts(),
             Math.max(1000, properties.getPublishCompensationIntervalMs()),
             Math.max(1, properties.getPublishCompensationBatchSize()),
             Math.max(1000, properties.getPublishCompensationLeaseMs()),
-            claimed,
+            safeCount(summary == null ? null : summary.getClaimed()),
             null,
             latestFailureReason
         );
@@ -372,6 +367,10 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 task.getLastPublishError()
             ))
             .toList();
+    }
+
+    private long safeCount(Long value) {
+        return value == null ? 0L : value;
     }
 
     private boolean isExceptionTask(ReviewTask task) {

@@ -32,6 +32,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cache.annotation.Cacheable;
 
 class DashboardServiceImplTest {
 
@@ -70,6 +71,16 @@ class DashboardServiceImplTest {
     void setUp() {
         when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of());
         when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of());
+    }
+
+    @Test
+    void overviewCacheUsesSynchronizedLoadingToAvoidTtlStampede() throws Exception {
+        Cacheable cacheable = DashboardServiceImpl.class
+            .getMethod("getOverview", Integer.class)
+            .getAnnotation(Cacheable.class);
+
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.sync()).isTrue();
     }
 
     @Test
