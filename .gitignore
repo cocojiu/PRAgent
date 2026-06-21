@@ -11,6 +11,7 @@ target/
 .vscode/
 *.log
 logs/
+performance/
 .deploy/
 .deploy-runtime/
 releases/
@@ -19,6 +20,7 @@ releases/
 .npm-cache/
 move-codex-data-to-d.ps1
 BackendRules/
+.github/workflows/runtime-metadata-check.yml
 repoguard-backend/src/main/resources/application-local.yml
 config/application-local.yml
 repoguard-backend/config/application-local.yml
