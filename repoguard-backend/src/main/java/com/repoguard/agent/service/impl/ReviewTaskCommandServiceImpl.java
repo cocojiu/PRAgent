@@ -30,8 +30,13 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -50,6 +55,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private static final String SOURCE_GITHUB_PR_PICKER = "GITHUB_PR_PICKER";
     private static final String SOURCE_EXISTING_REUSED = "EXISTING_REUSED";
     private static final ConcurrentMap<String, CompletableFuture<ReviewTask>> IN_FLIGHT_MANUAL_CREATES = new ConcurrentHashMap<>();
+    private static final ExecutorService REVIEW_PUBLISH_EXECUTOR = Executors.newFixedThreadPool(
+        2,
+        new ManualReviewPublishThreadFactory()
+    );
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineMapper reviewTimelineMapper;
@@ -58,6 +67,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private final CacheEvictionService cacheEvictionService;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final TransactionTemplate manualCreateTransactionTemplate;
+    private final Executor reviewPublishExecutor;
 
     public ReviewTaskCommandServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -66,7 +76,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         RepoGuardMetrics metrics,
         CacheEvictionService cacheEvictionService
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService, null, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService, null, null, Runnable::run);
     }
 
     public ReviewTaskCommandServiceImpl(
@@ -77,7 +87,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         CacheEvictionService cacheEvictionService,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService, reviewTaskStateMachine, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, metrics, cacheEvictionService, reviewTaskStateMachine, null, Runnable::run);
     }
 
     @Autowired
@@ -90,6 +100,28 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         ReviewTaskStateMachine reviewTaskStateMachine,
         PlatformTransactionManager transactionManager
     ) {
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            metrics,
+            cacheEvictionService,
+            reviewTaskStateMachine,
+            transactionManager,
+            REVIEW_PUBLISH_EXECUTOR
+        );
+    }
+
+    ReviewTaskCommandServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RepoGuardMetrics metrics,
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        PlatformTransactionManager transactionManager,
+        Executor reviewPublishExecutor
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
@@ -99,6 +131,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
+        this.reviewPublishExecutor = reviewPublishExecutor == null ? Runnable::run : reviewPublishExecutor;
     }
 
     private TransactionTemplate buildManualCreateTransactionTemplate(PlatformTransactionManager transactionManager) {
@@ -201,20 +234,18 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             createdAt,
             LogContext.currentTraceId()
         );
-        try {
-            publishReviewTaskAfterCommit(task, message, createdAt);
+        boolean queued = publishReviewTaskAfterCommit(task, message, createdAt);
+        if (queued) {
             return new ManualReviewResponse(task.getId(), "queued", "Review task queued", false, lower(source), lower(source));
-        } catch (MessagePublishException ex) {
-            markPublishFailed(task, ex, createdAt);
-            return new ManualReviewResponse(
-                task.getId(),
-                "publish_failed",
-                "Review task saved, waiting for message publish compensation",
-                false,
-                lower(source),
-                lower(source)
-            );
         }
+        return new ManualReviewResponse(
+            task.getId(),
+            "publish_failed",
+            "Review task saved, waiting for message publish compensation",
+            false,
+            lower(source),
+            lower(source)
+        );
     }
 
     @Override
@@ -270,8 +301,16 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             LogContext.currentTraceId()
         );
         try {
-            publishReviewTaskAfterCommit(task, message, queuedAt);
-            return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
+            boolean queued = publishReviewTaskAfterCommit(task, message, queuedAt);
+            if (queued) {
+                return new ReviewRetryResponse(task.getId(), "queued", "Review task queued for retry", retryCount);
+            }
+            return new ReviewRetryResponse(
+                task.getId(),
+                "publish_failed",
+                "Review task saved, waiting for message publish compensation",
+                retryCount
+            );
         } catch (MessagePublishException ex) {
             markPublishFailed(task, ex, queuedAt);
             return new ReviewRetryResponse(
@@ -330,21 +369,27 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         task.setDurationSeconds(0);
     }
 
-    private void publishReviewTaskAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
+    private boolean publishReviewTaskAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            reviewTaskPublisher.publish(message);
-            return;
+            return publishAndMarkFailure(task, message, queuedAt);
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                try {
-                    reviewTaskPublisher.publish(message);
-                } catch (MessagePublishException ex) {
-                    markPublishFailed(task, ex, queuedAt);
-                }
+                reviewPublishExecutor.execute(() -> publishAndMarkFailure(task, message, queuedAt));
             }
         });
+        return true;
+    }
+
+    private boolean publishAndMarkFailure(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
+        try {
+            reviewTaskPublisher.publish(message);
+            return true;
+        } catch (MessagePublishException ex) {
+            markPublishFailed(task, ex, queuedAt);
+            return false;
+        }
     }
 
     private void evictDashboardOverview() {
@@ -636,5 +681,16 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     @FunctionalInterface
     private interface ManualReviewCreation {
         ManualReviewResponse create();
+    }
+
+    private static class ManualReviewPublishThreadFactory implements ThreadFactory {
+        private final AtomicInteger sequence = new AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "manual-review-publish-" + sequence.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        }
     }
 }
