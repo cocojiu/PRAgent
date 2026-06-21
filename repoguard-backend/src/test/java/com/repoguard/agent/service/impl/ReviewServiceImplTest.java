@@ -704,7 +704,7 @@ class ReviewServiceImplTest {
         assertThat(result.triggerSource()).isEqualTo("existing_reused");
         assertThat(result.message()).isEqualTo("Review task already exists");
         verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
-        verify(reviewTaskMapper).updateById(any(ReviewTask.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
