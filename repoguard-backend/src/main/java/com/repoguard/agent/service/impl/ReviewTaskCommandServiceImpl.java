@@ -220,7 +220,8 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             return reusedTaskResponse(concurrentTask);
         }
         insertInitialTimeline(task.getId(), createdAt);
-        completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, task);
+        ownerFuture.complete(task);
+        cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
         evictDashboardOverview();
         if (metrics != null) {
             metrics.reviewTaskCreated(source);
@@ -450,6 +451,22 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             @Override
             public void afterCompletion(int status) {
                 if (status != STATUS_COMMITTED) {
+                    future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
+                }
+                IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+            }
+        });
+    }
+
+    private void cleanupManualCreateAfterTransaction(String idempotencyKey, CompletableFuture<ReviewTask> future) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != STATUS_COMMITTED && !future.isCompletedExceptionally()) {
                     future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
                 }
                 IN_FLIGHT_MANUAL_CREATES.remove(idempotencyKey, future);
