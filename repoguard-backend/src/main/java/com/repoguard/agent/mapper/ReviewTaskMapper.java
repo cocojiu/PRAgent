@@ -59,15 +59,51 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         """)
     List<ReviewTask> selectMessageQueueExceptionTasks();
 
-    interface MessageQueueHealthSummary {
-        Long getTotal();
+    class MessageQueueHealthSummary {
+        private Long total;
+        private Long publishFailed;
+        private Long claimed;
+        private Long dlqBacklog;
+        private LocalDateTime latestFailureCreatedAt;
 
-        Long getPublishFailed();
+        public Long getTotal() {
+            return total;
+        }
 
-        Long getClaimed();
+        public void setTotal(Long total) {
+            this.total = total;
+        }
 
-        Long getDlqBacklog();
+        public Long getPublishFailed() {
+            return publishFailed;
+        }
 
-        LocalDateTime getLatestFailureCreatedAt();
+        public void setPublishFailed(Long publishFailed) {
+            this.publishFailed = publishFailed;
+        }
+
+        public Long getClaimed() {
+            return claimed;
+        }
+
+        public void setClaimed(Long claimed) {
+            this.claimed = claimed;
+        }
+
+        public Long getDlqBacklog() {
+            return dlqBacklog;
+        }
+
+        public void setDlqBacklog(Long dlqBacklog) {
+            this.dlqBacklog = dlqBacklog;
+        }
+
+        public LocalDateTime getLatestFailureCreatedAt() {
+            return latestFailureCreatedAt;
+        }
+
+        public void setLatestFailureCreatedAt(LocalDateTime latestFailureCreatedAt) {
+            this.latestFailureCreatedAt = latestFailureCreatedAt;
+        }
     }
 }

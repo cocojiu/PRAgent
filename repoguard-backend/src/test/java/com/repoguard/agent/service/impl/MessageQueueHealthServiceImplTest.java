@@ -218,32 +218,13 @@ class MessageQueueHealthServiceImplTest {
     }
 
     private MessageQueueHealthSummary summary(Long total, Long publishFailed, Long claimed, Long dlqBacklog) {
-        return new MessageQueueHealthSummary() {
-            @Override
-            public Long getTotal() {
-                return total;
-            }
-
-            @Override
-            public Long getPublishFailed() {
-                return publishFailed;
-            }
-
-            @Override
-            public Long getClaimed() {
-                return claimed;
-            }
-
-            @Override
-            public Long getDlqBacklog() {
-                return dlqBacklog;
-            }
-
-            @Override
-            public LocalDateTime getLatestFailureCreatedAt() {
-                return LocalDateTime.of(2026, 6, 10, 21, 3);
-            }
-        };
+        MessageQueueHealthSummary summary = new MessageQueueHealthSummary();
+        summary.setTotal(total);
+        summary.setPublishFailed(publishFailed);
+        summary.setClaimed(claimed);
+        summary.setDlqBacklog(dlqBacklog);
+        summary.setLatestFailureCreatedAt(LocalDateTime.of(2026, 6, 10, 21, 3));
+        return summary;
     }
 
     private ReviewTask task(
