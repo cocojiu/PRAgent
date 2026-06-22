@@ -8,6 +8,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewData;
 import com.repoguard.agent.service.impl.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,6 +17,7 @@ public class GithubCommentPreviewResponseAssembler {
     private final GithubCommentWritebackCheckBuilder writebackCheckBuilder;
     private final GithubCommentPreviewItemBuilder previewItemBuilder;
 
+    @Autowired
     public GithubCommentPreviewResponseAssembler() {
         this(new GithubCommentWritebackCheckBuilder(), new GithubCommentPreviewItemBuilder());
     }

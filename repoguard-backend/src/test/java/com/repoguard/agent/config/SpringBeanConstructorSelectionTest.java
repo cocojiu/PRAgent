@@ -11,8 +11,10 @@ import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
 import com.repoguard.agent.service.impl.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.service.impl.DashboardReviewTrendWindow;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
+import com.repoguard.agent.service.impl.GithubCommentPreviewResponseAssembler;
 import com.repoguard.agent.service.impl.GithubCommentPublishServiceImpl;
 import com.repoguard.agent.service.impl.HumanReviewCommandService;
 import com.repoguard.agent.service.impl.MessageQueueHealthServiceImpl;
@@ -46,8 +48,10 @@ class SpringBeanConstructorSelectionTest {
             SecretCryptoService.class,
             DataRetentionServiceImpl.class,
             DashboardLlmQualityTrendBuilder.class,
+            DashboardReviewTrendWindow.class,
             GithubCommentApplicationServiceImpl.class,
             GithubCommentPreviewServiceImpl.class,
+            GithubCommentPreviewResponseAssembler.class,
             GithubCommentPublishServiceImpl.class,
             HumanReviewCommandService.class,
             MessageQueueHealthServiceImpl.class,
@@ -68,7 +72,8 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryEventStateUpdater"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryFailurePolicy"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryLogFactory"),
-            Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy")
+            Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy"),
+            Class.forName("com.repoguard.agent.service.impl.MessageQueueHealthQueryService")
         );
 
         for (Class<?> type : concat(springManagedTypes, packagePrivateSpringManagedTypes)) {

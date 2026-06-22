@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -11,6 +12,7 @@ public class DashboardReviewTrendWindow {
 
     private final Clock clock;
 
+    @Autowired
     DashboardReviewTrendWindow() {
         this(Clock.systemDefaultZone());
     }

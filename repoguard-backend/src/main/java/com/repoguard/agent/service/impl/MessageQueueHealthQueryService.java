@@ -19,6 +19,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -35,6 +36,7 @@ class MessageQueueHealthQueryService {
     private final RepoGuardMetrics metrics;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
 
+    @Autowired
     MessageQueueHealthQueryService(
         ReviewTaskMapper reviewTaskMapper,
         RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
