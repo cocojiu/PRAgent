@@ -51,6 +51,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ReviewControllerTest {
 
     private ReviewQuery lastListQuery;
+    private int lastPublicationPage;
+    private int lastPublicationPageSize;
+    private String lastPublicationStatus;
 
     private final ReviewService reviewService = new ReviewService() {
         @Override
@@ -249,6 +252,9 @@ class ReviewControllerTest {
 
         @Override
         public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status) {
+            lastPublicationPage = page;
+            lastPublicationPageSize = pageSize;
+            lastPublicationStatus = status;
             return new GithubCommentPublicationHistoryResponse(
                 id,
                 1,
@@ -465,12 +471,37 @@ class ReviewControllerTest {
         mockMvc.perform(get("/api/v1/reviews/512/github-comments/preview"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp").exists())
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.prNumber").value(512))
+            .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
+            .andExpect(jsonPath("$.data.totalFindings").value(1))
             .andExpect(jsonPath("$.data.commentableCount").value(1))
+            .andExpect(jsonPath("$.data.blockedCount").value(0))
             .andExpect(jsonPath("$.data.writebackCheck.status").value("ready"))
+            .andExpect(jsonPath("$.data.writebackCheck.level").value("success"))
+            .andExpect(jsonPath("$.data.writebackCheck.taskOwner").value("repo-guard-demo"))
+            .andExpect(jsonPath("$.data.writebackCheck.taskRepository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data.writebackCheck.configuredOwner").value("repo-guard-demo"))
+            .andExpect(jsonPath("$.data.writebackCheck.configuredRepository").value("spring-boot-demo"))
             .andExpect(jsonPath("$.data.writebackCheck.repositoryMatched").value(true))
+            .andExpect(jsonPath("$.data.writebackCheck.tokenConfigured").value(true))
+            .andExpect(jsonPath("$.data.writebackCheck.connectionHealthy").value(true))
+            .andExpect(jsonPath("$.data.writebackCheck.messages[0]").value("GitHub 回写配置与当前任务仓库匹配。"))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].findingId").value(1))
+            .andExpect(jsonPath("$.data.items[0].severity").value("low"))
             .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"))
-            .andExpect(jsonPath("$.data.items[0].commentable").value(true));
+            .andExpect(jsonPath("$.data.items[0].line").value(12))
+            .andExpect(jsonPath("$.data.items[0].message").value("Use logger"))
+            .andExpect(jsonPath("$.data.items[0].recommendation").value("Replace stdout with logger"))
+            .andExpect(jsonPath("$.data.items[0].commentBody").value("**RepoGuard LOW finding**\n\nUse logger\n\n**建议**：Replace stdout with logger"))
+            .andExpect(jsonPath("$.data.items[0].commentable").value(true))
+            .andExpect(jsonPath("$.data.items[0].targetType").value("line"))
+            .andExpect(jsonPath("$.data.items[0].published").value(false))
+            .andExpect(jsonPath("$.data.items[0].feedbackStatus").value("unreviewed"));
     }
 
     @Test
@@ -478,19 +509,61 @@ class ReviewControllerTest {
         mockMvc.perform(post("/api/v1/reviews/512/github-comments"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.totalFindings").value(1))
             .andExpect(jsonPath("$.data.attemptedCount").value(1))
             .andExpect(jsonPath("$.data.succeededCount").value(1))
-            .andExpect(jsonPath("$.data.items[0].status").value("published"));
+            .andExpect(jsonPath("$.data.failedCount").value(0))
+            .andExpect(jsonPath("$.data.skippedCount").value(0))
+            .andExpect(jsonPath("$.data.items[0].findingId").value(1))
+            .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"))
+            .andExpect(jsonPath("$.data.items[0].line").value(12))
+            .andExpect(jsonPath("$.data.items[0].targetType").value("line"))
+            .andExpect(jsonPath("$.data.items[0].success").value(true))
+            .andExpect(jsonPath("$.data.items[0].status").value("published"))
+            .andExpect(jsonPath("$.data.items[0].message").value("GitHub comment published"))
+            .andExpect(jsonPath("$.data.items[0].url").value("https://github.com/repo/pull/1#discussion_r1"))
+            .andExpect(jsonPath("$.data.items[0].githubCommentId").value(1001))
+            .andExpect(jsonPath("$.data.items[0].publishedAt").value("2026-06-07 10:00:00"));
     }
 
     @Test
     void getGithubCommentPublicationHistoryReturnsBatches() throws Exception {
-        mockMvc.perform(get("/api/v1/reviews/512/github-comments/publications"))
+        mockMvc.perform(get("/api/v1/reviews/512/github-comments/publications")
+                .param("page", "2")
+                .param("pageSize", "10")
+                .param("status", "completed"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.page").value(2))
+            .andExpect(jsonPath("$.data.pageSize").value(10))
+            .andExpect(jsonPath("$.data.status").value("completed"))
             .andExpect(jsonPath("$.data.batches", hasSize(1)))
             .andExpect(jsonPath("$.data.batches[0].batchId").value(10))
-            .andExpect(jsonPath("$.data.batches[0].items[0].status").value("published"));
+            .andExpect(jsonPath("$.data.batches[0].status").value("completed"))
+            .andExpect(jsonPath("$.data.batches[0].totalFindings").value(1))
+            .andExpect(jsonPath("$.data.batches[0].attemptedCount").value(1))
+            .andExpect(jsonPath("$.data.batches[0].succeededCount").value(1))
+            .andExpect(jsonPath("$.data.batches[0].failedCount").value(0))
+            .andExpect(jsonPath("$.data.batches[0].skippedCount").value(0))
+            .andExpect(jsonPath("$.data.batches[0].createdAt").value("2026-06-09 12:00:00"))
+            .andExpect(jsonPath("$.data.batches[0].completedAt").value("2026-06-09 12:00:01"))
+            .andExpect(jsonPath("$.data.batches[0].items[0].findingId").value(1))
+            .andExpect(jsonPath("$.data.batches[0].items[0].file").value("src/App.java"))
+            .andExpect(jsonPath("$.data.batches[0].items[0].line").value(12))
+            .andExpect(jsonPath("$.data.batches[0].items[0].targetType").value("line"))
+            .andExpect(jsonPath("$.data.batches[0].items[0].success").value(true))
+            .andExpect(jsonPath("$.data.batches[0].items[0].status").value("published"))
+            .andExpect(jsonPath("$.data.batches[0].items[0].url").value("https://github.com/repo/pull/1#discussion_r1"))
+            .andExpect(jsonPath("$.data.batches[0].items[0].githubCommentId").value(1001))
+            .andExpect(jsonPath("$.data.batches[0].items[0].publishedAt").value("2026-06-09 12:00:01"));
+        assertThat(lastPublicationPage).isEqualTo(2);
+        assertThat(lastPublicationPageSize).isEqualTo(10);
+        assertThat(lastPublicationStatus).isEqualTo("completed");
     }
 
     @Test
