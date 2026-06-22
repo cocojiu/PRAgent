@@ -6,6 +6,7 @@ import org.springframework.util.StringUtils;
 public enum ReviewTaskSource {
     MANUAL_INPUT("MANUAL_INPUT"),
     GITHUB_PR_PICKER("GITHUB_PR_PICKER"),
+    GITHUB_WEBHOOK("GITHUB_WEBHOOK"),
     EXISTING_REUSED("EXISTING_REUSED");
 
     private final String code;
@@ -24,7 +25,11 @@ public enum ReviewTaskSource {
 
     public static ReviewTaskSource creationSource(String value) {
         ReviewTaskSource source = from(value);
-        return GITHUB_PR_PICKER == source ? GITHUB_PR_PICKER : MANUAL_INPUT;
+        return switch (source) {
+            case GITHUB_PR_PICKER -> GITHUB_PR_PICKER;
+            case GITHUB_WEBHOOK -> GITHUB_WEBHOOK;
+            default -> MANUAL_INPUT;
+        };
     }
 
     public static ReviewTaskSource from(String value) {

@@ -108,7 +108,7 @@ if (-not $SkipBackendTests) {
     Invoke-Check "backend production readiness test slice" {
         Invoke-CommandChecked `
             -FilePath "mvn" `
-            -Arguments @("-Dtest=DashboardControllerTest,ReviewControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
+            -Arguments @("-Dtest=DashboardControllerTest,ReviewControllerTest,GithubWebhookControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
             -WorkingDirectory $BackendDir
     }
 }
