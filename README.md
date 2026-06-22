@@ -247,6 +247,7 @@ RepoGuard / RepoGuard Review Observability
 - 提交信息使用 `<type>(<scope>): <中文摘要>` 格式。
 - 提交前按影响范围运行后端测试、前端类型检查或前端构建。
 - 不提交本地日志、临时脚本、真实密钥、真实 token、真实连接信息。
+- 生产准出检查可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1`；如需同时验证前端类型检查和构建，追加 `-IncludeFrontendBuild`。
 
 ## License
 

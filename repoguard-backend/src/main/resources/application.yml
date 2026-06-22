@@ -55,7 +55,7 @@ repoguard:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
   auth:
-    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:repoguard-local-dev-auth-token-secret}
+    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:changeme-local-dev}
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
