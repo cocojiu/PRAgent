@@ -193,6 +193,45 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeWritesPartialFallbackTimelineWhenChunkedReviewFallsBack() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
+            "LOW",
+            List.of(),
+            "dashscope",
+            "mimo-v2.5-pro",
+            10354,
+            "partial_fallback",
+            "PR repo-guard-demo/spring-boot-demo#512; chunked=true; chunks=2; failedChunks=2",
+            null,
+            null,
+            null,
+            null
+        ));
+
+        executor.execute(message());
+
+        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
+        verify(reviewTimelineMapper, times(4)).insert(timelineCaptor.capture());
+        assertThat(timelineCaptor.getAllValues())
+            .extracting(ReviewTimeline::getLabel)
+            .contains("Code review generated with partial rule fallback");
+    }
+
+    @Test
     void executeIgnoresCompletedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);

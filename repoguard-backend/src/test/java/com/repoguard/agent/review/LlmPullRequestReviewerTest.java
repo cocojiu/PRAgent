@@ -16,8 +16,11 @@ import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -139,6 +142,68 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void reviewParsesOctetStreamLlmResponseAsUtf8Json() throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            byte[] response = """
+                {
+                  "choices": [
+                    {
+                      "message": {
+                        "content": "{\\"riskLevel\\":\\"LOW\\",\\"findings\\":[]}"
+                      }
+                    }
+                  ],
+                  "usage": {
+                    "prompt_tokens": 321,
+                    "completion_tokens": 45,
+                    "total_tokens": 366
+                  }
+                }
+                """.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(
+                99,
+                700,
+                4,
+                450,
+                "http://127.0.0.1:" + server.getAddress().getPort()
+            );
+            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+                file("src/main/java/com/repoguard/agent/service/A.java", 10, 2)
+            ));
+
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
+
+            ReviewResult result = new LlmPullRequestReviewer(
+                reviewPolicyProvider,
+                ruleBasedReviewer,
+                RestClient.builder(),
+                new ObjectMapper(),
+                null,
+                null
+            ).review(new ReviewTask(), diff);
+
+            assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+            assertThat(result.llmParseStatus()).isEqualTo("parsed");
+            assertThat(result.llmPromptTokens()).isEqualTo(321);
+            assertThat(result.llmCompletionTokens()).isEqualTo(45);
+            assertThat(result.llmTotalTokens()).isEqualTo(366);
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void reviewFallsBackOnlyFailedChunksToRules() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
@@ -204,12 +269,28 @@ class LlmPullRequestReviewerTest {
         Integer chunkMaxFiles,
         Integer chunkMaxLines
     ) {
+        return llmSettings(
+            chunkFileThreshold,
+            chunkLineThreshold,
+            chunkMaxFiles,
+            chunkMaxLines,
+            "https://llm.example.test"
+        );
+    }
+
+    private ReviewPolicySettings llmSettings(
+        Integer chunkFileThreshold,
+        Integer chunkLineThreshold,
+        Integer chunkMaxFiles,
+        Integer chunkMaxLines,
+        String baseUrl
+    ) {
         return new ReviewPolicySettings(
             true,
             true,
             "openai",
             "gpt-test",
-            "https://llm.example.test",
+            baseUrl,
             "llm-key",
             30,
             BigDecimal.valueOf(0.2),
