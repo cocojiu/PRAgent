@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -18,6 +19,7 @@ public class RuleBasedPullRequestReviewer {
     private final ReviewFindingFactory findingFactory;
     private final List<ReviewRule> lineRules;
 
+    @Autowired
     public RuleBasedPullRequestReviewer(ReviewRuleProvider reviewRuleProvider) {
         this(reviewRuleProvider, new ReviewFindingFactory());
     }

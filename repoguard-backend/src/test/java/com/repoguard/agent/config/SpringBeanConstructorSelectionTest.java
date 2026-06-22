@@ -6,6 +6,7 @@ import com.repoguard.agent.github.GithubPullRequestClientImpl;
 import com.repoguard.agent.messaging.RabbitReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.review.LlmPullRequestReviewer;
+import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
@@ -40,6 +41,7 @@ class SpringBeanConstructorSelectionTest {
             RabbitReviewTaskPublisher.class,
             ReviewTaskPublishCompensator.class,
             LlmPullRequestReviewer.class,
+            RuleBasedPullRequestReviewer.class,
             AuthTokenService.class,
             SecretCryptoService.class,
             DataRetentionServiceImpl.class,
