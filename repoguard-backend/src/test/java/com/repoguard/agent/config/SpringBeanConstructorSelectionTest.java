@@ -17,9 +17,10 @@ import com.repoguard.agent.service.impl.HumanReviewCommandService;
 import com.repoguard.agent.service.impl.MessageQueueHealthServiceImpl;
 import com.repoguard.agent.service.impl.ManualReviewCreationService;
 import com.repoguard.agent.service.impl.ManualReviewIdempotencyCoordinator;
-import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskAfterCommitPublisher;
 import com.repoguard.agent.service.impl.ReviewTaskAfterCommitPublisherExecutor;
+import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
+import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader;
 import com.repoguard.agent.service.impl.ReviewTaskQueryServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskRetryService;
 import com.repoguard.agent.service.impl.ReviewServiceImpl;
@@ -53,6 +54,7 @@ class SpringBeanConstructorSelectionTest {
             ReviewTaskAfterCommitPublisher.class,
             ReviewTaskAfterCommitPublisherExecutor.class,
             ReviewTaskCommandServiceImpl.class,
+            ReviewTaskDetailDataLoader.class,
             ReviewTaskQueryServiceImpl.class,
             ReviewTaskRetryService.class,
             ReviewServiceImpl.class,

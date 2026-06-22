@@ -10,6 +10,7 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -20,6 +21,7 @@ public class ReviewTaskDetailDataLoader {
     private final ReviewTimelineQueryService timelineQueryService;
     private final ReviewTaskDetailFindingAssembler findingAssembler;
 
+    @Autowired
     public ReviewTaskDetailDataLoader(
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
