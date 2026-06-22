@@ -39,9 +39,18 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -862,6 +871,72 @@ class ReviewServiceImplTest {
         assertThat(timelineCaptor.getAllValues().getLast().getLabel()).contains("Message publish failed");
     }
 
+    @ParameterizedTest
+    @ValueSource(ints = {20, 50, 100})
+    void triggerManualReviewKeepsConcurrentIdempotencyForSamePrAndCommit(int concurrency) throws Exception {
+        CountingManualReviewIdempotencyCoordinator coordinator = new CountingManualReviewIdempotencyCoordinator(concurrency - 1);
+        ReviewTaskCommandServiceImpl commandService = new ReviewTaskCommandServiceImpl(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            null,
+            null,
+            null,
+            null,
+            Runnable::run,
+            coordinator,
+            null,
+            null,
+            null,
+            null
+        );
+        when(reviewTaskMapper.selectOne(any())).thenReturn(null);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ReviewTask task = invocation.getArgument(0);
+            task.setId(9001L);
+            coordinator.awaitDuplicateRegistrations();
+            return 1;
+        }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+
+        ExecutorService executor = Executors.newFixedThreadPool(concurrency);
+        CountDownLatch ready = new CountDownLatch(concurrency);
+        CountDownLatch start = new CountDownLatch(1);
+        List<CompletableFuture<ManualReviewResult>> futures = new ArrayList<>();
+        for (int i = 0; i < concurrency; i++) {
+            futures.add(CompletableFuture.supplyAsync(() -> {
+                ready.countDown();
+                await(ready);
+                await(start);
+                var response = commandService.triggerManualReview(new ManualReviewRequest(
+                    "octocat",
+                    "Hello-World",
+                    42,
+                    "Concurrent review",
+                    "same-commit",
+                    "master",
+                    "github_pr_picker"
+                ));
+                return new ManualReviewResult(response.taskId(), response.existing(), response.status());
+            }, executor));
+        }
+
+        assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+        start.countDown();
+        List<ManualReviewResult> results = futures.stream()
+            .map(CompletableFuture::join)
+            .toList();
+        executor.shutdownNow();
+
+        assertThat(results).hasSize(concurrency);
+        assertThat(results).allMatch(result -> result.taskId().equals(9001L));
+        assertThat(results).filteredOn(result -> !result.existing()).hasSize(1);
+        assertThat(results).filteredOn(ManualReviewResult::existing).hasSize(concurrency - 1);
+        assertThat(results).allMatch(result -> result.status().equals("queued"));
+        verify(reviewTaskMapper, org.mockito.Mockito.times(1)).insertManualReviewOrReuse(any(ReviewTask.class));
+        verify(reviewTimelineMapper, org.mockito.Mockito.times(1)).insert(any(ReviewTimeline.class));
+        verify(reviewTaskPublisher, org.mockito.Mockito.times(1)).publish(any(ReviewTaskMessage.class));
+    }
+
     @Test
     void retryReviewQueuesFailedTaskAndPublishesMessage() {
         ReviewTask task = task();
@@ -1014,5 +1089,53 @@ class ReviewServiceImplTest {
             repository,
             1L
         );
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for concurrent review test latch");
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for concurrent review test latch", ex);
+        }
+    }
+
+    private record ManualReviewResult(
+        Long taskId,
+        boolean existing,
+        String status
+    ) {
+    }
+
+    private static class CountingManualReviewIdempotencyCoordinator extends ManualReviewIdempotencyCoordinator {
+
+        private final CountDownLatch duplicateRegistrations;
+
+        CountingManualReviewIdempotencyCoordinator(int expectedDuplicates) {
+            this.duplicateRegistrations = new CountDownLatch(expectedDuplicates);
+        }
+
+        @Override
+        public CompletableFuture<ReviewTask> registerOwner(
+            String idempotencyKey,
+            CompletableFuture<ReviewTask> ownerFuture
+        ) {
+            CompletableFuture<ReviewTask> existingFuture = super.registerOwner(idempotencyKey, ownerFuture);
+            if (existingFuture != null) {
+                duplicateRegistrations.countDown();
+            }
+            return existingFuture;
+        }
+
+        void awaitDuplicateRegistrations() {
+            try {
+                duplicateRegistrations.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while waiting for duplicate manual review registrations", ex);
+            }
+        }
     }
 }

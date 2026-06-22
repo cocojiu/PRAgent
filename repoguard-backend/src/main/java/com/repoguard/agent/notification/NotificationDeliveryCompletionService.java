@@ -6,23 +6,30 @@ import org.springframework.stereotype.Component;
 @Component
 class NotificationDeliveryCompletionService {
 
-    private final NotificationDeliveryFailurePolicy deliveryFailurePolicy;
+    private final NotificationDeliveryCompletionDecider completionDecider;
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
 
     NotificationDeliveryCompletionService(
         NotificationDeliveryFailurePolicy deliveryFailurePolicy,
         NotificationDeliveryEventStateUpdater eventStateUpdater
     ) {
-        this.deliveryFailurePolicy = deliveryFailurePolicy;
+        this(new NotificationDeliveryCompletionDecider(deliveryFailurePolicy), eventStateUpdater);
+    }
+
+    NotificationDeliveryCompletionService(
+        NotificationDeliveryCompletionDecider completionDecider,
+        NotificationDeliveryEventStateUpdater eventStateUpdater
+    ) {
+        this.completionDecider = completionDecider;
         this.eventStateUpdater = eventStateUpdater;
     }
 
     void complete(NotificationEvent event, NotificationDeliveryResultSummary resultSummary) {
-        if (resultSummary.anyFailed()) {
-            NotificationDeliveryFailureDecision decision = deliveryFailurePolicy.decide(event);
-            eventStateUpdater.markFailed(event, decision);
+        NotificationDeliveryCompletionDecision decision = completionDecider.decide(event, resultSummary);
+        if (decision.delivered()) {
+            eventStateUpdater.markDelivered(event);
             return;
         }
-        eventStateUpdater.markDelivered(event);
+        eventStateUpdater.markFailed(event, decision.failureDecision());
     }
 }

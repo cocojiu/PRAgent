@@ -145,105 +145,24 @@
         </el-tab-pane>
 
         <el-tab-pane label="通知事件" name="events">
-          <article class="task-panel">
-            <div class="filter-bar notification-filter-bar">
-              <el-select v-model="eventFilter.status" placeholder="全部状态" clearable>
-                <el-option label="PENDING" value="PENDING" />
-                <el-option label="PUBLISHED" value="PUBLISHED" />
-                <el-option label="DELIVERING" value="DELIVERING" />
-                <el-option label="DELIVERED" value="DELIVERED" />
-                <el-option label="PUBLISH_FAILED" value="PUBLISH_FAILED" />
-                <el-option label="DELIVERY_FAILED" value="DELIVERY_FAILED" />
-                <el-option label="DEAD" value="DEAD" />
-              </el-select>
-              <el-input-number v-model="eventFilter.taskId" :min="1" :controls="false" placeholder="Task ID" />
-              <el-button type="primary" plain :loading="eventsLoading" @click="loadNotificationEvents">
-                <RefreshCw :size="16" />
-                刷新
-              </el-button>
-            </div>
-            <el-table :data="notificationEvents" class="rg-table task-table" size="large">
-              <el-table-column prop="id" label="ID" width="86" />
-              <el-table-column label="事件类型" min-width="190">
-                <template #default="{ row }">{{ eventTypeText(row.eventType) }}</template>
-              </el-table-column>
-              <el-table-column prop="taskId" label="任务" width="100" />
-              <el-table-column label="状态" width="150">
-                <template #default="{ row }">
-                  <span :class="`status-pill ${notificationStatusClass(row.status)}`">{{ notificationStatusText(row.status) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="渠道" min-width="150">
-                <template #default="{ row }">
-                  <span class="channel-cell">
-                    <component :is="channelIcon(row)" :size="18" />
-                    {{ channelText(row) }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column label="投递数" width="96">
-                <template #default="{ row }">{{ row.deliverySummary?.deliveryCount ?? 0 }}</template>
-              </el-table-column>
-              <el-table-column label="失败投递" width="110">
-                <template #default="{ row }">
-                  <span :class="{ 'danger-count': (row.deliverySummary?.failedDeliveryCount ?? 0) > 0 }">
-                    {{ row.deliverySummary?.failedDeliveryCount ?? 0 }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column label="最近投递状态" width="140">
-                <template #default="{ row }">
-                  <span :class="`status-pill ${notificationStatusClass(row.deliverySummary?.latestDeliveryStatus || '')}`">
-                    {{ notificationStatusText(row.deliverySummary?.latestDeliveryStatus || "") }}
-                  </span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="retryCount" label="重试" width="86" />
-              <el-table-column prop="nextRetryAt" label="下次重试" min-width="160" />
-              <el-table-column prop="lastError" label="最近错误" min-width="240" show-overflow-tooltip />
-              <el-table-column label="操作" width="120" fixed="right">
-                <template #default="{ row }">
-                  <el-button size="small" :disabled="!canManage || !canRetryNotificationEvent(row.status)" :loading="retryingEventId === row.id" @click="retryEvent(row.id)">
-                    重试
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </article>
+          <NotificationEventsPanel
+            :can-manage="canManage"
+            :events="notificationEvents"
+            :filter="eventFilter"
+            :loading="eventsLoading"
+            :retrying-event-id="retryingEventId"
+            @refresh="loadNotificationEvents"
+            @retry="retryEvent"
+          />
         </el-tab-pane>
 
         <el-tab-pane label="投递记录" name="deliveries">
-          <article class="task-panel">
-            <div class="filter-bar notification-filter-bar">
-              <el-select v-model="deliveryFilter.status" placeholder="全部状态" clearable>
-                <el-option label="SUCCESS" value="SUCCESS" />
-                <el-option label="FAILED" value="FAILED" />
-                <el-option label="SKIPPED" value="SKIPPED" />
-              </el-select>
-              <el-input-number v-model="deliveryFilter.taskId" :min="1" :controls="false" placeholder="Task ID" />
-              <el-button type="primary" plain :loading="deliveriesLoading" @click="loadNotificationDeliveries">
-                <RefreshCw :size="16" />
-                刷新
-              </el-button>
-            </div>
-            <el-table :data="notificationDeliveries" class="rg-table task-table" size="large">
-              <el-table-column prop="id" label="ID" width="86" />
-              <el-table-column prop="eventId" label="事件" width="96" />
-              <el-table-column prop="bindingId" label="绑定" width="96" />
-              <el-table-column prop="taskId" label="任务" width="96" />
-              <el-table-column label="平台" width="120">
-                <template #default="{ row }">{{ providerText(row.provider) }}</template>
-              </el-table-column>
-              <el-table-column label="状态" width="130">
-                <template #default="{ row }">
-                  <span :class="`status-pill ${notificationStatusClass(row.status)}`">{{ notificationStatusText(row.status) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="attemptCount" label="次数" width="86" />
-              <el-table-column prop="failureReason" label="失败原因" min-width="240" show-overflow-tooltip />
-              <el-table-column prop="sentAt" label="发送时间" min-width="160" />
-            </el-table>
-          </article>
+          <NotificationDeliveriesPanel
+            :deliveries="notificationDeliveries"
+            :filter="deliveryFilter"
+            :loading="deliveriesLoading"
+            @refresh="loadNotificationDeliveries"
+          />
         </el-tab-pane>
       </el-tabs>
     </section>
@@ -299,6 +218,8 @@ import {
   eventTypeText,
   NotificationBindingDialog,
   NotificationBindingTable,
+  NotificationDeliveriesPanel,
+  NotificationEventsPanel,
   NotificationSettingsPanel,
   notificationStatusClass,
   notificationStatusText,

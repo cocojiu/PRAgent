@@ -1,0 +1,74 @@
+package com.repoguard.agent.github;
+
+import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.observability.RepoGuardMetrics;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+
+@Component
+public class GithubIntegrationHealthReporter {
+
+    private final GithubIntegrationProvider githubIntegrationProvider;
+    private final RepoGuardMetrics metrics;
+
+    public GithubIntegrationHealthReporter(
+        GithubIntegrationProvider githubIntegrationProvider,
+        RepoGuardMetrics metrics
+    ) {
+        this.githubIntegrationProvider = githubIntegrationProvider;
+        this.metrics = metrics;
+    }
+
+    public void markChecked(GithubIntegrationSettings settings, String error) {
+        githubIntegrationProvider.markChecked(settings, error);
+    }
+
+    public void recordExternalFailure(RuntimeException ex) {
+        if (metrics != null && ex instanceof ExternalCallException externalCallException) {
+            metrics.externalCallFailed(externalCallException);
+        }
+    }
+
+    public void recordGithubApiRequest(
+        LocalDateTime startedAt,
+        String operation,
+        String result,
+        RuntimeException ex
+    ) {
+        if (ex instanceof ExternalCallException externalCallException) {
+            recordGithubApiRequest(
+                startedAt,
+                operation,
+                result,
+                externalCallException.getCategory(),
+                externalCallException.getStatusCode() == null ? null : externalCallException.getStatusCode().toString()
+            );
+            return;
+        }
+        recordGithubApiRequest(startedAt, operation, result, null, null);
+    }
+
+    public void recordGithubApiRequest(
+        LocalDateTime startedAt,
+        String operation,
+        String result,
+        String category,
+        String status
+    ) {
+        if (metrics != null) {
+            metrics.githubApiRequest(Duration.between(startedAt, LocalDateTime.now()), operation, result, category, status);
+        }
+    }
+
+    public String conciseError(RuntimeException ex) {
+        String message = ex.getMessage();
+        if (!StringUtils.hasText(message)) {
+            return ex.getClass().getSimpleName();
+        }
+        return message.length() > 300 ? message.substring(0, 300) : message;
+    }
+}

@@ -10,23 +10,25 @@ import org.junit.jupiter.api.Test;
 
 class NotificationDeliveryCompletionServiceTest {
 
-    private final NotificationDeliveryFailurePolicy deliveryFailurePolicy =
-        org.mockito.Mockito.mock(NotificationDeliveryFailurePolicy.class);
+    private final NotificationDeliveryCompletionDecider completionDecider =
+        org.mockito.Mockito.mock(NotificationDeliveryCompletionDecider.class);
     private final NotificationDeliveryEventStateUpdater eventStateUpdater =
         org.mockito.Mockito.mock(NotificationDeliveryEventStateUpdater.class);
     private final NotificationDeliveryCompletionService service =
-        new NotificationDeliveryCompletionService(deliveryFailurePolicy, eventStateUpdater);
+        new NotificationDeliveryCompletionService(completionDecider, eventStateUpdater);
 
     @Test
     void marksEventDeliveredWhenSummaryHasNoFailures() {
         NotificationEvent event = event();
         NotificationDeliveryResultSummary resultSummary = NotificationDeliveryResultSummary.empty()
             .add(NotificationSendResult.success("request-1", "ok"));
+        when(completionDecider.decide(event, resultSummary))
+            .thenReturn(NotificationDeliveryCompletionDecision.markDelivered());
 
         service.complete(event, resultSummary);
 
+        verify(completionDecider).decide(event, resultSummary);
         verify(eventStateUpdater).markDelivered(event);
-        verify(deliveryFailurePolicy, never()).decide(any());
         verify(eventStateUpdater, never()).markFailed(any(), any());
     }
 
@@ -42,11 +44,12 @@ class NotificationDeliveryCompletionServiceTest {
         NotificationDeliveryResultSummary resultSummary = NotificationDeliveryResultSummary.empty()
             .add(NotificationSendResult.success("request-1", "ok"))
             .add(NotificationSendResult.failed("request-2", "timeout"));
-        when(deliveryFailurePolicy.decide(event)).thenReturn(decision);
+        when(completionDecider.decide(event, resultSummary))
+            .thenReturn(NotificationDeliveryCompletionDecision.failed(decision));
 
         service.complete(event, resultSummary);
 
-        verify(deliveryFailurePolicy).decide(event);
+        verify(completionDecider).decide(event, resultSummary);
         verify(eventStateUpdater).markFailed(event, decision);
         verify(eventStateUpdater, never()).markDelivered(any());
     }

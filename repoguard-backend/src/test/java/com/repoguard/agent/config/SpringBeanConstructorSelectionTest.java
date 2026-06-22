@@ -13,9 +13,15 @@ import com.repoguard.agent.service.impl.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPublishServiceImpl;
+import com.repoguard.agent.service.impl.HumanReviewCommandService;
 import com.repoguard.agent.service.impl.MessageQueueHealthServiceImpl;
+import com.repoguard.agent.service.impl.ManualReviewCreationService;
+import com.repoguard.agent.service.impl.ManualReviewIdempotencyCoordinator;
 import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
+import com.repoguard.agent.service.impl.ReviewTaskAfterCommitPublisher;
+import com.repoguard.agent.service.impl.ReviewTaskAfterCommitPublisherExecutor;
 import com.repoguard.agent.service.impl.ReviewTaskQueryServiceImpl;
+import com.repoguard.agent.service.impl.ReviewTaskRetryService;
 import com.repoguard.agent.service.impl.ReviewServiceImpl;
 import com.repoguard.agent.worker.ReviewTaskExecutorImpl;
 import java.lang.reflect.Constructor;
@@ -40,9 +46,15 @@ class SpringBeanConstructorSelectionTest {
             GithubCommentApplicationServiceImpl.class,
             GithubCommentPreviewServiceImpl.class,
             GithubCommentPublishServiceImpl.class,
+            HumanReviewCommandService.class,
             MessageQueueHealthServiceImpl.class,
+            ManualReviewCreationService.class,
+            ManualReviewIdempotencyCoordinator.class,
+            ReviewTaskAfterCommitPublisher.class,
+            ReviewTaskAfterCommitPublisherExecutor.class,
             ReviewTaskCommandServiceImpl.class,
             ReviewTaskQueryServiceImpl.class,
+            ReviewTaskRetryService.class,
             ReviewServiceImpl.class,
             ReviewTaskExecutorImpl.class
         );

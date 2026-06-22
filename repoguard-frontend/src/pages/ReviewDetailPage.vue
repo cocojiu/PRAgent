@@ -184,7 +184,6 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from "vue";
-import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
@@ -207,15 +206,6 @@ import {
   findingFeedbackStatusClass,
   findingFeedbackStatusText,
   humanReviewActionText,
-  humanReviewPublishBlockReasonText,
-  humanReviewStatusClass as mapHumanReviewStatusClass,
-  humanReviewStatusText as mapHumanReviewStatusText,
-  llmCostText as mapLlmCostText,
-  llmDurationText as mapLlmDurationText,
-  llmModelText as mapLlmModelText,
-  llmParseStatusClass as mapLlmParseStatusClass,
-  llmParseStatusText as mapLlmParseStatusText,
-  llmTokenUsageText as mapLlmTokenUsageText,
   publicationBatchStatusClass,
   publicationBatchStatusText,
   publicationItemStatusClass,
@@ -224,27 +214,21 @@ import {
   refreshStatusText as mapRefreshStatusText,
   repositoryText,
   sourceText,
-  statusReasonText,
-  timelineLabelText,
+  useReviewDetailDerivedCollections,
   useReviewDetailFindingFeedback,
+  useReviewDetailGithubCommentPublishConfirm,
   useReviewDetailGithubComments,
   useReviewDetailHumanReview,
+  useReviewDetailHumanReviewDisplay,
   useReviewDetailLoader,
+  useReviewDetailLlmDisplay,
   useReviewDetailPolling,
   useReviewDetailRetry,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
-import type {
-  ChangedFile,
-  HumanReviewStatus,
-  ReviewStatus,
-  RiskLevel,
-  TimelineItem
-} from "@/types";
+import type { ReviewStatus } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
-
-type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
@@ -310,11 +294,6 @@ const canPublishGithubComments = computed(() =>
   )
 );
 
-const reviewFindings = computed(() => selectedTask.value?.findings ?? []);
-const missingTests = computed(() => selectedTask.value?.missingTests ?? []);
-const changedFiles = computed(() => selectedTask.value?.changedFiles ?? []);
-const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
-const riskProfile = computed(() => selectedTask.value?.riskProfile);
 const emptyDescription = computed(() => (errorMessage.value ? "审查详情加载失败" : "未找到审查任务"));
 const isTerminalTask = computed(() => {
   return isTerminalReviewStatus(selectedTask.value?.status);
@@ -323,6 +302,30 @@ const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalT
 const canRetryTask = computed(() => selectedTask.value?.status === "failed");
 const failureReason = computed(() => selectedTask.value?.failureReason ?? "");
 const failureSuggestion = computed(() => selectedTask.value?.failureSuggestion ?? "");
+const {
+  changedFiles,
+  changedFilesWithFindingCounts,
+  findingCounts,
+  localizedTimeline,
+  missingTests,
+  reviewFindings,
+  reviewTimeline,
+  riskProfile,
+  statusReason
+} = useReviewDetailDerivedCollections({
+  failureReason,
+  selectedTask
+});
+const {
+  llmCostText,
+  llmDurationText,
+  llmModelText,
+  llmParseStatusClass,
+  llmParseStatusText,
+  llmTokenUsageText
+} = useReviewDetailLlmDisplay({
+  selectedTask
+});
 const retryTooltip = computed(() => {
   if (!canRetryTask.value) {
     return "仅失败任务支持重试";
@@ -341,22 +344,14 @@ const { confirmRetryReview, retryingTask } = useReviewDetailRetry({
   },
   selectedTask
 });
-const humanReviewStatus = computed<HumanReviewStatus | string>(() => selectedTask.value?.humanReviewStatus ?? "not_required");
-const isHumanReviewPublishAllowed = computed(() => {
-  if (!selectedTask.value?.humanReviewRequired) {
-    return true;
-  }
-  return humanReviewStatus.value === "approved" || humanReviewStatus.value === "changes_requested";
-});
-const canSubmitHumanReview = computed(() =>
-  Boolean(selectedTask.value?.humanReviewRequired && humanReviewStatus.value === "pending")
-);
-const humanReviewPublishBlockReason = computed(() => {
-  return humanReviewPublishBlockReasonText(
-    selectedTask.value?.humanReviewRequired,
-    humanReviewStatus.value,
-    isHumanReviewPublishAllowed.value
-  );
+const {
+  canSubmitHumanReview,
+  humanReviewPublishBlockReason,
+  humanReviewStatusClass,
+  humanReviewStatusText,
+  isHumanReviewPublishAllowed
+} = useReviewDetailHumanReviewDisplay({
+  selectedTask
 });
 const refreshStatusText = computed(() => {
   return mapRefreshStatusText({
@@ -387,65 +382,6 @@ const { cleanupPolling } = polling;
 stopPolling = polling.stopPolling;
 syncPolling = polling.syncPolling;
 
-const findingCounts = computed<Record<RiskLevel, number>>(() =>
-  reviewFindings.value.reduce(
-    (counts, finding) => {
-      counts[finding.severity] += 1;
-      return counts;
-    },
-    { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-  )
-);
-
-const findingCountByFile = computed(() =>
-  reviewFindings.value.reduce<Record<string, number>>((counts, finding) => {
-    counts[finding.file] = (counts[finding.file] ?? 0) + 1;
-    return counts;
-  }, {})
-);
-
-const changedFilesWithFindingCounts = computed<ChangedFileWithFindingCount[]>(() =>
-  changedFiles.value.map((file) => ({
-    ...file,
-    findingCount: findingCountByFile.value[file.path] ?? 0
-  }))
-);
-
-const localizedTimeline = computed<TimelineItem[]>(() =>
-  reviewTimeline.value.map((item) => ({
-    ...item,
-    label: timelineLabelText(item.label)
-  }))
-);
-
-const statusReason = computed(() => {
-  return statusReasonText(failureReason.value, reviewTimeline.value);
-});
-
-const llmModelText = computed(() => {
-  return selectedTask.value ? mapLlmModelText(selectedTask.value.llm) : "-";
-});
-
-const llmDurationText = computed(() => {
-  return selectedTask.value ? mapLlmDurationText(selectedTask.value.llm) : "-";
-});
-
-const llmTokenUsageText = computed(() => {
-  return mapLlmTokenUsageText(selectedTask.value?.llm);
-});
-
-const llmCostText = computed(() => {
-  return mapLlmCostText(selectedTask.value?.llm);
-});
-
-const llmParseStatusText = computed(() => {
-  return mapLlmParseStatusText(selectedTask.value?.llm);
-});
-
-const llmParseStatusClass = computed(() => {
-  return mapLlmParseStatusClass(selectedTask.value?.llm);
-});
-
 const writebackCheckStatusText = computed(() => {
   return writebackCheck.value ? mapWritebackCheckStatusText(writebackCheck.value.status) : "";
 });
@@ -459,14 +395,6 @@ const writebackCheckStatusClass = computed(() => {
     return "warning";
   }
   return "danger";
-});
-
-const humanReviewStatusText = computed(() => {
-  return mapHumanReviewStatusText(humanReviewStatus.value);
-});
-
-const humanReviewStatusClass = computed(() => {
-  return mapHumanReviewStatusClass(humanReviewStatus.value);
 });
 
 const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHumanReview({
@@ -485,37 +413,17 @@ const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedba
   selectedTask
 });
 
-const confirmPublishGithubComments = async () => {
-  const preview = githubCommentPreview.value;
-  if (!canManage.value || !selectedTask.value || publishingComments.value || !canPublishGithubComments.value || !preview) {
-    return;
-  }
-
-  try {
-    const warningText = writebackCheck.value && writebackCheck.value.status !== "ready"
-      ? `\n\n提示：${writebackCheck.value.messages.join(" ")}`
-      : "";
-    await ElMessageBox.confirm(
-      `将向 GitHub PR #${selectedTask.value.prNumber} 回写 ${preview.commentableCount} 条评论。确认继续？${warningText}`,
-      "确认回写 GitHub 评论",
-      {
-        confirmButtonText: "确认回写",
-        cancelButtonText: "取消",
-        type: "warning"
-      }
-    );
-  } catch {
-    return;
-  }
-
-  const taskId = selectedTask.value.id;
-  await publishGithubCommentsForTask(taskId, async () => {
-    await Promise.all([
-      loadGithubCommentPreview(taskId),
-      loadGithubCommentPublicationHistory(taskId)
-    ]);
-  });
-};
+const { confirmPublishGithubComments } = useReviewDetailGithubCommentPublishConfirm({
+  canManage,
+  canPublishGithubComments,
+  githubCommentPreview,
+  loadGithubCommentPreview,
+  loadGithubCommentPublicationHistory,
+  publishGithubCommentsForTask,
+  publishingComments,
+  selectedTask,
+  writebackCheck
+});
 
 const goBack = () => {
   router.push({ name: "tasks" });

@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.service.impl.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -13,7 +14,6 @@ import org.springframework.util.StringUtils;
 public class ReviewTaskListItemAssembler {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String SOURCE_MANUAL_INPUT = "MANUAL_INPUT";
     private static final String HUMAN_REVIEW_PENDING = "PENDING";
     private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
 
@@ -30,8 +30,8 @@ public class ReviewTaskListItemAssembler {
             lower(task.getRiskLevel()),
             task.getMqRetries(),
             lower(task.getLlmStatus()),
-            lower(resolveStoredSource(task.getSource())),
-            lower(resolveStoredSource(task.getTriggerSource())),
+            ReviewTaskSource.dtoCodeOrDefault(task.getSource()),
+            ReviewTaskSource.dtoCodeOrDefault(task.getTriggerSource()),
             task.getCreatedAt().format(DATE_TIME_FORMATTER),
             formatDuration(task.getDurationSeconds()),
             failureSummary.category(),
@@ -43,10 +43,6 @@ public class ReviewTaskListItemAssembler {
             task.getHumanReviewBy(),
             formatDateTimeOrNull(task.getHumanReviewedAt())
         );
-    }
-
-    private String resolveStoredSource(String source) {
-        return StringUtils.hasText(source) ? source : SOURCE_MANUAL_INPUT;
     }
 
     private String resolveHumanReviewStatus(ReviewTask task) {

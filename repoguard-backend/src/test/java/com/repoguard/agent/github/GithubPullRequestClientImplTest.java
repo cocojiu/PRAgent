@@ -5,6 +5,15 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.entity.ReviewTask;
+import com.sun.net.httpserver.HttpServer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -33,5 +42,250 @@ class GithubPullRequestClientImplTest {
 
         assertThat(repository.owner()).isEqualTo("octocat");
         assertThat(repository.repository()).isEqualTo("api");
+    }
+
+    @Test
+    void fetchPullRequestDiffReadsSinglePageChangedFiles() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(30, 0)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+
+            assertThat(diff.files()).hasSize(30);
+            assertThat(diff.files().get(0).filename()).isEqualTo("src/File001.java");
+            assertThat(server.filesPageRequests()).containsExactly(1);
+        }
+    }
+
+    @Test
+    void fetchPullRequestDiffReadsBeyondGithubDefaultThirtyFiles() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(50, 0)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+
+            assertThat(diff.files()).hasSize(50);
+            assertThat(diff.files().get(49).filename()).isEqualTo("src/File050.java");
+            assertThat(server.filesPageRequests()).containsExactly(1);
+        }
+    }
+
+    @Test
+    void fetchPullRequestDiffReadsMultiplePagesChangedFiles() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(101, 0)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+
+            assertThat(diff.files()).hasSize(101);
+            assertThat(diff.files().get(100).filename()).isEqualTo("src/File101.java");
+            assertThat(server.filesPageRequests()).containsExactly(1, 2);
+        }
+    }
+
+    @Test
+    void listOpenPullRequestsReadsBeyondLegacyFiftyLimit() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 101)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            List<GithubPullRequestSummary> pullRequests = client.listOpenPullRequests();
+
+            assertThat(pullRequests).hasSize(101);
+            assertThat(pullRequests.get(0).number()).isEqualTo(1);
+            assertThat(pullRequests.get(100).number()).isEqualTo(101);
+            assertThat(server.pullRequestPageRequests()).containsExactly(1, 2);
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsKeepsPrCommentBehavior() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            GithubReviewCommentDraft draft = new GithubReviewCommentDraft(
+                10L,
+                null,
+                null,
+                "PR summary",
+                "pull_request"
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), List.of(draft));
+
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).success()).isTrue();
+            assertThat(results.get(0).status()).isEqualTo("published");
+            assertThat(results.get(0).targetType()).isEqualTo("pull_request");
+            assertThat(results.get(0).commentId()).isEqualTo(9001L);
+            assertThat(server.commentPaths()).containsExactly("/repos/octocat/api/issues/7/comments");
+            assertThat(server.commentBodies().get(0)).contains("PR summary");
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsDowngradesUnresolvableLineCommentToPrComment() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextLineCommentAsUnresolvable();
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            GithubReviewCommentDraft draft = new GithubReviewCommentDraft(
+                11L,
+                "src/App.java",
+                12,
+                "Line comment",
+                "line"
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), List.of(draft));
+
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).success()).isTrue();
+            assertThat(results.get(0).status()).isEqualTo("downgraded_to_pr_comment");
+            assertThat(results.get(0).targetType()).isEqualTo("pull_request");
+            assertThat(server.commentPaths()).containsExactly(
+                "/repos/octocat/api/pulls/7/comments",
+                "/repos/octocat/api/issues/7/comments"
+            );
+        }
+    }
+
+    private GithubIntegrationSettings githubSettings(String baseUrl) {
+        return new GithubIntegrationSettings(
+            "GITHUB",
+            "CONFIGURED",
+            baseUrl,
+            "ghp_test",
+            null,
+            "octocat",
+            "api",
+            7L
+        );
+    }
+
+    private ReviewTask reviewTask() {
+        ReviewTask task = new ReviewTask();
+        task.setOrganization("octocat");
+        task.setRepository("api");
+        task.setPrNumber(7);
+        task.setCommitSha("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        return task;
+    }
+
+    private GithubApiServer startGithubApiServer(int changedFileCount, int pullRequestCount) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        List<Integer> filesPageRequests = new ArrayList<>();
+        List<Integer> pullRequestPageRequests = new ArrayList<>();
+        List<String> commentPaths = new ArrayList<>();
+        List<String> commentBodies = new ArrayList<>();
+        AtomicInteger lineCommentFailures = new AtomicInteger();
+        server.createContext("/", exchange -> {
+            URI uri = exchange.getRequestURI();
+            String body;
+            if ("/repos/octocat/api/pulls/7/files".equals(uri.getPath())) {
+                int page = queryInt(uri, "page", 1);
+                int perPage = queryInt(uri, "per_page", 30);
+                filesPageRequests.add(page);
+                body = changedFilesJson(changedFileCount, page, perPage);
+            } else if ("/repos/octocat/api/pulls".equals(uri.getPath())) {
+                int page = queryInt(uri, "page", 1);
+                int perPage = queryInt(uri, "per_page", 30);
+                pullRequestPageRequests.add(page);
+                body = pullRequestsJson(pullRequestCount, page, perPage);
+            } else if ("POST".equals(exchange.getRequestMethod())
+                && "/repos/octocat/api/pulls/7/comments".equals(uri.getPath())) {
+                commentPaths.add(uri.getPath());
+                commentBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                if (lineCommentFailures.getAndDecrement() > 0) {
+                    body = "{\"message\":\"Validation Failed: could not be resolved to a diff line\"}";
+                    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(422, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                    return;
+                }
+                body = "{\"id\":9002,\"html_url\":\"https://github.com/octocat/api/pull/7#discussion_r9002\"}";
+            } else if ("POST".equals(exchange.getRequestMethod())
+                && "/repos/octocat/api/issues/7/comments".equals(uri.getPath())) {
+                commentPaths.add(uri.getPath());
+                commentBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                body = "{\"id\":9001,\"html_url\":\"https://github.com/octocat/api/pull/7#issuecomment-9001\"}";
+            } else {
+                exchange.sendResponseHeaders(404, 0);
+                exchange.close();
+                return;
+            }
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        server.start();
+        return new GithubApiServer(
+            server,
+            "http://127.0.0.1:" + server.getAddress().getPort(),
+            filesPageRequests,
+            pullRequestPageRequests,
+            commentPaths,
+            commentBodies,
+            lineCommentFailures
+        );
+    }
+
+    private int queryInt(URI uri, String name, int defaultValue) {
+        String query = uri.getRawQuery();
+        if (query == null || query.isBlank()) {
+            return defaultValue;
+        }
+        for (String pair : query.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && name.equals(parts[0])) {
+                return Integer.parseInt(parts[1]);
+            }
+        }
+        return defaultValue;
+    }
+
+    private String changedFilesJson(int total, int page, int perPage) {
+        int start = (page - 1) * perPage + 1;
+        int end = Math.min(total, page * perPage);
+        List<String> items = new ArrayList<>();
+        for (int i = start; i <= end; i++) {
+            items.add("""
+                {"filename":"src/File%03d.java","status":"modified","additions":1,"deletions":0,"patch":"@@ patch %03d"}
+                """.formatted(i, i).trim());
+        }
+        return "[" + String.join(",", items) + "]";
+    }
+
+    private String pullRequestsJson(int total, int page, int perPage) {
+        int start = (page - 1) * perPage + 1;
+        int end = Math.min(total, page * perPage);
+        List<String> items = new ArrayList<>();
+        for (int i = start; i <= end; i++) {
+            items.add("""
+                {"number":%d,"title":"PR %03d","head":{"ref":"feature-%03d","sha":"abc%03d"},"user":{"login":"alice"},"html_url":"https://github.com/octocat/api/pull/%d","updated_at":"2026-06-21T00:00:00Z"}
+                """.formatted(i, i, i, i, i).trim());
+        }
+        return "[" + String.join(",", items) + "]";
+    }
+
+    private record GithubApiServer(
+        HttpServer server,
+        String baseUrl,
+        List<Integer> filesPageRequests,
+        List<Integer> pullRequestPageRequests,
+        List<String> commentPaths,
+        List<String> commentBodies,
+        AtomicInteger lineCommentFailures
+    ) implements AutoCloseable {
+
+        @Override
+        public void close() {
+            server.stop(0);
+        }
+
+        void failNextLineCommentAsUnresolvable() {
+            lineCommentFailures.set(1);
+        }
     }
 }

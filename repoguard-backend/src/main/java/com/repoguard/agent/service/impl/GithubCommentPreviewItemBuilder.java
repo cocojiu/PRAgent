@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.github.GithubCommentTargetType;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Set;
@@ -27,7 +28,7 @@ public class GithubCommentPreviewItemBuilder {
         ChangedFile changedFile,
         GithubCommentPublication publication
     ) {
-        String targetType = resolveCommentTargetType(finding, changedFile);
+        GithubCommentTargetType targetType = resolveCommentTargetType(finding, changedFile);
         String reason = resolveCommentReason(targetType, finding, changedFile);
         boolean published = isPublished(publication);
         boolean actionable = isActionableFinding(finding);
@@ -40,7 +41,7 @@ public class GithubCommentPreviewItemBuilder {
             finding.getRecommendation(),
             buildGithubCommentBody(finding),
             !published && actionable,
-            targetType,
+            targetType.code(),
             published ? "GitHub comment already published" : actionable ? reason : feedbackSkipReason(finding),
             published,
             publication == null ? null : publication.getStatus(),
@@ -67,7 +68,7 @@ public class GithubCommentPreviewItemBuilder {
             summary.mergeRecommendation(),
             summary.githubCommentBody(),
             !published,
-            "pull_request",
+            GithubCommentTargetType.PULL_REQUEST.code(),
             published ? "GitHub comment already published" : null,
             published,
             publication == null ? null : publication.getStatus(),
@@ -86,7 +87,7 @@ public class GithubCommentPreviewItemBuilder {
             && StringUtils.hasText(publication.getGithubUrl());
     }
 
-    private String resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {
+    private GithubCommentTargetType resolveCommentTargetType(ReviewFinding finding, ChangedFile changedFile) {
         if (
             StringUtils.hasText(finding.getFilePath())
                 && finding.getLineNumber() != null
@@ -94,13 +95,13 @@ public class GithubCommentPreviewItemBuilder {
                 && changedFile != null
                 && !isDeletedChange(changedFile.getChangeType())
         ) {
-            return "line";
+            return GithubCommentTargetType.LINE;
         }
-        return "pull_request";
+        return GithubCommentTargetType.PULL_REQUEST;
     }
 
-    private String resolveCommentReason(String targetType, ReviewFinding finding, ChangedFile changedFile) {
-        if ("line".equals(targetType)) {
+    private String resolveCommentReason(GithubCommentTargetType targetType, ReviewFinding finding, ChangedFile changedFile) {
+        if (targetType.isLine()) {
             return null;
         }
         if (!StringUtils.hasText(finding.getFilePath())) {
