@@ -76,6 +76,67 @@ public class DashboardSqlVerificationPlan {
         );
     }
 
+    public List<ExplainObservation> explainObservations() {
+        return List.of(
+            new ExplainObservation(
+                "selectMetricStat",
+                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk"),
+                List.of("range"),
+                "rows should stay bounded by the selected dashboard time window.",
+                List.of("key should not be null", "type should not degrade to ALL")
+            ),
+            new ExplainObservation(
+                "selectRiskLevelCounts",
+                List.of("idx_review_task_dashboard_created_risk"),
+                List.of("range"),
+                "rows should stay bounded by created_at before grouping by risk_level.",
+                List.of("key should prefer the created_at/risk_level composite index", "type should not degrade to ALL")
+            ),
+            new ExplainObservation(
+                "selectReviewTrendCounts",
+                List.of("idx_review_task_created_at"),
+                List.of("range"),
+                "rows should stay bounded by the trend window even when date_format grouping uses a derived expression.",
+                List.of("key should not be null", "Using temporary is acceptable only when rows remains window-bounded")
+            ),
+            new ExplainObservation(
+                "selectRuleHitCounts",
+                List.of("idx_review_task_created_at", "idx_review_finding_task_category_rule"),
+                List.of("range", "ref", "eq_ref"),
+                "rows should stay bounded by the review_task time window and task_id/category finding join.",
+                List.of("review_finding should not be scanned as ALL", "join key should include task_id/category when possible")
+            ),
+            new ExplainObservation(
+                "selectRecentHighRiskReviews",
+                List.of("idx_review_task_risk_created", "idx_review_task_dashboard_created_risk", "idx_review_finding_task_category_rule"),
+                List.of("range", "ref", "eq_ref"),
+                "rows should stay bounded by high/critical risk plus the dashboard time window before the limit is applied.",
+                List.of("review_task key should include risk_level or created_at", "review_finding join should not scan all findings")
+            ),
+            new ExplainObservation(
+                "selectLlmQualityTrendCounts",
+                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("range"),
+                "rows should stay bounded by created_at because llm_status uses exclusion filters instead of equality.",
+                List.of("key should prefer the created_at/llm_status composite index", "type should not degrade to ALL")
+            ),
+            new ExplainObservation(
+                "selectLlmQualityByModelStats",
+                List.of("idx_review_task_dashboard_created_llm_model", "idx_review_finding_task_category_rule"),
+                List.of("range", "ref", "eq_ref"),
+                "derived task and feedback rows should stay bounded by created_at before model grouping and task_id finding joins.",
+                List.of("derived table filesort is acceptable only after window filtering", "review_finding join should use task_id/category")
+            ),
+            new ExplainObservation(
+                "selectLlmQualityByRepositoryStats",
+                List.of("idx_review_task_dashboard_created_llm_repo", "idx_review_finding_task_category_rule"),
+                List.of("range", "ref", "eq_ref"),
+                "derived task and feedback rows should stay bounded by created_at before repository grouping and task_id finding joins.",
+                List.of("derived table filesort is acceptable only after window filtering", "review_finding join should use task_id/category")
+            )
+        );
+    }
+
     public record QueryAssumption(
         String mapperMethod,
         String verificationScope,
@@ -87,6 +148,15 @@ public class DashboardSqlVerificationPlan {
         String indexName,
         List<String> leadingColumns,
         String reason
+    ) {
+    }
+
+    public record ExplainObservation(
+        String mapperMethod,
+        List<String> keyCandidates,
+        List<String> acceptableAccessTypes,
+        String rowsExpectation,
+        List<String> extraWatchItems
     ) {
     }
 }

@@ -10,6 +10,8 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
 
@@ -75,6 +77,39 @@ class DashboardSqlVerificationPlanTest {
                 "selectLlmQualityByModelStats",
                 "selectLlmQualityByRepositoryStats"
             );
+    }
+
+    @Test
+    void explainObservationsCoverEveryDashboardQueryAndReferenceKnownIndexes() throws IOException {
+        Set<String> mapperMethods = plan.queryAssumptions().stream()
+            .map(DashboardSqlVerificationPlan.QueryAssumption::mapperMethod)
+            .collect(Collectors.toSet());
+        String migrations = migrationSql();
+
+        assertThat(plan.explainObservations())
+            .extracting(DashboardSqlVerificationPlan.ExplainObservation::mapperMethod)
+            .containsExactlyInAnyOrderElementsOf(mapperMethods);
+
+        for (DashboardSqlVerificationPlan.ExplainObservation observation : plan.explainObservations()) {
+            assertThat(observation.keyCandidates())
+                .as(observation.mapperMethod() + " EXPLAIN key candidates")
+                .isNotEmpty();
+            assertThat(observation.acceptableAccessTypes())
+                .as(observation.mapperMethod() + " acceptable access types")
+                .allMatch(accessType -> List.of("range", "ref", "eq_ref", "const").contains(accessType));
+            assertThat(observation.rowsExpectation())
+                .as(observation.mapperMethod() + " rows expectation")
+                .containsIgnoringCase("rows");
+            assertThat(observation.extraWatchItems())
+                .as(observation.mapperMethod() + " extra watch items")
+                .isNotEmpty();
+
+            for (String keyCandidate : observation.keyCandidates()) {
+                assertThat(migrations)
+                    .as(observation.mapperMethod() + " EXPLAIN key candidate " + keyCandidate)
+                    .contains(keyCandidate.toLowerCase(Locale.ROOT));
+            }
+        }
     }
 
     private String migrationSql() throws IOException {
