@@ -20,6 +20,11 @@
   font-weight: 800;
 }
 
+.disabled-link {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
 .pr-picker-meta {
   display: flex;
   align-items: center;
