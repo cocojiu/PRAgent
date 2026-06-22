@@ -6,9 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "repoguard.auth")
 public class AuthProperties {
 
-    private static final String DEFAULT_TOKEN_SECRET = "repoguard-local-dev-auth-token-secret";
+    private static final String DEFAULT_TOKEN_SECRET = "changeme-local-dev";
 
-    private String tokenSecret = "repoguard-local-dev-auth-token-secret";
+    private String tokenSecret = DEFAULT_TOKEN_SECRET;
     private long accessTokenTtlSeconds = 900;
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;

@@ -9,7 +9,9 @@ import org.springframework.util.StringUtils;
 /**
  * Probes runtime and saved RabbitMQ connectivity.
  */
-public class RabbitMqConnectionProbe {
+public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfig> {
+
+    static final String PROVIDER = "RABBITMQ";
 
     private final RabbitTemplate rabbitTemplate;
     private final SecretCryptoService secretCryptoService;
@@ -17,6 +19,16 @@ public class RabbitMqConnectionProbe {
     public RabbitMqConnectionProbe(RabbitTemplate rabbitTemplate, SecretCryptoService secretCryptoService) {
         this.rabbitTemplate = rabbitTemplate;
         this.secretCryptoService = secretCryptoService;
+    }
+
+    @Override
+    public String provider() {
+        return PROVIDER;
+    }
+
+    @Override
+    public ConnectionProbeResult probe(IntegrationConfig config) {
+        return configuredProbe(config);
     }
 
     public ConnectionProbeResult runtimeProbe() {

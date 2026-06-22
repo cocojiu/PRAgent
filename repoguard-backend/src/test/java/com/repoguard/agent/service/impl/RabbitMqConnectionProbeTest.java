@@ -12,6 +12,11 @@ class RabbitMqConnectionProbeTest {
     private final RabbitMqConnectionProbe probe = new RabbitMqConnectionProbe(null, secretCryptoService);
 
     @Test
+    void providerReturnsRabbitMqProviderCode() {
+        assertThat(probe.provider()).isEqualTo("RABBITMQ");
+    }
+
+    @Test
     void runtimeProbeReportsUnavailableWhenRabbitTemplateIsMissing() {
         ConnectionProbeResult result = probe.runtimeProbe();
 

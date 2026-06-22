@@ -13,7 +13,7 @@ export type ReviewStatus =
   | "rejected";
 export type HumanReviewStatus = "not_required" | "pending" | "approved" | "changes_requested" | "rejected";
 export type FindingFeedbackStatus = "unreviewed" | "valid" | "false_positive" | "fixed" | "ignored";
-export type ReviewTaskSource = "manual_input" | "github_pr_picker";
+export type ReviewTaskSource = "manual_input" | "github_pr_picker" | "github_webhook";
 export type ReviewTaskTriggerSource = ReviewTaskSource | "existing_reused";
 
 export interface ReviewTask {

@@ -10,7 +10,9 @@ import org.springframework.web.util.UriComponentsBuilder;
 /**
  * Executes a lightweight GitHub API probe for integration connectivity checks.
  */
-public class GithubConnectionProbe {
+public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig> {
+
+    static final String PROVIDER = "GITHUB";
 
     private final RestClient.Builder restClientBuilder;
     private final SecretCryptoService secretCryptoService;
@@ -20,7 +22,13 @@ public class GithubConnectionProbe {
         this.secretCryptoService = secretCryptoService;
     }
 
-    public void probe(IntegrationConfig config) {
+    @Override
+    public String provider() {
+        return PROVIDER;
+    }
+
+    @Override
+    public ConnectionProbeResult probe(IntegrationConfig config) {
         String url = buildGithubTestUrl(config);
         String token = secretCryptoService.decrypt(config.getTokenValue());
         RestClient.RequestHeadersSpec<?> request = restClientBuilder.build()
@@ -31,6 +39,7 @@ public class GithubConnectionProbe {
             request.header("Authorization", "Bearer " + token.trim());
         }
         request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
+        return new ConnectionProbeResult(true, "connected", "GitHub connection test succeeded");
     }
 
     private String buildGithubTestUrl(IntegrationConfig config) {

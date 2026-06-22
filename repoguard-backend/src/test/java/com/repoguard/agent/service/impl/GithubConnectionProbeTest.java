@@ -18,12 +18,19 @@ class GithubConnectionProbeTest {
     private final GithubConnectionProbe probe = new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
 
     @Test
+    void providerReturnsGithubProviderCode() {
+        assertThat(probe.provider()).isEqualTo("GITHUB");
+    }
+
+    @Test
     void probeUsesRateLimitEndpointWhenRepositoryIsMissing() throws Exception {
         try (ProbeServer server = startProbeServer()) {
             IntegrationConfig config = githubConfig(server.baseUrl());
 
-            probe.probe(config);
+            ConnectionProbeResult result = probe.probe(config);
 
+            assertThat(result.healthy()).isTrue();
+            assertThat(result.status()).isEqualTo("connected");
             assertThat(server.path()).isEqualTo("/rate_limit");
             assertThat(server.authorization()).isEqualTo("Bearer ghp_test_1234");
         }

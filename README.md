@@ -137,17 +137,24 @@ npm run dev
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`
 - `REPOGUARD_AUTH_TOKEN_SECRET`
 - `REPOGUARD_ADMIN_API_KEY`
+- `REPOGUARD_GITHUB_WEBHOOK_SECRET`
+- `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`
+- `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
+- `REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE`
+- `REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT`
 - `REPOGUARD_REVIEW_WORKER_CONCURRENCY`
 
 敏感配置要求：
 
 - GitHub Token、LLM API Key、数据库密码、RabbitMQ 密码等不得提交到仓库。
 - 本地 `application-local.yml`、真实 `.env`、真实密钥文件不得提交。
-- 生产环境必须使用独立加密密钥和认证 Token 密钥。
+- 生产环境必须使用独立加密密钥、认证 Token 密钥和 GitHub Webhook Secret。
 
 ## 镜像发布与回滚
 
 生产发布通过 GitHub Actions 的 `Release Images` workflow 执行。镜像会推送到 GHCR 和阿里云 ACR，生产服务器部署时从阿里云 ACR 拉取镜像。
+
+RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前自动建 PR workflow 只监听 `PRAgent-test` 分支 push，并自动创建或复用指向 `main` 的 PR。生产环境建议将 `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES` 配置为当前 GitHub 仓库全名，并保持 `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES=PRAgent-test`。
 
 需要在 GitHub Actions Repository secrets 或 variables 中配置：
 
@@ -189,6 +196,7 @@ npm run dev
 - `/api/v1/auth/**`：注册、登录、刷新、当前用户、登出。
 - `/api/v1/dashboard/**`：总览统计、趋势、风险分布、通知摘要。
 - `/api/v1/reviews/**`：审查任务列表、详情、手动触发、重试、评论预览与回写。
+- `/api/v1/github/webhooks`：GitHub `pull_request` webhook 自动触发审查任务。
 - `/api/v1/config/**`：系统设置、集成配置、连接测试、密钥重加密。
 - `/api/v1/message-queue/**`：RabbitMQ 健康、异常任务、重新入队。
 - `/api/v1/users/**`：用户管理。
@@ -247,6 +255,9 @@ RepoGuard / RepoGuard Review Observability
 - 提交信息使用 `<type>(<scope>): <中文摘要>` 格式。
 - 提交前按影响范围运行后端测试、前端类型检查或前端构建。
 - 不提交本地日志、临时脚本、真实密钥、真实 token、真实连接信息。
+- 生产准出快速门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1`，覆盖空白、Flyway migration、敏感信息扫描和后端关键测试集合。
+- 生产准出完整门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -IncludeFrontendBuild`，在快速门禁基础上追加前端类型检查和构建。
+- 准出门禁分层、失败处理和执行矩阵详见 [生产准出检查自动化说明](./docs/release/16-生产准出检查自动化说明.md)。
 
 ## License
 

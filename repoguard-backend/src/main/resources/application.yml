@@ -55,7 +55,7 @@ repoguard:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
   auth:
-    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:repoguard-local-dev-auth-token-secret}
+    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:changeme-local-dev}
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
@@ -66,6 +66,19 @@ app:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
       header-name: ${REPOGUARD_ADMIN_API_KEY_HEADER:X-RepoGuard-Admin-Key}
+  github:
+    webhook:
+      enabled: ${REPOGUARD_GITHUB_WEBHOOK_ENABLED:true}
+      secret: ${REPOGUARD_GITHUB_WEBHOOK_SECRET:}
+      require-signature: ${REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE:true}
+      ignore-draft: ${REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT:true}
+      allowed-actions:
+        - opened
+        - reopened
+        - synchronize
+        - ready_for_review
+      allowed-repositories: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES:}
+      allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:PRAgent-test}
   cors:
     allowed-origins:
       - http://localhost:5173

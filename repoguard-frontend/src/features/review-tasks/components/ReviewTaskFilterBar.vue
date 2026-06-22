@@ -20,6 +20,7 @@
       <el-option label="全部来源" value="" />
       <el-option label="手动输入" value="manual_input" />
       <el-option label="PR 选择" value="github_pr_picker" />
+      <el-option label="GitHub 自动触发" value="github_webhook" />
       <el-option label="复用已有" value="existing_reused" />
     </el-select>
     <el-input v-model="keywordModel" class="search-input" placeholder="搜索 PR 标题、作者或 Commit ID" clearable>

@@ -60,6 +60,9 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         if (path.equals("/api/v1/auth/me")) {
             return true;
         }
+        if (path.equals("/api/v1/github/webhooks")) {
+            return false;
+        }
         return path.startsWith("/api/v1/")
             && !path.startsWith("/api/v1/auth/");
     }

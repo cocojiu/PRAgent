@@ -1,0 +1,73 @@
+package com.repoguard.agent.github.webhook;
+
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+@ConfigurationProperties(prefix = "app.github.webhook")
+public class GithubWebhookProperties {
+
+    private boolean enabled = true;
+    private String secret;
+    private boolean requireSignature = true;
+    private boolean ignoreDraft = true;
+    private List<String> allowedActions = new ArrayList<>(List.of("opened", "reopened", "synchronize", "ready_for_review"));
+    private List<String> allowedRepositories = new ArrayList<>();
+    private List<String> allowedHeadBranches = new ArrayList<>(List.of("PRAgent-test"));
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String getSecret() {
+        return secret;
+    }
+
+    public void setSecret(String secret) {
+        this.secret = secret;
+    }
+
+    public boolean isRequireSignature() {
+        return requireSignature;
+    }
+
+    public void setRequireSignature(boolean requireSignature) {
+        this.requireSignature = requireSignature;
+    }
+
+    public boolean isIgnoreDraft() {
+        return ignoreDraft;
+    }
+
+    public void setIgnoreDraft(boolean ignoreDraft) {
+        this.ignoreDraft = ignoreDraft;
+    }
+
+    public List<String> getAllowedActions() {
+        return allowedActions;
+    }
+
+    public void setAllowedActions(List<String> allowedActions) {
+        this.allowedActions = allowedActions == null ? new ArrayList<>() : new ArrayList<>(allowedActions);
+    }
+
+    public List<String> getAllowedRepositories() {
+        return allowedRepositories;
+    }
+
+    public void setAllowedRepositories(List<String> allowedRepositories) {
+        this.allowedRepositories = allowedRepositories == null ? new ArrayList<>() : new ArrayList<>(allowedRepositories);
+    }
+
+    public List<String> getAllowedHeadBranches() {
+        return allowedHeadBranches;
+    }
+
+    public void setAllowedHeadBranches(List<String> allowedHeadBranches) {
+        this.allowedHeadBranches = allowedHeadBranches == null ? new ArrayList<>() : new ArrayList<>(allowedHeadBranches);
+    }
+}

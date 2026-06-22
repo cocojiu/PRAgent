@@ -1,8 +1,6 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.repoguard.agent.common.BusinessException;
-import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskDetail;
@@ -30,10 +28,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskDetailAssembler detailAssembler;
     private final ReviewTaskDetailDataLoader detailDataLoader;
-    private final ReviewFailureSummaryResolver failureSummaryResolver;
-    private final ReviewTimelineQueryService timelineQueryService;
+    private final ReviewTaskQueryItemLoader queryItemLoader;
     private final ReviewTaskStatusAssembler statusAssembler;
-    private final ReviewTaskListItemAssembler listItemAssembler;
     private final ReviewTaskListQueryBuilder listQueryBuilder;
 
     public ReviewTaskQueryServiceImpl(
@@ -56,10 +52,13 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
                 reviewFindingMapper,
                 new ReviewTimelineQueryService(reviewTimelineMapper)
             ),
-            new ReviewFailureSummaryResolver(),
-            new ReviewTimelineQueryService(reviewTimelineMapper),
+            new ReviewTaskQueryItemLoader(
+                reviewTaskMapper,
+                new ReviewFailureSummaryResolver(),
+                new ReviewTimelineQueryService(reviewTimelineMapper),
+                new ReviewTaskListItemAssembler()
+            ),
             new ReviewTaskStatusAssembler(),
-            new ReviewTaskListItemAssembler(),
             new ReviewTaskListQueryBuilder()
         );
     }
@@ -72,19 +71,15 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskDetailAssembler detailAssembler,
         ReviewTaskDetailDataLoader detailDataLoader,
-        ReviewFailureSummaryResolver failureSummaryResolver,
-        ReviewTimelineQueryService timelineQueryService,
+        ReviewTaskQueryItemLoader queryItemLoader,
         ReviewTaskStatusAssembler statusAssembler,
-        ReviewTaskListItemAssembler listItemAssembler,
         ReviewTaskListQueryBuilder listQueryBuilder
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.detailAssembler = detailAssembler;
         this.detailDataLoader = detailDataLoader;
-        this.failureSummaryResolver = failureSummaryResolver;
-        this.timelineQueryService = timelineQueryService;
+        this.queryItemLoader = queryItemLoader;
         this.statusAssembler = statusAssembler;
-        this.listItemAssembler = listItemAssembler;
         this.listQueryBuilder = listQueryBuilder;
     }
 
@@ -95,10 +90,10 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             listQueryBuilder.build(query)
         );
         List<ReviewTask> tasks = page.getRecords();
-        Map<Long, List<ReviewTimeline>> timelinesByTaskId = timelineQueryService.loadByTaskId(tasks);
+        Map<Long, List<ReviewTimeline>> timelinesByTaskId = queryItemLoader.loadTimelinesByTaskId(tasks);
         return new PageResponse<>(
             tasks.stream()
-                .map(task -> listItemAssembler.assemble(task, failureSummaryResolver.resolve(task, timelineQueryService.labels(timelinesByTaskId.get(task.getId())))))
+                .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
                 .toList(),
             page.getTotal()
         );
@@ -106,17 +101,9 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public ReviewTaskDetail getReviewDetail(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-
+        ReviewTask task = queryItemLoader.loadRequired(id);
         ReviewTaskDetailData detailData = detailDataLoader.load(id);
-
-        ReviewTaskListItem item = listItemAssembler.assemble(
-            task,
-            failureSummaryResolver.resolve(task, timelineQueryService.itemLabels(detailData.timeline()))
-        );
+        ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(task, detailData.timeline());
         return detailAssembler.assemble(
             task,
             item,
@@ -129,14 +116,10 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public ReviewTaskStatusResponse getReviewStatus(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
-        }
-
-        List<ReviewTimeline> timelines = timelineQueryService.loadByTaskId(id);
-        var latestTimeline = timelineQueryService.latestItem(timelines);
-        ReviewTaskListItem item = listItemAssembler.assemble(task, failureSummaryResolver.resolve(task, timelineQueryService.labels(timelines)));
+        ReviewTask task = queryItemLoader.loadRequired(id);
+        List<ReviewTimeline> timelines = queryItemLoader.loadTimelines(id);
+        var latestTimeline = queryItemLoader.latestTimelineItem(timelines);
+        ReviewTaskListItem item = queryItemLoader.assemble(task, timelines);
 
         return statusAssembler.assemble(task, item, latestTimeline);
     }

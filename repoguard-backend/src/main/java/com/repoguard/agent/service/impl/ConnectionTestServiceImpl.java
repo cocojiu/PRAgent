@@ -14,16 +14,9 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.ConnectionTestService;
-import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -31,20 +24,19 @@ import org.springframework.web.client.RestClient;
 @Service
 public class ConnectionTestServiceImpl implements ConnectionTestService {
 
-    private static final String GITHUB_PROVIDER = "GITHUB";
-    private static final String MYSQL_PROVIDER = "MYSQL";
-    private static final String RABBITMQ_PROVIDER = "RABBITMQ";
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final int MIN_LLM_TEST_MAX_TOKENS = 512;
-    private static final int MAX_LLM_TEST_MAX_TOKENS = 4096;
-
+    private static final String GITHUB_PROVIDER = GithubConnectionProbe.PROVIDER;
+    private static final String MYSQL_PROVIDER = MysqlConnectionProbe.PROVIDER;
+    private static final String RABBITMQ_PROVIDER = RabbitMqConnectionProbe.PROVIDER;
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
-    private final RestClient.Builder restClientBuilder;
     private final GithubConnectionProbe githubConnectionProbe;
+    private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner;
+    private final LlmConnectionProbe llmConnectionProbe;
+    private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner;
     private final MysqlConnectionProbe mysqlConnectionProbe;
     private final RabbitMqConnectionProbe rabbitMqConnectionProbe;
-    private final LlmConnectionProbeResponseParser llmConnectionProbeResponseParser;
+    private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner;
+    private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner;
     private final SecretCryptoService secretCryptoService;
 
     public ConnectionTestServiceImpl(
@@ -58,11 +50,28 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.restClientBuilder = restClientBuilder;
         this.githubConnectionProbe = new GithubConnectionProbe(restClientBuilder, secretCryptoService);
+        this.githubConnectionTestRunner = new GithubIntegrationConnectionTestRunner(this.githubConnectionProbe);
+        this.llmConnectionProbe = new LlmConnectionProbe(
+            restClientBuilder,
+            new LlmConnectionProbeResponseParser(objectMapper),
+            secretCryptoService
+        );
+        this.llmConnectionTestRunner = new LlmReviewPolicyConnectionTestRunner(this.llmConnectionProbe);
         this.mysqlConnectionProbe = new MysqlConnectionProbe(dataSource, secretCryptoService);
         this.rabbitMqConnectionProbe = new RabbitMqConnectionProbe(rabbitTemplate, secretCryptoService);
-        this.llmConnectionProbeResponseParser = new LlmConnectionProbeResponseParser(objectMapper);
+        this.mysqlConnectionTestRunner = new ServiceIntegrationConnectionTestRunner(
+            "MySQL connection test succeeded",
+            "MySQL runtime connection test succeeded",
+            this.mysqlConnectionProbe::runtimeProbe,
+            this.mysqlConnectionProbe
+        );
+        this.rabbitMqConnectionTestRunner = new ServiceIntegrationConnectionTestRunner(
+            "RabbitMQ connection test succeeded",
+            "RabbitMQ runtime connection test succeeded",
+            this.rabbitMqConnectionProbe::runtimeProbe,
+            this.rabbitMqConnectionProbe
+        );
         this.secretCryptoService = secretCryptoService;
     }
 
@@ -71,72 +80,14 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig savedConfig = findGithubConfig();
         boolean transientConfig = configRequest != null;
         IntegrationConfig config = transientConfig ? githubIntegrationForTest(configRequest, savedConfig) : savedConfig;
-        if (config == null) {
-            return connectionResult(false, "failed", "GitHub integration is not configured");
-        }
-        try {
-            githubConnectionProbe.probe(config);
-            if (!transientConfig) {
-                markGithubIntegrationChecked(config, null);
-            }
-            return connectionResult(true, "connected", "GitHub connection test succeeded");
-        } catch (RuntimeException ex) {
-            String error = conciseError(ex);
-            if (!transientConfig) {
-                markGithubIntegrationChecked(config, error);
-            }
-            return connectionResult(false, "failed", error);
-        }
+        return githubConnectionTestRunner.run(config, transientConfig, this::markGithubIntegrationChecked);
     }
 
     @Override
     public ConnectionTestResultDto testReviewPolicy(ReviewPolicyConfigRequest configRequest) {
         ReviewPolicyConfig savedConfig = findReviewPolicy();
         ReviewPolicyConfig config = configRequest == null ? savedConfig : reviewPolicyForTest(configRequest, savedConfig);
-        if (config == null) {
-            return connectionResult(false, "failed", "LLM config is not configured");
-        }
-        if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
-            return connectionResult(false, "failed", "LLM review is disabled");
-        }
-        String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
-        if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
-            return connectionResult(false, "failed", "LLM base URL, model or API key is missing");
-        }
-        try {
-            RestClient restClient = restClientBuilder
-                .baseUrl(config.getBaseUrl().trim())
-                .requestFactory(requestFactory(config.getTimeoutSeconds()))
-                .build();
-            String response = restClient.post()
-                .uri("/chat/completions")
-                .header("Authorization", "Bearer " + apiKey.trim())
-                .contentType(MediaType.APPLICATION_JSON)
-                .accept(MediaType.APPLICATION_JSON)
-                .body(Map.of(
-                    "model", config.getModelName(),
-                    "temperature", connectionTestTemperature(config.getTemperature()),
-                    "max_tokens", connectionTestMaxTokens(config.getMaxTokens()),
-                    "messages", List.of(
-                        Map.of("role", "system", "content", "You are a RepoGuard connectivity probe. Reply with strict JSON only."),
-                        Map.of("role", "user", "content", "Return exactly this JSON object and no markdown: {\"riskLevel\":\"INFO\",\"findings\":[]}")
-                    )
-                ))
-                .retrieve()
-                .body(String.class);
-            String content = llmConnectionProbeResponseParser.extractReviewContent(response);
-            if (!StringUtils.hasText(content)) {
-                return connectionResult(false, "failed", "LLM response did not include usable review content");
-            }
-            try {
-                llmConnectionProbeResponseParser.validateReviewJson(content);
-            } catch (RuntimeException ex) {
-                return connectionResult(false, "failed", "LLM response was received but could not be parsed as review JSON: " + conciseError(ex));
-            }
-            return connectionResult(true, "connected", "LLM connection test succeeded");
-        } catch (Exception ex) {
-            return connectionResult(false, "failed", conciseError(ex));
-        }
+        return llmConnectionTestRunner.run(config);
     }
 
     @Override
@@ -144,37 +95,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig savedConfig = findServiceIntegration(MYSQL_PROVIDER);
         boolean transientConfig = configRequest != null;
         IntegrationConfig config = transientConfig ? serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig) : savedConfig;
-        if (config != null) {
-            ConnectionProbeResult runtimeProbe = mysqlConnectionProbe.runtimeProbe();
-            ConnectionProbeResult configuredProbe = mysqlConnectionProbe.configuredProbe(config);
-            boolean success = Boolean.TRUE.equals(configuredProbe.healthy());
-            String error = success ? null : configuredProbe.message();
-            if (!transientConfig) {
-                markServiceIntegrationChecked(config, error);
-            }
-            String source = transientConfig ? "submitted_config" : "saved_config";
-            Boolean savedConfigProbe = transientConfig ? null : success;
-            return serviceConnectionResult(
-                success,
-                success ? "connected" : "failed",
-                success ? "MySQL connection test succeeded" : error,
-                source,
-                runtimeProbe,
-                savedConfig,
-                savedConfigProbe
-            );
-        }
-        ConnectionProbeResult runtimeProbe = mysqlConnectionProbe.runtimeProbe();
-        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
-        return serviceConnectionResult(
-            success,
-            success ? "connected" : "failed",
-            success ? "MySQL runtime connection test succeeded" : runtimeProbe.message(),
-            "runtime_config",
-            runtimeProbe,
-            savedConfig,
-            null
-        );
+        return mysqlConnectionTestRunner.run(savedConfig, config, transientConfig, this::markServiceIntegrationChecked);
     }
 
     @Override
@@ -182,37 +103,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig savedConfig = findServiceIntegration(RABBITMQ_PROVIDER);
         boolean transientConfig = configRequest != null;
         IntegrationConfig config = transientConfig ? serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig) : savedConfig;
-        if (config != null) {
-            ConnectionProbeResult runtimeProbe = rabbitMqConnectionProbe.runtimeProbe();
-            ConnectionProbeResult configuredProbe = rabbitMqConnectionProbe.configuredProbe(config);
-            boolean success = Boolean.TRUE.equals(configuredProbe.healthy());
-            String error = success ? null : configuredProbe.message();
-            if (!transientConfig) {
-                markServiceIntegrationChecked(config, error);
-            }
-            String source = transientConfig ? "submitted_config" : "saved_config";
-            Boolean savedConfigProbe = transientConfig ? null : success;
-            return serviceConnectionResult(
-                success,
-                success ? "connected" : "failed",
-                success ? "RabbitMQ connection test succeeded" : error,
-                source,
-                runtimeProbe,
-                savedConfig,
-                savedConfigProbe
-            );
-        }
-        ConnectionProbeResult runtimeProbe = rabbitMqConnectionProbe.runtimeProbe();
-        boolean success = Boolean.TRUE.equals(runtimeProbe.healthy());
-        return serviceConnectionResult(
-            success,
-            success ? "connected" : "failed",
-            success ? "RabbitMQ runtime connection test succeeded" : runtimeProbe.message(),
-            "runtime_config",
-            runtimeProbe,
-            savedConfig,
-            null
-        );
+        return rabbitMqConnectionTestRunner.run(savedConfig, config, transientConfig, this::markServiceIntegrationChecked);
     }
 
     private IntegrationConfig findGithubConfig() {
@@ -326,69 +217,6 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         }
     }
 
-    private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds == null ? 60 : timeoutSeconds));
-        requestFactory.setConnectTimeout(timeout);
-        requestFactory.setReadTimeout(timeout);
-        return requestFactory;
-    }
-
-    private BigDecimal connectionTestTemperature(BigDecimal configuredTemperature) {
-        return configuredTemperature == null ? BigDecimal.ZERO : configuredTemperature;
-    }
-
-    private int connectionTestMaxTokens(Integer configuredMaxTokens) {
-        int maxTokens = configuredMaxTokens == null ? MIN_LLM_TEST_MAX_TOKENS : configuredMaxTokens;
-        return Math.max(MIN_LLM_TEST_MAX_TOKENS, Math.min(maxTokens, MAX_LLM_TEST_MAX_TOKENS));
-    }
-
-    private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
-        return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()), null, null, null, null, null, null);
-    }
-
-    private ConnectionTestResultDto serviceConnectionResult(
-        boolean success,
-        String status,
-        String message,
-        String testedConfigSource,
-        ConnectionProbeResult runtimeProbe,
-        IntegrationConfig savedConfig,
-        Boolean testedSavedConfigHealthy
-    ) {
-        Boolean runtimeHealthy = runtimeProbe == null ? null : runtimeProbe.healthy();
-        Boolean savedConfigHealthy = resolveSavedConfigHealthy(savedConfig, testedSavedConfigHealthy);
-        return new ConnectionTestResultDto(
-            success,
-            status,
-            message,
-            format(LocalDateTime.now()),
-            testedConfigSource,
-            runtimeHealthy,
-            savedConfigHealthy,
-            mismatch(runtimeHealthy, savedConfigHealthy),
-            runtimeProbe == null ? null : runtimeProbe.status(),
-            savedConfig == null ? "not_configured" : lower(savedConfig.getStatus())
-        );
-    }
-
-    private Boolean resolveSavedConfigHealthy(IntegrationConfig savedConfig, Boolean testedSavedConfigHealthy) {
-        if (savedConfig == null) {
-            return null;
-        }
-        if (testedSavedConfigHealthy != null) {
-            return testedSavedConfigHealthy;
-        }
-        return "CONFIGURED".equals(savedConfig.getStatus()) && !StringUtils.hasText(savedConfig.getLastError());
-    }
-
-    private Boolean mismatch(Boolean runtimeHealthy, Boolean savedConfigHealthy) {
-        if (runtimeHealthy == null || savedConfigHealthy == null) {
-            return null;
-        }
-        return !runtimeHealthy.equals(savedConfigHealthy);
-    }
-
     private String resolveSecretValue(String currentValue, String submittedValue) {
         if (submittedValue == null) {
             return currentValue;
@@ -402,26 +230,6 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase();
-    }
-
-    private String conciseError(Exception ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message) && ex.getCause() != null) {
-            message = ex.getCause().getMessage();
-        }
-        if (!StringUtils.hasText(message)) {
-            return ex.getClass().getSimpleName();
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
-    }
-
-    private String format(LocalDateTime time) {
-        return time == null ? null : time.format(DATE_TIME_FORMATTER);
     }
 
 }

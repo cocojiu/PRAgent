@@ -12,44 +12,44 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
     private final NotificationOutboxEventStore outboxEventStore;
     private final NotificationEventPayloadBuilder payloadBuilder;
     private final NotificationEventPublishCoordinator publishCoordinator;
+    private final NotificationDispatchRequestFactory requestFactory;
 
     public NotificationDispatchServiceImpl(
         NotificationOutboxEventStore outboxEventStore,
         NotificationEventPayloadBuilder payloadBuilder,
         NotificationEventPublishCoordinator publishCoordinator
     ) {
+        this(outboxEventStore, payloadBuilder, publishCoordinator, new NotificationDispatchRequestFactory());
+    }
+
+    NotificationDispatchServiceImpl(
+        NotificationOutboxEventStore outboxEventStore,
+        NotificationEventPayloadBuilder payloadBuilder,
+        NotificationEventPublishCoordinator publishCoordinator,
+        NotificationDispatchRequestFactory requestFactory
+    ) {
         this.outboxEventStore = outboxEventStore;
         this.payloadBuilder = payloadBuilder;
         this.publishCoordinator = publishCoordinator;
+        this.requestFactory = requestFactory;
     }
 
     @Override
     @Transactional
     public void reviewFinished(ReviewTask task, int findingCount) {
-        String eventType = Boolean.TRUE.equals(task.getHumanReviewRequired())
-            ? NotificationEventType.HUMAN_REVIEW_REQUIRED.code()
-            : NotificationEventType.REVIEW_COMPLETED.code();
-        createAndPublish(eventType, task, null, findingCount, 0, 0, 0);
+        createAndPublish(task, requestFactory.reviewFinished(task, findingCount));
     }
 
     @Override
     @Transactional
     public void reviewFailed(ReviewTask task) {
-        createAndPublish(NotificationEventType.REVIEW_FAILED.code(), task, null, 0, 0, 0, 0);
+        createAndPublish(task, requestFactory.reviewFailed());
     }
 
     @Override
     @Transactional
     public void githubCommentsPublished(ReviewTask task, GithubCommentPublishResponse response, Long batchId) {
-        createAndPublish(
-            NotificationEventType.GITHUB_COMMENT_PUBLISHED.code(),
-            task,
-            batchId,
-            response.totalFindings() == null ? 0 : response.totalFindings(),
-            response.succeededCount() == null ? 0 : response.succeededCount(),
-            response.failedCount() == null ? 0 : response.failedCount(),
-            response.skippedCount() == null ? 0 : response.skippedCount()
-        );
+        createAndPublish(task, requestFactory.githubCommentsPublished(response, batchId));
     }
 
     @Override
@@ -66,28 +66,20 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
         publishCoordinator.publish(event);
     }
 
-    private void createAndPublish(
-        String eventType,
-        ReviewTask task,
-        Long batchId,
-        int findingCount,
-        int commentSucceededCount,
-        int commentFailedCount,
-        int commentSkippedCount
-    ) {
+    private void createAndPublish(ReviewTask task, NotificationDispatchRequest request) {
         if (task == null || task.getId() == null) {
             return;
         }
         NotificationEventPayload payload = payloadBuilder.build(
-            eventType,
+            request.eventType(),
             task,
-            batchId,
-            findingCount,
-            commentSucceededCount,
-            commentFailedCount,
-            commentSkippedCount
+            request.batchId(),
+            request.findingCount(),
+            request.commentSucceededCount(),
+            request.commentFailedCount(),
+            request.commentSkippedCount()
         );
-        NotificationEvent event = outboxEventStore.createPendingEvent(eventType, task, batchId, payload);
+        NotificationEvent event = outboxEventStore.createPendingEvent(request.eventType(), task, request.batchId(), payload);
         publishCoordinator.publishAfterCommit(event);
     }
 }

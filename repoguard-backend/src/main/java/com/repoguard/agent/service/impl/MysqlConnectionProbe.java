@@ -9,7 +9,9 @@ import javax.sql.DataSource;
 /**
  * Probes runtime and saved MySQL connectivity.
  */
-public class MysqlConnectionProbe {
+public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> {
+
+    static final String PROVIDER = "MYSQL";
 
     private final DataSource dataSource;
     private final SecretCryptoService secretCryptoService;
@@ -17,6 +19,16 @@ public class MysqlConnectionProbe {
     public MysqlConnectionProbe(DataSource dataSource, SecretCryptoService secretCryptoService) {
         this.dataSource = dataSource;
         this.secretCryptoService = secretCryptoService;
+    }
+
+    @Override
+    public String provider() {
+        return PROVIDER;
+    }
+
+    @Override
+    public ConnectionProbeResult probe(IntegrationConfig config) {
+        return configuredProbe(config);
     }
 
     public ConnectionProbeResult runtimeProbe() {

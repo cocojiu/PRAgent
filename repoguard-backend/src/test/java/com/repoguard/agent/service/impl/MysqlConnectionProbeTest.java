@@ -11,6 +11,13 @@ class MysqlConnectionProbeTest {
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
 
     @Test
+    void providerReturnsMysqlProviderCode() {
+        MysqlConnectionProbe probe = new MysqlConnectionProbe(null, secretCryptoService);
+
+        assertThat(probe.provider()).isEqualTo("MYSQL");
+    }
+
+    @Test
     void runtimeProbeReportsUnavailableWhenDataSourceIsMissing() {
         MysqlConnectionProbe probe = new MysqlConnectionProbe(null, secretCryptoService);
 
@@ -29,7 +36,7 @@ class MysqlConnectionProbeTest {
         config.setDefaultOwner("root");
         config.setTokenValue(secretCryptoService.encrypt("root"));
 
-        ConnectionProbeResult result = probe.configuredProbe(config);
+        ConnectionProbeResult result = probe.probe(config);
 
         assertThat(result.healthy()).isFalse();
         assertThat(result.status()).isEqualTo("failed");

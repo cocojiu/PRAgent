@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
+import com.repoguard.agent.github.GithubCommentPublicationStatus;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import org.springframework.stereotype.Component;
 
@@ -41,7 +42,9 @@ public class GithubCommentPublishPlanBuilder {
                 item.line(),
                 item.targetType(),
                 Boolean.TRUE.equals(item.published()),
-                Boolean.TRUE.equals(item.published()) ? "already_published" : "skipped",
+                Boolean.TRUE.equals(item.published())
+                    ? GithubCommentPublicationStatus.ALREADY_PUBLISHED.code()
+                    : GithubCommentPublicationStatus.SKIPPED.code(),
                 Boolean.TRUE.equals(item.published()) ? "GitHub comment already published" : item.reason(),
                 null,
                 null,

@@ -6,6 +6,7 @@ import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
+import com.repoguard.agent.github.GithubCommentPublicationBatchStatus;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -106,15 +107,17 @@ public class GithubCommentPublicationRecorder {
 
     private String resolvePublicationBatchStatus(GithubCommentPublishResponse response) {
         if (response.totalFindings() == 0) {
-            return "empty";
+            return GithubCommentPublicationBatchStatus.EMPTY.code();
         }
         if (response.failedCount() > 0) {
-            return response.succeededCount() > 0 ? "partial_failed" : "failed";
+            return response.succeededCount() > 0
+                ? GithubCommentPublicationBatchStatus.PARTIAL_FAILED.code()
+                : GithubCommentPublicationBatchStatus.FAILED.code();
         }
         if (response.attemptedCount() == 0 && response.skippedCount() > 0) {
-            return "skipped";
+            return GithubCommentPublicationBatchStatus.SKIPPED.code();
         }
-        return "completed";
+        return GithubCommentPublicationBatchStatus.COMPLETED.code();
     }
 
     private GithubCommentPublication loadPrSummaryPublication(Long taskId) {

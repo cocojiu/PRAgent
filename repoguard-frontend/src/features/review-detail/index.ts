@@ -5,10 +5,14 @@ export { default as ReviewDetailHumanReviewCard } from "./components/ReviewDetai
 export { default as ReviewDetailKpiGrid } from "./components/ReviewDetailKpiGrid.vue";
 export { default as ReviewDetailSidePanel } from "./components/ReviewDetailSidePanel.vue";
 export { default as ReviewDetailSummaryCard } from "./components/ReviewDetailSummaryCard.vue";
+export { useReviewDetailDerivedCollections } from "./composables/useReviewDetailDerivedCollections";
 export { useReviewDetailFindingFeedback } from "./composables/useReviewDetailFindingFeedback";
+export { useReviewDetailGithubCommentPublishConfirm } from "./composables/useReviewDetailGithubCommentPublishConfirm";
 export { useReviewDetailGithubComments } from "./composables/useReviewDetailGithubComments";
+export { useReviewDetailHumanReviewDisplay } from "./composables/useReviewDetailHumanReviewDisplay";
 export { useReviewDetailHumanReview } from "./composables/useReviewDetailHumanReview";
 export { useReviewDetailLoader } from "./composables/useReviewDetailLoader";
+export { useReviewDetailLlmDisplay } from "./composables/useReviewDetailLlmDisplay";
 export { useReviewDetailPolling } from "./composables/useReviewDetailPolling";
 export { useReviewDetailRetry } from "./composables/useReviewDetailRetry";
 export {
