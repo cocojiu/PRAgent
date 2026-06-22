@@ -16,7 +16,7 @@
     </article>
     <article class="dashboard-card">
       <h2>模型质量</h2>
-      <el-table :data="qualityByModel" class="rg-table" size="large" aria-label="模型质量统计">
+      <el-table :data="qualityByModel" class="rg-table" size="large" max-height="360" aria-label="模型质量统计">
         <el-table-column prop="model" label="模型" min-width="180" />
         <el-table-column prop="taskCount" label="任务" width="80" />
         <el-table-column prop="averageDuration" label="均耗时" width="100" />
@@ -34,7 +34,7 @@
     </article>
     <article class="dashboard-card">
       <h2>仓库质量</h2>
-      <el-table :data="qualityByRepository" class="rg-table" size="large" aria-label="仓库质量统计">
+      <el-table :data="qualityByRepository" class="rg-table" size="large" max-height="360" aria-label="仓库质量统计">
         <el-table-column prop="repository" label="仓库" min-width="180" />
         <el-table-column prop="taskCount" label="任务" width="80" />
         <el-table-column prop="fallbackRate" label="兜底率" width="100" />

@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewTimelineQueryService {
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ReviewTimelineMapper reviewTimelineMapper;
 
