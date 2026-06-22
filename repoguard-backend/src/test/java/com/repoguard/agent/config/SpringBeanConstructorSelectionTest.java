@@ -62,6 +62,7 @@ class SpringBeanConstructorSelectionTest {
         );
         List<Class<?>> packagePrivateSpringManagedTypes = List.of(
             Class.forName("com.repoguard.agent.notification.DingTalkWebhookSigner"),
+            Class.forName("com.repoguard.agent.notification.NotificationDeliveryCompletionService"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryEventStateUpdater"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryFailurePolicy"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryLogFactory"),

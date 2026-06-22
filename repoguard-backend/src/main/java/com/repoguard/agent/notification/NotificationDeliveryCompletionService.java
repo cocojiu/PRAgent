@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -9,6 +10,7 @@ class NotificationDeliveryCompletionService {
     private final NotificationDeliveryCompletionDecider completionDecider;
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
 
+    @Autowired
     NotificationDeliveryCompletionService(
         NotificationDeliveryFailurePolicy deliveryFailurePolicy,
         NotificationDeliveryEventStateUpdater eventStateUpdater
