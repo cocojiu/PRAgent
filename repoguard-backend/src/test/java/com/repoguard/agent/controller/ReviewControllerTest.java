@@ -24,9 +24,16 @@ import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
+import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.ChunkedReviewDto;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
+import com.repoguard.agent.dto.PrReviewSummaryDto;
+import com.repoguard.agent.dto.PrRiskFileDto;
+import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -67,7 +74,12 @@ class ReviewControllerTest {
                 "2 分 48 秒",
                 null,
                 null,
-                null
+                null,
+                true,
+                "pending",
+                "Need owner confirmation",
+                "review-lead",
+                "2026-06-12 11:00:00"
             );
             return new PageResponse<>(List.of(item), 1);
         }
@@ -90,16 +102,58 @@ class ReviewControllerTest {
                 "github_pr_picker",
                 "2025-05-31 14:32:21",
                 "2 分 48 秒",
-                null,
-                null,
-                null,
+                "github_error",
+                "GitHub API rate limited",
+                "Retry after rate limit resets",
                 "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
-                List.of(),
-                List.of(),
-                List.of(),
-                List.of(),
+                List.of(new ReviewFindingDto(
+                    1L,
+                    "high",
+                    "src/App.java",
+                    12,
+                    "Use logger",
+                    "Replace stdout with logger",
+                    "HIGH",
+                    "System.out.println(password)",
+                    "Secret may leak to stdout",
+                    "log.info(\"user exported\")",
+                    true,
+                    "security",
+                    "valid",
+                    "Confirmed by owner",
+                    "review-lead",
+                    "2026-06-12 12:00:00"
+                )),
+                List.of(new MissingTestDto("UserExportControllerTest", "exportUsers", "controller", "Add authorization regression test")),
+                List.of(new ChangedFileDto("src/App.java", "modified", 12, 3)),
+                List.of(new ReviewTimelineItem("GitHub diff fetched", "10:20:30", "done")),
+                new PrRiskProfileDto(
+                    91,
+                    "critical",
+                    "High risk export endpoint change.",
+                    true,
+                    "Touches user export and logging.",
+                    List.of("auth-sensitive", "secret-risk"),
+                    List.of(new PrRiskFileDto("src/App.java", "modified", 12, 3, 2, 91, List.of("secret-risk")))
+                ),
+                new PrReviewSummaryDto(
+                    "critical",
+                    "Manual review required before merge.",
+                    "block",
+                    false,
+                    true,
+                    List.of("Secret logging risk"),
+                    List.of("src/App.java"),
+                    "RepoGuard summary body"
+                ),
                 new LlmStatusDto("completed", "2 分 48 秒", "high"),
-                new RabbitMqStatusDto(1, 0, "confirmed")
+                new ChunkedReviewDto(true, 3, "high", 2, 0, List.of("large_pr")),
+                new RabbitMqStatusDto(1, 0, "confirmed"),
+                true,
+                "pending",
+                "Need owner confirmation",
+                "review-lead",
+                "2026-06-12 11:00:00"
             );
         }
 
@@ -115,7 +169,12 @@ class ReviewControllerTest {
                 null,
                 null,
                 null,
-                new ReviewTimelineItem("GitHub diff fetched", "10:20:30", "current")
+                new ReviewTimelineItem("GitHub diff fetched", "10:20:30", "current"),
+                true,
+                "pending",
+                "Need owner confirmation",
+                "review-lead",
+                "2026-06-12 11:00:00"
             );
         }
 
@@ -292,11 +351,34 @@ class ReviewControllerTest {
                 .param("triggerSource", "existing_reused"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp").exists())
             .andExpect(jsonPath("$.data.total").value(1))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].id").value(512))
+            .andExpect(jsonPath("$.data.items[0].prNumber").value(512))
+            .andExpect(jsonPath("$.data.items[0].title").value("新增用户导出接口"))
+            .andExpect(jsonPath("$.data.items[0].repository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data.items[0].organization").value("repo-guard-demo"))
+            .andExpect(jsonPath("$.data.items[0].commit").value("a1b2c3d"))
+            .andExpect(jsonPath("$.data.items[0].branch").value("main"))
             .andExpect(jsonPath("$.data.items[0].status").value("completed"))
+            .andExpect(jsonPath("$.data.items[0].riskLevel").value("high"))
+            .andExpect(jsonPath("$.data.items[0].mqRetries").value(0))
+            .andExpect(jsonPath("$.data.items[0].llmStatus").value("completed"))
             .andExpect(jsonPath("$.data.items[0].source").value("github_pr_picker"))
-            .andExpect(jsonPath("$.data.items[0].triggerSource").value("github_pr_picker"));
+            .andExpect(jsonPath("$.data.items[0].triggerSource").value("github_pr_picker"))
+            .andExpect(jsonPath("$.data.items[0].createdAt").value("2025-05-31 14:32:21"))
+            .andExpect(jsonPath("$.data.items[0].duration").value("2 分 48 秒"))
+            .andExpect(jsonPath("$.data.items[0].humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.data.items[0].humanReviewStatus").value("pending"))
+            .andExpect(jsonPath("$.data.items[0].humanReviewNote").value("Need owner confirmation"))
+            .andExpect(jsonPath("$.data.items[0].humanReviewBy").value("review-lead"))
+            .andExpect(jsonPath("$.data.items[0].humanReviewedAt").value("2026-06-12 11:00:00"));
+        assertThat(lastListQuery.page()).isEqualTo(1);
+        assertThat(lastListQuery.pageSize()).isEqualTo(20);
+        assertThat(lastListQuery.status()).isEqualTo("completed");
         assertThat(lastListQuery.source()).isEqualTo("github_pr_picker");
         assertThat(lastListQuery.triggerSource()).isEqualTo("existing_reused");
     }
@@ -307,10 +389,56 @@ class ReviewControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.id").value(512))
+            .andExpect(jsonPath("$.data.prNumber").value(512))
+            .andExpect(jsonPath("$.data.title").value("新增用户导出接口"))
+            .andExpect(jsonPath("$.data.repository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data.organization").value("repo-guard-demo"))
+            .andExpect(jsonPath("$.data.commit").value("a1b2c3d"))
+            .andExpect(jsonPath("$.data.branch").value("main"))
+            .andExpect(jsonPath("$.data.status").value("completed"))
+            .andExpect(jsonPath("$.data.riskLevel").value("high"))
+            .andExpect(jsonPath("$.data.mqRetries").value(0))
+            .andExpect(jsonPath("$.data.llmStatus").value("completed"))
             .andExpect(jsonPath("$.data.source").value("github_pr_picker"))
             .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"))
+            .andExpect(jsonPath("$.data.createdAt").value("2025-05-31 14:32:21"))
+            .andExpect(jsonPath("$.data.duration").value("2 分 48 秒"))
+            .andExpect(jsonPath("$.data.failureCategory").value("github_error"))
+            .andExpect(jsonPath("$.data.failureReason").value("GitHub API rate limited"))
+            .andExpect(jsonPath("$.data.failureSuggestion").value("Retry after rate limit resets"))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
-            .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"));
+            .andExpect(jsonPath("$.data.findings[0].id").value(1))
+            .andExpect(jsonPath("$.data.findings[0].severity").value("high"))
+            .andExpect(jsonPath("$.data.findings[0].file").value("src/App.java"))
+            .andExpect(jsonPath("$.data.findings[0].line").value(12))
+            .andExpect(jsonPath("$.data.findings[0].message").value("Use logger"))
+            .andExpect(jsonPath("$.data.findings[0].recommendation").value("Replace stdout with logger"))
+            .andExpect(jsonPath("$.data.findings[0].isBlocking").value(true))
+            .andExpect(jsonPath("$.data.findings[0].reviewDimension").value("security"))
+            .andExpect(jsonPath("$.data.findings[0].feedbackStatus").value("valid"))
+            .andExpect(jsonPath("$.data.missingTests[0].file").value("UserExportControllerTest"))
+            .andExpect(jsonPath("$.data.changedFiles[0].path").value("src/App.java"))
+            .andExpect(jsonPath("$.data.changedFiles[0].changeType").value("modified"))
+            .andExpect(jsonPath("$.data.timeline[0].label").value("GitHub diff fetched"))
+            .andExpect(jsonPath("$.data.riskProfile.score").value(91))
+            .andExpect(jsonPath("$.data.riskProfile.level").value("critical"))
+            .andExpect(jsonPath("$.data.riskProfile.recommendHumanReview").value(true))
+            .andExpect(jsonPath("$.data.prSummary.overallRisk").value("critical"))
+            .andExpect(jsonPath("$.data.prSummary.recommendMerge").value(false))
+            .andExpect(jsonPath("$.data.prSummary.githubCommentBody").value("RepoGuard summary body"))
+            .andExpect(jsonPath("$.data.llm.status").value("completed"))
+            .andExpect(jsonPath("$.data.llm.duration").value("2 分 48 秒"))
+            .andExpect(jsonPath("$.data.llm.riskLevel").value("high"))
+            .andExpect(jsonPath("$.data.chunkedReview.enabled").value(true))
+            .andExpect(jsonPath("$.data.chunkedReview.chunkCount").value(3))
+            .andExpect(jsonPath("$.data.chunkedReview.aggregateRisk").value("high"))
+            .andExpect(jsonPath("$.data.chunkedReview.aggregateFindings").value(2))
+            .andExpect(jsonPath("$.data.rabbitMq.consumeStatus").value("confirmed"))
+            .andExpect(jsonPath("$.data.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.data.humanReviewStatus").value("pending"))
+            .andExpect(jsonPath("$.data.humanReviewNote").value("Need owner confirmation"))
+            .andExpect(jsonPath("$.data.humanReviewBy").value("review-lead"))
+            .andExpect(jsonPath("$.data.humanReviewedAt").value("2026-06-12 11:00:00"));
     }
 
     @Test
@@ -323,7 +451,13 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.llmStatus").value("reviewing"))
             .andExpect(jsonPath("$.data.updatedAt").value("2026-06-12 10:20:30"))
             .andExpect(jsonPath("$.data.latestTimeline.label").value("GitHub diff fetched"))
-            .andExpect(jsonPath("$.data.latestTimeline.status").value("current"));
+            .andExpect(jsonPath("$.data.latestTimeline.time").value("10:20:30"))
+            .andExpect(jsonPath("$.data.latestTimeline.status").value("current"))
+            .andExpect(jsonPath("$.data.humanReviewRequired").value(true))
+            .andExpect(jsonPath("$.data.humanReviewStatus").value("pending"))
+            .andExpect(jsonPath("$.data.humanReviewNote").value("Need owner confirmation"))
+            .andExpect(jsonPath("$.data.humanReviewBy").value("review-lead"))
+            .andExpect(jsonPath("$.data.humanReviewedAt").value("2026-06-12 11:00:00"));
     }
 
     @Test
