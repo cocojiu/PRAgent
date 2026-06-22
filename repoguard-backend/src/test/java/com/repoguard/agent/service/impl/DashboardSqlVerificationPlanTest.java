@@ -8,6 +8,7 @@ import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,20 @@ class DashboardSqlVerificationPlanTest {
     }
 
     @Test
+    void dashboardIndexAlignmentsKeepExpectedLeadingColumns() throws IOException {
+        String migrations = migrationSql();
+
+        for (DashboardSqlVerificationPlan.IndexAlignment alignment : plan.indexAlignments()) {
+            assertThat(migrations)
+                .as(alignment.indexName() + " leading columns")
+                .contains(indexDefinition(alignment.indexName(), alignment.leadingColumns()));
+            assertThat(alignment.reason())
+                .as(alignment.indexName() + " alignment reason")
+                .isNotBlank();
+        }
+    }
+
+    @Test
     void planCoversEveryDashboardMapperAggregateQuery() {
         assertThat(plan.queryAssumptions())
             .extracting(DashboardSqlVerificationPlan.QueryAssumption::mapperMethod)
@@ -80,5 +95,10 @@ class DashboardSqlVerificationPlanTest {
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to read migration " + path, ex);
         }
+    }
+
+    private String indexDefinition(String indexName, List<String> columns) {
+        return "add key " + indexName.toLowerCase(Locale.ROOT)
+            + " (" + String.join(", ", columns).toLowerCase(Locale.ROOT) + ")";
     }
 }
