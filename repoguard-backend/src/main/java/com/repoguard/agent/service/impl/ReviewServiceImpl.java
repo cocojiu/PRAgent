@@ -169,7 +169,7 @@ public class ReviewServiceImpl implements ReviewService {
             )
             : githubCommentApplicationService;
         this.githubPullRequestOptionService = githubPullRequestOptionService == null
-            ? new GithubPullRequestOptionServiceImpl(githubPullRequestClient)
+            ? new GithubPullRequestOptionServiceImpl(githubPullRequestClient, reviewTaskMapper)
             : githubPullRequestOptionService;
     }
 
