@@ -92,7 +92,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${HTTP_PORT_BIND:-80}:80"
+      - "${HTTP_PORT_BIND:-80}:8080"
     mem_limit: ${FRONTEND_MEM_LIMIT:-128m}
 
 volumes:
