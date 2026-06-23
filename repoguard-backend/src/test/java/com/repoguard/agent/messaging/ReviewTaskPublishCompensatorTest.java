@@ -170,6 +170,25 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void compensateCanRecoverQueuedTaskNeverClaimedBeforeCrash() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(0);
+        task.setPublishClaimedAt(null);
+        task.setCreatedAt(LocalDateTime.now().minusMinutes(5));
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getPublishClaimedAt()).isNull();
+        assertThat(task.getPublishClaimedBy()).isNull();
+    }
+
+    @Test
     void compensateDoesNotReclaimQueuedTaskAtMaxAttempts() {
         properties.setPublishCompensationMaxAttempts(3);
         ReviewTask task = task();
@@ -220,6 +239,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(attemptsLimit).isGreaterThanOrEqualTo(0);
         assertThat(staleQueuedBranch).isGreaterThan(attemptsLimit);
         assertThat(sqlSegment.indexOf("publish_attempts", staleQueuedBranch)).isGreaterThan(staleQueuedBranch);
+        assertThat(sqlSegment).contains("created_at");
     }
 
     private ReviewTask task() {

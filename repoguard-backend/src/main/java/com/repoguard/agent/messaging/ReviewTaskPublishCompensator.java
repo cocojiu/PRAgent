@@ -107,8 +107,16 @@ public class ReviewTaskPublishCompensator {
                     )
                     .or(staleQueued -> staleQueued
                         .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
-                        .isNotNull(ReviewTask::getPublishClaimedAt)
-                        .le(ReviewTask::getPublishClaimedAt, expiredBefore)
+                        .and(queued -> queued
+                            .and(claimed -> claimed
+                                .isNotNull(ReviewTask::getPublishClaimedAt)
+                                .le(ReviewTask::getPublishClaimedAt, expiredBefore)
+                            )
+                            .or(unclaimed -> unclaimed
+                                .isNull(ReviewTask::getPublishClaimedAt)
+                                .le(ReviewTask::getCreatedAt, expiredBefore)
+                            )
+                        )
                         .lt(ReviewTask::getPublishAttempts, maxAttempts())
                     )
                 )
@@ -124,6 +132,7 @@ public class ReviewTaskPublishCompensator {
     void compensate(ReviewTask task) {
         try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
             LocalDateTime claimedAt = LocalDateTime.now();
+            String recoverySource = recoverySource(task);
             if (!claimTask(task, claimedAt)) {
                 LOGGER.info(
                     "Review task publish compensation skipped taskId={} repository={} prNumber={} operation=review_publish_compensation result=claim_failed status={} attempts={} maxAttempts={}",
@@ -137,9 +146,6 @@ public class ReviewTaskPublishCompensator {
                 return;
             }
             int nextAttempt = safeAttempts(task) + 1;
-            String recoverySource = reviewTaskStateMachine.isPublishFailed(task.getStatus())
-                ? "publish_failed"
-                : "stale_queued_claim";
             LOGGER.info(
                 "Review task publish compensation claimed taskId={} repository={} prNumber={} operation=review_publish_compensation recoverySource={} currentStatus={} nextAttempt={} maxAttempts={} claimedAt={}",
                 task.getId(),
@@ -231,8 +237,16 @@ public class ReviewTaskPublishCompensator {
                     )
                     .or(staleQueued -> staleQueued
                         .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                        .isNotNull("publish_claimed_at")
-                        .le("publish_claimed_at", expiredBefore)
+                        .and(queued -> queued
+                            .and(claimed -> claimed
+                                .isNotNull("publish_claimed_at")
+                                .le("publish_claimed_at", expiredBefore)
+                            )
+                            .or(unclaimed -> unclaimed
+                                .isNull("publish_claimed_at")
+                                .le("created_at", expiredBefore)
+                            )
+                        )
                         .lt("publish_attempts", maxAttempts())
                     )
                 )
@@ -245,6 +259,15 @@ public class ReviewTaskPublishCompensator {
             return true;
         }
         return false;
+    }
+
+    private String recoverySource(ReviewTask task) {
+        if (reviewTaskStateMachine.isPublishFailed(task.getStatus())) {
+            return "publish_failed";
+        }
+        return task.getPublishClaimedAt() == null
+            ? "stale_unclaimed_queued"
+            : "stale_queued_claim";
     }
 
     private boolean markQueuedBeforePublish(ReviewTask task, LocalDateTime claimedAt, int nextAttempt) {

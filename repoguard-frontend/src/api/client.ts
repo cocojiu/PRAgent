@@ -14,7 +14,6 @@ interface TokenPairResponse {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
-const ADMIN_KEY_HEADER = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY_HEADER ?? "X-RepoGuard-Admin-Key";
 const ACCESS_TOKEN_STORAGE_KEY = "repoguard.accessToken";
 const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
@@ -37,7 +36,7 @@ export const request = async <T>(
   options: RequestInit = {}
 ): Promise<T> => {
   const response = await safeDoRequest(path, params, options);
-  if (response.ok || response.status !== 401 || isAuthPath(path)) {
+  if (response.ok || response.status !== 401 || isRefreshExcludedAuthPath(path)) {
     return unwrapResponse(response);
   }
 
@@ -89,10 +88,6 @@ const doRequest = async (
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
-  }
-  const adminApiKey = import.meta.env.VITE_REPOGUARD_ADMIN_API_KEY;
-  if (adminApiKey && !headers.has(ADMIN_KEY_HEADER)) {
-    headers.set(ADMIN_KEY_HEADER, adminApiKey);
   }
   const authToken = resolveAccessToken();
   if (authToken && !headers.has("Authorization")) {
@@ -187,7 +182,16 @@ const redirectToLogin = () => {
   window.location.assign(`/login?redirect=${redirect}`);
 };
 
-const isAuthPath = (path: string) => path.startsWith("/api/v1/auth/");
+const isRefreshExcludedAuthPath = (path: string) => {
+  const excludedAuthPaths = [
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/refresh-token/reset",
+    "/api/v1/auth/logout"
+  ];
+  return excludedAuthPaths.includes(path);
+};
 
 const isRefreshTokenRemembered = () => Boolean(window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY));
 

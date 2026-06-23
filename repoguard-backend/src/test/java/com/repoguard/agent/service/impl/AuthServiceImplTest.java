@@ -208,14 +208,31 @@ class AuthServiceImplTest {
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
         when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(existingUser());
+        when(userRefreshTokenMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
         AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken));
 
         assertThat(response.accessToken()).isNotBlank();
         assertThat(response.refreshToken()).isNotEqualTo(refreshToken);
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
-        verify(userRefreshTokenMapper).updateById(storedToken);
+        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void refreshRejectsRefreshTokenAlreadyUsedByConcurrentRequest() {
+        String refreshToken = "refresh-token";
+        UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(existingUser());
+        when(userRefreshTokenMapper.update(isNull(), any(Wrapper.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("登录状态已过期，请重新登录");
+
+        Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 

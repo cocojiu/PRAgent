@@ -145,11 +145,10 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
         }
 
-        storedToken.setStatus(STATUS_REVOKED);
-        storedToken.setRevokedAt(now);
-        storedToken.setLastUsedAt(now);
-        storedToken.setUpdatedAt(now);
-        userRefreshTokenMapper.updateById(storedToken);
+        if (!revokeActiveRefreshToken(storedToken, now)) {
+            recordAudit(storedToken.getUserId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token already used");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+        }
 
         boolean remember = storedToken.getExpiresAt().isAfter(now.plusSeconds(authTokenService.refreshTokenTtlSeconds(false)));
         recordAudit(user.getId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_SUCCESS, null);
@@ -238,6 +237,24 @@ public class AuthServiceImpl implements AuthService {
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
         userRefreshTokenMapper.updateById(storedToken);
+    }
+
+    private boolean revokeActiveRefreshToken(UserRefreshToken storedToken, LocalDateTime now) {
+        int updated = userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("id", storedToken.getId())
+            .eq("status", STATUS_ACTIVE)
+            .set("status", STATUS_REVOKED)
+            .set("revoked_at", now)
+            .set("last_used_at", now)
+            .set("updated_at", now));
+        if (updated <= 0) {
+            return false;
+        }
+        storedToken.setStatus(STATUS_REVOKED);
+        storedToken.setRevokedAt(now);
+        storedToken.setLastUsedAt(now);
+        storedToken.setUpdatedAt(now);
+        return true;
     }
 
     private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {

@@ -1,8 +1,10 @@
 package com.repoguard.agent.github.webhook;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.util.StringUtils;
 
 @ConfigurationProperties(prefix = "app.github.webhook")
 public class GithubWebhookProperties {
@@ -69,5 +71,13 @@ public class GithubWebhookProperties {
 
     public void setAllowedHeadBranches(List<String> allowedHeadBranches) {
         this.allowedHeadBranches = allowedHeadBranches == null ? new ArrayList<>() : new ArrayList<>(allowedHeadBranches);
+    }
+
+    public void validateForProfiles(String[] activeProfiles) {
+        boolean productionProfile = Arrays.stream(activeProfiles)
+            .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
+        if (productionProfile && enabled && requireSignature && !StringUtils.hasText(secret)) {
+            throw new IllegalStateException("app.github.webhook.secret must be configured in prod profile when signature verification is enabled");
+        }
     }
 }
