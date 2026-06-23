@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -240,11 +241,32 @@ public class RuleBasedPullRequestReviewer {
         if ("*".equals(normalizedPattern)) {
             return true;
         }
-        String regex = normalizedPattern
-            .replace(".", "\\.")
-            .replace("*", ".*")
-            .replace("?", ".");
+        String regex = globToRegex(normalizedPattern);
         return normalizedFilePath.matches(".*" + regex);
+    }
+
+    private String globToRegex(String pattern) {
+        StringBuilder regex = new StringBuilder();
+        StringBuilder literal = new StringBuilder();
+        for (int index = 0; index < pattern.length(); index++) {
+            char current = pattern.charAt(index);
+            if (current == '*' || current == '?') {
+                appendQuotedLiteral(regex, literal);
+                regex.append(current == '*' ? ".*" : ".");
+            } else {
+                literal.append(current);
+            }
+        }
+        appendQuotedLiteral(regex, literal);
+        return regex.toString();
+    }
+
+    private void appendQuotedLiteral(StringBuilder regex, StringBuilder literal) {
+        if (literal.isEmpty()) {
+            return;
+        }
+        regex.append(Pattern.quote(literal.toString()));
+        literal.setLength(0);
     }
 
     private String normalizePath(String value) {

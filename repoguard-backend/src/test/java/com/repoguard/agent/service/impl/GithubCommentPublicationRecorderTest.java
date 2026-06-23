@@ -84,6 +84,41 @@ class GithubCommentPublicationRecorderTest {
     }
 
     @Test
+    void recordPublicationDoesNotRegressExistingSuccessfulPublicationOnRetryFailure() {
+        LocalDateTime originalPublishedAt = LocalDateTime.of(2026, 6, 18, 10, 30);
+        GithubCommentPublication existing = new GithubCommentPublication();
+        existing.setId(10L);
+        existing.setTaskId(521L);
+        existing.setFindingId(1L);
+        existing.setStatus("published");
+        existing.setSuccess(true);
+        existing.setGithubCommentId(101L);
+        existing.setGithubUrl("https://github.com/comment/101");
+        existing.setPublishedAt(originalPublishedAt);
+        when(publicationMapper.selectOne(any())).thenReturn(existing);
+
+        GithubCommentPublication publication = recorder.recordPublication(521L, new GithubReviewCommentResult(
+            1L,
+            "README.md",
+            8,
+            "line",
+            false,
+            "failed",
+            "publisher confirm timed out",
+            null,
+            null
+        ));
+
+        assertThat(publication.getStatus()).isEqualTo("published");
+        assertThat(publication.getSuccess()).isTrue();
+        assertThat(publication.getGithubCommentId()).isEqualTo(101L);
+        assertThat(publication.getGithubUrl()).isEqualTo("https://github.com/comment/101");
+        assertThat(publication.getPublishedAt()).isEqualTo(originalPublishedAt);
+        assertThat(publication.getMessage()).isEqualTo("publisher confirm timed out");
+        verify(publicationMapper).updateById(existing);
+    }
+
+    @Test
     void recordBatchPersistsBatchAndHistoryItems() {
         Mockito.doAnswer(invocation -> {
             GithubCommentPublicationBatch batch = invocation.getArgument(0);

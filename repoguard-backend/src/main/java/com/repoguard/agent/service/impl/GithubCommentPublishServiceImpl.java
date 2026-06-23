@@ -111,7 +111,9 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         List<GithubCommentPublishItem> items = new java.util.ArrayList<>(publishedItems);
         items.addAll(skippedItems);
 
-        int succeededCount = (int) publishedItems.stream().filter(GithubCommentPublishItem::success).count();
+        int succeededCount = (int) publishedItems.stream()
+            .filter(item -> Boolean.TRUE.equals(item.success()))
+            .count();
         int failedCount = publishedItems.size() - succeededCount;
         recordGithubCommentPublishMetrics(succeededCount, failedCount, skippedItems.size());
         GithubCommentPublishResponse response = new GithubCommentPublishResponse(

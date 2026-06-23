@@ -55,13 +55,18 @@ public class GithubCommentPublicationRecorder {
             publication.setFindingId(result.findingId());
             publication.setCreatedAt(now);
         }
+        boolean alreadyPublished = Boolean.TRUE.equals(publication.getSuccess())
+            && StringUtils.hasText(publication.getGithubUrl());
+        boolean currentSucceeded = Boolean.TRUE.equals(result.success());
         publication.setTargetType(result.targetType());
-        publication.setStatus(result.status());
-        publication.setSuccess(result.success());
-        publication.setGithubCommentId(result.commentId());
-        publication.setGithubUrl(result.url());
+        if (!alreadyPublished || currentSucceeded) {
+            publication.setStatus(result.status());
+            publication.setSuccess(result.success());
+            publication.setGithubCommentId(result.commentId());
+            publication.setGithubUrl(result.url());
+            publication.setPublishedAt(currentSucceeded ? now : null);
+        }
         publication.setMessage(result.message());
-        publication.setPublishedAt(Boolean.TRUE.equals(result.success()) ? now : null);
         publication.setUpdatedAt(now);
         if (existing) {
             githubCommentPublicationMapper.updateById(publication);

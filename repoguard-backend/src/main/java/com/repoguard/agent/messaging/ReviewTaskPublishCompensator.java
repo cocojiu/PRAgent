@@ -109,6 +109,7 @@ public class ReviewTaskPublishCompensator {
                         .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
                         .isNotNull(ReviewTask::getPublishClaimedAt)
                         .le(ReviewTask::getPublishClaimedAt, expiredBefore)
+                        .lt(ReviewTask::getPublishAttempts, maxAttempts())
                     )
                 )
                 .orderByAsc(ReviewTask::getPublishClaimedAt)
@@ -135,9 +136,7 @@ public class ReviewTaskPublishCompensator {
                 );
                 return;
             }
-            int nextAttempt = reviewTaskStateMachine.isPublishFailed(task.getStatus())
-                ? safeAttempts(task) + 1
-                : safeAttempts(task);
+            int nextAttempt = safeAttempts(task) + 1;
             String recoverySource = reviewTaskStateMachine.isPublishFailed(task.getStatus())
                 ? "publish_failed"
                 : "stale_queued_claim";
@@ -234,6 +233,7 @@ public class ReviewTaskPublishCompensator {
                         .eq("status", reviewTaskStateMachine.statusWhenQueued())
                         .isNotNull("publish_claimed_at")
                         .le("publish_claimed_at", expiredBefore)
+                        .lt("publish_attempts", maxAttempts())
                     )
                 )
                 .set("publish_claimed_at", claimedAt)

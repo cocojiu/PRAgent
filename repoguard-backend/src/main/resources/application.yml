@@ -22,8 +22,8 @@ spring:
       simple:
         acknowledge-mode: manual
         prefetch: 1
-        concurrency: 1
-        max-concurrency: 1
+        concurrency: ${REPOGUARD_RABBIT_LISTENER_CONCURRENCY:${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}}
+        max-concurrency: ${REPOGUARD_RABBIT_LISTENER_MAX_CONCURRENCY:${REPOGUARD_REVIEW_WORKER_MAX_CONCURRENCY:${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}}}
         default-requeue-rejected: false
         retry:
           enabled: true
@@ -97,10 +97,10 @@ app:
       llm:
         circuit-breaker-failure-rate-threshold: ${REPOGUARD_LLM_CB_FAILURE_RATE_THRESHOLD:50}
         circuit-breaker-sliding-window-size: ${REPOGUARD_LLM_CB_SLIDING_WINDOW_SIZE:10}
-        circuit-breaker-minimum-calls: ${REPOGUARD_LLM_CB_MINIMUM_CALLS:3}
+        circuit-breaker-minimum-calls: ${REPOGUARD_LLM_CB_MINIMUM_CALLS:5}
         circuit-breaker-wait-open-seconds: ${REPOGUARD_LLM_CB_WAIT_OPEN_SECONDS:30}
-        retry-max-attempts: ${REPOGUARD_LLM_RETRY_MAX_ATTEMPTS:1}
-        retry-wait-millis: ${REPOGUARD_LLM_RETRY_WAIT_MILLIS:0}
+        retry-max-attempts: ${REPOGUARD_LLM_RETRY_MAX_ATTEMPTS:2}
+        retry-wait-millis: ${REPOGUARD_LLM_RETRY_WAIT_MILLIS:300}
         rate-limit-for-period: ${REPOGUARD_LLM_RATE_LIMIT_FOR_PERIOD:10}
         rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
         rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}

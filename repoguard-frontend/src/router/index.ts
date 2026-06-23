@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
 import { hasAuthToken } from "@/api/client";
 import { routeNames } from "@/router/names";
+import { canManage, currentUser, loadCurrentUser } from "@/stores/authState";
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -44,37 +45,37 @@ export const router = createRouter({
           path: "rules",
           name: routeNames.rules,
           component: () => import("@/pages/RuleConfigPage.vue"),
-          meta: { title: "规则配置", requiresAuth: true }
+          meta: { title: "规则配置", requiresAuth: true, requiresManage: true }
         },
         {
           path: "integrations",
           name: routeNames.integrations,
           component: () => import("@/pages/IntegrationsPage.vue"),
-          meta: { title: "集成配置", requiresAuth: true }
+          meta: { title: "集成配置", requiresAuth: true, requiresManage: true }
         },
         {
           path: "message-queue",
           name: routeNames.messageQueue,
           component: () => import("@/pages/MessageQueueHealthPage.vue"),
-          meta: { title: "消息队列健康状态", requiresAuth: true }
+          meta: { title: "消息队列健康状态", requiresAuth: true, requiresManage: true }
         },
         {
           path: "notifications",
           name: routeNames.notificationOps,
           component: () => import("@/pages/NotificationOpsPage.vue"),
-          meta: { title: "通知运维", requiresAuth: true }
+          meta: { title: "通知运维", requiresAuth: true, requiresManage: true }
         },
         {
           path: "users",
           name: routeNames.users,
           component: () => import("@/pages/UserManagementPage.vue"),
-          meta: { title: "用户管理", requiresAuth: true }
+          meta: { title: "用户管理", requiresAuth: true, requiresManage: true }
         },
         {
           path: "settings",
           name: routeNames.settings,
           component: () => import("@/pages/SystemSettingsPage.vue"),
-          meta: { title: "系统设置", requiresAuth: true }
+          meta: { title: "系统设置", requiresAuth: true, requiresManage: true }
         }
       ]
     },
@@ -86,7 +87,7 @@ export const router = createRouter({
   ]
 });
 
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
   const title = typeof to.meta.title === "string" ? to.meta.title : "RepoGuard";
   document.title = `${title} - RepoGuard`;
 
@@ -95,6 +96,15 @@ router.beforeEach((to) => {
       name: routeNames.login,
       query: { redirect: to.fullPath }
     };
+  }
+
+  if (to.meta.requiresManage) {
+    if (!currentUser.value) {
+      await loadCurrentUser();
+    }
+    if (!canManage.value) {
+      return { name: routeNames.overview };
+    }
   }
 
   if (to.name === routeNames.login && hasAuthToken()) {

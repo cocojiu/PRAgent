@@ -100,6 +100,38 @@ class RuleBasedPullRequestReviewerTest {
     }
 
     @Test
+    void treatsRegexMetacharactersInFilePatternsAsLiterals() {
+        when(reviewRuleProvider.getRulesById())
+            .thenReturn(Map.of("RG-CUSTOM-001", rule("RG-CUSTOM-001", "ENABLED", "src/(api)/[v1]/*.java")));
+        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
+            reviewRuleProvider,
+            findingFactory,
+            List.of(customRulePlugin(findingFactory))
+        );
+
+        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(new GithubChangedFile(
+                "src/(api)/[v1]/UserController.java",
+                "modified",
+                1,
+                0,
+                """
+                    @@ -1,1 +1,2 @@
+                     class UserController {
+                    +dangerousCall();
+                    """
+            ))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .contains("RG-CUSTOM-001");
+    }
+
+    @Test
     void detectsProjectSpecificGovernanceRules() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 

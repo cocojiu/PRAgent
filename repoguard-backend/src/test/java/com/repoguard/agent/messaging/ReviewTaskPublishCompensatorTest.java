@@ -166,23 +166,22 @@ class ReviewTaskPublishCompensatorTest {
 
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
-        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getPublishAttempts()).isEqualTo(2);
     }
 
     @Test
-    void compensateReclaimsLastQueuedAttemptWithoutExceedingMaxAttempts() {
+    void compensateDoesNotReclaimQueuedTaskAtMaxAttempts() {
         properties.setPublishCompensationMaxAttempts(3);
         ReviewTask task = task();
         task.setStatus("QUEUED");
         task.setPublishAttempts(3);
         task.setPublishClaimedAt(LocalDateTime.now().minusMinutes(5));
         task.setPublishClaimedBy("dead-instance");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
-        when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
         assertThat(task.getPublishAttempts()).isEqualTo(3);
         assertThat(task.getStatus()).isEqualTo("QUEUED");
     }
@@ -206,7 +205,7 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
-    void compensationQueryLimitsFailedAttemptsWithoutExcludingStaleQueuedAttempt() {
+    void compensationQueryLimitsFailedAndStaleQueuedAttempts() {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
 
@@ -220,7 +219,7 @@ class ReviewTaskPublishCompensatorTest {
         int staleQueuedBranch = sqlSegment.indexOf("OR");
         assertThat(attemptsLimit).isGreaterThanOrEqualTo(0);
         assertThat(staleQueuedBranch).isGreaterThan(attemptsLimit);
-        assertThat(sqlSegment.indexOf("publish_attempts", staleQueuedBranch)).isEqualTo(-1);
+        assertThat(sqlSegment.indexOf("publish_attempts", staleQueuedBranch)).isGreaterThan(staleQueuedBranch);
     }
 
     private ReviewTask task() {
