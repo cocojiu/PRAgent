@@ -9,12 +9,41 @@ import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class RuleBasedPullRequestReviewerTest {
 
     private final ReviewRuleProvider reviewRuleProvider = org.mockito.Mockito.mock(ReviewRuleProvider.class);
-    private final RuleBasedPullRequestReviewer reviewer = new RuleBasedPullRequestReviewer(reviewRuleProvider);
+    private final RuleBasedPullRequestReviewer reviewer = ReviewRuleTestFixtures.defaultReviewer(reviewRuleProvider);
+
+    @Test
+    void usesInjectedRulePluginsInsteadOfHardcodedRuleList() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
+            reviewRuleProvider,
+            findingFactory,
+            List.of(customRulePlugin(findingFactory))
+        );
+
+        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/PluginDemo.java",
+                """
+                    @@ -8,0 +9,1 @@
+                    +dangerousCall();
+                    """
+            ))
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .containsExactly("RG-CUSTOM-001");
+    }
 
     @Test
     void skipsDisabledRulesWhenReviewingPatch() {
@@ -348,5 +377,29 @@ class RuleBasedPullRequestReviewerTest {
 
     private GithubChangedFile file(String filename, String patch) {
         return new GithubChangedFile(filename, "modified", 1, 0, patch);
+    }
+
+    private ReviewRule customRulePlugin(ReviewFindingFactory findingFactory) {
+        return new ReviewRule() {
+            @Override
+            public String id() {
+                return "RG-CUSTOM-001";
+            }
+
+            @Override
+            public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+                if (!context.trimmedLine().contains("dangerousCall")) {
+                    return Optional.empty();
+                }
+                return Optional.of(findingFactory.finding(
+                    "MEDIUM",
+                    id(),
+                    context.filePath(),
+                    context.lineNumber(),
+                    "Custom rule plugin detected a dangerous call",
+                    "Replace the dangerous call with a governed abstraction."
+                ));
+            }
+        };
     }
 }

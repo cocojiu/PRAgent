@@ -5,6 +5,7 @@ import com.repoguard.agent.config.ReviewRuleSettings;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -20,27 +21,23 @@ public class RuleBasedPullRequestReviewer {
     private final List<ReviewRule> lineRules;
 
     @Autowired
-    public RuleBasedPullRequestReviewer(ReviewRuleProvider reviewRuleProvider) {
-        this(reviewRuleProvider, new ReviewFindingFactory());
-    }
-
-    RuleBasedPullRequestReviewer(ReviewRuleProvider reviewRuleProvider, ReviewFindingFactory findingFactory) {
+    public RuleBasedPullRequestReviewer(
+        ReviewRuleProvider reviewRuleProvider,
+        ReviewFindingFactory findingFactory,
+        List<ReviewRule> lineRules
+    ) {
         this.reviewRuleProvider = reviewRuleProvider;
         this.findingFactory = findingFactory;
-        this.lineRules = List.of(
-            new BroadExceptionCatchRule(findingFactory),
-            new StandardOutputLoggingRule(findingFactory),
-            new FixedSleepRule(findingFactory),
-            new TodoCommentRule(findingFactory),
-            new SensitiveLiteralRule(findingFactory),
-            new SensitiveLoggingRule(findingFactory),
-            new TaskStatusStringRule(findingFactory),
-            new RabbitMessagePublishRule(findingFactory),
-            new RawExternalCallRule(findingFactory),
-            new DestructiveMigrationRule(findingFactory),
-            new RequiredColumnWithoutDefaultRule(findingFactory),
-            new GithubCommentDirectPublishRule(findingFactory)
-        );
+        this.lineRules = sortedRules(lineRules);
+    }
+
+    private static List<ReviewRule> sortedRules(List<ReviewRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            throw new IllegalArgumentException("At least one ReviewRule plugin must be registered");
+        }
+        return rules.stream()
+            .sorted(Comparator.comparingInt(ReviewRule::order).thenComparing(ReviewRule::id))
+            .toList();
     }
 
     public ReviewResult review(GithubPullRequestDiff diff) {

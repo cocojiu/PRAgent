@@ -1,7 +1,9 @@
 package com.repoguard.agent.review;
 
 import java.util.Optional;
+import org.springframework.stereotype.Component;
 
+@Component
 class TaskStatusStringRule implements ReviewRule {
 
     static final String RULE_ID = "RG-STATE-001";

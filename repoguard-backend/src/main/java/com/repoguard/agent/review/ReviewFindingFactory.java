@@ -1,7 +1,9 @@
 package com.repoguard.agent.review;
 
 import java.util.Locale;
+import org.springframework.stereotype.Component;
 
+@Component
 class ReviewFindingFactory {
 
     ReviewFindingResult finding(

@@ -2,7 +2,9 @@ package com.repoguard.agent.review;
 
 import java.util.Locale;
 import java.util.Optional;
+import org.springframework.stereotype.Component;
 
+@Component
 class SensitiveLiteralRule implements ReviewRule {
 
     static final String RULE_ID = "RG-SECRET-001";

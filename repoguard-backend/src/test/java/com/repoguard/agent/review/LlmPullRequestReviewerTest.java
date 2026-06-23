@@ -345,7 +345,7 @@ class LlmPullRequestReviewerTest {
         }
 
         @Override
-        protected LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
+        public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
             reviewedChunks.add(diff);
             String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
             boolean shouldFail = failingFilePart != null

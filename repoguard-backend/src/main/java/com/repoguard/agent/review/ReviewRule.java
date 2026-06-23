@@ -2,9 +2,13 @@ package com.repoguard.agent.review;
 
 import java.util.Optional;
 
-interface ReviewRule {
+public interface ReviewRule {
 
     String id();
+
+    default int order() {
+        return 1000;
+    }
 
     Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context);
 }
