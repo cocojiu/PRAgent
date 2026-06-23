@@ -55,6 +55,22 @@ class LlmConnectionProbeTest {
     }
 
     @Test
+    void probeParsesOctetStreamChatCompletionResponse() throws Exception {
+        String llmResponse = """
+            {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}"}}]}
+            """;
+        try (ProbeServer server = startProbeServer(llmResponse, "application/octet-stream")) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+
+            ConnectionProbeResult result = probe.probe(config);
+
+            assertThat(result.healthy()).isTrue();
+            assertThat(result.status()).isEqualTo("connected");
+        }
+    }
+
+    @Test
     void probeReportsMalformedReviewJson() throws Exception {
         String llmResponse = """
             {"choices":[{"message":{"content":"OK"}}]}
@@ -90,6 +106,10 @@ class LlmConnectionProbeTest {
     }
 
     private ProbeServer startProbeServer(String responseBody) throws IOException {
+        return startProbeServer(responseBody, "application/json");
+    }
+
+    private ProbeServer startProbeServer(String responseBody, String contentType) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<String> requestBody = new AtomicReference<>("");
         AtomicReference<String> authorization = new AtomicReference<>("");
@@ -97,7 +117,7 @@ class LlmConnectionProbeTest {
             requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.getResponseHeaders().set("Content-Type", contentType);
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();

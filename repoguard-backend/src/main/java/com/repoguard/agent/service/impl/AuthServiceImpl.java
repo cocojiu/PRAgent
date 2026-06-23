@@ -102,15 +102,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public AuthResponse login(AuthLoginRequest request) {
         UserAccount user = verifyCredentials(request.account(), request.password(), "LOGIN");
         LocalDateTime now = LocalDateTime.now();
-        user.setLastLoginAt(now);
-        user.setFailedLoginCount(0);
-        user.setLockedUntil(null);
-        user.setUpdatedAt(now);
-        userAccountMapper.updateById(user);
+        clearLoginFailures(user, now);
         recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
     }
@@ -161,7 +157,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
         UserAccount user = verifyCredentials(request.account(), request.password(), "TOKEN_RESET");
         LocalDateTime now = LocalDateTime.now();
@@ -251,13 +247,38 @@ public class AuthServiceImpl implements AuthService {
         }
         LocalDateTime now = LocalDateTime.now();
         int failedCount = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;
-        user.setFailedLoginCount(failedCount);
+        LocalDateTime lockedUntil = null;
         if (failedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
-            user.setLockedUntil(now.plusMinutes(ACCOUNT_LOCK_MINUTES));
+            lockedUntil = now.plusMinutes(ACCOUNT_LOCK_MINUTES);
         }
-        user.setUpdatedAt(now);
-        userAccountMapper.updateById(user);
+        persistFailedLoginAttempt(user, failedCount, lockedUntil, now);
         recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, reason);
+    }
+
+    private void persistFailedLoginAttempt(UserAccount user, int failedCount, LocalDateTime lockedUntil, LocalDateTime now) {
+        user.setFailedLoginCount(failedCount);
+        user.setLockedUntil(lockedUntil);
+        user.setUpdatedAt(now);
+        UpdateWrapper<UserAccount> update = new UpdateWrapper<UserAccount>()
+            .eq("id", user.getId())
+            .set("failed_login_count", failedCount)
+            .set("locked_until", lockedUntil)
+            .set("updated_at", now);
+        userAccountMapper.update(null, update);
+    }
+
+    private void clearLoginFailures(UserAccount user, LocalDateTime now) {
+        user.setLastLoginAt(now);
+        user.setFailedLoginCount(0);
+        user.setLockedUntil(null);
+        user.setUpdatedAt(now);
+        UpdateWrapper<UserAccount> update = new UpdateWrapper<UserAccount>()
+            .eq("id", user.getId())
+            .set("last_login_at", now)
+            .set("failed_login_count", 0)
+            .set("locked_until", null)
+            .set("updated_at", now);
+        userAccountMapper.update(null, update);
     }
 
     private boolean isLocked(UserAccount user) {

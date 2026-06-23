@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.transaction.annotation.Transactional;
 
 class AuthServiceImplTest {
 
@@ -105,8 +106,18 @@ class AuthServiceImplTest {
             .hasMessage("账号或密码错误");
 
         assertThat(user.getFailedLoginCount()).isEqualTo(1);
-        verify(userAccountMapper).updateById(user);
+        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void loginDoesNotRollBackFailureCounterWhenBusinessExceptionIsThrown() throws NoSuchMethodException {
+        Transactional transactional = AuthServiceImpl.class
+            .getMethod("login", AuthLoginRequest.class)
+            .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.noRollbackFor()).contains(BusinessException.class);
     }
 
     @Test
@@ -122,7 +133,7 @@ class AuthServiceImplTest {
 
         assertThat(user.getFailedLoginCount()).isEqualTo(5);
         assertThat(user.getLockedUntil()).isAfter(LocalDateTime.now());
-        verify(userAccountMapper).updateById(user);
+        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
@@ -160,7 +171,7 @@ class AuthServiceImplTest {
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(user.getFailedLoginCount()).isZero();
         assertThat(user.getLockedUntil()).isNull();
-        verify(userAccountMapper).updateById(user);
+        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 

@@ -18,6 +18,7 @@ class LlmReviewPipeline {
     private final RuleBasedPullRequestReviewer ruleBasedReviewer;
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmRuleReviewMerger reviewMerger;
+    private final LlmReviewQualityScorer qualityScorer;
     private final RepoGuardMetrics metrics;
     private final ObjectMapper objectMapper;
 
@@ -26,10 +27,11 @@ class LlmReviewPipeline {
         RuleBasedPullRequestReviewer ruleBasedReviewer,
         LlmReviewPromptBuilder promptBuilder,
         LlmRuleReviewMerger reviewMerger,
+        LlmReviewQualityScorer qualityScorer,
         ObjectMapper objectMapper,
         RepoGuardMetrics metrics
     ) {
-        this(ruleBasedReviewer, promptBuilder, reviewMerger, objectMapper, metrics, new PullRequestDiffChunker());
+        this(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, objectMapper, metrics, new PullRequestDiffChunker());
     }
 
     LlmReviewPipeline(
@@ -40,9 +42,22 @@ class LlmReviewPipeline {
         RepoGuardMetrics metrics,
         PullRequestDiffChunker diffChunker
     ) {
+        this(ruleBasedReviewer, promptBuilder, reviewMerger, new LlmReviewQualityScorer(), objectMapper, metrics, diffChunker);
+    }
+
+    LlmReviewPipeline(
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmRuleReviewMerger reviewMerger,
+        LlmReviewQualityScorer qualityScorer,
+        ObjectMapper objectMapper,
+        RepoGuardMetrics metrics,
+        PullRequestDiffChunker diffChunker
+    ) {
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
         this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger() : reviewMerger;
+        this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
         this.metrics = metrics;
         this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
         this.stages = List.of(
@@ -102,7 +117,7 @@ class LlmReviewPipeline {
             List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, settings);
             if (chunks.size() == 1) {
                 LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), diff);
-                ReviewResult parsed = reviewResultParser.parse(callResult.content());
+                ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), diff);
                 return ReviewResult.completed(
                     parsed.riskLevel(),
                     parsed.findings(),
@@ -127,7 +142,7 @@ class LlmReviewPipeline {
             for (PullRequestDiffChunk chunk : chunks) {
                 try {
                     LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
-                    ReviewResult parsed = reviewResultParser.parse(callResult.content());
+                    ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
                     riskLevel = reviewMerger.maxRisk(riskLevel, parsed.riskLevel());
                     promptTokens += safeInt(callResult.promptTokens());
                     completionTokens += safeInt(callResult.completionTokens());

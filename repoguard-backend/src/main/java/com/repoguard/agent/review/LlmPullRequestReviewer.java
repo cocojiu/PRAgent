@@ -168,8 +168,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .retrieve()
-                .body(byte[].class));
+                .exchange((request, clientResponse) -> clientResponse.getBody().readAllBytes()));
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
