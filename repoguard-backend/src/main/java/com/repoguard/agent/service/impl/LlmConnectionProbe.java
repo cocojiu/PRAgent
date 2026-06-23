@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +52,7 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
             return new ConnectionProbeResult(false, "failed", "LLM base URL, model or API key is missing");
         }
         try {
-            String response = restClientBuilder
+            byte[] responseBytes = restClientBuilder
                 .baseUrl(config.getBaseUrl().trim())
                 .requestFactory(requestFactory(config.getTimeoutSeconds()))
                 .build()
@@ -69,8 +70,8 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
                         Map.of("role", "user", "content", "Return exactly this JSON object and no markdown: {\"riskLevel\":\"INFO\",\"findings\":[]}")
                     )
                 ))
-                .retrieve()
-                .body(String.class);
+                .exchange((request, response) -> response.getBody().readAllBytes());
+            String response = responseBytes == null ? "" : new String(responseBytes, StandardCharsets.UTF_8);
             String content = responseParser.extractReviewContent(response);
             if (!StringUtils.hasText(content)) {
                 return new ConnectionProbeResult(false, "failed", "LLM response did not include usable review content");
