@@ -149,7 +149,7 @@ export const useReviewDetailLoader = ({
   const refreshDetail = () => {
     pollFailureCount.value = 0;
     pollErrorMessage.value = "";
-    void loadDetail({ silent: true, resetPublishResult: false });
+    return loadDetail({ silent: true, resetPublishResult: false });
   };
 
   return {

@@ -5,7 +5,10 @@
         <div class="pr-cell">
           <Github :size="20" />
           <div>
-            <RouterLink class="pr-link" :to="{ name: 'task-detail', params: { id: row.id } }">
+            <span v-if="isRetrying(row)" class="pr-link disabled-link">
+              #{{ row.prNumber }}
+            </span>
+            <RouterLink v-else class="pr-link" :to="{ name: 'task-detail', params: { id: row.id } }">
               #{{ row.prNumber }}
             </RouterLink>
             <p>{{ row.title }}</p>
@@ -69,7 +72,7 @@
     <el-table-column label="操作" width="170" fixed="right">
       <template #default="{ row }">
         <div class="table-actions">
-          <el-button type="primary" size="small" @click="emit('view', row.id)">查看</el-button>
+          <el-button type="primary" size="small" :disabled="isRetrying(row)" @click="emit('view', row.id)">查看</el-button>
           <el-tooltip :content="reviewTaskRetryTooltip(row)">
             <span>
               <el-button
@@ -141,4 +144,6 @@ const pageSizeModel = computed({
   get: () => props.pageSize,
   set: (value: number) => emit("update:pageSize", value)
 });
+
+const isRetrying = (task: ReviewTask) => props.retryingTaskId === task.id;
 </script>

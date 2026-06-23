@@ -11,6 +11,7 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -274,18 +275,18 @@ public class LlmPullRequestReviewer implements PullRequestReviewer {
         );
 
         try {
-            String response = executeLlm("chat_completions", () -> restClient.post()
+            byte[] response = executeLlm("chat_completions", () -> restClient.post()
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + apiKey.trim())
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
                 .retrieve()
-                .body(String.class));
+                .body(byte[].class));
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
-            return extractLlmCallResult(response);
+            return extractLlmCallResult(response == null ? "" : new String(response, StandardCharsets.UTF_8));
         } catch (RuntimeException ex) {
             var classified = ExternalCallErrorClassifier.llm(ex);
             if (metrics != null) {

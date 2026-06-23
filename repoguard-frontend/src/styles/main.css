@@ -585,8 +585,10 @@ a {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  max-height: 260px;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
   list-style: none;
 }
 
@@ -741,6 +743,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .health-item {

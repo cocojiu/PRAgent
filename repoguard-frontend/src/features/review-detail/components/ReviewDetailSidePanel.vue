@@ -17,7 +17,7 @@
         <dt>执行状态</dt><dd><span :class="`status-pill ${statusClass(task.llm.status)}`">{{ statusText(task.llm.status) }}</span></dd>
         <dt>模型</dt><dd>{{ llmModelText }}</dd>
         <dt>解析状态</dt><dd><span :class="`status-pill ${llmParseStatusClass}`">{{ llmParseStatusText }}</span></dd>
-        <dt>规则兜底</dt><dd>{{ task.llm.status === "fallback" ? "已启用" : "未触发" }}</dd>
+        <dt>规则兜底</dt><dd>{{ ruleFallbackText(task) }}</dd>
         <dt>耗时</dt><dd>{{ llmDurationText }}</dd>
         <dt>风险级别</dt><dd>{{ riskText(task.llm.riskLevel) }}</dd>
         <dt>Token 用量</dt><dd>{{ llmTokenUsageText }}</dd>
@@ -68,4 +68,14 @@ defineProps<{
   chunkReasonText: (reason: string) => string;
   consumeStatusText: (status: string) => string;
 }>();
+
+const ruleFallbackText = (task: ReviewTaskDetail) => {
+  if (task.llm.status === "fallback") {
+    return "已启用";
+  }
+  if (task.llm.parseStatus === "partial_fallback" || task.chunkedReview.failedChunks > 0) {
+    return "分片规则兜底";
+  }
+  return "未触发";
+};
 </script>

@@ -2,7 +2,7 @@
   <section class="bottom-grid">
     <article class="dashboard-card">
       <h2>近期高风险审查</h2>
-      <el-table :data="highRiskReviews" class="rg-table" size="large" aria-label="近期高风险审查列表">
+      <el-table :data="highRiskReviews" class="rg-table" size="large" max-height="360" aria-label="近期高风险审查列表">
         <el-table-column prop="title" label="PR 标题" min-width="220" />
         <el-table-column prop="repository" label="仓库" width="150" />
         <el-table-column label="风险等级" width="110">
@@ -31,7 +31,7 @@
 
     <article class="dashboard-card">
       <h2>高频失败规则</h2>
-      <el-table :data="failedRules" class="rg-table" size="large" aria-label="高频失败规则列表">
+      <el-table :data="failedRules" class="rg-table" size="large" max-height="360" aria-label="高频失败规则列表">
         <el-table-column prop="name" label="规则名称" min-width="180" />
         <el-table-column prop="count" label="命中次数" width="100" />
         <el-table-column label="趋势" width="100">

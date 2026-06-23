@@ -82,6 +82,9 @@ class ReviewExecutionResultWriter {
     }
 
     private String reviewGeneratedLabel(ReviewResult reviewResult) {
+        if ("partial_fallback".equalsIgnoreCase(reviewResult.llmParseStatus())) {
+            return "Code review generated with partial rule fallback";
+        }
         if (LlmStatus.FALLBACK != LlmStatus.from(reviewResult.llmStatus())) {
             return "Code review generated";
         }
