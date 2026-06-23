@@ -4,6 +4,7 @@ set -eu
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/actuator/health}"
+BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
@@ -57,7 +58,23 @@ print_backend_logs() {
   compose logs --tail=120 backend >&2 || true
 }
 
-wait_health() {
+wait_backend_health() {
+  attempts="${1:-30}"
+  i=1
+  while [ "$i" -le "$attempts" ]; do
+    container_id="$(compose ps -q "$BACKEND_SERVICE" 2>/dev/null || true)"
+    if [ -n "$container_id" ] && [ "$(docker inspect "$container_id" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)" = "healthy" ]; then
+      return 0
+    fi
+    sleep 2
+    i=$((i + 1))
+  done
+  echo "Backend container health check failed after $attempts attempts." >&2
+  print_backend_logs
+  return 1
+}
+
+wait_http_health() {
   attempts="${1:-30}"
   i=1
   while [ "$i" -le "$attempts" ]; do
@@ -71,7 +88,7 @@ wait_health() {
     sleep 2
     i=$((i + 1))
   done
-  echo "Health check failed after $attempts attempts: $HEALTH_URL" >&2
+  echo "HTTP health check failed after $attempts attempts: $HEALTH_URL" >&2
   print_backend_logs
   return 1
 }
@@ -97,7 +114,8 @@ assert_service_image() {
 }
 
 verify_deployment() {
-  wait_health "${1:-30}"
+  wait_backend_health "${1:-30}"
+  wait_http_health "${2:-30}"
   assert_service_image backend "$BACKEND_IMAGE"
   assert_service_image frontend "$FRONTEND_IMAGE"
 }
@@ -110,10 +128,10 @@ compose pull backend frontend
 
 if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   compose up -d --no-deps backend
-  wait_health 45
+  wait_backend_health 45
   compose up -d --no-deps frontend
   compose ps
-  verify_deployment 15
+  verify_deployment 15 30
   echo "RepoGuard deployment is healthy: $HEALTH_URL"
   exit 0
 fi
@@ -128,6 +146,6 @@ fi
 
 compose up -d
 compose ps
-verify_deployment 30
+verify_deployment 30 30
 
 echo "RepoGuard deployment is healthy: $HEALTH_URL"
