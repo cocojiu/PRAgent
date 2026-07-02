@@ -1,4 +1,5 @@
-import { clearAuthToken, request, resolveRefreshToken, saveAuthTokens } from "@/api/client";
+import { clearAuthToken, resolveRefreshToken, saveAuthTokens } from "@/api/client";
+import { apiRequest } from "@/api/contracts";
 
 export interface AuthUser {
   id: number;
@@ -35,33 +36,24 @@ export interface RegisterRequest {
 }
 
 export const login = async (payload: LoginRequest) => {
-  const response = await request<AuthResponse>("/api/v1/auth/login", undefined, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  const response = await apiRequest("login", payload);
   saveAuthTokens(response.accessToken, response.refreshToken, payload.remember);
   return response;
 };
 
 export const register = async (payload: RegisterRequest) => {
-  const response = await request<AuthResponse>("/api/v1/auth/register", undefined, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  const response = await apiRequest("register", payload);
   saveAuthTokens(response.accessToken, response.refreshToken, false);
   return response;
 };
 
-export const getCurrentUser = () => request<CurrentUser>("/api/v1/auth/me");
+export const getCurrentUser = () => apiRequest("getCurrentUser", undefined);
 
 export const logout = async () => {
   const refreshToken = resolveRefreshToken();
   if (refreshToken) {
     try {
-      await request<void>("/api/v1/auth/logout", undefined, {
-        method: "POST",
-        body: JSON.stringify({ refreshToken })
-      });
+      await apiRequest("logout", { refreshToken });
     } finally {
       clearAuthToken();
     }

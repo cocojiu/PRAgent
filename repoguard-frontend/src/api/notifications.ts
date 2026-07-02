@@ -1,4 +1,3 @@
-import { request } from "@/api/client";
-import type { NotificationCenter } from "@/types";
+import { apiRequest } from "@/api/contracts";
 
-export const fetchNotifications = () => request<NotificationCenter>("/api/v1/notifications");
+export const fetchNotifications = () => apiRequest("fetchNotifications", undefined);

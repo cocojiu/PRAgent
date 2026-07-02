@@ -1,95 +1,46 @@
-import { request } from "@/api/client";
+import { apiRequest } from "@/api/contracts";
 import type {
   FindingFeedbackRequest,
-  FindingFeedbackResponse,
   HumanReviewRequest,
-  HumanReviewResponse,
   ManualReviewRequest,
-  ManualReviewResponse,
-  PageResponse,
-  ReviewQuery,
-  ReviewRetryResponse,
-  ReviewTask,
-  ReviewTaskDetail,
-  ReviewTaskStatus,
-  GithubCommentPreview,
-  GithubCommentPublicationHistory,
-  GithubCommentPublish,
-  GithubPullRequestOptions
+  ReviewQuery
 } from "@/types";
 
 /**
  * 查询评审任务列表，参数与后端只读 API 保持一致。
  */
 export const fetchReviews = (query: ReviewQuery) =>
-  request<PageResponse<ReviewTask>>("/api/v1/reviews", {
-    page: query.page,
-    pageSize: query.pageSize,
-    repository: query.repository,
-    status: query.status,
-    riskLevel: query.riskLevel,
-    source: query.source,
-    triggerSource: query.triggerSource,
-    keyword: query.keyword
-  });
+  apiRequest("fetchReviews", query);
 
 /**
  * 查询单个评审任务详情。
  */
-export const fetchReviewDetail = (id: number) => request<ReviewTaskDetail>(`/api/v1/reviews/${id}`);
+export const fetchReviewDetail = (id: number) => apiRequest("fetchReviewDetail", { id });
 
-export const fetchReviewStatus = (id: number) => request<ReviewTaskStatus>(`/api/v1/reviews/${id}/status`);
+export const fetchReviewStatus = (id: number) => apiRequest("fetchReviewStatus", { id });
 
 export const fetchGithubCommentPreview = (id: number) =>
-  request<GithubCommentPreview>(`/api/v1/reviews/${id}/github-comments/preview`);
+  apiRequest("fetchGithubCommentPreview", { id });
 
 export const fetchGithubCommentPublicationHistory = (
   id: number,
   params?: { page?: number; pageSize?: number; status?: string }
-) => {
-  const searchParams = new URLSearchParams();
-  if (params?.page) {
-    searchParams.set("page", String(params.page));
-  }
-  if (params?.pageSize) {
-    searchParams.set("pageSize", String(params.pageSize));
-  }
-  if (params?.status) {
-    searchParams.set("status", params.status);
-  }
-  const query = searchParams.toString();
-  return request<GithubCommentPublicationHistory>(
-    `/api/v1/reviews/${id}/github-comments/publications${query ? `?${query}` : ""}`
-  );
-};
+) => apiRequest("fetchGithubCommentPublicationHistory", { id, ...params });
 
 export const publishGithubComments = (id: number) =>
-  request<GithubCommentPublish>(`/api/v1/reviews/${id}/github-comments`, undefined, {
-    method: "POST"
-  });
+  apiRequest("publishGithubComments", { id });
 
 export const submitHumanReview = (id: number, payload: HumanReviewRequest) =>
-  request<HumanReviewResponse>(`/api/v1/reviews/${id}/human-review`, undefined, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  apiRequest("submitHumanReview", { id, payload });
 
 export const updateFindingFeedback = (id: number, findingId: number, payload: FindingFeedbackRequest) =>
-  request<FindingFeedbackResponse>(`/api/v1/reviews/${id}/findings/${findingId}/feedback`, undefined, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  apiRequest("updateFindingFeedback", { id, findingId, payload });
 
 export const retryReview = (id: number) =>
-  request<ReviewRetryResponse>(`/api/v1/reviews/${id}/retry`, undefined, {
-    method: "POST"
-  });
+  apiRequest("retryReview", { id });
 
 export const fetchGithubPullRequestOptions = () =>
-  request<GithubPullRequestOptions>("/api/v1/reviews/github/pull-requests");
+  apiRequest("fetchGithubPullRequestOptions", undefined);
 
 export const triggerManualReview = (payload: ManualReviewRequest) =>
-  request<ManualReviewResponse>("/api/v1/reviews/manual", undefined, {
-    method: "POST",
-    body: JSON.stringify(payload)
-  });
+  apiRequest("triggerManualReview", payload);

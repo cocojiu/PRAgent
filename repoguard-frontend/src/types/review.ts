@@ -201,7 +201,7 @@ export interface GithubCommentPublicationBatch {
   items: GithubCommentPublicationHistoryItem[];
 }
 
-export interface GithubCommentPublicationHistoryItem extends GithubCommentPublishItem {}
+export type GithubCommentPublicationHistoryItem = GithubCommentPublishItem;
 
 export interface ReviewFinding {
   id: number;

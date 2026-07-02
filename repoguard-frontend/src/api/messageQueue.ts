@@ -1,9 +1,6 @@
-import { request } from "@/api/client";
-import type { MessageQueueHealth, MessageQueueRequeueResponse } from "@/types";
+import { apiRequest } from "@/api/contracts";
 
-export const fetchMessageQueueHealth = () => request<MessageQueueHealth>("/api/v1/message-queue/health");
+export const fetchMessageQueueHealth = () => apiRequest("fetchMessageQueueHealth", undefined);
 
 export const requeueMessageQueueTask = (taskId: number) =>
-  request<MessageQueueRequeueResponse>(`/api/v1/message-queue/tasks/${taskId}/requeue`, undefined, {
-    method: "POST"
-  });
+  apiRequest("requeueMessageQueueTask", { taskId });

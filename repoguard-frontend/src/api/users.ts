@@ -1,4 +1,4 @@
-import { request } from "@/api/client";
+import { apiRequest } from "@/api/contracts";
 
 export type UserRole = "ADMIN" | "VIEWER";
 export type UserStatus = "ACTIVE" | "DISABLED";
@@ -32,18 +32,12 @@ export interface UserOperationAudit {
   createdAt: string;
 }
 
-export const fetchUsers = () => request<ManagedUser[]>("/api/v1/users");
+export const fetchUsers = () => apiRequest("fetchUsers", undefined);
 
-export const fetchUserOperationAudits = () => request<UserOperationAudit[]>("/api/v1/users/audits");
+export const fetchUserOperationAudits = () => apiRequest("fetchUserOperationAudits", undefined);
 
 export const updateUserRole = (id: number, role: UserRole) =>
-  request<ManagedUser>(`/api/v1/users/${id}/role`, undefined, {
-    method: "PUT",
-    body: JSON.stringify({ role })
-  });
+  apiRequest("updateUserRole", { id, role });
 
 export const updateUserStatus = (id: number, status: UserStatus) =>
-  request<ManagedUser>(`/api/v1/users/${id}/status`, undefined, {
-    method: "PUT",
-    body: JSON.stringify({ status })
-  });
+  apiRequest("updateUserStatus", { id, status });
