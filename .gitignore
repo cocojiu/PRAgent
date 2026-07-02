@@ -18,6 +18,8 @@ releases/
 .DS_Store
 *.local
 .npm-cache/
+output/
+tmp/
 move-codex-data-to-d.ps1
 BackendRules/
 .github/workflows/runtime-metadata-check.yml
