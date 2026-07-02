@@ -30,13 +30,15 @@
 
     <el-button class="auth-primary" type="primary" size="large" :loading="loading" @click="$emit('submit')">登录</el-button>
 
-    <div class="auth-divider">
+    <div v-if="registrationEnabled" class="auth-divider">
       <span></span>
       <em>或</em>
       <span></span>
     </div>
 
-    <el-button class="auth-secondary" size="large" @click="$emit('switch-register')">没有账户？立即注册</el-button>
+    <el-button v-if="registrationEnabled" class="auth-secondary" size="large" @click="$emit('switch-register')">
+      没有账户？立即注册
+    </el-button>
   </el-form>
 </template>
 
@@ -49,9 +51,12 @@ interface LoginFormModel {
   remember: boolean;
 }
 
-defineProps<{
+withDefaults(defineProps<{
   loading: boolean;
-}>();
+  registrationEnabled?: boolean;
+}>(), {
+  registrationEnabled: true
+});
 
 defineEmits<{
   submit: [];

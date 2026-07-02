@@ -18,6 +18,7 @@
           v-if="authMode === 'login'"
           v-model="loginForm"
           :loading="submitting"
+          :registration-enabled="registrationEnabled"
           @forgot-password="handleForgotPassword"
           @submit="handleLogin"
           @switch-register="switchMode('register')"
@@ -46,13 +47,15 @@ import { login, register } from "@/api/auth";
 import LoginForm from "@/components/LoginForm.vue";
 import LoginHeroPanel from "@/components/LoginHeroPanel.vue";
 import RegisterForm from "@/components/RegisterForm.vue";
-import { getErrorMessage } from "@/utils/errors";
+import { getAuthErrorMessage } from "@/utils/errors";
 
 type AuthMode = "login" | "register";
 
 const router = useRouter();
 const authMode = ref<AuthMode>("login");
 const submitting = ref(false);
+const registrationEnabled = import.meta.env.VITE_REGISTRATION_ENABLED === "true"
+  || (import.meta.env.DEV && import.meta.env.VITE_REGISTRATION_ENABLED !== "false");
 
 const loginForm = reactive({
   account: "",
@@ -68,6 +71,10 @@ const registerForm = reactive({
 });
 
 const switchMode = (mode: AuthMode) => {
+  if (mode === "register" && !registrationEnabled) {
+    ElMessage.info("公开注册已关闭，请联系管理员开通账号");
+    return;
+  }
   authMode.value = mode;
 };
 
@@ -93,7 +100,7 @@ const handleLogin = async () => {
     ElMessage.success("登录成功");
     void router.push("/repoguard/overview");
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "登录失败"));
+    ElMessage.error(getAuthErrorMessage(error, "登录失败"));
   } finally {
     submitting.value = false;
   }
@@ -122,7 +129,7 @@ const handleRegister = async () => {
     ElMessage.success("注册成功");
     void router.push("/repoguard/overview");
   } catch (error) {
-    ElMessage.error(getErrorMessage(error, "注册失败"));
+    ElMessage.error(getAuthErrorMessage(error, "注册失败"));
   } finally {
     submitting.value = false;
   }

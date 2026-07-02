@@ -18,6 +18,7 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
+import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
@@ -47,6 +48,7 @@ public class AuthServiceImpl implements AuthService {
     private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final UserLoginAuditMapper userLoginAuditMapper;
     private final PasswordHashService passwordHashService;
+    private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
 
     public AuthServiceImpl(
@@ -54,18 +56,23 @@ public class AuthServiceImpl implements AuthService {
         UserRefreshTokenMapper userRefreshTokenMapper,
         UserLoginAuditMapper userLoginAuditMapper,
         PasswordHashService passwordHashService,
+        AuthProperties authProperties,
         AuthTokenService authTokenService
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.userLoginAuditMapper = userLoginAuditMapper;
         this.passwordHashService = passwordHashService;
+        this.authProperties = authProperties;
         this.authTokenService = authTokenService;
     }
 
     @Override
     @Transactional
     public AuthResponse register(AuthRegisterRequest request) {
+        if (!authProperties.isRegistrationEnabled()) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "公开注册已关闭，请联系管理员开通账号");
+        }
         if (!request.password().equals(request.confirmPassword())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "两次输入的密码不一致");
         }

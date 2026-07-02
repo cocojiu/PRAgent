@@ -59,6 +59,7 @@ repoguard:
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
+    registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}
 
 app:
   security:

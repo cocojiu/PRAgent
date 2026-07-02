@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
@@ -13,9 +14,12 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
+import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_DISABLED = "DISABLED";
     private static final String STATUS_REVOKED = "REVOKED";
+    private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
     private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
     private static final int AUDIT_LIMIT = 50;
@@ -34,15 +39,18 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
+    private final PasswordHashService passwordHashService;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
-        UserOperationAuditMapper userOperationAuditMapper
+        UserOperationAuditMapper userOperationAuditMapper,
+        PasswordHashService passwordHashService
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.userOperationAuditMapper = userOperationAuditMapper;
+        this.passwordHashService = passwordHashService;
     }
 
     @Override
@@ -64,6 +72,43 @@ public class UserManagementServiceImpl implements UserManagementService {
             .stream()
             .map(this::toAuditDto)
             .toList();
+    }
+
+    @Override
+    @Transactional
+    public UserManagementItemDto createUser(UserOperationAuditContext auditContext, UserCreateRequest request) {
+        if (!request.password().equals(request.confirmPassword())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "两次输入的密码不一致");
+        }
+        if (!isStrongEnough(request.password())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "密码至少 8 位，且必须同时包含字母和数字");
+        }
+        String username = request.username().trim();
+        String email = request.email().trim().toLowerCase(Locale.ROOT);
+        if (findByUsername(username) != null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名已存在");
+        }
+        if (findByEmail(email) != null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "邮箱已存在");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        UserAccount user = new UserAccount();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setPasswordHash(passwordHashService.hash(request.password()));
+        user.setRole(ROLE_VIEWER);
+        user.setStatus(STATUS_ACTIVE);
+        user.setFailedLoginCount(0);
+        user.setCreatedAt(now);
+        user.setUpdatedAt(now);
+        try {
+            userAccountMapper.insert(user);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
+        }
+        recordAudit(auditContext, user, ACTION_USER_CREATE, null, ROLE_VIEWER);
+        return toDto(user);
     }
 
     @Override
@@ -159,6 +204,18 @@ public class UserManagementServiceImpl implements UserManagementService {
             .set("status", STATUS_REVOKED)
             .set("revoked_at", now)
             .set("updated_at", now));
+    }
+
+    private UserAccount findByUsername(String username) {
+        return userAccountMapper.selectOne(new LambdaQueryWrapper<UserAccount>().eq(UserAccount::getUsername, username));
+    }
+
+    private UserAccount findByEmail(String email) {
+        return userAccountMapper.selectOne(new LambdaQueryWrapper<UserAccount>().eq(UserAccount::getEmail, email));
+    }
+
+    private boolean isStrongEnough(String password) {
+        return password.chars().anyMatch(Character::isLetter) && password.chars().anyMatch(Character::isDigit);
     }
 
     private String normalizeRole(String role) {

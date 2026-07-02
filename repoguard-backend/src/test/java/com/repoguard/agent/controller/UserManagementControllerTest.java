@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +49,36 @@ class UserManagementControllerTest {
             .andExpect(jsonPath("$.data[0].operatorUsername").value("admin"))
             .andExpect(jsonPath("$.data[0].targetUsername").value("viewer"))
             .andExpect(jsonPath("$.data[0].action").value("ROLE_UPDATE"));
+    }
+
+    @Test
+    void createUserPassesAuthenticatedOperator() throws Exception {
+        Mockito.when(userManagementService.createUser(ArgumentMatchers.any(UserOperationAuditContext.class), ArgumentMatchers.any()))
+            .thenReturn(item(1002L, "viewer", "VIEWER", "ACTIVE"));
+
+        mockMvc.perform(post("/api/v1/users")
+                .requestAttr(
+                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                )
+                .header("X-Forwarded-For", "10.0.0.8, 10.0.0.9")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "username": "viewer",
+                      "email": "viewer@repoguard.dev",
+                      "password": "Secure123",
+                      "confirmPassword": "Secure123"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.username").value("viewer"))
+            .andExpect(jsonPath("$.data.role").value("VIEWER"));
+
+        ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
+        Mockito.verify(userManagementService).createUser(contextCaptor.capture(), ArgumentMatchers.any());
+        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
+        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.8");
     }
 
     @Test

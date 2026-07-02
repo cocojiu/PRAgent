@@ -1,6 +1,6 @@
 import { request } from "@/api/client";
 import type { AuthResponse, CurrentUser, LoginRequest, RegisterRequest } from "@/api/auth";
-import type { ManagedUser, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
+import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import type {
   ConnectionTestResult,
   DashboardOverview,
@@ -132,6 +132,7 @@ export type ApiContract = {
   fetchNotifications: ApiOperation<undefined, NotificationCenter>;
   fetchUsers: ApiOperation<undefined, ManagedUser[]>;
   fetchUserOperationAudits: ApiOperation<undefined, UserOperationAudit[]>;
+  createUser: ApiOperation<UserCreateRequest, ManagedUser>;
   updateUserRole: ApiOperation<UserRoleInput, ManagedUser>;
   updateUserStatus: ApiOperation<UserStatusInput, ManagedUser>;
 };
@@ -356,6 +357,11 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchUserOperationAudits: {
     path: () => "/api/v1/users/audits"
+  },
+  createUser: {
+    method: "POST",
+    path: () => "/api/v1/users",
+    body: input => input
   },
   updateUserRole: {
     method: "PUT",

@@ -12,6 +12,7 @@ public class AuthProperties {
     private long accessTokenTtlSeconds = 900;
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
+    private boolean registrationEnabled = true;
 
     public String getTokenSecret() {
         return tokenSecret;
@@ -43,6 +44,14 @@ public class AuthProperties {
 
     public void setRememberTokenTtlSeconds(long rememberTokenTtlSeconds) {
         this.rememberTokenTtlSeconds = rememberTokenTtlSeconds;
+    }
+
+    public boolean isRegistrationEnabled() {
+        return registrationEnabled;
+    }
+
+    public void setRegistrationEnabled(boolean registrationEnabled) {
+        this.registrationEnabled = registrationEnabled;
     }
 
     public void validateForProfiles(String[] activeProfiles) {

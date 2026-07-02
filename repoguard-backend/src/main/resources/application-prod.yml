@@ -16,3 +16,5 @@ repoguard:
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:}
+  auth:
+    registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}

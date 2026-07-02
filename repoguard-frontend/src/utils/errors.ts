@@ -36,3 +36,16 @@ export const getErrorMessage = (error: unknown, fallback = "操作失败") => {
   }
   return fallback;
 };
+
+export const getAuthErrorMessage = (error: unknown, fallback = "认证失败") => {
+  if (error instanceof RequestError) {
+    if (error.status === 0 || error.code === "NETWORK_ERROR") {
+      return "网络连接异常，请检查后重试";
+    }
+    return error.message || fallback;
+  }
+  if (error instanceof Error) {
+    return error.message || fallback;
+  }
+  return fallback;
+};

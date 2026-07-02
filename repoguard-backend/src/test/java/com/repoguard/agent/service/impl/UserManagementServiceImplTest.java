@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
@@ -16,6 +18,7 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
+import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,10 +31,12 @@ class UserManagementServiceImplTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserOperationAuditMapper userOperationAuditMapper = Mockito.mock(UserOperationAuditMapper.class);
+    private final PasswordHashService passwordHashService = new PasswordHashService();
     private final UserManagementServiceImpl userManagementService = new UserManagementServiceImpl(
         userAccountMapper,
         userRefreshTokenMapper,
-        userOperationAuditMapper
+        userOperationAuditMapper,
+        passwordHashService
     );
 
     @BeforeEach
@@ -72,6 +77,59 @@ class UserManagementServiceImplTest {
         assertThat(audits.get(0).operatorUsername()).isEqualTo("admin");
         assertThat(audits.get(0).targetUsername()).isEqualTo("viewer");
         assertThat(audits.get(0).action()).isEqualTo("ROLE_UPDATE");
+    }
+
+    @Test
+    void createUserStoresViewerAccountAndAuditRecord() {
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
+        when(userAccountMapper.insert(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount user = invocation.getArgument(0);
+            user.setId(1003L);
+            return 1;
+        });
+
+        var created = userManagementService.createUser(auditContext(), new UserCreateRequest(
+            "reviewer",
+            "Reviewer@RepoGuard.dev",
+            "Secure123",
+            "Secure123"
+        ));
+
+        ArgumentCaptor<UserAccount> userCaptor = ArgumentCaptor.forClass(UserAccount.class);
+        verify(userAccountMapper).insert(userCaptor.capture());
+        UserAccount saved = userCaptor.getValue();
+        assertThat(saved.getUsername()).isEqualTo("reviewer");
+        assertThat(saved.getEmail()).isEqualTo("reviewer@repoguard.dev");
+        assertThat(saved.getPasswordHash()).startsWith("$2");
+        assertThat(saved.getPasswordHash()).doesNotContain("Secure123");
+        assertThat(saved.getRole()).isEqualTo("VIEWER");
+        assertThat(saved.getStatus()).isEqualTo("ACTIVE");
+        assertThat(created.role()).isEqualTo("VIEWER");
+        assertThat(created.status()).isEqualTo("ACTIVE");
+
+        ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
+        verify(userOperationAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getAction()).isEqualTo("USER_CREATE");
+        assertThat(auditCaptor.getValue().getOperatorUsername()).isEqualTo("admin");
+        assertThat(auditCaptor.getValue().getTargetUsername()).isEqualTo("reviewer");
+        assertThat(auditCaptor.getValue().getAfterValue()).isEqualTo("VIEWER");
+    }
+
+    @Test
+    void createUserRejectsDuplicateUsername() {
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user(1003L, "reviewer", "VIEWER", "ACTIVE"));
+
+        assertThatThrownBy(() -> userManagementService.createUser(auditContext(), new UserCreateRequest(
+            "reviewer",
+            "reviewer2@repoguard.dev",
+            "Secure123",
+            "Secure123"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("用户名已存在");
+
+        verify(userAccountMapper, never()).insert(any(UserAccount.class));
     }
 
     @Test

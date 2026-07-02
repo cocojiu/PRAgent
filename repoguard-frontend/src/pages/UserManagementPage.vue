@@ -5,7 +5,12 @@
         <h1>用户管理</h1>
         <p>管理平台账号、角色权限和账号启停状态</p>
       </div>
-      <el-button :icon="RefreshCw" size="large" :loading="loading" @click="loadAll">刷新</el-button>
+      <div class="page-heading-actions">
+        <el-button type="primary" :icon="UserPlus" size="large" :disabled="!canManage" @click="openCreateDialog">
+          创建用户
+        </el-button>
+        <el-button :icon="RefreshCw" size="large" :loading="loading" @click="loadAll">刷新</el-button>
+      </div>
     </div>
 
     <MetricGrid :metrics="userMetricItems" :resolve-icon="getMetricIcon" />
@@ -129,15 +134,48 @@
         </template>
       </el-table>
     </section>
+
+    <el-dialog v-model="createDialogVisible" title="创建用户" width="480px" destroy-on-close>
+      <el-form class="create-user-form" label-position="top" @submit.prevent>
+        <el-form-item label="用户名">
+          <el-input v-model="createForm.username" placeholder="请输入用户名" autocomplete="off" />
+        </el-form-item>
+        <el-form-item label="邮箱地址">
+          <el-input v-model="createForm.email" placeholder="请输入企业邮箱" autocomplete="off" />
+        </el-form-item>
+        <el-form-item label="初始密码">
+          <el-input
+            v-model="createForm.password"
+            type="password"
+            placeholder="至少 8 位，包含字母和数字"
+            autocomplete="new-password"
+            show-password
+          />
+        </el-form-item>
+        <el-form-item label="确认密码">
+          <el-input
+            v-model="createForm.confirmPassword"
+            type="password"
+            placeholder="再次输入初始密码"
+            autocomplete="new-password"
+            show-password
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="createDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="creatingUser" @click="submitCreateUser">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserX, Users } from "lucide-vue-next";
-import { fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
-import type { ManagedUser, UserOperationAudit, UserStatus } from "@/api/users";
+import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "lucide-vue-next";
+import { createUser, fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
+import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserStatus } from "@/api/users";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { canManage, currentUser } from "@/stores/authState";
@@ -151,6 +189,14 @@ const statusFilter = ref("");
 const users = ref<ManagedUser[]>([]);
 const audits = ref<UserOperationAudit[]>([]);
 const savingIds = ref<Set<number>>(new Set());
+const createDialogVisible = ref(false);
+const creatingUser = ref(false);
+const createForm = reactive<UserCreateRequest>({
+  username: "",
+  email: "",
+  password: "",
+  confirmPassword: ""
+});
 
 const metricIconMap = {
   blue: Users,
@@ -223,6 +269,52 @@ const setSaving = (id: number, saving: boolean) => {
   savingIds.value = next;
 };
 
+const openCreateDialog = () => {
+  if (!canManage.value) {
+    return;
+  }
+  resetCreateForm();
+  createDialogVisible.value = true;
+};
+
+const submitCreateUser = async () => {
+  if (creatingUser.value) {
+    return;
+  }
+  if (!createForm.username.trim() || !createForm.email.trim() || !createForm.password || !createForm.confirmPassword) {
+    ElMessage.warning("请完整填写用户信息");
+    return;
+  }
+  if (createForm.password !== createForm.confirmPassword) {
+    ElMessage.warning("两次输入的密码不一致");
+    return;
+  }
+  creatingUser.value = true;
+  try {
+    const created = await createUser({
+      username: createForm.username.trim(),
+      email: createForm.email.trim(),
+      password: createForm.password,
+      confirmPassword: createForm.confirmPassword
+    });
+    users.value = [created, ...users.value.filter((user) => user.id !== created.id)];
+    await loadAudits();
+    createDialogVisible.value = false;
+    ElMessage.success("用户已创建");
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "用户创建失败"));
+  } finally {
+    creatingUser.value = false;
+  }
+};
+
+const resetCreateForm = () => {
+  createForm.username = "";
+  createForm.email = "";
+  createForm.password = "";
+  createForm.confirmPassword = "";
+};
+
 const changeRole = async (user: ManagedUser) => {
   if (isSaving(user.id)) {
     await loadUsers();
@@ -271,7 +363,12 @@ const applyUser = (updated: ManagedUser) => {
 
 const statusText = (status: UserStatus) => (status === "ACTIVE" ? "启用" : "禁用");
 const statusClass = (status: UserStatus) => (status === "ACTIVE" ? "success" : "danger");
-const actionText = (action: string) => (action === "ROLE_UPDATE" ? "角色调整" : "账号状态");
+const actionText = (action: string) => {
+  if (action === "USER_CREATE") {
+    return "创建账号";
+  }
+  return action === "ROLE_UPDATE" ? "角色调整" : "账号状态";
+};
 
 const valueText = (value?: string) => {
   if (!value) {

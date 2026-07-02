@@ -16,6 +16,13 @@ export interface ManagedUser {
   updatedAt: string;
 }
 
+export interface UserCreateRequest {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}
+
 export type UserOperationAction = "ROLE_UPDATE" | "STATUS_UPDATE" | string;
 
 export interface UserOperationAudit {
@@ -35,6 +42,8 @@ export interface UserOperationAudit {
 export const fetchUsers = () => apiRequest("fetchUsers", undefined);
 
 export const fetchUserOperationAudits = () => apiRequest("fetchUserOperationAudits", undefined);
+
+export const createUser = (payload: UserCreateRequest) => apiRequest("createUser", payload);
 
 export const updateUserRole = (id: number, role: UserRole) =>
   apiRequest("updateUserRole", { id, role });

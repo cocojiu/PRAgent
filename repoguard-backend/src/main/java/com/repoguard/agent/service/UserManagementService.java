@@ -1,5 +1,6 @@
 package com.repoguard.agent.service;
 
+import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
@@ -10,6 +11,8 @@ public interface UserManagementService {
     List<UserManagementItemDto> listUsers();
 
     List<UserOperationAuditDto> listOperationAudits();
+
+    UserManagementItemDto createUser(UserOperationAuditContext auditContext, UserCreateRequest request);
 
     UserManagementItemDto updateRole(UserOperationAuditContext auditContext, Long userId, String role);
 

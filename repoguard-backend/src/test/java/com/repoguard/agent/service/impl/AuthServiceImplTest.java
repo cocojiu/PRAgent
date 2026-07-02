@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +44,7 @@ class AuthServiceImplTest {
         userRefreshTokenMapper,
         userLoginAuditMapper,
         passwordHashService,
+        authProperties,
         authTokenService
     );
 
@@ -93,6 +95,23 @@ class AuthServiceImplTest {
         )))
             .isInstanceOf(BusinessException.class)
             .hasMessage("用户名已存在");
+    }
+
+    @Test
+    void registerRejectsWhenSelfRegistrationIsDisabled() {
+        authProperties.setRegistrationEnabled(false);
+
+        assertThatThrownBy(() -> authService.register(new AuthRegisterRequest(
+            "viewer",
+            "viewer@repoguard.dev",
+            "Secure123",
+            "Secure123"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("公开注册已关闭，请联系管理员开通账号");
+
+        verify(userAccountMapper, never()).insert(any(UserAccount.class));
+        verify(userRefreshTokenMapper, never()).insert(any(UserRefreshToken.class));
     }
 
     @Test

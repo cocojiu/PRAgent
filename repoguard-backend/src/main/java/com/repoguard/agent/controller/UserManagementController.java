@@ -3,6 +3,7 @@ package com.repoguard.agent.controller;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
@@ -17,6 +18,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +44,14 @@ public class UserManagementController {
     @GetMapping("/audits")
     public ApiResponse<List<UserOperationAuditDto>> listOperationAudits() {
         return ApiResponse.ok(userManagementService.listOperationAudits());
+    }
+
+    @PostMapping
+    public ApiResponse<UserManagementItemDto> createUser(
+        HttpServletRequest request,
+        @Valid @RequestBody UserCreateRequest createRequest
+    ) {
+        return ApiResponse.ok(userManagementService.createUser(auditContext(request), createRequest));
     }
 
     @PutMapping("/{id}/role")
