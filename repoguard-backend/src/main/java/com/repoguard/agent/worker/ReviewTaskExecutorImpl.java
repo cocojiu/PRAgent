@@ -2,7 +2,6 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -48,6 +47,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final ReviewExecutionFailureHandler failureHandler;
     private final ReviewExecutionResultWriter resultWriter;
     private final ReviewExecutionNotifier notifier;
+    private final ReviewExecutionDiffStats diffStats;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -126,6 +126,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         this.notifier = notifier == null
             ? new ReviewExecutionNotifier(notificationDispatchService)
             : notifier;
+        this.diffStats = new ReviewExecutionDiffStats();
     }
 
     public ReviewTaskExecutorImpl(
@@ -285,9 +286,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     task.getId(),
                     repositorySlug(task),
                     task.getPrNumber(),
-                    diff.files() == null ? 0 : diff.files().size(),
-                    totalAdditions(diff),
-                    totalDeletions(diff)
+                    diffStats.fileCount(diff),
+                    diffStats.totalAdditions(diff),
+                    diffStats.totalDeletions(diff)
                 );
                 ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
                 ReviewExecutionResultWriter.WriteResult writeResult = completeReview(
@@ -384,26 +385,6 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private String safePart(String value) {
         return value == null || value.isBlank() ? "<unknown>" : value.trim();
-    }
-
-    private int totalAdditions(GithubPullRequestDiff diff) {
-        if (diff.files() == null) {
-            return 0;
-        }
-        return diff.files().stream()
-            .map(GithubChangedFile::additions)
-            .mapToInt(value -> value == null ? 0 : value)
-            .sum();
-    }
-
-    private int totalDeletions(GithubPullRequestDiff diff) {
-        if (diff.files() == null) {
-            return 0;
-        }
-        return diff.files().stream()
-            .map(GithubChangedFile::deletions)
-            .mapToInt(value -> value == null ? 0 : value)
-            .sum();
     }
 
     private void inTransaction(Runnable action) {

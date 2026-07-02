@@ -29,6 +29,16 @@ public class PullRequestDiffChunker {
     );
     private static final Pattern YAML_KEY = Pattern.compile("^[+-]?\\s*([A-Za-z0-9_.-]+)\\s*:");
 
+    private final DiffRiskClassifier riskClassifier;
+
+    public PullRequestDiffChunker() {
+        this(new DiffRiskClassifier());
+    }
+
+    PullRequestDiffChunker(DiffRiskClassifier riskClassifier) {
+        this.riskClassifier = riskClassifier;
+    }
+
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
         return chunk(diff, ChunkingPolicy.defaults());
     }
@@ -83,13 +93,13 @@ public class PullRequestDiffChunker {
         int totalLines = files.stream().mapToInt(this::changedLines).sum();
         return files.size() > policy.largePrFileThreshold()
             || totalLines > policy.largePrLineThreshold()
-            || (files.stream().anyMatch(file -> !riskReasons(file).isEmpty()) && files.size() > 1);
+            || (files.stream().anyMatch(file -> !riskClassifier.reasons(file).isEmpty()) && files.size() > 1);
     }
 
     private List<GithubChangedFile> prioritized(List<GithubChangedFile> files) {
         return files.stream()
             .sorted(Comparator
-                .comparingInt(this::riskPriority)
+                .comparingInt(riskClassifier::priority)
                 .thenComparing(GithubChangedFile::filename, Comparator.nullsLast(String::compareTo)))
             .toList();
     }
@@ -103,23 +113,6 @@ public class PullRequestDiffChunker {
                 .thenComparing(SemanticDiffSegment::semanticKey)
                 .thenComparing(segment -> segment.file().filename(), Comparator.nullsLast(String::compareTo)))
             .toList();
-    }
-
-    private int riskPriority(GithubChangedFile file) {
-        List<String> reasons = riskReasons(file);
-        if (reasons.contains("database_migration")) {
-            return 0;
-        }
-        if (reasons.contains("security_sensitive")) {
-            return 1;
-        }
-        if (reasons.contains("runtime_config")) {
-            return 2;
-        }
-        if (reasons.contains("delivery_pipeline")) {
-            return 3;
-        }
-        return 4;
     }
 
     private PullRequestDiffChunk toChunk(GithubPullRequestDiff source, List<GithubChangedFile> files, int index, int total) {
@@ -177,7 +170,7 @@ public class PullRequestDiffChunker {
             reasons.add("large_churn");
         }
         files.stream()
-            .flatMap(file -> riskReasons(file).stream())
+            .flatMap(file -> riskClassifier.reasons(file).stream())
             .distinct()
             .forEach(reasons::add);
         return reasons.isEmpty() ? List.of("standard") : reasons;
@@ -207,7 +200,7 @@ public class PullRequestDiffChunker {
             .distinct()
             .forEach(reasons::add);
         segments.stream()
-            .flatMap(segment -> riskReasons(segment.file()).stream())
+            .flatMap(segment -> riskClassifier.reasons(segment.file()).stream())
             .distinct()
             .forEach(reasons::add);
         return reasons.isEmpty() ? List.of("standard") : reasons;
@@ -297,7 +290,7 @@ public class PullRequestDiffChunker {
             chunkGroupKey,
             semanticKey,
             semanticReason,
-            riskPriority(file),
+            riskClassifier.priority(file),
             additions,
             deletions
         );
@@ -535,24 +528,6 @@ public class PullRequestDiffChunker {
         String leftPath = left.filename() == null ? "" : left.filename();
         String rightPath = right.filename() == null ? "" : right.filename();
         return leftPath.equals(rightPath);
-    }
-
-    private List<String> riskReasons(GithubChangedFile file) {
-        String path = file.filename() == null ? "" : file.filename().toLowerCase(Locale.ROOT);
-        List<String> reasons = new ArrayList<>();
-        if (path.contains("db/migration") || path.endsWith(".sql")) {
-            reasons.add("database_migration");
-        }
-        if (path.contains("security") || path.contains("auth") || path.contains("token") || path.contains("permission")) {
-            reasons.add("security_sensitive");
-        }
-        if (path.endsWith("application.yml") || path.endsWith("application-prod.yml") || path.contains("config")) {
-            reasons.add("runtime_config");
-        }
-        if (path.contains(".github/") || path.contains("docker") || path.endsWith("pom.xml") || path.endsWith("package.json")) {
-            reasons.add("delivery_pipeline");
-        }
-        return reasons;
     }
 
     private int changedLines(GithubChangedFile file) {
