@@ -18,6 +18,7 @@ const ACCESS_TOKEN_STORAGE_KEY = "repoguard.accessToken";
 const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
 
+let activeAccessToken = "";
 let refreshPromise: Promise<boolean> | undefined;
 
 const buildUrl = (path: string, params?: Record<string, string | number | undefined>) => {
@@ -51,9 +52,11 @@ export const request = async <T>(
 
 export const saveAuthTokens = (accessToken: string, refreshToken: string, remember: boolean) => {
   clearAuthToken();
+  activeAccessToken = accessToken;
   const storage = remember ? window.localStorage : window.sessionStorage;
-  storage.setItem(ACCESS_TOKEN_STORAGE_KEY, accessToken);
-  storage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+  if (refreshToken) {
+    storage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
+  }
 };
 
 export const saveAuthToken = (token: string, remember: boolean) => {
@@ -61,6 +64,7 @@ export const saveAuthToken = (token: string, remember: boolean) => {
 };
 
 export const clearAuthToken = () => {
+  activeAccessToken = "";
   window.sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
   window.sessionStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
@@ -199,9 +203,24 @@ const resolveAccessToken = () => {
   if (typeof window === "undefined") {
     return "";
   }
-  return window.sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
+  if (activeAccessToken) {
+    return activeAccessToken;
+  }
+  activeAccessToken = consumeStoredAccessToken();
+  return activeAccessToken;
+};
+
+const consumeStoredAccessToken = () => {
+  const token = window.sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
     || window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
     || window.sessionStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY)
     || window.localStorage.getItem(LEGACY_AUTH_TOKEN_STORAGE_KEY)
     || "";
+  if (token) {
+    window.sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+  }
+  return token;
 };
