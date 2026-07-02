@@ -23,6 +23,7 @@ tmp/
 move-codex-data-to-d.ps1
 BackendRules/
 .github/workflows/runtime-metadata-check.yml
+scripts/maintenance/purge_demo_review_data.sql
 repoguard-backend/src/main/resources/application-local.yml
 config/application-local.yml
 repoguard-backend/config/application-local.yml
