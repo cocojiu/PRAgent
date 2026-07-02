@@ -221,7 +221,10 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
           DEPLOY_EXISTING_TAG: ${{ inputs.deploy_existing_tag }}
+          APP_CORS_ALLOWED_ORIGINS: ${{ secrets.APP_CORS_ALLOWED_ORIGINS || vars.APP_CORS_ALLOWED_ORIGINS }}
+          HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL }}
           IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+          REPOGUARD_FRONTEND_SERVER_NAME: ${{ secrets.REPOGUARD_FRONTEND_SERVER_NAME || vars.REPOGUARD_FRONTEND_SERVER_NAME }}
         run: |
           test -n "${ALIYUN_REGISTRY_PASSWORD}" || { echo "Missing ALIYUN_REGISTRY_PASSWORD secret"; exit 1; }
           test -n "${ALIYUN_DEPLOY_REGISTRY}" || { echo "Missing ALIYUN_DEPLOY_REGISTRY secret or variable"; exit 1; }
@@ -239,10 +242,18 @@ jobs:
             image_tag="${ref_slug}-${GITHUB_SHA::12}"
           fi
           test -n "${image_tag}" || { echo "Missing resolved image tag"; exit 1; }
+          test -n "${REPOGUARD_FRONTEND_SERVER_NAME}" || { echo "Missing REPOGUARD_FRONTEND_SERVER_NAME secret or variable"; exit 1; }
+          test -n "${APP_CORS_ALLOWED_ORIGINS}" || { echo "Missing APP_CORS_ALLOWED_ORIGINS secret or variable"; exit 1; }
           backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${image_tag}"
           frontend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:frontend-${image_tag}"
+          health_url="${HEALTH_URL:-https://${REPOGUARD_FRONTEND_SERVER_NAME}/actuator/health}"
           printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "cd '${DEPLOY_PATH}' && \
-             BACKEND_IMAGE='${backend_image}' FRONTEND_IMAGE='${frontend_image}' sh scripts/deploy-prod.sh"
+             BACKEND_IMAGE='${backend_image}' \
+             FRONTEND_IMAGE='${frontend_image}' \
+             REPOGUARD_FRONTEND_SERVER_NAME='${REPOGUARD_FRONTEND_SERVER_NAME}' \
+             APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
+             HEALTH_URL='${health_url}' \
+             sh scripts/deploy-prod.sh"
