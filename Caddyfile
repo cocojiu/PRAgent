@@ -1,0 +1,8 @@
+{$REPOGUARD_FRONTEND_SERVER_NAME} {
+    encode zstd gzip
+    reverse_proxy frontend:8080
+}
+
+:80 {
+    reverse_proxy frontend:8080
+}

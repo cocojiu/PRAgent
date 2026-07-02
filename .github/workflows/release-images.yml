@@ -206,6 +206,7 @@ jobs:
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" "mkdir -p '${DEPLOY_PATH}/scripts'"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
 
       - name: Pull and restart

@@ -93,12 +93,34 @@ services:
         condition: service_healthy
     environment:
       REPOGUARD_FRONTEND_SERVER_NAME: ${REPOGUARD_FRONTEND_SERVER_NAME:-_}
-    ports:
-      - "${HTTP_PORT_BIND:-80}:8080"
+    expose:
+      - "8080"
     mem_limit: ${FRONTEND_MEM_LIMIT:-128m}
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: repoguard-caddy
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_started
+    environment:
+      REPOGUARD_FRONTEND_SERVER_NAME: ${REPOGUARD_FRONTEND_SERVER_NAME}
+    ports:
+      - "${HTTP_PORT_BIND:-80}:80"
+      - "${HTTPS_PORT_BIND:-443}:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - repoguard_caddy_data:/data
+      - repoguard_caddy_config:/config
+    mem_limit: ${CADDY_MEM_LIMIT:-128m}
 
 volumes:
   repoguard_mysql_data:
     name: ${MYSQL_VOLUME_NAME:-repoguard_mysql_data}
   repoguard_rabbitmq_data:
     name: ${RABBITMQ_VOLUME_NAME:-repoguard_rabbitmq_data}
+  repoguard_caddy_data:
+    name: ${CADDY_DATA_VOLUME_NAME:-repoguard_caddy_data}
+  repoguard_caddy_config:
+    name: ${CADDY_CONFIG_VOLUME_NAME:-repoguard_caddy_config}

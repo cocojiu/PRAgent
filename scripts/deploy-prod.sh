@@ -123,13 +123,15 @@ verify_deployment() {
 echo "Deploying RepoGuard images:"
 echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
+echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
-compose pull backend frontend
+compose pull backend frontend caddy
 
 if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   compose up -d --no-deps backend
   wait_backend_health 45
   compose up -d --no-deps frontend
+  compose up -d --no-deps caddy
   compose ps
   verify_deployment 15 30
   echo "RepoGuard deployment is healthy: $HEALTH_URL"

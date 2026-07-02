@@ -5,6 +5,7 @@ APP_DIR="${APP_DIR:-/opt/repoguard}"
 APP_USER="${APP_USER:-repoguard}"
 APP_GROUP="${APP_GROUP:-repoguard}"
 HTTP_PORT_BIND="${HTTP_PORT_BIND:-80}"
+HTTPS_PORT_BIND="${HTTPS_PORT_BIND:-443}"
 PRODUCTION_ORIGIN="${PRODUCTION_ORIGIN:-http://CHANGE_ME_SERVER_IP}"
 PRODUCTION_SERVER_NAME="${PRODUCTION_SERVER_NAME:-CHANGE_ME_SERVER_IP}"
 
@@ -137,16 +138,19 @@ REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE=true
 REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT=true
 
 HTTP_PORT_BIND=${HTTP_PORT_BIND}
+HTTPS_PORT_BIND=${HTTPS_PORT_BIND}
 HEALTH_URL=http://127.0.0.1/actuator/health
 EOF
   chmod 600 "$APP_DIR/.env"
 }
 
 check_port() {
-  if command -v ss >/dev/null 2>&1 && ss -ltn | awk '{print $4}' | grep -Eq "(:|\\])${HTTP_PORT_BIND}$"; then
-    echo "Warning: TCP port ${HTTP_PORT_BIND} appears to be in use." >&2
-    echo "If nginx/apache is running, stop it or change HTTP_PORT_BIND in $APP_DIR/.env." >&2
-  fi
+  for port in "$HTTP_PORT_BIND" "$HTTPS_PORT_BIND"; do
+    if command -v ss >/dev/null 2>&1 && ss -ltn | awk '{print $4}' | grep -Eq "(:|\\])${port}$"; then
+      echo "Warning: TCP port ${port} appears to be in use." >&2
+      echo "If nginx/apache is running, stop it or change port binds in $APP_DIR/.env." >&2
+    fi
+  done
 }
 
 main() {
