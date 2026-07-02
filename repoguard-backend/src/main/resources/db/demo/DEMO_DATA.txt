@@ -1,0 +1,14 @@
+Demo data scripts
+=================
+
+These scripts are optional seed data for local demos only. They are intentionally
+kept outside db/migration so production Flyway runs do not create demo review
+tasks.
+
+To load them in a disposable local database, apply the scripts manually after
+the normal Flyway migrations:
+
+1. seed_review_demo_data.sql
+2. seed_llm_quality_demo_data.sql
+
+Do not add new demo seed scripts under src/main/resources/db/migration.

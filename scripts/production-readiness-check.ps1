@@ -32,12 +32,45 @@ function Invoke-CommandChecked {
     $previous = Get-Location
     try {
         Set-Location $WorkingDirectory
-        & $FilePath @Arguments
+        $ResolvedCommand = Resolve-ToolCommand -FilePath $FilePath
+        $ResolvedArguments = @($ResolvedCommand.Arguments) + $Arguments
+        & $ResolvedCommand.FilePath @ResolvedArguments
         if ($LASTEXITCODE -ne 0) {
-            throw "Command failed with exit code $LASTEXITCODE`: $FilePath $($Arguments -join ' ')"
+            throw "Command failed with exit code $LASTEXITCODE`: $($ResolvedCommand.FilePath) $($ResolvedArguments -join ' ')"
         }
     } finally {
         Set-Location $previous
+    }
+}
+
+function Resolve-ToolCommand {
+    param(
+        [string] $FilePath
+    )
+
+    $command = Get-Command $FilePath -ErrorAction SilentlyContinue
+    if ($command) {
+        return [pscustomobject]@{
+            FilePath = $command.Source
+            Arguments = @()
+        }
+    }
+
+    if ($FilePath -eq "npm") {
+        $node = Get-Command "node" -ErrorAction SilentlyContinue
+        $nodePath = if ($node) { $node.Source } else { Join-Path $env:APPDATA "npm/node_modules/node/bin/node.exe" }
+        $npmCli = Join-Path $env:APPDATA "npm/node_modules/npm/bin/npm-cli.js"
+        if ((Test-Path -LiteralPath $nodePath) -and (Test-Path -LiteralPath $npmCli)) {
+            return [pscustomobject]@{
+                FilePath = $nodePath
+                Arguments = @($npmCli)
+            }
+        }
+    }
+
+    return [pscustomobject]@{
+        FilePath = $FilePath
+        Arguments = @()
     }
 }
 
@@ -62,6 +95,43 @@ Invoke-Check "Flyway migration naming and duplicate version check" {
             throw "Duplicate Flyway migration version V$version`: $($versions[$version]) and $($migration.Name)"
         }
         $versions[$version] = $migration.Name
+    }
+}
+
+Invoke-Check "Flyway migration demo data guard" {
+    $allowedDemoMigrations = @(
+        "V2__seed_demo_data.sql",
+        "V24__seed_llm_quality_demo_data.sql",
+        "V25__remove_legacy_v2_demo_data.sql",
+        "V35__remove_llm_quality_demo_data.sql",
+        "V36__purge_demo_review_data.sql"
+    )
+    $demoMarkers = @(
+        "repo-guard-demo",
+        "https://github.com/monorepo/",
+        "src/main/java/com/demo/",
+        "demo901a",
+        "demo902b",
+        "demo903c",
+        "demo904d"
+    )
+
+    $migrations = Get-ChildItem -LiteralPath $MigrationDir -Filter "*.sql" | Sort-Object Name
+    foreach ($migration in $migrations) {
+        if ($allowedDemoMigrations -contains $migration.Name) {
+            continue
+        }
+
+        if ($migration.Name -match '(?i)seed.*demo|demo.*seed') {
+            throw "Demo seed migration is not allowed in the main Flyway chain: $($migration.Name). Put demo data under repoguard-backend/src/main/resources/db/demo instead."
+        }
+
+        $content = Get-Content -LiteralPath $migration.FullName -Raw -Encoding UTF8
+        foreach ($marker in $demoMarkers) {
+            if ($content.Contains($marker)) {
+                throw "Demo data marker '$marker' found in main Flyway migration $($migration.Name). Put demo data under repoguard-backend/src/main/resources/db/demo instead."
+            }
+        }
     }
 }
 
@@ -108,17 +178,21 @@ if (-not $SkipBackendTests) {
     Invoke-Check "backend production readiness test slice" {
         Invoke-CommandChecked `
             -FilePath "mvn" `
-            -Arguments @("-Dtest=DashboardControllerTest,ReviewControllerTest,GithubWebhookControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
+            -Arguments @("-Dtest=ApiContractTest,ControllerAuthorizationContractTest,DashboardControllerTest,ReviewControllerTest,GithubWebhookControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
             -WorkingDirectory $BackendDir
     }
 }
 
 if ($IncludeFrontendBuild) {
-    Invoke-Check "frontend type check and build" {
+    Invoke-Check "frontend quality gate" {
+        Invoke-CommandChecked -FilePath "npm" -Arguments @("run", "quality") -WorkingDirectory $FrontendDir
+    }
+
+    Invoke-Check "frontend production build" {
         Invoke-CommandChecked -FilePath "npm" -Arguments @("run", "build") -WorkingDirectory $FrontendDir
     }
 } else {
-    Write-Host "SKIP: frontend type check and build (pass -IncludeFrontendBuild to enable)"
+    Write-Host "SKIP: frontend quality gate and build (pass -IncludeFrontendBuild to enable)"
 }
 
 Write-Host "Production readiness checks completed."

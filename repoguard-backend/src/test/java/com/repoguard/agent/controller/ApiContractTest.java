@@ -30,8 +30,10 @@ class ApiContractTest {
         CacheStatsController.class,
         DashboardController.class,
         DataRetentionController.class,
+        GithubWebhookController.class,
         MessageQueueHealthController.class,
         NotificationController.class,
+        NotificationIntegrationController.class,
         ReviewController.class,
         SystemConfigController.class,
         UserManagementController.class
@@ -41,11 +43,16 @@ class ApiContractTest {
     void controllerBasePathsStayVersionedUnderApiV1() {
         CONTROLLERS.forEach(controller -> {
             RequestMapping mapping = controller.getAnnotation(RequestMapping.class);
-            assertThat(mapping)
-                .as(controller.getSimpleName() + " must declare a base request mapping")
-                .isNotNull();
-            assertThat(mappingPaths(mapping))
-                .as(controller.getSimpleName() + " base path must be versioned")
+            if (mapping != null) {
+                assertThat(mappingPaths(mapping))
+                    .as(controller.getSimpleName() + " base path must be versioned")
+                    .isNotEmpty()
+                    .allSatisfy(path -> assertThat(path).startsWith("/api/v1/"));
+                return;
+            }
+
+            assertThat(handlerMappingPaths(controller))
+                .as(controller.getSimpleName() + " handler paths must be versioned when no base request mapping exists")
                 .isNotEmpty()
                 .allSatisfy(path -> assertThat(path).startsWith("/api/v1/"));
         });
@@ -96,6 +103,41 @@ class ApiContractTest {
             return List.of(mapping.path());
         }
         return List.of(mapping.value());
+    }
+
+    private List<String> handlerMappingPaths(Class<?> controller) {
+        return List.of(controller.getDeclaredMethods()).stream()
+            .filter(this::isHandlerMethod)
+            .flatMap(method -> methodMappingPaths(method).stream())
+            .toList();
+    }
+
+    private List<String> methodMappingPaths(Method method) {
+        if (method.isAnnotationPresent(RequestMapping.class)) {
+            RequestMapping mapping = method.getAnnotation(RequestMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        if (method.isAnnotationPresent(GetMapping.class)) {
+            GetMapping mapping = method.getAnnotation(GetMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        if (method.isAnnotationPresent(PostMapping.class)) {
+            PostMapping mapping = method.getAnnotation(PostMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        if (method.isAnnotationPresent(PutMapping.class)) {
+            PutMapping mapping = method.getAnnotation(PutMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        if (method.isAnnotationPresent(DeleteMapping.class)) {
+            DeleteMapping mapping = method.getAnnotation(DeleteMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        if (method.isAnnotationPresent(PatchMapping.class)) {
+            PatchMapping mapping = method.getAnnotation(PatchMapping.class);
+            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
+        }
+        return List.of();
     }
 
     private boolean isHandlerMethod(Method method) {
