@@ -20,7 +20,7 @@ services:
       - loki
     volumes:
       - ./config/observability/promtail.yml:/etc/promtail/promtail.yml:ro
-      - ./logs/backend:/var/log/repoguard/backend:ro
+      - ./config/observability/promtail-positions:/positions
       - /var/run/docker.sock:/var/run/docker.sock:ro
     mem_limit: 128m
 

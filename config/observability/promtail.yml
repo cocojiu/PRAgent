@@ -3,29 +3,19 @@ server:
   grpc_listen_port: 0
 
 positions:
-  filename: /tmp/positions.yaml
+  filename: /positions/positions.yaml
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  - job_name: repoguard-local-files
-    static_configs:
-      - targets:
-          - localhost
-        labels:
-          service: repoguard-backend
-          container: local-file
-          stream: file
-          __path__: /var/log/repoguard/backend/*.log
-
   - job_name: repoguard-docker
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
     relabel_configs:
       - source_labels: ["__meta_docker_container_name"]
-        regex: "/(repoguard-.*)"
+        regex: "/(repoguard-backend|repoguard-frontend|repoguard-caddy)"
         action: keep
       - source_labels: ["__meta_docker_container_name"]
         regex: "/(.*)"
