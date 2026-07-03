@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.github.GithubRestClientFactory;
 import com.repoguard.agent.security.SecretCryptoService;
 import org.springframework.http.MediaType;
 import org.springframework.util.StringUtils;
@@ -31,7 +32,7 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
     public ConnectionProbeResult probe(IntegrationConfig config) {
         String url = buildGithubTestUrl(config);
         String token = secretCryptoService.decrypt(config.getTokenValue());
-        RestClient.RequestHeadersSpec<?> request = restClientBuilder.clone().build()
+        RestClient.RequestHeadersSpec<?> request = GithubRestClientFactory.build(restClientBuilder)
             .get()
             .uri(url)
             .accept(MediaType.APPLICATION_JSON);

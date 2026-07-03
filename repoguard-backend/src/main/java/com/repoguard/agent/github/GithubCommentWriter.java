@@ -26,7 +26,7 @@ public class GithubCommentWriter {
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter
     ) {
-        this.restClient = restClientBuilder.clone().build();
+        this.restClient = GithubRestClientFactory.build(restClientBuilder);
         this.healthReporter = healthReporter;
     }
 
