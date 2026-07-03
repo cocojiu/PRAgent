@@ -22,6 +22,7 @@ public class GlobalExceptionHandler {
         "(?i)([\"']?\\b[\\w.-]*(?:token|password|secret|api[-_ ]?key)[\\w.-]*\\b[\"']?\\s*[:=]\\s*)(\"[^\"]*\"|'[^']*'|[^\\s,;}]+)"
     );
     private static final Pattern BEARER_TOKEN_PATTERN = Pattern.compile("(?i)(bearer\\s+)[A-Za-z0-9._~+/=-]+");
+    private static final String VALIDATION_ERROR_MESSAGE = "Request validation failed";
     private static final String INTERNAL_ERROR_MESSAGE = "系统内部异常，请联系管理员。";
 
     @ExceptionHandler(BusinessException.class)
@@ -44,7 +45,7 @@ public class GlobalExceptionHandler {
     })
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception exception) {
         return ResponseEntity.badRequest()
-            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, exception.getMessage()));
+            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, VALIDATION_ERROR_MESSAGE));
     }
 
     @ExceptionHandler(Exception.class)

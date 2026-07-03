@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
@@ -146,6 +147,7 @@ class SystemConfigControllerTest {
     private final SecretReEncryptionService secretReEncryptionService = Mockito.mock(SecretReEncryptionService.class);
     private final MockMvc mockMvc = MockMvcBuilders
         .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionService))
+        .setControllerAdvice(new GlobalExceptionHandler())
         .build();
 
     @Test
@@ -355,6 +357,49 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.executed").value(false))
             .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"));
+    }
+
+    @Test
+    void reEncryptSecretsRejectsOverlongEncryptionKeyBeforeServiceCall() throws Exception {
+        mockMvc.perform(post("/api/v1/config/secrets/re-encryption")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sourceEncryptionKey": "%s",
+                      "sourceKeyId": "old-2026",
+                      "targetEncryptionKey": "New-Encryption-Key-2026!Rotate-Primary",
+                      "targetKeyId": "new-2026",
+                      "execute": false
+                    }
+                    """.formatted("x".repeat(4097))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Request validation failed"));
+
+        Mockito.verify(secretReEncryptionService, Mockito.never())
+            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
+    }
+
+    @Test
+    void reEncryptSecretsRejectsOverlongConfirmationTextBeforeServiceCall() throws Exception {
+        mockMvc.perform(post("/api/v1/config/secrets/re-encryption")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "sourceEncryptionKey": "Old-Encryption-Key-2026!Rotate-Primary",
+                      "sourceKeyId": "old-2026",
+                      "targetEncryptionKey": "New-Encryption-Key-2026!Rotate-Primary",
+                      "targetKeyId": "new-2026",
+                      "execute": true,
+                      "confirmText": "%s"
+                    }
+                    """.formatted("x".repeat(33))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Request validation failed"));
+
+        Mockito.verify(secretReEncryptionService, Mockito.never())
+            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
     }
 
     private GithubIntegrationConfigDto githubDto() {
