@@ -40,6 +40,21 @@ class WebhookNotificationRequestFactoryTest {
         assertThat(request.secret()).isNull();
     }
 
+    @Test
+    void createReturnsFailureRequestWhenWebhookCredentialsCannotBeDecrypted() {
+        NotificationChannelBinding binding = binding();
+        when(secretCryptoService.decrypt("enc:webhook"))
+            .thenThrow(new IllegalStateException("Unable to decrypt secret token=raw-token"));
+
+        WebhookNotificationRequest request = factory.create(binding);
+
+        assertThat(request.ready()).isFalse();
+        assertThat(request.failureMessage()).isEqualTo("Webhook credentials cannot be decrypted");
+        assertThat(request.failureMessage()).doesNotContain("raw-token");
+        assertThat(request.webhookUrl()).isNull();
+        assertThat(request.secret()).isNull();
+    }
+
     private NotificationChannelBinding binding() {
         NotificationChannelBinding binding = new NotificationChannelBinding();
         binding.setWebhookUrlValue("enc:webhook");
