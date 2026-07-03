@@ -63,4 +63,26 @@ class WebhookNotificationResponseEvaluatorTest {
         assertThat(result.success()).isFalse();
         assertThat(result.message()).hasSize(512);
     }
+
+    @Test
+    void exceptionMessageMasksWebhookSecretsBeforeRecordingFailure() {
+        NotificationSendResult result = evaluator.failure(new RuntimeException(
+            "I/O error on POST https://oapi.dingtalk.com/robot/send?access_token=raw-token&sign=raw-sign"
+        ));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("access_token=****");
+        assertThat(result.message()).contains("sign=****");
+        assertThat(result.message()).doesNotContain("raw-token", "raw-sign");
+    }
+
+    @Test
+    void responseMessageMasksAssignedSecretsBeforeRecordingFailure() {
+        NotificationSendResult result = evaluator.evaluate("token=raw-token secret:raw-secret errmsg=failed");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("token=****");
+        assertThat(result.message()).contains("secret:****");
+        assertThat(result.message()).doesNotContain("raw-token", "raw-secret");
+    }
 }
