@@ -13,6 +13,7 @@ import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -67,10 +68,25 @@ public class ReviewTaskAfterCommitPublisher {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                reviewPublishExecutor.execute(() -> publishAndMarkFailure(task, message, queuedAt));
+                executeAfterCommit(task, message, queuedAt);
             }
         });
         return true;
+    }
+
+    private void executeAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
+        try {
+            reviewPublishExecutor.execute(() -> publishAndMarkFailure(task, message, queuedAt));
+        } catch (RejectedExecutionException ex) {
+            markPublishFailed(task, publishExecutorRejected(ex), queuedAt);
+        }
+    }
+
+    private MessagePublishException publishExecutorRejected(RejectedExecutionException ex) {
+        String detail = ex.getMessage() == null || ex.getMessage().isBlank()
+            ? ex.getClass().getSimpleName()
+            : ex.getMessage();
+        return new MessagePublishException("Review publish executor rejected task: " + detail, ex);
     }
 
     private boolean publishAndMarkFailure(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
