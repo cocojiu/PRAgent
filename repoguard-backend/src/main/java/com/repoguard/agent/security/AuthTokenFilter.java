@@ -2,6 +2,8 @@ package com.repoguard.agent.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.mapper.UserAccountMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,12 +20,19 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class AuthTokenFilter extends OncePerRequestFilter {
 
     public static final String AUTHENTICATED_USER_ATTRIBUTE = "repoguard.authenticatedUser";
+    private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final AuthTokenService authTokenService;
+    private final UserAccountMapper userAccountMapper;
     private final ObjectMapper objectMapper;
 
-    public AuthTokenFilter(AuthTokenService authTokenService, ObjectMapper objectMapper) {
+    public AuthTokenFilter(
+        AuthTokenService authTokenService,
+        UserAccountMapper userAccountMapper,
+        ObjectMapper objectMapper
+    ) {
         this.authTokenService = authTokenService;
+        this.userAccountMapper = userAccountMapper;
         this.objectMapper = objectMapper;
     }
 
@@ -52,7 +61,17 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
-        request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, authenticatedUser.get());
+        UserAccount currentUser = userAccountMapper.selectById(authenticatedUser.get().id());
+        if (currentUser == null || !STATUS_ACTIVE.equals(currentUser.getStatus())) {
+            writeUnauthorized(response, "Authentication token is invalid or expired");
+            return;
+        }
+        request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, new AuthTokenService.AuthenticatedUser(
+            currentUser.getId(),
+            currentUser.getUsername(),
+            currentUser.getRole(),
+            authenticatedUser.get().expiresAt()
+        ));
         filterChain.doFilter(request, response);
     }
 
