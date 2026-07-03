@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
@@ -345,7 +346,10 @@ class ReviewControllerTest {
         }
     };
 
-    private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ReviewController(reviewService)).build();
+    private final MockMvc mockMvc = MockMvcBuilders
+        .standaloneSetup(new ReviewController(reviewService))
+        .setControllerAdvice(new GlobalExceptionHandler())
+        .build();
 
     @Test
     void listReviewsReturnsPagedItems() throws Exception {
@@ -387,6 +391,13 @@ class ReviewControllerTest {
         assertThat(lastListQuery.status()).isEqualTo("completed");
         assertThat(lastListQuery.source()).isEqualTo("github_pr_picker");
         assertThat(lastListQuery.triggerSource()).isEqualTo("existing_reused");
+    }
+
+    @Test
+    void listReviewsRejectsOverlongKeyword() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews")
+                .param("keyword", "x".repeat(256)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -564,6 +575,13 @@ class ReviewControllerTest {
         assertThat(lastPublicationPage).isEqualTo(2);
         assertThat(lastPublicationPageSize).isEqualTo(10);
         assertThat(lastPublicationStatus).isEqualTo("completed");
+    }
+
+    @Test
+    void getGithubCommentPublicationHistoryRejectsOverlongStatus() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/github-comments/publications")
+                .param("status", "x".repeat(33)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test

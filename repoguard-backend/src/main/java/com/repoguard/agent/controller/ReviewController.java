@@ -27,6 +27,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -56,14 +57,23 @@ public class ReviewController {
     public ApiResponse<PageResponse<ReviewTaskListItem>> listReviews(
         @RequestParam(defaultValue = "1") @Min(1) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
-        @RequestParam(required = false) String repository,
-        @RequestParam(required = false) String status,
-        @RequestParam(required = false) String riskLevel,
-        @RequestParam(required = false) String source,
-        @RequestParam(required = false) String triggerSource,
-        @RequestParam(required = false) String keyword
+        @RequestParam(required = false) @Size(max = 128) String repository,
+        @RequestParam(required = false) @Size(max = 32) String status,
+        @RequestParam(required = false) @Size(max = 32) String riskLevel,
+        @RequestParam(required = false) @Size(max = 64) String source,
+        @RequestParam(required = false) @Size(max = 64) String triggerSource,
+        @RequestParam(required = false) @Size(max = 255) String keyword
     ) {
-        ReviewQuery query = new ReviewQuery(page, pageSize, repository, status, riskLevel, source, triggerSource, keyword);
+        ReviewQuery query = new ReviewQuery(
+            page,
+            pageSize,
+            checkedParam("repository", repository, 128),
+            checkedParam("status", status, 32),
+            checkedParam("riskLevel", riskLevel, 32),
+            checkedParam("source", source, 64),
+            checkedParam("triggerSource", triggerSource, 64),
+            checkedParam("keyword", keyword, 255)
+        );
         return ApiResponse.ok(reviewService.listReviews(query));
     }
 
@@ -102,9 +112,14 @@ public class ReviewController {
         @PathVariable @Min(1) Long id,
         @RequestParam(defaultValue = "1") @Min(1) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
-        @RequestParam(required = false) String status
+        @RequestParam(required = false) @Size(max = 32) String status
     ) {
-        return ApiResponse.ok(reviewService.getGithubCommentPublicationHistory(id, page, pageSize, status));
+        return ApiResponse.ok(reviewService.getGithubCommentPublicationHistory(
+            id,
+            page,
+            pageSize,
+            checkedParam("status", status, 32)
+        ));
     }
 
     @GetMapping("/github/pull-requests")
@@ -151,5 +166,12 @@ public class ReviewController {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
         }
         return user.username();
+    }
+
+    private String checkedParam(String name, String value, int maxLength) {
+        if (value != null && value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, name + " must be at most " + maxLength + " characters");
+        }
+        return value;
     }
 }
