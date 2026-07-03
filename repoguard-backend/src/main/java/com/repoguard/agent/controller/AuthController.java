@@ -47,8 +47,7 @@ public class AuthController {
         HttpServletResponse httpResponse
     ) {
         AuthResponse response = authService.register(request);
-        writeRefreshTokenCookie(response, httpRequest, httpResponse);
-        return ApiResponse.ok(response);
+        return authResponse(response, httpRequest, httpResponse);
     }
 
     @PostMapping("/login")
@@ -58,8 +57,7 @@ public class AuthController {
         HttpServletResponse httpResponse
     ) {
         AuthResponse response = authService.login(request);
-        writeRefreshTokenCookie(response, httpRequest, httpResponse);
-        return ApiResponse.ok(response);
+        return authResponse(response, httpRequest, httpResponse);
     }
 
     @GetMapping("/me")
@@ -80,8 +78,7 @@ public class AuthController {
     ) {
         try {
             AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken(request, cookieRefreshToken)));
-            writeRefreshTokenCookie(response, httpRequest, httpResponse);
-            return ApiResponse.ok(response);
+            return authResponse(response, httpRequest, httpResponse);
         } catch (RuntimeException ex) {
             clearRefreshTokenCookie(httpRequest, httpResponse);
             throw ex;
@@ -95,8 +92,7 @@ public class AuthController {
         HttpServletResponse httpResponse
     ) {
         AuthResponse response = authService.resetRefreshToken(request);
-        writeRefreshTokenCookie(response, httpRequest, httpResponse);
-        return ApiResponse.ok(response);
+        return authResponse(response, httpRequest, httpResponse);
     }
 
     @PostMapping("/logout")
@@ -123,6 +119,26 @@ public class AuthController {
             return request.refreshToken();
         }
         return cookieRefreshToken;
+    }
+
+    private ApiResponse<AuthResponse> authResponse(
+        AuthResponse response,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        writeRefreshTokenCookie(response, httpRequest, httpResponse);
+        return ApiResponse.ok(withoutRefreshToken(response));
+    }
+
+    private AuthResponse withoutRefreshToken(AuthResponse response) {
+        return new AuthResponse(
+            response.accessToken(),
+            null,
+            response.tokenType(),
+            response.accessTokenExpiresInSeconds(),
+            response.refreshTokenExpiresInSeconds(),
+            response.user()
+        );
     }
 
     private void writeRefreshTokenCookie(

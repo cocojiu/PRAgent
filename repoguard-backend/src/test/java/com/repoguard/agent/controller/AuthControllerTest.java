@@ -80,7 +80,7 @@ class AuthControllerTest {
         .build();
 
     @Test
-    void registerReturnsTokenPairAndUser() throws Exception {
+    void registerReturnsAccessTokenCookieAndUserWithoutRefreshTokenBody() throws Exception {
         mockMvc.perform(post("/api/v1/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -94,12 +94,13 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
-            .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"))
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
             .andExpect(jsonPath("$.data.user.username").value("admin"));
     }
 
     @Test
-    void loginReturnsTokenPairAndUser() throws Exception {
+    void loginReturnsAccessTokenCookieAndUserWithoutRefreshTokenBody() throws Exception {
         mockMvc.perform(post("/api/v1/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -112,6 +113,7 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
             .andExpect(jsonPath("$.data.accessTokenExpiresInSeconds").value(900))
             .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
@@ -143,7 +145,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshReturnsNewTokenPair() throws Exception {
+    void refreshReturnsNewAccessTokenWithoutRefreshTokenBody() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -153,7 +155,8 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
-            .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"));
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
     @Test
@@ -162,6 +165,7 @@ class AuthControllerTest {
                 .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
@@ -190,7 +194,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void resetRefreshTokenReturnsNewTokenPair() throws Exception {
+    void resetRefreshTokenReturnsNewAccessTokenWithoutRefreshTokenBody() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh-token/reset")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -201,7 +205,9 @@ class AuthControllerTest {
                     }
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"));
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
     @Test
