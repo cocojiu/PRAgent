@@ -81,6 +81,8 @@ class DashboardServiceImplTest {
 
         assertThat(cacheable).isNotNull();
         assertThat(cacheable.sync()).isTrue();
+        assertThat(cacheable.key())
+            .isEqualTo("T(com.repoguard.agent.service.impl.DashboardLlmTrendDays).normalize(#llmTrendDays)");
     }
 
     @Test

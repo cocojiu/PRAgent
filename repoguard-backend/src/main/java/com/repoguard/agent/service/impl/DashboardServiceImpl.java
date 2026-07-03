@@ -67,7 +67,11 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays", sync = true)
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_OVERVIEW,
+        key = "T(com.repoguard.agent.service.impl.DashboardLlmTrendDays).normalize(#llmTrendDays)",
+        sync = true
+    )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays);
         LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();

@@ -36,7 +36,7 @@ public class DashboardLlmQualityTrendBuilder {
     }
 
     Window window(Integer days) {
-        int normalizedDays = normalizeDays(days);
+        int normalizedDays = DashboardLlmTrendDays.normalize(days);
         return new Window(normalizedDays, today().minusDays(normalizedDays - 1L));
     }
 
@@ -59,17 +59,6 @@ public class DashboardLlmQualityTrendBuilder {
             llmQualityFormatter.rate(safeFallbackCount(count), taskCount),
             llmQualityFormatter.rate(safePartialFallbackCount(count), taskCount)
         );
-    }
-
-    private int normalizeDays(Integer days) {
-        if (days == null) {
-            return 7;
-        }
-        return switch (days) {
-            case 30 -> 30;
-            case 90 -> 90;
-            default -> 7;
-        };
     }
 
     private LocalDate today() {
