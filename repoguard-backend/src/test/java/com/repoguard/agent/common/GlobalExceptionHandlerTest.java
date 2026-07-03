@@ -30,6 +30,7 @@ class GlobalExceptionHandlerTest {
         String sanitized = handler.sanitizeLogMessage("""
             request failed payload={"refreshToken":"raw-refresh","clientSecret": "raw-secret","apiKey": "raw-key"}
             password=raw-password Authorization=Bearer abc.def.ghi
+            callback=https://user:raw-pass@example.com/hook?access_token=raw-access&sign=raw-sign
             """);
 
         assertThat(sanitized)
@@ -38,6 +39,17 @@ class GlobalExceptionHandlerTest {
             .contains("\"apiKey\": \"****\"")
             .contains("password=****")
             .contains("Bearer ****")
-            .doesNotContain("raw-refresh", "raw-secret", "raw-key", "raw-password", "abc.def.ghi");
+            .contains("https://user:****@example.com/hook")
+            .contains("access_token=****", "sign=****")
+            .doesNotContain(
+                "raw-refresh",
+                "raw-secret",
+                "raw-key",
+                "raw-password",
+                "abc.def.ghi",
+                "raw-pass",
+                "raw-access",
+                "raw-sign"
+            );
     }
 }

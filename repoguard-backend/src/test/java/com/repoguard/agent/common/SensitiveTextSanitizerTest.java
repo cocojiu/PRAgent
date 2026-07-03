@@ -28,4 +28,17 @@ class SensitiveTextSanitizerTest {
     void returnsNullWhenInputIsNull() {
         assertThat(SensitiveTextSanitizer.sanitize(null)).isNull();
     }
+
+    @Test
+    void preservesQuotedSecretShape() {
+        String sanitized = SensitiveTextSanitizer.sanitize(
+            "{\"refreshToken\":\"raw-refresh\",\"clientSecret\": \"raw-secret\",\"apiKey\": 'raw-key'}"
+        );
+
+        assertThat(sanitized)
+            .contains("\"refreshToken\":\"****\"")
+            .contains("\"clientSecret\": \"****\"")
+            .contains("\"apiKey\": '****'")
+            .doesNotContain("raw-refresh", "raw-secret", "raw-key");
+    }
 }
