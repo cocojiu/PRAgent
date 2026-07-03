@@ -33,4 +33,14 @@ class GithubWebhookPropertiesTest {
         assertThatCode(() -> properties.validateForProfiles(new String[] {"prod"}))
             .doesNotThrowAnyException();
     }
+
+    @Test
+    void rejectsNonPositivePayloadLimit() {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+        properties.setMaxPayloadBytes(0);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"test"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("app.github.webhook.max-payload-bytes");
+    }
 }

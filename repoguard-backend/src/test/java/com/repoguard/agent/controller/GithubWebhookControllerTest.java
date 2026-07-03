@@ -35,6 +35,7 @@ class GithubWebhookControllerTest {
     private final ReviewService reviewService = org.mockito.Mockito.mock(ReviewService.class);
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new GithubWebhookController(
         objectMapper,
+        properties,
         new GithubWebhookSignatureVerifier(properties),
         new GithubPullRequestWebhookService(properties, reviewService)
     ))
@@ -152,6 +153,22 @@ class GithubWebhookControllerTest {
                 .content(payload))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        verify(reviewService, never()).triggerManualReview(any());
+    }
+
+    @Test
+    void oversizedPayloadIsRejectedBeforeSignatureVerification() throws Exception {
+        properties.setMaxPayloadBytes(4);
+        byte[] payload = "{\"zen\":\"too large\"}".getBytes(StandardCharsets.UTF_8);
+
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-GitHub-Event", "ping")
+                .header("X-Hub-Signature-256", "sha256=invalid")
+                .content(payload))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
 
         verify(reviewService, never()).triggerManualReview(any());
     }

@@ -6,6 +6,7 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.github.webhook.GithubPullRequestWebhookService;
+import com.repoguard.agent.github.webhook.GithubWebhookProperties;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.github.webhook.GithubWebhookSignatureVerifier;
 import java.io.IOException;
@@ -21,15 +22,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class GithubWebhookController {
 
     private final ObjectMapper objectMapper;
+    private final GithubWebhookProperties properties;
     private final GithubWebhookSignatureVerifier signatureVerifier;
     private final GithubPullRequestWebhookService pullRequestWebhookService;
 
     public GithubWebhookController(
         ObjectMapper objectMapper,
+        GithubWebhookProperties properties,
         GithubWebhookSignatureVerifier signatureVerifier,
         GithubPullRequestWebhookService pullRequestWebhookService
     ) {
         this.objectMapper = objectMapper;
+        this.properties = properties;
         this.signatureVerifier = signatureVerifier;
         this.pullRequestWebhookService = pullRequestWebhookService;
     }
@@ -41,6 +45,7 @@ public class GithubWebhookController {
         @RequestHeader(name = "X-Hub-Signature-256", required = false) String signature,
         @RequestBody byte[] payload
     ) {
+        validatePayloadSize(payload);
         signatureVerifier.verify(signature, payload);
         JsonNode root = parsePayload(payload);
         if (!"pull_request".equals(event)) {
@@ -54,6 +59,12 @@ public class GithubWebhookController {
             return objectMapper.readTree(payload);
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload is not valid JSON");
+        }
+    }
+
+    private void validatePayloadSize(byte[] payload) {
+        if (payload != null && payload.length > properties.getMaxPayloadBytes()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "GitHub webhook payload exceeds max size");
         }
     }
 }

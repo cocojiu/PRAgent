@@ -9,10 +9,13 @@ import org.springframework.util.StringUtils;
 @ConfigurationProperties(prefix = "app.github.webhook")
 public class GithubWebhookProperties {
 
+    public static final int DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024;
+
     private boolean enabled = true;
     private String secret;
     private boolean requireSignature = true;
     private boolean ignoreDraft = true;
+    private int maxPayloadBytes = DEFAULT_MAX_PAYLOAD_BYTES;
     private List<String> allowedActions = new ArrayList<>(List.of("opened", "reopened", "synchronize", "ready_for_review"));
     private List<String> allowedRepositories = new ArrayList<>();
     private List<String> allowedHeadBranches = new ArrayList<>(List.of("PRAgent-test"));
@@ -49,6 +52,14 @@ public class GithubWebhookProperties {
         this.ignoreDraft = ignoreDraft;
     }
 
+    public int getMaxPayloadBytes() {
+        return maxPayloadBytes;
+    }
+
+    public void setMaxPayloadBytes(int maxPayloadBytes) {
+        this.maxPayloadBytes = maxPayloadBytes;
+    }
+
     public List<String> getAllowedActions() {
         return allowedActions;
     }
@@ -74,6 +85,9 @@ public class GithubWebhookProperties {
     }
 
     public void validateForProfiles(String[] activeProfiles) {
+        if (maxPayloadBytes <= 0) {
+            throw new IllegalStateException("app.github.webhook.max-payload-bytes must be positive");
+        }
         boolean productionProfile = Arrays.stream(activeProfiles)
             .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
         if (productionProfile && enabled && requireSignature && !StringUtils.hasText(secret)) {
