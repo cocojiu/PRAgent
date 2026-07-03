@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AuthProperties {
 
     private static final String DEFAULT_TOKEN_SECRET = "changeme-local-dev";
+    private static final int MIN_PRODUCTION_TOKEN_SECRET_LENGTH = 32;
 
     private String tokenSecret = DEFAULT_TOKEN_SECRET;
     private long accessTokenTtlSeconds = 900;
@@ -57,8 +58,15 @@ public class AuthProperties {
     public void validateForProfiles(String[] activeProfiles) {
         boolean productionProfile = Arrays.stream(activeProfiles)
             .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
-        if (productionProfile && (tokenSecret == null || tokenSecret.isBlank() || DEFAULT_TOKEN_SECRET.equals(tokenSecret))) {
+        if (!productionProfile) {
+            return;
+        }
+        String normalizedTokenSecret = tokenSecret == null ? "" : tokenSecret.trim();
+        if (normalizedTokenSecret.isBlank() || DEFAULT_TOKEN_SECRET.equals(normalizedTokenSecret)) {
             throw new IllegalStateException("repoguard.auth.token-secret must be configured in prod profile");
+        }
+        if (normalizedTokenSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
+            throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in prod profile");
         }
     }
 }
