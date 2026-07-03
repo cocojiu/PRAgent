@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -59,7 +60,7 @@ class LlmReviewPipeline {
         this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger() : reviewMerger;
         this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
         this.metrics = metrics;
-        this.objectMapper = objectMapper == null ? new ObjectMapper() : objectMapper;
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.stages = List.of(
             new LlmReadinessStage(),
             new LlmExecutionStage(diffChunker == null ? new PullRequestDiffChunker() : diffChunker),

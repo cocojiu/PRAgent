@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -125,7 +126,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     ) {
         this.reviewPolicyProvider = reviewPolicyProvider;
         this.restClientBuilder = restClientBuilder;
-        this.objectMapper = objectMapper;
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.metrics = metrics;
         this.resilience = resilience;
         this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
