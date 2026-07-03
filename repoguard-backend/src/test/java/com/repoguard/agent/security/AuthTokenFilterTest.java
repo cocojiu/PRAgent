@@ -66,6 +66,20 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void corsPreflightDoesNotRequireToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v1/reviews");
+        request.addHeader("Origin", "http://localhost:5173");
+        request.addHeader("Access-Control-Request-Method", "GET");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
     void protectedApiAllowsExistingAuthenticatedUserAttribute() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
         request.setAttribute(

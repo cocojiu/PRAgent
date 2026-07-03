@@ -28,6 +28,21 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
+    void corsPreflightDoesNotRequireAdminKey() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v1/config/review-policy");
+        request.addHeader("Origin", "http://localhost:5173");
+        request.addHeader("Access-Control-Request-Method", "GET");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
     void protectedReviewWriteEndpointRejectsInvalidAdminKey() throws ServletException, IOException {
         AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/reviews/42/github-comments");

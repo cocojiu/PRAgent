@@ -12,6 +12,7 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 public class AuthTokenFilter extends OncePerRequestFilter {
@@ -32,7 +33,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
-        if (!requiresAuth(request)) {
+        if (CorsUtils.isPreFlightRequest(request) || !requiresAuth(request)) {
             filterChain.doFilter(request, response);
             return;
         }
