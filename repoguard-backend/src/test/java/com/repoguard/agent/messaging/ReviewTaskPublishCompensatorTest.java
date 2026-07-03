@@ -86,7 +86,7 @@ class ReviewTaskPublishCompensatorTest {
         });
         doAnswer(invocation -> {
             events.add("publish");
-            throw new MessagePublishException("publisher confirm timed out");
+            throw new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token");
         }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
@@ -97,6 +97,8 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(task.getPublishAttempts()).isEqualTo(2);
         assertThat(task.getNextPublishRetryAt()).isNotNull();
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
+        assertThat(task.getLastPublishError()).contains("password=****", "token=****");
+        assertThat(task.getLastPublishError()).doesNotContain("raw-password", "raw-token");
         assertThat(task.getPublishClaimedAt()).isNull();
         assertThat(task.getPublishClaimedBy()).isNull();
         assertLogContextCleared();
@@ -104,6 +106,8 @@ class ReviewTaskPublishCompensatorTest {
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getValue().getLabel()).contains("Message publish retry failed");
+        assertThat(timelineCaptor.getValue().getLabel()).contains("password=****", "token=****");
+        assertThat(timelineCaptor.getValue().getLabel()).doesNotContain("raw-password", "raw-token");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("FAILED");
     }
 

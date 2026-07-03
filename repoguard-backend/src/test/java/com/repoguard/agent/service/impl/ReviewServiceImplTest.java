@@ -843,7 +843,7 @@ class ReviewServiceImplTest {
             task.setId(522L);
             return 1;
         }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
-        doThrow(new MessagePublishException("publisher confirm timed out"))
+        doThrow(new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token"))
             .when(reviewTaskPublisher)
             .publish(any(ReviewTaskMessage.class));
 
@@ -865,10 +865,14 @@ class ReviewServiceImplTest {
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(1);
         assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
         assertThat(taskCaptor.getValue().getLastPublishError()).contains("publisher confirm timed out");
+        assertThat(taskCaptor.getValue().getLastPublishError()).contains("password=****", "token=****");
+        assertThat(taskCaptor.getValue().getLastPublishError()).doesNotContain("raw-password", "raw-token");
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getAllValues().getLast().getLabel()).contains("Message publish failed");
+        assertThat(timelineCaptor.getAllValues().getLast().getLabel()).contains("password=****", "token=****");
+        assertThat(timelineCaptor.getAllValues().getLast().getLabel()).doesNotContain("raw-password", "raw-token");
     }
 
     @ParameterizedTest

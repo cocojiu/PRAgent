@@ -401,9 +401,7 @@ public class ReviewTaskPublishCompensator {
     }
 
     private String errorMessage(Exception ex) {
-        return ex.getMessage() == null || ex.getMessage().isBlank()
-            ? ex.getClass().getSimpleName()
-            : ex.getMessage().replaceAll("\\s+", " ").trim();
+        return MessagePublishFailureSanitizer.sanitize(ex);
     }
 
     private String truncate(String value) {

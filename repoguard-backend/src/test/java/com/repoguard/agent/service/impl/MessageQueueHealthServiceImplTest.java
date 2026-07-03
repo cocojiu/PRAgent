@@ -178,7 +178,7 @@ class MessageQueueHealthServiceImplTest {
         properties.setPublishCompensationIntervalMs(1000);
         ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        doThrow(new MessagePublishException("publisher confirm timed out"))
+        doThrow(new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token"))
             .when(reviewTaskPublisher)
             .publish(any(ReviewTaskMessage.class));
 
@@ -190,6 +190,8 @@ class MessageQueueHealthServiceImplTest {
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getNextPublishRetryAt()).isNotNull();
         assertThat(task.getLastPublishError()).contains("publisher confirm timed out");
+        assertThat(task.getLastPublishError()).contains("password=****", "token=****");
+        assertThat(task.getLastPublishError()).doesNotContain("raw-password", "raw-token");
         verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 

@@ -11,6 +11,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
@@ -172,9 +173,7 @@ class ReviewTaskRequeueService {
     }
 
     private String errorMessage(Exception ex) {
-        return ex.getMessage() == null || ex.getMessage().isBlank()
-            ? ex.getClass().getSimpleName()
-            : ex.getMessage().replaceAll("\\s+", " ").trim();
+        return MessagePublishFailureSanitizer.sanitize(ex);
     }
 
     private String truncate(String value) {
