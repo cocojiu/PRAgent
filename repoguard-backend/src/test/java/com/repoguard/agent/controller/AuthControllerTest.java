@@ -58,6 +58,9 @@ class AuthControllerTest {
 
         @Override
         public AuthResponse refresh(AuthRefreshRequest request) {
+            if (request == null || request.refreshToken() == null || request.refreshToken().isBlank()) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "refresh token expired or invalid");
+            }
             if ("invalid-refresh-token".equals(request.refreshToken())) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "refresh token expired or invalid");
             }
@@ -71,6 +74,9 @@ class AuthControllerTest {
 
         @Override
         public void logout(AuthLogoutRequest request) {
+            if (request == null || request.refreshToken() == null || request.refreshToken().isBlank()) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "refresh token is required");
+            }
         }
     };
 
@@ -170,6 +176,17 @@ class AuthControllerTest {
     }
 
     @Test
+    void refreshWithEmptyBodyUsesHttpOnlyCookieToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
+                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+    }
+
+    @Test
     void refreshWithInvalidTokenReturns401() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -256,6 +273,17 @@ class AuthControllerTest {
     @Test
     void logoutClearsHttpOnlyCookieToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
+                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+            .andExpect(status().isOk())
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+    }
+
+    @Test
+    void logoutWithEmptyBodyUsesHttpOnlyCookieToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}")
                 .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
             .andExpect(status().isOk())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
