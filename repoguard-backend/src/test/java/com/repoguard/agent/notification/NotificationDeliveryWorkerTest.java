@@ -7,12 +7,14 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rabbitmq.client.Channel;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -23,18 +25,37 @@ class NotificationDeliveryWorkerTest {
     private final NotificationChannelBindingMapper bindingMapper = org.mockito.Mockito.mock(NotificationChannelBindingMapper.class);
     private final NotificationDeliveryLogMapper deliveryLogMapper = org.mockito.Mockito.mock(NotificationDeliveryLogMapper.class);
     private final NotificationChannelAdapter adapter = org.mockito.Mockito.mock(NotificationChannelAdapter.class);
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+
+    @Test
+    void handleAcknowledgesMessageAndRecordsSuccessMetricAfterDelivery() throws Exception {
+        Channel channel = org.mockito.Mockito.mock(Channel.class);
+        NotificationEventMessage message = message();
+
+        worker().handle(message, channel, 99L);
+
+        org.mockito.Mockito.verify(channel).basicAck(99L, false);
+        org.mockito.Mockito.verify(metrics)
+            .rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("success"));
+    }
+
+    @Test
+    void handleRejectsMessageWithoutRequeueAndRecordsRejectedMetricWhenDeliveryFails() throws Exception {
+        Channel channel = org.mockito.Mockito.mock(Channel.class);
+        NotificationEventMessage message = message();
+        when(eventMapper.selectById(11L)).thenThrow(new IllegalStateException("boom"));
+
+        worker().handle(message, channel, 100L);
+
+        org.mockito.Mockito.verify(channel).basicReject(100L, false);
+        org.mockito.Mockito.verify(metrics)
+            .rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("rejected"));
+    }
 
     @Test
     void deliversSameEventToMultipleRepositoryBindingsIndependently() throws Exception {
         when(adapter.provider()).thenReturn("DINGTALK");
-        NotificationChannelAdapterRegistry registry = new NotificationChannelAdapterRegistry(List.of(adapter));
-        NotificationDeliveryWorker worker = new NotificationDeliveryWorker(
-            new NotificationDeliverableEventQuery(eventMapper),
-            new NotificationEventPayloadParser(new ObjectMapper()),
-            bindingBatchDeliveryService(registry),
-            deliveryCompletionService(),
-            new NotificationDeliveryEventStateUpdater(eventMapper)
-        );
+        NotificationDeliveryWorker worker = worker();
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.success("request-1", "ok"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
@@ -52,14 +73,7 @@ class NotificationDeliveryWorkerTest {
     @Test
     void failedDeliveryMarksEventDeliveryFailedAndStoresFailedLog() throws Exception {
         when(adapter.provider()).thenReturn("DINGTALK");
-        NotificationChannelAdapterRegistry registry = new NotificationChannelAdapterRegistry(List.of(adapter));
-        NotificationDeliveryWorker worker = new NotificationDeliveryWorker(
-            new NotificationDeliverableEventQuery(eventMapper),
-            new NotificationEventPayloadParser(new ObjectMapper()),
-            bindingBatchDeliveryService(registry),
-            deliveryCompletionService(),
-            new NotificationDeliveryEventStateUpdater(eventMapper)
-        );
+        NotificationDeliveryWorker worker = worker();
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.failed("request-1", "timeout"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
@@ -83,14 +97,7 @@ class NotificationDeliveryWorkerTest {
     @Test
     void skipsBindingWhenSuccessfulDeliveryAlreadyExists() throws Exception {
         when(adapter.provider()).thenReturn("DINGTALK");
-        NotificationChannelAdapterRegistry registry = new NotificationChannelAdapterRegistry(List.of(adapter));
-        NotificationDeliveryWorker worker = new NotificationDeliveryWorker(
-            new NotificationDeliverableEventQuery(eventMapper),
-            new NotificationEventPayloadParser(new ObjectMapper()),
-            bindingBatchDeliveryService(registry),
-            deliveryCompletionService(),
-            new NotificationDeliveryEventStateUpdater(eventMapper)
-        );
+        NotificationDeliveryWorker worker = worker();
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
         when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L)));
@@ -101,6 +108,16 @@ class NotificationDeliveryWorkerTest {
         org.mockito.Mockito.verify(adapter, org.mockito.Mockito.never()).send(any(), any());
         org.mockito.Mockito.verify(deliveryLogMapper, org.mockito.Mockito.never())
             .insert(any(NotificationDeliveryLog.class));
+    }
+
+    private NotificationEventMessage message() {
+        return new NotificationEventMessage(
+            11L,
+            "notification-11",
+            NotificationEventType.REVIEW_COMPLETED.code(),
+            42L,
+            7L
+        );
     }
 
     private NotificationEvent event() throws Exception {
@@ -154,6 +171,18 @@ class NotificationDeliveryWorkerTest {
                 new NotificationBindingMatcher(),
                 new NotificationSuccessfulDeliveryQuery(deliveryLogMapper)
             )
+        );
+    }
+
+    private NotificationDeliveryWorker worker() {
+        NotificationChannelAdapterRegistry registry = new NotificationChannelAdapterRegistry(List.of(adapter));
+        return new NotificationDeliveryWorker(
+            new NotificationDeliverableEventQuery(eventMapper),
+            new NotificationEventPayloadParser(new ObjectMapper()),
+            bindingBatchDeliveryService(registry),
+            deliveryCompletionService(),
+            new NotificationDeliveryEventStateUpdater(eventMapper),
+            metrics
         );
     }
 
