@@ -1,6 +1,7 @@
 package com.repoguard.agent.config;
 
 import java.util.Arrays;
+import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -12,11 +13,16 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @EnableConfigurationProperties(AppCorsProperties.class)
 public class CorsConfig implements WebMvcConfigurer {
 
-    private final AppCorsProperties properties;
+    private static final String WILDCARD_ORIGIN = "*";
+
+    private final List<String> allowedOrigins;
 
     public CorsConfig(AppCorsProperties properties, Environment environment) {
-        this.properties = properties;
-        if (isProd(environment) && hasNoAllowedOrigins(properties)) {
+        this.allowedOrigins = sanitizeAllowedOrigins(properties);
+        if (this.allowedOrigins.contains(WILDCARD_ORIGIN)) {
+            throw new IllegalStateException("app.cors.allowed-origins cannot contain * when credentials are allowed");
+        }
+        if (isProd(environment) && this.allowedOrigins.isEmpty()) {
             throw new IllegalStateException("app.cors.allowed-origins must be configured for prod profile");
         }
     }
@@ -24,17 +30,23 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/api/**")
-            .allowedOrigins(properties.getAllowedOrigins().toArray(String[]::new))
+            .allowedOrigins(allowedOrigins.toArray(String[]::new))
             .allowedMethods("*")
-            .allowedHeaders("*");
+            .allowedHeaders("*")
+            .allowCredentials(true);
     }
 
     private boolean isProd(Environment environment) {
         return Arrays.asList(environment.getActiveProfiles()).contains("prod");
     }
 
-    private boolean hasNoAllowedOrigins(AppCorsProperties properties) {
-        return properties.getAllowedOrigins() == null
-            || properties.getAllowedOrigins().stream().noneMatch(StringUtils::hasText);
+    private List<String> sanitizeAllowedOrigins(AppCorsProperties properties) {
+        if (properties.getAllowedOrigins() == null) {
+            return List.of();
+        }
+        return properties.getAllowedOrigins().stream()
+            .filter(StringUtils::hasText)
+            .map(String::trim)
+            .toList();
     }
 }

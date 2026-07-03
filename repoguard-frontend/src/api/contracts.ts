@@ -78,7 +78,7 @@ export type ApiContract = {
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
-  logout: ApiOperation<{ refreshToken: string }, void>;
+  logout: ApiOperation<{ refreshToken?: string } | undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
@@ -167,7 +167,7 @@ const apiEndpoints: ApiEndpointMap = {
   logout: {
     method: "POST",
     path: () => "/api/v1/auth/logout",
-    body: input => input
+    body: input => input ?? {}
   },
   fetchDashboardOverview: {
     path: () => "/api/v1/dashboard/overview",

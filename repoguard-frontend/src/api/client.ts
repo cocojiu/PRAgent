@@ -10,13 +10,16 @@ interface ApiResponse<T> {
 
 interface TokenPairResponse {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const ACCESS_TOKEN_STORAGE_KEY = "repoguard.accessToken";
 const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
+const SESSION_MARKER_STORAGE_KEY = "repoguard.session";
+const SESSION_MARKER_VALUE = "active";
+const AUTH_FETCH_CREDENTIALS: RequestCredentials = "include";
 
 let activeAccessToken = "";
 let refreshPromise: Promise<boolean> | undefined;
@@ -50,13 +53,10 @@ export const request = async <T>(
   return unwrapResponse(await safeDoRequest(path, params, options));
 };
 
-export const saveAuthTokens = (accessToken: string, refreshToken: string, remember: boolean) => {
+export const saveAuthTokens = (accessToken: string, _refreshToken: string, remember: boolean) => {
   clearAuthToken();
   activeAccessToken = accessToken;
-  const storage = remember ? window.localStorage : window.sessionStorage;
-  if (refreshToken) {
-    storage.setItem(REFRESH_TOKEN_STORAGE_KEY, refreshToken);
-  }
+  saveSessionMarker(remember);
 };
 
 export const saveAuthToken = (token: string, remember: boolean) => {
@@ -71,9 +71,11 @@ export const clearAuthToken = () => {
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY);
   window.localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+  window.sessionStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
+  window.localStorage.removeItem(SESSION_MARKER_STORAGE_KEY);
 };
 
-export const hasAuthToken = () => Boolean(resolveAccessToken() || resolveRefreshToken());
+export const hasAuthToken = () => Boolean(resolveAccessToken() || hasSessionMarker() || resolveRefreshToken());
 
 export const resolveRefreshToken = () => {
   if (typeof window === "undefined") {
@@ -100,7 +102,8 @@ const doRequest = async (
 
   return fetch(buildUrl(path, params), {
     ...options,
-    headers
+    headers,
+    credentials: options.credentials ?? AUTH_FETCH_CREDENTIALS
   }) as Promise<Response>;
 };
 
@@ -158,23 +161,30 @@ const refreshSession = async () => {
 
 const doRefreshSession = async () => {
   const refreshToken = resolveRefreshToken();
-  if (!refreshToken) {
+  if (!refreshToken && !hasSessionMarker()) {
     return false;
   }
-  const remember = isRefreshTokenRemembered();
+  const remember = isSessionRemembered();
+  const headers = new Headers();
+  let requestBody: string | undefined;
+  if (refreshToken) {
+    headers.set("Content-Type", "application/json");
+    requestBody = JSON.stringify({ refreshToken });
+  }
   const response = await fetch(buildUrl("/api/v1/auth/refresh"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refreshToken })
+    headers,
+    body: requestBody,
+    credentials: AUTH_FETCH_CREDENTIALS
   });
   if (!response.ok) {
     return false;
   }
   const body = (await response.json()) as ApiResponse<TokenPairResponse>;
-  if (!body.success || !body.data?.accessToken || !body.data?.refreshToken) {
+  if (!body.success || !body.data?.accessToken) {
     return false;
   }
-  saveAuthTokens(body.data.accessToken, body.data.refreshToken, remember);
+  saveAuthTokens(body.data.accessToken, body.data.refreshToken ?? "", remember);
   return true;
 };
 
@@ -197,7 +207,20 @@ const isRefreshExcludedAuthPath = (path: string) => {
   return excludedAuthPaths.includes(path);
 };
 
-const isRefreshTokenRemembered = () => Boolean(window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY));
+const isSessionRemembered = () => Boolean(
+  window.localStorage.getItem(SESSION_MARKER_STORAGE_KEY)
+    || window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
+);
+
+const hasSessionMarker = () => Boolean(
+  window.sessionStorage.getItem(SESSION_MARKER_STORAGE_KEY)
+    || window.localStorage.getItem(SESSION_MARKER_STORAGE_KEY)
+);
+
+const saveSessionMarker = (remember: boolean) => {
+  const storage = remember ? window.localStorage : window.sessionStorage;
+  storage.setItem(SESSION_MARKER_STORAGE_KEY, SESSION_MARKER_VALUE);
+};
 
 const resolveAccessToken = () => {
   if (typeof window === "undefined") {

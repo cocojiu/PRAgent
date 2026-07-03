@@ -14,7 +14,13 @@ import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.Duration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +31,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
+    static final String REFRESH_TOKEN_COOKIE_NAME = "repoguard_refresh_token";
+    private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
+
     private final AuthService authService;
 
     public AuthController(AuthService authService) {
@@ -32,13 +41,25 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ApiResponse<AuthResponse> register(@Valid @RequestBody AuthRegisterRequest request) {
-        return ApiResponse.ok(authService.register(request));
+    public ApiResponse<AuthResponse> register(
+        @Valid @RequestBody AuthRegisterRequest request,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        AuthResponse response = authService.register(request);
+        writeRefreshTokenCookie(response, httpRequest, httpResponse);
+        return ApiResponse.ok(response);
     }
 
     @PostMapping("/login")
-    public ApiResponse<AuthResponse> login(@Valid @RequestBody AuthLoginRequest request) {
-        return ApiResponse.ok(authService.login(request));
+    public ApiResponse<AuthResponse> login(
+        @Valid @RequestBody AuthLoginRequest request,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        AuthResponse response = authService.login(request);
+        writeRefreshTokenCookie(response, httpRequest, httpResponse);
+        return ApiResponse.ok(response);
     }
 
     @GetMapping("/me")
@@ -51,18 +72,93 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<AuthResponse> refresh(@Valid @RequestBody AuthRefreshRequest request) {
-        return ApiResponse.ok(authService.refresh(request));
+    public ApiResponse<AuthResponse> refresh(
+        @RequestBody(required = false) AuthRefreshRequest request,
+        @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        try {
+            AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken(request, cookieRefreshToken)));
+            writeRefreshTokenCookie(response, httpRequest, httpResponse);
+            return ApiResponse.ok(response);
+        } catch (RuntimeException ex) {
+            clearRefreshTokenCookie(httpRequest, httpResponse);
+            throw ex;
+        }
     }
 
     @PostMapping("/refresh-token/reset")
-    public ApiResponse<AuthResponse> resetRefreshToken(@Valid @RequestBody AuthRefreshTokenResetRequest request) {
-        return ApiResponse.ok(authService.resetRefreshToken(request));
+    public ApiResponse<AuthResponse> resetRefreshToken(
+        @Valid @RequestBody AuthRefreshTokenResetRequest request,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        AuthResponse response = authService.resetRefreshToken(request);
+        writeRefreshTokenCookie(response, httpRequest, httpResponse);
+        return ApiResponse.ok(response);
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@Valid @RequestBody AuthLogoutRequest request) {
-        authService.logout(request);
+    public ApiResponse<Void> logout(
+        @RequestBody(required = false) AuthLogoutRequest request,
+        @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        authService.logout(new AuthLogoutRequest(refreshToken(request, cookieRefreshToken)));
+        clearRefreshTokenCookie(httpRequest, httpResponse);
         return ApiResponse.ok(null);
+    }
+
+    private String refreshToken(AuthRefreshRequest request, String cookieRefreshToken) {
+        if (request != null && StringUtils.hasText(request.refreshToken())) {
+            return request.refreshToken();
+        }
+        return cookieRefreshToken;
+    }
+
+    private String refreshToken(AuthLogoutRequest request, String cookieRefreshToken) {
+        if (request != null && StringUtils.hasText(request.refreshToken())) {
+            return request.refreshToken();
+        }
+        return cookieRefreshToken;
+    }
+
+    private void writeRefreshTokenCookie(
+        AuthResponse authResponse,
+        HttpServletRequest request,
+        HttpServletResponse response
+    ) {
+        if (authResponse == null || !StringUtils.hasText(authResponse.refreshToken())) {
+            return;
+        }
+        long refreshTokenTtlSeconds = authResponse.refreshTokenExpiresInSeconds() == null
+            ? 0L
+            : Math.max(0L, authResponse.refreshTokenExpiresInSeconds());
+        ResponseCookie cookie = refreshTokenCookieBuilder(request, authResponse.refreshToken())
+            .maxAge(Duration.ofSeconds(refreshTokenTtlSeconds))
+            .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void clearRefreshTokenCookie(HttpServletRequest request, HttpServletResponse response) {
+        ResponseCookie cookie = refreshTokenCookieBuilder(request, "")
+            .maxAge(Duration.ZERO)
+            .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private ResponseCookie.ResponseCookieBuilder refreshTokenCookieBuilder(HttpServletRequest request, String value) {
+        return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, value)
+            .httpOnly(true)
+            .secure(isSecureRequest(request))
+            .sameSite("Lax")
+            .path(REFRESH_TOKEN_COOKIE_PATH);
+    }
+
+    private boolean isSecureRequest(HttpServletRequest request) {
+        return request != null
+            && (request.isSecure() || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")));
     }
 }

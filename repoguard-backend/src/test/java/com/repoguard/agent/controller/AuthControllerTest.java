@@ -1,7 +1,9 @@
 package com.repoguard.agent.controller;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -18,8 +20,10 @@ import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
+import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -109,7 +113,10 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
             .andExpect(jsonPath("$.data.accessTokenExpiresInSeconds").value(900))
-            .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200));
+            .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")));
     }
 
     @Test
@@ -147,6 +154,15 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").value("refresh-token-value"));
+    }
+
+    @Test
+    void refreshAcceptsHttpOnlyCookieToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
     @Test
@@ -199,6 +215,15 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    void logoutClearsHttpOnlyCookieToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+            .andExpect(status().isOk())
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
     }
 
     @Test
