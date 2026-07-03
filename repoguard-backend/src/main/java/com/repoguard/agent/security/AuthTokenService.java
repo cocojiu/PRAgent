@@ -86,7 +86,7 @@ public class AuthTokenService {
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }
-        if (Instant.now(clock).getEpochSecond() > expiresAt) {
+        if (Instant.now(clock).getEpochSecond() >= expiresAt) {
             return Optional.empty();
         }
         return Optional.of(new AuthenticatedUser(userId, payloadParts[1], payloadParts[2], expiresAt));

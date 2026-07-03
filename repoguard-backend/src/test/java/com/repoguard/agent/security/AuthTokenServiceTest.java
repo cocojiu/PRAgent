@@ -57,6 +57,24 @@ class AuthTokenServiceTest {
         assertThat(verifyingService.verify(token)).isEmpty();
     }
 
+    @Test
+    void verifyRejectsTokenAtExactExpirySecond() {
+        authProperties.setTokenSecret("test-secret");
+        authProperties.setAccessTokenTtlSeconds(1);
+        AuthTokenService issuingService = new AuthTokenService(
+            authProperties,
+            Clock.fixed(Instant.parse("2026-06-11T00:00:00Z"), ZoneOffset.UTC)
+        );
+        AuthTokenService verifyingService = new AuthTokenService(
+            authProperties,
+            Clock.fixed(Instant.parse("2026-06-11T00:00:01Z"), ZoneOffset.UTC)
+        );
+
+        String token = issuingService.issueAccessToken(user()).token();
+
+        assertThat(verifyingService.verify(token)).isEmpty();
+    }
+
     private UserAccount user() {
         UserAccount user = new UserAccount();
         user.setId(1001L);
