@@ -31,7 +31,7 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
     public ConnectionProbeResult probe(IntegrationConfig config) {
         String url = buildGithubTestUrl(config);
         String token = secretCryptoService.decrypt(config.getTokenValue());
-        RestClient.RequestHeadersSpec<?> request = restClientBuilder.build()
+        RestClient.RequestHeadersSpec<?> request = restClientBuilder.clone().build()
             .get()
             .uri(url)
             .accept(MediaType.APPLICATION_JSON);

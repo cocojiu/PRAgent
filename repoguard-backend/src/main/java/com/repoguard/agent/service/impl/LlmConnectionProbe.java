@@ -53,6 +53,7 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         }
         try {
             byte[] responseBytes = restClientBuilder
+                .clone()
                 .baseUrl(config.getBaseUrl().trim())
                 .requestFactory(requestFactory(config.getTimeoutSeconds()))
                 .build()

@@ -50,10 +50,10 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.githubConnectionProbe = new GithubConnectionProbe(restClientBuilder, secretCryptoService);
+        this.githubConnectionProbe = new GithubConnectionProbe(restClientBuilder.clone(), secretCryptoService);
         this.githubConnectionTestRunner = new GithubIntegrationConnectionTestRunner(this.githubConnectionProbe);
         this.llmConnectionProbe = new LlmConnectionProbe(
-            restClientBuilder,
+            restClientBuilder.clone(),
             new LlmConnectionProbeResponseParser(objectMapper),
             secretCryptoService
         );

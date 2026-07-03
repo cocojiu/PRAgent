@@ -146,6 +146,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
         long startedAt = System.nanoTime();
         RestClient restClient = restClientBuilder
+            .clone()
             .baseUrl(settings.baseUrl().trim())
             .requestFactory(requestFactory(settings.timeoutSeconds()))
             .build();

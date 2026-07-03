@@ -20,7 +20,7 @@ public class GithubPaginator {
     private final RestClient restClient;
 
     public GithubPaginator(RestClient.Builder restClientBuilder) {
-        this.restClient = restClientBuilder.build();
+        this.restClient = restClientBuilder.clone().build();
     }
 
     public <T> List<T> fetchPages(

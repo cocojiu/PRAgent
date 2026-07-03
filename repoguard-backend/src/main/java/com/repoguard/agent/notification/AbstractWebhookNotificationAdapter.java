@@ -22,7 +22,7 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
         SimpleClientHttpRequestFactory httpRequestFactory = new SimpleClientHttpRequestFactory();
         httpRequestFactory.setConnectTimeout(5000);
         httpRequestFactory.setReadTimeout(8000);
-        this.restClient = restClientBuilder.requestFactory(httpRequestFactory).build();
+        this.restClient = restClientBuilder.clone().requestFactory(httpRequestFactory).build();
         this.contentBuilder = contentBuilder;
         this.responseEvaluator = responseEvaluator;
         this.requestFactory = requestFactory;
