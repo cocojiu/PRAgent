@@ -42,11 +42,11 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
         String actualKey = request.getHeader(properties.getHeaderName());
         if (actualKey == null || actualKey.isBlank()) {
-            writeError(response, HttpStatus.UNAUTHORIZED, "Admin API key is required");
+            writeError(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Admin API key is required");
             return;
         }
         if (!secureEquals(properties.getKey(), actualKey)) {
-            writeError(response, HttpStatus.FORBIDDEN, "Admin API key is invalid");
+            writeError(response, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Admin API key is invalid");
             return;
         }
         request.setAttribute(
@@ -130,13 +130,13 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
         return MessageDigest.isEqual(expectedBytes, actualBytes);
     }
 
-    private void writeError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
+    private void writeError(HttpServletResponse response, HttpStatus status, ErrorCode errorCode, String message) throws IOException {
         response.setStatus(status.value());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getWriter(), Map.of(
             "success", false,
-            "code", ErrorCode.UNAUTHORIZED.code(),
+            "code", errorCode.code(),
             "message", message,
             "timestamp", OffsetDateTime.now().toString()
         ));

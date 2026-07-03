@@ -37,7 +37,7 @@ class AdminApiKeyFilterTest {
         filter.doFilter(request, response, new MockFilterChain());
 
         assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+        assertThat(response.getContentAsString()).contains("\"code\":\"FORBIDDEN\"");
     }
 
     @Test
