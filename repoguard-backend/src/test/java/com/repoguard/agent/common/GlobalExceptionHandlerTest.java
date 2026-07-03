@@ -22,4 +22,22 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().message()).isEqualTo("系统内部异常，请联系管理员。");
         assertThat(response.getBody().message()).doesNotContain("jdbc:mysql", "password=secret");
     }
+
+    @Test
+    void sanitizeLogMessageMasksStructuredSecrets() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        String sanitized = handler.sanitizeLogMessage("""
+            request failed payload={"refreshToken":"raw-refresh","clientSecret": "raw-secret","apiKey": "raw-key"}
+            password=raw-password Authorization=Bearer abc.def.ghi
+            """);
+
+        assertThat(sanitized)
+            .contains("\"refreshToken\":\"****\"")
+            .contains("\"clientSecret\": \"****\"")
+            .contains("\"apiKey\": \"****\"")
+            .contains("password=****")
+            .contains("Bearer ****")
+            .doesNotContain("raw-refresh", "raw-secret", "raw-key", "raw-password", "abc.def.ghi");
+    }
 }
