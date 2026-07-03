@@ -18,6 +18,7 @@ releases/
 .DS_Store
 *.local
 .npm-cache/
+.claude/
 output/
 tmp/
 move-codex-data-to-d.ps1
