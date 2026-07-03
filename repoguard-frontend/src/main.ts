@@ -14,6 +14,7 @@ import { ElOption, ElSelect } from "element-plus/es/components/select/index.mjs"
 import { ElPagination } from "element-plus/es/components/pagination/index.mjs";
 import { ElPopover } from "element-plus/es/components/popover/index.mjs";
 import { ElRadio } from "element-plus/es/components/radio/index.mjs";
+import { ElSegmented } from "element-plus/es/components/segmented/index.mjs";
 import { ElSwitch } from "element-plus/es/components/switch/index.mjs";
 import { ElTabPane, ElTabs } from "element-plus/es/components/tabs/index.mjs";
 import { ElTag } from "element-plus/es/components/tag/index.mjs";
@@ -51,6 +52,7 @@ const app = createApp(App);
   ElPagination,
   ElPopover,
   ElRadio,
+  ElSegmented,
   ElSelect,
   ElSwitch,
   ElTabPane,

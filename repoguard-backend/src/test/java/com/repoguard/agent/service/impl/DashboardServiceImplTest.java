@@ -153,6 +153,35 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void overviewFallsBackToLatestReviewWindowWhenCurrentWindowHasNoReviews() {
+        when(dashboardMapper.selectLatestReviewTaskDate()).thenReturn(LocalDate.of(2026, 6, 10));
+        when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of(reviewTrendCount("06-10", 4L)));
+        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+            llmQualityTrendCount("2026-06-10", 4L, 3L, 1L, 0L)
+        ));
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
+        when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
+
+        var overview = service.getOverview(7);
+
+        LocalDate fallbackStartDate = LocalDate.of(2026, 6, 4);
+        verify(dashboardMapper).selectMetricStat(fallbackStartDate);
+        verify(dashboardMapper).selectReviewTrendCounts(fallbackStartDate);
+        verify(dashboardMapper).selectRiskLevelCounts(fallbackStartDate);
+        verify(dashboardMapper).selectRuleHitCounts(fallbackStartDate);
+        verify(dashboardMapper).selectRecentHighRiskReviews(fallbackStartDate);
+        verify(dashboardMapper).selectLlmQualityByModelStats(fallbackStartDate);
+        verify(dashboardMapper).selectLlmQualityByRepositoryStats(fallbackStartDate);
+        verify(dashboardMapper).selectLlmQualityTrendCounts(fallbackStartDate);
+        assertThat(overview.reviewTrend()).hasSize(1);
+        assertThat(overview.reviewTrend().getFirst().date()).isEqualTo("06-10");
+        assertThat(overview.llmQualityTrend()).hasSize(7);
+        assertThat(overview.llmQualityTrend().get(6).date()).isEqualTo("06-10");
+        assertThat(overview.llmQualityTrend().get(6).taskCount()).isEqualTo(4L);
+    }
+
+    @Test
     void overviewBuildsRiskDistributionFromGroupedQuery() {
         when(dashboardMapper.selectRiskLevelCounts(any())).thenReturn(List.of(
             riskLevelCount("HIGH", 1L),

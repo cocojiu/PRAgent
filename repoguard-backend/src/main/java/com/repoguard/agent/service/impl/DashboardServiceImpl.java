@@ -69,8 +69,9 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_OVERVIEW, key = "#llmTrendDays == null ? 'default' : #llmTrendDays", sync = true)
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays);
-        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();
+        LocalDate latestReviewDate = dashboardMapper.selectLatestReviewTaskDate();
+        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate);
+        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate(latestReviewDate);
         DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
         List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
         List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate);
