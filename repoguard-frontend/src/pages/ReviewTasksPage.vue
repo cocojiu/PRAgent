@@ -138,7 +138,6 @@ const getMetricIcon = useMetricIcon(metricIconMap, CheckCircle);
 
 onMounted(() => {
   initializeReviewTasksList();
-  void loadPullRequests({ preselect: false });
 });
 
 const goDetail = (id: number) => router.push({ name: "task-detail", params: { id } });

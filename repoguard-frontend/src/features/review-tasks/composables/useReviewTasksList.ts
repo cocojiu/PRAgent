@@ -30,6 +30,7 @@ export const useReviewTasksList = () => {
   const currentPage = ref(1);
   const pageSize = ref(8);
   let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
+  let repositoryLoadTimer: ReturnType<typeof setTimeout> | undefined;
   let taskRequestSeq = 0;
 
   const repositories = computed(() => allRepositories.value);
@@ -130,8 +131,13 @@ export const useReviewTasksList = () => {
   };
 
   const initializeReviewTasksList = () => {
-    void loadRepositories();
     void loadTasks();
+    if (repositoryLoadTimer) {
+      clearTimeout(repositoryLoadTimer);
+    }
+    repositoryLoadTimer = setTimeout(() => {
+      void loadRepositories();
+    }, 500);
   };
 
   watch([repoFilter, statusFilter, riskFilter, sourceFilter, keyword], scheduleFilterLoad);
@@ -143,6 +149,9 @@ export const useReviewTasksList = () => {
   onUnmounted(() => {
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
+    }
+    if (repositoryLoadTimer) {
+      clearTimeout(repositoryLoadTimer);
     }
   });
 

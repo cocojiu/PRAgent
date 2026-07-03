@@ -24,7 +24,7 @@
         </button>
         <div class="top-title">{{ currentTitle }}</div>
         <div class="top-actions">
-          <el-popover placement="bottom-end" trigger="click" width="380" popper-class="notification-popover" @show="loadNotifications">
+          <el-popover placement="bottom-end" trigger="click" width="380" popper-class="notification-popover" @show="loadNotifications()">
             <template #reference>
               <button class="top-action-button bell-wrap" type="button" aria-label="查看通知">
                 <Bell :size="20" />
@@ -42,7 +42,7 @@
               <div v-if="loadingNotifications" class="notification-state">正在加载通知...</div>
               <div v-else-if="notificationError" class="notification-state notification-state--error">
                 <span>{{ notificationError }}</span>
-                <button type="button" @click="loadNotifications">重试</button>
+                <button type="button" @click="loadNotifications({ force: true })">重试</button>
               </div>
               <div v-else-if="!notifications.length" class="notification-state">暂无待处理通知</div>
               <div v-else class="notification-list">
@@ -93,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
@@ -124,6 +124,7 @@ const loadingNotifications = ref(false);
 const notificationError = ref("");
 const readNotificationIds = ref<Set<string>>(new Set());
 const NOTIFICATION_READ_KEY = "repoguard-read-notifications";
+let notificationWarmupTimer: ReturnType<typeof setTimeout> | undefined;
 
 const navItems = [
   { label: "总览", path: "/repoguard/overview", icon: Home },
@@ -169,6 +170,9 @@ const markNotificationRead = (id: string) => {
 const isNotificationRead = (id: string) => readNotificationIds.value.has(id);
 
 const refreshCurrentUser = async () => {
+  if (currentUser.value) {
+    return;
+  }
   try {
     await loadCurrentUser();
   } catch {
@@ -176,7 +180,10 @@ const refreshCurrentUser = async () => {
   }
 };
 
-const loadNotifications = async () => {
+const loadNotifications = async (options: { force?: boolean } = {}) => {
+  if (loadingNotifications.value || (notificationCenter.value && !options.force)) {
+    return;
+  }
   loadingNotifications.value = true;
   notificationError.value = "";
   try {
@@ -232,6 +239,15 @@ const handleUserCommand = async (command: string) => {
 onMounted(() => {
   loadReadNotificationIds();
   void refreshCurrentUser();
-  void loadNotifications();
+  notificationWarmupTimer = setTimeout(() => {
+    notificationWarmupTimer = undefined;
+    void loadNotifications();
+  }, 1200);
+});
+
+onBeforeUnmount(() => {
+  if (notificationWarmupTimer) {
+    clearTimeout(notificationWarmupTimer);
+  }
 });
 </script>
