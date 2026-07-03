@@ -59,6 +59,19 @@ class NotificationPublishFailurePolicyTest {
     }
 
     @Test
+    void sensitiveFailureMessageIsSanitizedBeforePersisting() {
+        NotificationEvent event = event(0);
+
+        NotificationPublishFailureDecision decision = policy.decide(event, new RuntimeException(
+            "amqp://user:raw-pass@rabbit:5672 failed token=raw-token password=raw-password"
+        ), 5);
+
+        assertThat(decision.lastError()).contains("amqp://user:****@rabbit:5672");
+        assertThat(decision.lastError()).contains("token=****", "password=****");
+        assertThat(decision.lastError()).doesNotContain("raw-pass", "raw-token", "raw-password");
+    }
+
+    @Test
     void longErrorMessageIsTruncatedToDatabaseLimit() {
         NotificationEvent event = event(0);
         String message = "x".repeat(1100);

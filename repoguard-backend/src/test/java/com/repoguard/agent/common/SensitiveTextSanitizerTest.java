@@ -1,0 +1,31 @@
+package com.repoguard.agent.common;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
+
+class SensitiveTextSanitizerTest {
+
+    @Test
+    void masksCommonSecretForms() {
+        String sanitized = SensitiveTextSanitizer.sanitize(
+            "amqp://user:raw-pass@rabbit:5672 failed token=raw-token password:raw-password "
+                + "url=https://broker.example/publish?access_token=raw-access&sign=raw-sign "
+                + "Authorization: Bearer raw.bearer-token"
+        );
+
+        assertThat(sanitized).contains("amqp://user:****@rabbit:5672");
+        assertThat(sanitized).contains("token=****");
+        assertThat(sanitized).contains("password:****");
+        assertThat(sanitized).contains("access_token=****");
+        assertThat(sanitized).contains("sign=****");
+        assertThat(sanitized).contains("Bearer ****");
+        assertThat(sanitized)
+            .doesNotContain("raw-pass", "raw-token", "raw-password", "raw-access", "raw-sign", "raw.bearer-token");
+    }
+
+    @Test
+    void returnsNullWhenInputIsNull() {
+        assertThat(SensitiveTextSanitizer.sanitize(null)).isNull();
+    }
+}

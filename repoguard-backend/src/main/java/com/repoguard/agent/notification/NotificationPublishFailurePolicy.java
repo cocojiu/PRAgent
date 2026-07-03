@@ -1,5 +1,6 @@
 package com.repoguard.agent.notification;
 
+import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -48,7 +49,8 @@ class NotificationPublishFailurePolicy {
     }
 
     private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+        return SensitiveTextSanitizer.sanitize(message);
     }
 
     private String truncate(String value, int maxLength) {

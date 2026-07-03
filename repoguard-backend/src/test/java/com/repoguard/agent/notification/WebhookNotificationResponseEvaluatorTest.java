@@ -77,6 +77,18 @@ class WebhookNotificationResponseEvaluatorTest {
     }
 
     @Test
+    void exceptionMessageMasksCredentialFormsBeforeRecordingFailure() {
+        NotificationSendResult result = evaluator.failure(new RuntimeException(
+            "POST https://user:raw-pass@example.com/webhook failed password=raw-password Authorization: Bearer raw-token"
+        ));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains("https://user:****@example.com/webhook");
+        assertThat(result.message()).contains("password=****", "Bearer ****");
+        assertThat(result.message()).doesNotContain("raw-pass", "raw-password", "raw-token");
+    }
+
+    @Test
     void responseMessageMasksAssignedSecretsBeforeRecordingFailure() {
         NotificationSendResult result = evaluator.evaluate("token=raw-token secret:raw-secret errmsg=failed");
 
