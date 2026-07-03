@@ -169,6 +169,10 @@ a {
 
 .top-title {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 17px;
   font-weight: 700;
 }
@@ -995,5 +999,24 @@ a {
 
   .rg-content {
     padding: 18px;
+  }
+
+  .rg-topbar {
+    gap: 12px;
+    padding: 0 14px;
+  }
+
+  .top-actions {
+    flex: 0 0 auto;
+    gap: 10px;
+  }
+
+  .user {
+    gap: 0;
+  }
+
+  .user > span:not(.avatar),
+  .user > svg {
+    display: none;
   }
 }

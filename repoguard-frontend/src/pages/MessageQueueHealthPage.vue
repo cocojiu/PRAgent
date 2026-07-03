@@ -93,6 +93,11 @@
     </section>
 
     <section v-if="health" class="task-panel">
+      <div class="mq-task-heading">
+        <h2>异常任务</h2>
+        <span class="count-badge">最近 {{ health.exceptionTasks.length }} 条</span>
+      </div>
+
       <div class="filter-bar mq-filter-bar">
         <el-select v-model="statusFilter" placeholder="全部状态" clearable>
           <el-option label="全部状态" value="" />
@@ -105,7 +110,9 @@
           <el-option label="全部仓库" value="" />
           <el-option v-for="repo in repositories" :key="repo" :label="repo" :value="repo" />
         </el-select>
-        <el-input :model-value="health.activeConfig.configVersion" disabled />
+        <span class="mq-version-badge" :title="health.activeConfig.configVersion">
+          版本：{{ health.activeConfig.configVersion }}
+        </span>
         <el-input v-model="keyword" class="search-input" placeholder="搜索任务ID、仓库或错误原因" clearable>
           <template #suffix><Search :size="18" /></template>
         </el-input>
@@ -115,7 +122,7 @@
         </el-button>
       </div>
 
-      <el-table :data="filteredTasks" class="rg-table task-table" size="large" aria-label="消息队列异常任务列表">
+      <el-table :data="pagedTasks" class="rg-table task-table" size="large" max-height="560" aria-label="消息队列异常任务列表">
         <el-table-column prop="taskId" label="任务ID" width="100" />
         <el-table-column label="仓库" min-width="170">
           <template #default="{ row }">
@@ -143,7 +150,7 @@
         <el-table-column prop="claimedBy" label="Claim实例" min-width="150">
           <template #default="{ row }">{{ row.claimedBy || "-" }}</template>
         </el-table-column>
-        <el-table-column label="最近错误" min-width="260">
+        <el-table-column label="最近错误" min-width="260" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.lastError" class="failure-summary-cell">
               <CircleAlert :size="15" />
@@ -178,6 +185,13 @@
 
       <div class="table-footer">
         <span>共 {{ filteredTasks.length }} 条，生成于 {{ health.generatedAt }}</span>
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[5, 10, 20]"
+          :total="filteredTasks.length"
+          layout="sizes, prev, pager, next"
+        />
         <span class="muted-text">数据源：{{ health.dataSource }}</span>
       </div>
     </section>
@@ -209,11 +223,14 @@ import type { MessageQueueMetric } from "@/types";
 const router = useRouter();
 const {
   autoRefresh,
+  currentPage,
   errorMessage,
   filteredTasks,
   health,
   keyword,
   loading,
+  pageSize,
+  pagedTasks,
   repositoryFilter,
   repositories,
   requeueingTaskId,

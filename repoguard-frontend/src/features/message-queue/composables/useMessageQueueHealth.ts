@@ -2,10 +2,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQueue";
+import { useFilterPagination } from "@/composables/useFilterPagination";
 import type { MessageQueueExceptionTask, MessageQueueHealth } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 const AUTO_REFRESH_INTERVAL_MS = 30000;
+const DEFAULT_PAGE_SIZE = 10;
 
 export const useMessageQueueHealth = () => {
   const loading = ref(false);
@@ -16,6 +18,8 @@ export const useMessageQueueHealth = () => {
   const keyword = ref("");
   const autoRefresh = ref(false);
   const requeueingTaskId = ref<number>();
+  const currentPage = ref(1);
+  const pageSize = ref(DEFAULT_PAGE_SIZE);
   let refreshTimer: ReturnType<typeof setInterval> | undefined;
 
   const repositories = computed(() =>
@@ -32,6 +36,12 @@ export const useMessageQueueHealth = () => {
         .some((value) => String(value).toLowerCase().includes(search));
       return matchesStatus && matchesRepo && matchesKeyword;
     });
+  });
+  const { pagedItems: pagedTasks } = useFilterPagination({
+    source: filteredTasks,
+    filters: [statusFilter, repositoryFilter, keyword],
+    currentPage,
+    pageSize
   });
 
   const loadHealth = async () => {
@@ -105,11 +115,14 @@ export const useMessageQueueHealth = () => {
 
   return {
     autoRefresh,
+    currentPage,
     errorMessage,
     filteredTasks,
     health,
     keyword,
     loading,
+    pageSize,
+    pagedTasks,
     repositoryFilter,
     repositories,
     requeueingTaskId,
