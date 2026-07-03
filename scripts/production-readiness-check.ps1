@@ -118,6 +118,12 @@ Invoke-Check "Flyway migration demo data guard" {
 
     $migrations = Get-ChildItem -LiteralPath $MigrationDir -Filter "*.sql" | Sort-Object Name
     foreach ($migration in $migrations) {
+        $content = Get-Content -LiteralPath $migration.FullName -Raw -Encoding UTF8
+
+        if ($migration.Name -eq "V36__purge_demo_review_data.sql" -and $content -match '(?im)^\s*or\s+(?:\w+\.)?id\s+in\s*\(') {
+            throw "Unsafe fixed-id OR filter found in $($migration.Name). Demo purge migrations must match demo-owned rows by organization, URL, or commit markers before deleting."
+        }
+
         if ($allowedDemoMigrations -contains $migration.Name) {
             continue
         }
@@ -126,7 +132,6 @@ Invoke-Check "Flyway migration demo data guard" {
             throw "Demo seed migration is not allowed in the main Flyway chain: $($migration.Name). Put demo data under repoguard-backend/src/main/resources/db/demo instead."
         }
 
-        $content = Get-Content -LiteralPath $migration.FullName -Raw -Encoding UTF8
         foreach ($marker in $demoMarkers) {
             if ($content.Contains($marker)) {
                 throw "Demo data marker '$marker' found in main Flyway migration $($migration.Name). Put demo data under repoguard-backend/src/main/resources/db/demo instead."

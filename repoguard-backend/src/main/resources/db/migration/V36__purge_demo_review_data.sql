@@ -19,8 +19,7 @@ where
                 'demo901a', 'demo902b', 'demo903c', 'demo904d'
             )
         )
-    )
-    or id in (505, 506, 507, 508, 509, 510, 511, 512, 9001, 9002, 9003, 9004);
+    );
 
 delete delivery
 from notification_delivery_log delivery
