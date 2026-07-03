@@ -40,4 +40,34 @@ class AuthPropertiesTest {
 
         assertThatCode(() -> properties.validateForProfiles(new String[] {"dev", "local"})).doesNotThrowAnyException();
     }
+
+    @Test
+    void rejectsNonPositiveAccessTokenTtl() {
+        AuthProperties properties = new AuthProperties();
+        properties.setAccessTokenTtlSeconds(0);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("access-token-ttl-seconds");
+    }
+
+    @Test
+    void rejectsNonPositiveRefreshTokenTtl() {
+        AuthProperties properties = new AuthProperties();
+        properties.setRefreshTokenTtlSeconds(-1);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("refresh-token-ttl-seconds");
+    }
+
+    @Test
+    void rejectsNonPositiveRememberTokenTtl() {
+        AuthProperties properties = new AuthProperties();
+        properties.setRememberTokenTtlSeconds(0);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("remember-token-ttl-seconds");
+    }
 }

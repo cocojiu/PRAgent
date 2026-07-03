@@ -56,6 +56,10 @@ public class AuthProperties {
     }
 
     public void validateForProfiles(String[] activeProfiles) {
+        requirePositive("repoguard.auth.access-token-ttl-seconds", accessTokenTtlSeconds);
+        requirePositive("repoguard.auth.refresh-token-ttl-seconds", refreshTokenTtlSeconds);
+        requirePositive("repoguard.auth.remember-token-ttl-seconds", rememberTokenTtlSeconds);
+
         boolean productionProfile = Arrays.stream(activeProfiles)
             .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
         if (!productionProfile) {
@@ -67,6 +71,12 @@ public class AuthProperties {
         }
         if (normalizedTokenSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
             throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in prod profile");
+        }
+    }
+
+    private void requirePositive(String propertyName, long value) {
+        if (value <= 0) {
+            throw new IllegalStateException(propertyName + " must be greater than 0");
         }
     }
 }
