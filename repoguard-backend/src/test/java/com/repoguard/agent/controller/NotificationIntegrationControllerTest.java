@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.NotificationBindingDto;
 import com.repoguard.agent.dto.NotificationBindingRequest;
@@ -25,6 +26,7 @@ class NotificationIntegrationControllerTest {
     private final RecordingNotificationIntegrationService service = new RecordingNotificationIntegrationService();
     private final MockMvc mockMvc = MockMvcBuilders
         .standaloneSetup(new NotificationIntegrationController(service))
+        .setControllerAdvice(new GlobalExceptionHandler())
         .build();
 
     @Test
@@ -67,6 +69,13 @@ class NotificationIntegrationControllerTest {
     }
 
     @Test
+    void listBindingsRejectsOverlongProvider() throws Exception {
+        mockMvc.perform(get("/api/v1/config/notification-bindings")
+                .param("provider", "x".repeat(33)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listEventsKeepsNotificationEventContract() throws Exception {
         mockMvc.perform(get("/api/v1/notification-events")
                 .param("page", "3")
@@ -97,6 +106,13 @@ class NotificationIntegrationControllerTest {
         assertThat(service.lastEventPageSize).isEqualTo(5);
         assertThat(service.lastEventStatus).isEqualTo("failed");
         assertThat(service.lastEventTaskId).isEqualTo(512L);
+    }
+
+    @Test
+    void listEventsRejectsOverlongStatus() throws Exception {
+        mockMvc.perform(get("/api/v1/notification-events")
+                .param("status", "x".repeat(33)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -138,6 +154,13 @@ class NotificationIntegrationControllerTest {
         assertThat(service.lastDeliveryPageSize).isEqualTo(15);
         assertThat(service.lastDeliveryStatus).isEqualTo("failed");
         assertThat(service.lastDeliveryTaskId).isEqualTo(512L);
+    }
+
+    @Test
+    void listDeliveriesRejectsOverlongStatus() throws Exception {
+        mockMvc.perform(get("/api/v1/notification-deliveries")
+                .param("status", "x".repeat(33)))
+            .andExpect(status().isBadRequest());
     }
 
     private static final class RecordingNotificationIntegrationService implements NotificationIntegrationService {

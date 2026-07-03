@@ -1,6 +1,8 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.NotificationBindingDto;
 import com.repoguard.agent.dto.NotificationBindingRequest;
@@ -13,6 +15,7 @@ import com.repoguard.agent.service.NotificationIntegrationService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,11 +41,17 @@ public class NotificationIntegrationController {
     public ApiResponse<PageResponse<NotificationBindingDto>> listBindings(
         @RequestParam(defaultValue = "1") @Min(1) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
-        @RequestParam(required = false) String organization,
-        @RequestParam(required = false) String repository,
-        @RequestParam(required = false) String provider
+        @RequestParam(required = false) @Size(max = 128) String organization,
+        @RequestParam(required = false) @Size(max = 128) String repository,
+        @RequestParam(required = false) @Size(max = 32) String provider
     ) {
-        return ApiResponse.ok(service.listBindings(page, pageSize, organization, repository, provider));
+        return ApiResponse.ok(service.listBindings(
+            page,
+            pageSize,
+            checkedParam("organization", organization, 128),
+            checkedParam("repository", repository, 128),
+            checkedParam("provider", provider, 32)
+        ));
     }
 
     @PostMapping("/api/v1/config/notification-bindings")
@@ -86,10 +95,10 @@ public class NotificationIntegrationController {
     public ApiResponse<PageResponse<NotificationEventDto>> listEvents(
         @RequestParam(defaultValue = "1") @Min(1) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
-        @RequestParam(required = false) String status,
+        @RequestParam(required = false) @Size(max = 32) String status,
         @RequestParam(required = false) Long taskId
     ) {
-        return ApiResponse.ok(service.listEvents(page, pageSize, status, taskId));
+        return ApiResponse.ok(service.listEvents(page, pageSize, checkedParam("status", status, 32), taskId));
     }
 
     @PostMapping("/api/v1/notification-events/{id}/retry")
@@ -102,9 +111,16 @@ public class NotificationIntegrationController {
     public ApiResponse<PageResponse<NotificationDeliveryDto>> listDeliveries(
         @RequestParam(defaultValue = "1") @Min(1) int page,
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
-        @RequestParam(required = false) String status,
+        @RequestParam(required = false) @Size(max = 32) String status,
         @RequestParam(required = false) Long taskId
     ) {
-        return ApiResponse.ok(service.listDeliveries(page, pageSize, status, taskId));
+        return ApiResponse.ok(service.listDeliveries(page, pageSize, checkedParam("status", status, 32), taskId));
+    }
+
+    private String checkedParam(String name, String value, int maxLength) {
+        if (value != null && value.length() > maxLength) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, name + " must be at most " + maxLength + " characters");
+        }
+        return value;
     }
 }
