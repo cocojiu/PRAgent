@@ -1,8 +1,11 @@
 package com.repoguard.agent.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public record AuthRefreshRequest(
-    @NotBlank String refreshToken
+    @NotBlank
+    @Size(max = 512)
+    String refreshToken
 ) {
 }

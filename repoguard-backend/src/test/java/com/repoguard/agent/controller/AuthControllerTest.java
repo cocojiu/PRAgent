@@ -194,6 +194,20 @@ class AuthControllerTest {
     }
 
     @Test
+    void refreshWithOversizedTokenReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "%s"
+                    }
+                    """.formatted("r".repeat(513))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
     void resetRefreshTokenReturnsNewAccessTokenWithoutRefreshTokenBody() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh-token/reset")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -208,6 +222,22 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+    }
+
+    @Test
+    void resetRefreshTokenWithOversizedCredentialsReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh-token/reset")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "%s",
+                      "password": "%s",
+                      "remember": false
+                    }
+                    """.formatted("a".repeat(256), "p".repeat(129))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
@@ -230,6 +260,20 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+    }
+
+    @Test
+    void logoutWithOversizedTokenReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "%s"
+                    }
+                    """.formatted("r".repeat(513))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test

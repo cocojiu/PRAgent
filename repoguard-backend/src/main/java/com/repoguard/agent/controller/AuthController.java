@@ -71,7 +71,7 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ApiResponse<AuthResponse> refresh(
-        @RequestBody(required = false) AuthRefreshRequest request,
+        @Valid @RequestBody(required = false) AuthRefreshRequest request,
         @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
@@ -97,7 +97,7 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ApiResponse<Void> logout(
-        @RequestBody(required = false) AuthLogoutRequest request,
+        @Valid @RequestBody(required = false) AuthLogoutRequest request,
         @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
