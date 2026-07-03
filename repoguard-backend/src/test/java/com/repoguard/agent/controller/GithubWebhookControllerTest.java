@@ -158,6 +158,23 @@ class GithubWebhookControllerTest {
     }
 
     @Test
+    void nonPullRequestEventSkipsPayloadParsingAfterSignatureVerification() throws Exception {
+        byte[] payload = "not-json".getBytes(StandardCharsets.UTF_8);
+
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-GitHub-Event", "ping")
+                .header("X-GitHub-Delivery", "delivery-invalid-json")
+                .header("X-Hub-Signature-256", signature(payload))
+                .content(payload))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("skipped"))
+            .andExpect(jsonPath("$.data.message").value("GitHub event is ignored"));
+
+        verify(reviewService, never()).triggerManualReview(any());
+    }
+
+    @Test
     void oversizedPayloadIsRejectedBeforeSignatureVerification() throws Exception {
         properties.setMaxPayloadBytes(4);
         byte[] payload = "{\"zen\":\"too large\"}".getBytes(StandardCharsets.UTF_8);

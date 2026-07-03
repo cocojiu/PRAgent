@@ -47,10 +47,10 @@ public class GithubWebhookController {
     ) {
         validatePayloadSize(payload);
         signatureVerifier.verify(signature, payload);
-        JsonNode root = parsePayload(payload);
         if (!"pull_request".equals(event)) {
             return ApiResponse.ok(GithubWebhookResponse.skipped("GitHub event is ignored", deliveryId, null));
         }
+        JsonNode root = parsePayload(payload);
         return ApiResponse.ok(pullRequestWebhookService.handlePullRequest(root, deliveryId));
     }
 
