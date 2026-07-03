@@ -26,10 +26,14 @@ import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 class AuthServiceImplTest {
 
@@ -47,6 +51,11 @@ class AuthServiceImplTest {
         authProperties,
         authTokenService
     );
+
+    @AfterEach
+    void clearRequestContext() {
+        RequestContextHolder.resetRequestAttributes();
+    }
 
     @Test
     void registerStoresBCryptHashAndReturnsTokenPair() {
@@ -192,6 +201,24 @@ class AuthServiceImplTest {
         assertThat(user.getLockedUntil()).isNull();
         verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void loginAuditIgnoresSpoofedForwardedHeaders() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        request.setRemoteAddr("192.0.2.20");
+        request.addHeader("X-Forwarded-For", "10.0.0.8, 10.0.0.9");
+        request.addHeader("X-Real-IP", "10.0.0.7");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        authService.login(new AuthLoginRequest("admin", "Secure123", false));
+
+        ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
+        verify(userLoginAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("192.0.2.20");
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.web.AuditClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -320,7 +321,7 @@ public class AuthServiceImpl implements AuthService {
 
         HttpServletRequest request = currentRequest();
         if (request != null) {
-            audit.setClientIp(resolveClientIp(request));
+            audit.setClientIp(AuditClientIpResolver.resolve(request));
             audit.setUserAgent(truncate(request.getHeader("User-Agent"), 512));
         }
         userLoginAuditMapper.insert(audit);
@@ -331,18 +332,6 @@ public class AuthServiceImpl implements AuthService {
             return attributes.getRequest();
         }
         return null;
-    }
-
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwardedFor)) {
-            return truncate(forwardedFor.split(",")[0].trim(), 64);
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(realIp)) {
-            return truncate(realIp, 64);
-        }
-        return truncate(request.getRemoteAddr(), 64);
     }
 
     private String truncate(String value, int maxLength) {

@@ -13,6 +13,7 @@ import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.UserManagementService;
+import com.repoguard.agent.web.AuditClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -23,7 +24,6 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.util.StringUtils;
 
 @RestController
 @RequestMapping("/api/v1/users")
@@ -77,19 +77,11 @@ public class UserManagementController {
         if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
         }
-        return new UserOperationAuditContext(user.id(), resolveClientIp(request), truncate(request.getHeader("User-Agent"), 512));
-    }
-
-    private String resolveClientIp(HttpServletRequest request) {
-        String forwardedFor = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(forwardedFor)) {
-            return truncate(forwardedFor.split(",")[0].trim(), 64);
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(realIp)) {
-            return truncate(realIp, 64);
-        }
-        return truncate(request.getRemoteAddr(), 64);
+        return new UserOperationAuditContext(
+            user.id(),
+            AuditClientIpResolver.resolve(request),
+            truncate(request.getHeader("User-Agent"), 512)
+        );
     }
 
     private String truncate(String value, int maxLength) {
