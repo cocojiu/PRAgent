@@ -29,6 +29,21 @@ class MysqlConnectionProbeTest {
     }
 
     @Test
+    void configuredProbeUsesBoundedConnectionTimeoutProperties() {
+        MysqlConnectionProbe probe = new MysqlConnectionProbe(null, secretCryptoService);
+        IntegrationConfig config = new IntegrationConfig();
+        config.setDefaultOwner(" root ");
+        config.setTokenValue(secretCryptoService.encrypt(" root secret "));
+
+        java.util.Properties properties = probe.connectionProperties(config);
+
+        assertThat(properties.getProperty("user")).isEqualTo("root");
+        assertThat(properties.getProperty("password")).isEqualTo(" root secret ");
+        assertThat(properties.getProperty("connectTimeout")).isEqualTo("2000");
+        assertThat(properties.getProperty("socketTimeout")).isEqualTo("2000");
+    }
+
+    @Test
     void configuredProbeReportsDriverErrorForInvalidJdbcUrl() {
         MysqlConnectionProbe probe = new MysqlConnectionProbe(null, secretCryptoService);
         IntegrationConfig config = new IntegrationConfig();
