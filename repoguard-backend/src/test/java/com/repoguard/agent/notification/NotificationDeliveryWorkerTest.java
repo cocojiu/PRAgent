@@ -194,7 +194,7 @@ class NotificationDeliveryWorkerTest {
         NotificationDeliveryEventStateUpdater eventStateUpdater =
             new NotificationDeliveryEventStateUpdater(eventMapper);
         return new NotificationDeliveryCompletionService(
-            new NotificationDeliveryFailurePolicy(),
+            new NotificationDeliveryFailurePolicy(new NotificationRetrySchedule()),
             eventStateUpdater
         );
     }

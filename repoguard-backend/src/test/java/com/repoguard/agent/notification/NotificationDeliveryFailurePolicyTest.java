@@ -12,7 +12,8 @@ import org.junit.jupiter.api.Test;
 class NotificationDeliveryFailurePolicyTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-06-18T10:30:00Z"), ZoneId.of("UTC"));
-    private final NotificationDeliveryFailurePolicy policy = new NotificationDeliveryFailurePolicy(clock);
+    private final NotificationDeliveryFailurePolicy policy =
+        new NotificationDeliveryFailurePolicy(new NotificationRetrySchedule(clock));
 
     @Test
     void firstFailureSchedulesDeliveryFailedWithOneMinuteRetry() {

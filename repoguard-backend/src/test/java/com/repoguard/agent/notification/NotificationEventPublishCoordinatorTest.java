@@ -26,7 +26,7 @@ class NotificationEventPublishCoordinatorTest {
     private final NotificationEventPublishCoordinator coordinator = new NotificationEventPublishCoordinator(
         publisher,
         properties,
-        new NotificationPublishFailurePolicy(),
+        new NotificationPublishFailurePolicy(new NotificationRetrySchedule()),
         new NotificationPublishEventStateUpdater(eventMapper)
     );
 
