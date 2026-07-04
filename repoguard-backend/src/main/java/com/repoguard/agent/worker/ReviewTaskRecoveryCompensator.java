@@ -2,7 +2,6 @@ package com.repoguard.agent.worker;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -26,39 +25,39 @@ public class ReviewTaskRecoveryCompensator {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTimelineAppender timelineAppender;
-    private final RabbitReviewQueueProperties properties;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewExecutionClock clock;
     private final ReviewLogContextFormatter logContextFormatter;
+    private final ReviewTaskRecoveryPolicy recoveryPolicy;
 
     public ReviewTaskRecoveryCompensator(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender timelineAppender,
-        RabbitReviewQueueProperties properties,
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewExecutionClock clock,
-        ReviewLogContextFormatter logContextFormatter
+        ReviewLogContextFormatter logContextFormatter,
+        ReviewTaskRecoveryPolicy recoveryPolicy
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.timelineAppender = timelineAppender;
-        this.properties = properties;
         this.reviewTaskStateMachine = reviewTaskStateMachine;
         this.clock = clock;
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
+        this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
     @Transactional
     public void recoverStuckTasks() {
         LocalDateTime now = clock.now();
-        LocalDateTime expiredBefore = now.minusNanos(executionTimeoutMs() * 1_000_000);
+        LocalDateTime expiredBefore = recoveryPolicy.expiredBefore(now);
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>()
                 .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenReviewing())
                 .isNotNull(ReviewTask::getReviewClaimedAt)
                 .le(ReviewTask::getReviewClaimedAt, expiredBefore)
                 .orderByAsc(ReviewTask::getReviewClaimedAt)
-                .last("limit " + batchSize())
+                .last("limit " + recoveryPolicy.batchSize())
         );
         for (ReviewTask task : tasks) {
             recover(task, now, expiredBefore);
@@ -110,13 +109,5 @@ public class ReviewTaskRecoveryCompensator {
                 recoveredAt
             );
         }
-    }
-
-    private long executionTimeoutMs() {
-        return Math.max(60000, properties.getReviewExecutionTimeoutMs());
-    }
-
-    private int batchSize() {
-        return Math.max(1, properties.getReviewRecoveryBatchSize());
     }
 }

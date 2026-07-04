@@ -26,10 +26,10 @@ class ReviewTaskRecoveryCompensatorTest {
     private final ReviewTaskRecoveryCompensator compensator = new ReviewTaskRecoveryCompensator(
         reviewTaskMapper,
         new ReviewTimelineAppender(reviewTimelineMapper),
-        new RabbitReviewQueueProperties(),
         new ReviewTaskStateMachine(),
         new ReviewExecutionClock(),
-        new ReviewLogContextFormatter()
+        new ReviewLogContextFormatter(),
+        new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties())
     );
 
     @Test
