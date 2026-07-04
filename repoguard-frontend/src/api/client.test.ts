@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RequestError } from "@/utils/errors";
 import { clearAuthToken, hasAuthToken, request, resolveRefreshToken, saveAuthTokens } from "./client";
 
 const apiResponse = (data: unknown, status = 200) =>
@@ -48,5 +49,58 @@ describe("auth token client", () => {
 
     const [, retryInit] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(new Headers(retryInit.headers).get("Authorization")).toBe("Bearer new-access");
+  });
+
+  it("shares one refresh request across concurrent unauthorized responses", async () => {
+    saveAuthTokens("expired-access", "refresh-token", true);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(apiResponse(null, 401))
+      .mockResolvedValueOnce(apiResponse(null, 401))
+      .mockResolvedValueOnce(apiResponse({ accessToken: "shared-access" }))
+      .mockResolvedValueOnce(apiResponse({ first: true }))
+      .mockResolvedValueOnce(apiResponse({ second: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const [first, second] = await Promise.all([
+      request<{ first: boolean }>("/api/v1/protected/first"),
+      request<{ second: boolean }>("/api/v1/protected/second")
+    ]);
+
+    expect(first).toEqual({ first: true });
+    expect(second).toEqual({ second: true });
+    const refreshCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v1/auth/refresh"));
+    expect(refreshCalls).toHaveLength(1);
+    const retryAuthorizations = fetchMock.mock.calls.slice(3).map(([, init]) =>
+      new Headers((init as RequestInit).headers).get("Authorization")
+    );
+    expect(retryAuthorizations).toEqual(["Bearer shared-access", "Bearer shared-access"]);
+  });
+
+  it("normalizes failed api envelopes into request errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(apiResponse(null, 403)));
+
+    await expect(request("/api/v1/admin-only")).rejects.toMatchObject({
+      name: "RequestError",
+      status: 403,
+      code: "UNAUTHORIZED",
+      message: "unauthorized"
+    });
+  });
+
+  it("normalizes network failures into request errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+
+    await expect(request("/api/v1/protected")).rejects.toMatchObject({
+      name: "RequestError",
+      status: 0,
+      code: "NETWORK_ERROR"
+    });
+  });
+
+  it("does not wrap existing request errors", async () => {
+    const original = new RequestError("custom", { status: 418, code: "TEAPOT" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(original));
+
+    await expect(request("/api/v1/protected")).rejects.toBe(original);
   });
 });
