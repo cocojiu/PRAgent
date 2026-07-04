@@ -16,15 +16,21 @@ class NotificationDeliveryLogFactory {
 
     private final Clock clock;
     private final NotificationTextLimiter textLimiter;
+    private final NotificationRetrySchedule retrySchedule;
 
     @Autowired
-    NotificationDeliveryLogFactory(NotificationTextLimiter textLimiter) {
-        this(Clock.systemDefaultZone(), textLimiter);
+    NotificationDeliveryLogFactory(NotificationTextLimiter textLimiter, NotificationRetrySchedule retrySchedule) {
+        this(Clock.systemDefaultZone(), textLimiter, retrySchedule);
     }
 
-    NotificationDeliveryLogFactory(Clock clock, NotificationTextLimiter textLimiter) {
+    NotificationDeliveryLogFactory(
+        Clock clock,
+        NotificationTextLimiter textLimiter,
+        NotificationRetrySchedule retrySchedule
+    ) {
         this.clock = clock;
         this.textLimiter = Objects.requireNonNull(textLimiter, "textLimiter");
+        this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
     }
 
     NotificationDeliveryLog create(
@@ -39,15 +45,11 @@ class NotificationDeliveryLogFactory {
         log.setTaskId(event.getTaskId());
         log.setProvider(binding.getProvider());
         log.setStatus(result.success() ? NotificationDeliveryStatus.SUCCESS.code() : NotificationDeliveryStatus.FAILED.code());
-        log.setAttemptCount(safe(event.getRetryCount()) + 1);
+        log.setAttemptCount(retrySchedule.nextRetryCount(event.getRetryCount()));
         log.setFailureReason(result.success() ? null : textLimiter.limit(result.message(), MAX_FAILURE_REASON_LENGTH));
         log.setRequestId(result.requestId());
         log.setSentAt(now);
         log.setCreatedAt(now);
         return log;
-    }
-
-    private int safe(Integer value) {
-        return value == null ? 0 : value;
     }
 }

@@ -169,7 +169,7 @@ class NotificationDeliveryWorkerTest {
             new NotificationBindingDeliveryService(
                 deliveryLogMapper,
                 registry,
-                new NotificationDeliveryLogFactory(new NotificationTextLimiter()),
+                new NotificationDeliveryLogFactory(new NotificationTextLimiter(), new NotificationRetrySchedule()),
                 new NotificationBindingMatcher(),
                 new NotificationSuccessfulDeliveryQuery(deliveryLogMapper)
             )
