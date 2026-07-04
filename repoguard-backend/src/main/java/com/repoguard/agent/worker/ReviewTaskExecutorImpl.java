@@ -18,23 +18,19 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.ConcurrencyFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
-    private static final int TRANSACTION_MAX_ATTEMPTS = 3;
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final PullRequestReviewer pullRequestReviewer;
-    private final PlatformTransactionManager transactionManager;
+    private final ReviewExecutionTransactionRunner transactionRunner;
     private final RepoGuardMetrics metrics;
     private final GithubPullRequestDiffFetcher diffFetcher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
@@ -71,11 +67,14 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewTaskClaimService claimService,
         ReviewExecutionFailureHandler failureHandler,
         ReviewExecutionResultWriter resultWriter,
-        ReviewExecutionNotifier notifier
+        ReviewExecutionNotifier notifier,
+        ReviewExecutionTransactionRunner transactionRunner
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.pullRequestReviewer = pullRequestReviewer;
-        this.transactionManager = transactionManager;
+        this.transactionRunner = transactionRunner == null
+            ? new ReviewExecutionTransactionRunner(transactionManager, 3)
+            : transactionRunner;
         this.metrics = metrics;
         this.diffFetcher = diffFetcher == null
             ? new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics)
@@ -161,6 +160,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -196,6 +196,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -215,6 +216,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             changedFileMapper,
             githubPullRequestClient,
             pullRequestReviewer,
+            null,
             null,
             null,
             null,
@@ -349,7 +351,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     }
 
     private boolean markReviewing(ReviewTask task, LocalDateTime startedAt, String claimId) {
-        return inTransaction(() -> {
+        return transactionRunner.execute(() -> {
             if (!claimService.claimReviewing(task, startedAt, claimId)) {
                 return false;
             }
@@ -365,11 +367,11 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         LocalDateTime startedAt,
         String claimId
     ) {
-        return inTransaction(() -> resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId));
+        return transactionRunner.execute(() -> resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId));
     }
 
     private boolean failReview(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
-        Boolean failed = inTransaction(() -> {
+        Boolean failed = transactionRunner.execute(() -> {
             return failureHandler.applyFailure(task, startedAt, claimId, ex);
         });
         if (Boolean.TRUE.equals(failed)) {
@@ -385,50 +387,5 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     private String safePart(String value) {
         return value == null || value.isBlank() ? "<unknown>" : value.trim();
-    }
-
-    private void inTransaction(Runnable action) {
-        inTransaction(() -> {
-            action.run();
-            return null;
-        });
-    }
-
-    private <T> T inTransaction(java.util.concurrent.Callable<T> action) {
-        if (transactionManager == null) {
-            try {
-                return action.call();
-            } catch (RuntimeException ex) {
-                throw ex;
-            } catch (Exception ex) {
-                throw new IllegalStateException(ex);
-            }
-        }
-        TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-        transactionTemplate.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-        for (int attempt = 1; attempt <= TRANSACTION_MAX_ATTEMPTS; attempt++) {
-            try {
-                return transactionTemplate.execute(status -> {
-                    try {
-                        return action.call();
-                    } catch (RuntimeException ex) {
-                        throw ex;
-                    } catch (Exception ex) {
-                        throw new IllegalStateException(ex);
-                    }
-                });
-            } catch (ConcurrencyFailureException ex) {
-                if (attempt >= TRANSACTION_MAX_ATTEMPTS) {
-                    throw ex;
-                }
-                LOGGER.warn(
-                    "Review task transaction concurrency conflict operation=review_transaction_retry attempt={} maxAttempts={} exceptionType={}",
-                    attempt,
-                    TRANSACTION_MAX_ATTEMPTS,
-                    ex.getClass().getName()
-                );
-            }
-        }
-        throw new IllegalStateException("Review transaction retry loop exited unexpectedly");
     }
 }
