@@ -2,12 +2,22 @@ package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.entity.ReviewTask;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class ReviewTaskListQueryBuilderTest {
 
     private final ReviewTaskListQueryBuilder builder = new ReviewTaskListQueryBuilder();
+
+    @BeforeAll
+    static void initMybatisPlusTableInfo() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+    }
 
     @Test
     void buildsNormalizedFiltersAndNumericKeywordCondition() {
@@ -60,6 +70,15 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.prNumber()).isNull();
         assertThat(criteria.commitPrefix()).isNull();
         assertThat(criteria.textKeyword()).isEqualTo("security");
+    }
+
+    @Test
+    void textKeywordUsesPrefixMatchToKeepIndexesUsable() {
+        var wrapper = builder.build(new ReviewQuery(1, 20, null, null, null, null, null, "security"));
+
+        assertThat(wrapper.getSqlSegment()).contains("title", "repository", "organization");
+        assertThat(wrapper.getParamNameValuePairs().values())
+            .containsOnly("security%");
     }
 
     @Test

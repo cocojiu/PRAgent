@@ -39,11 +39,11 @@ public class ReviewTaskListQueryBuilder {
             wrapper.likeRight(ReviewTask::getCommitSha, criteria.commitPrefix());
         } else if (StringUtils.hasText(criteria.textKeyword())) {
             wrapper.and(nested -> nested
-                .like(ReviewTask::getTitle, criteria.textKeyword())
+                .likeRight(ReviewTask::getTitle, criteria.textKeyword())
                 .or()
-                .like(ReviewTask::getRepository, criteria.textKeyword())
+                .likeRight(ReviewTask::getRepository, criteria.textKeyword())
                 .or()
-                .like(ReviewTask::getOrganization, criteria.textKeyword())
+                .likeRight(ReviewTask::getOrganization, criteria.textKeyword())
             );
         }
         return wrapper;
