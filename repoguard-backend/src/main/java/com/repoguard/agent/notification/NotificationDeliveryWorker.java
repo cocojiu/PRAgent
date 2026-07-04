@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.rabbitmq.client.Channel;
+import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.io.IOException;
@@ -14,6 +15,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 @Component
+@WorkerRuntimeEnabled
 public class NotificationDeliveryWorker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryWorker.class);

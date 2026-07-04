@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/config")
+@ApiRuntimeEnabled
 public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;

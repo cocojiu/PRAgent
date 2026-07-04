@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.security.RequireRole;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/v1/message-queue")
+@ApiRuntimeEnabled
 public class MessageQueueHealthController {
 
     private final MessageQueueHealthService messageQueueHealthService;

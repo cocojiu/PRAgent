@@ -1,0 +1,39 @@
+{
+  "date": "2026-07-04",
+  "branch": "PRAgent-test",
+  "optimizationOrder": 1,
+  "title": "模块化单体运行角色隔离",
+  "status": "completed",
+  "goal": "保持单体代码库和数据库不变，支持按进程关闭 API 或 Worker 能力，为后续 API 节点与审查 Worker 节点独立部署打基础。",
+  "changes": [
+    "新增 API 运行角色条件注解，业务 Controller 默认启用，可通过 REPOGUARD_API_ENABLED=false 关闭。",
+    "新增 Worker 运行角色条件注解，RabbitMQ 消费者和补偿任务默认启用，可通过 REPOGUARD_WORKER_ENABLED=false 关闭。",
+    "保留现有默认单体部署行为，生产 compose 和环境示例显式暴露两个开关。",
+    "新增默认不启动的 backend-worker compose profile，支持同镜像独立运行 worker-only 进程。"
+  ],
+  "verification": {
+    "status": "passed",
+    "commands": [
+      {
+        "command": "mvn \"-Dtest=RuntimeRoleConditionTest,SpringBeanConstructorSelectionTest\" test",
+        "result": "passed",
+        "summary": "4 tests passed"
+      },
+      {
+        "command": "mvn \"-Dtest=ReviewTaskWorkerTest,ReviewTaskRecoveryCompensatorTest,ReviewTaskPublishCompensatorTest,NotificationDeliveryWorkerTest,NotificationEventPublishCompensatorTest\" test",
+        "result": "passed",
+        "summary": "20 tests passed"
+      },
+      {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -SkipBackendTests",
+        "result": "passed",
+        "summary": "whitespace, Flyway, demo-data guard, and secret scan passed"
+      },
+      {
+        "command": "docker compose --env-file .env.prod.example -f docker-compose.prod.yml config",
+        "result": "not_run",
+        "summary": "docker command is unavailable in the local environment"
+      }
+    ]
+  }
+}

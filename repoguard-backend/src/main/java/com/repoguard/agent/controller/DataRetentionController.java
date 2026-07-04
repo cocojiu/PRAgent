@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.security.RequireRole;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/config/data-retention")
+@ApiRuntimeEnabled
 public class DataRetentionController {
 
     private final DataRetentionService dataRetentionService;

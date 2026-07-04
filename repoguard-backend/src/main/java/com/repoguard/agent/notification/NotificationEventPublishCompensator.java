@@ -1,11 +1,13 @@
 package com.repoguard.agent.notification;
 
+import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.util.List;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
+@WorkerRuntimeEnabled
 public class NotificationEventPublishCompensator {
 
     private final NotificationPublishCompensationQuery compensationQuery;

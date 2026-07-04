@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.observability.LogContext;
@@ -16,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
+@WorkerRuntimeEnabled
 public class ReviewTaskRecoveryCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskRecoveryCompensator.class);

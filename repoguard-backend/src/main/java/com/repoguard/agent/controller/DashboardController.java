@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.service.DashboardService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/dashboard")
+@ApiRuntimeEnabled
 public class DashboardController {
 
     private final DashboardService dashboardService;

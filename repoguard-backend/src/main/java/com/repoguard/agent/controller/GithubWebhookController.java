@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.github.webhook.GithubPullRequestWebhookService;
 import com.repoguard.agent.github.webhook.GithubWebhookProperties;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/github/webhooks")
+@ApiRuntimeEnabled
 public class GithubWebhookController {
 
     private final ObjectMapper objectMapper;

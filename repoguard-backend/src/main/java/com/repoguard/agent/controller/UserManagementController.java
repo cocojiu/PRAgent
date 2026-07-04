@@ -3,6 +3,7 @@ package com.repoguard.agent.controller;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/users")
 @RequireRole("ADMIN")
+@ApiRuntimeEnabled
 public class UserManagementController {
 
     private final UserManagementService userManagementService;

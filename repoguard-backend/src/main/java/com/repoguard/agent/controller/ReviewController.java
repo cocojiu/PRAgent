@@ -1,6 +1,7 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
+import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
@@ -40,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/v1/reviews")
+@ApiRuntimeEnabled
 public class ReviewController {
 
     private final ReviewService reviewService;
