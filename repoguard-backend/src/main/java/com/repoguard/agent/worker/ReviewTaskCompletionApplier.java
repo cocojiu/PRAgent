@@ -4,7 +4,6 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -15,16 +14,19 @@ class ReviewTaskCompletionApplier {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy;
     private final ReviewTaskFailureOutcomePolicy failureOutcomePolicy;
+    private final ReviewTaskDurationPolicy durationPolicy;
 
     ReviewTaskCompletionApplier(
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy,
-        ReviewTaskFailureOutcomePolicy failureOutcomePolicy
+        ReviewTaskFailureOutcomePolicy failureOutcomePolicy,
+        ReviewTaskDurationPolicy durationPolicy
     ) {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.humanReviewDecisionPolicy =
             Objects.requireNonNull(humanReviewDecisionPolicy, "humanReviewDecisionPolicy");
         this.failureOutcomePolicy = Objects.requireNonNull(failureOutcomePolicy, "failureOutcomePolicy");
+        this.durationPolicy = Objects.requireNonNull(durationPolicy, "durationPolicy");
     }
 
     boolean applyCompleted(
@@ -53,7 +55,7 @@ class ReviewTaskCompletionApplier {
         task.setHumanReviewBy(null);
         task.setHumanReviewedAt(null);
         task.setFinishedAt(finishedAt);
-        task.setDurationSeconds((int) Duration.between(startedAt, finishedAt).toSeconds());
+        task.setDurationSeconds(durationPolicy.durationSeconds(startedAt, finishedAt));
         return humanReviewRequired;
     }
 
@@ -62,7 +64,7 @@ class ReviewTaskCompletionApplier {
         task.setRiskLevel(failureOutcomePolicy.failedRiskLevel());
         task.setLlmStatus(failureOutcomePolicy.failedLlmStatus());
         task.setFinishedAt(failedAt);
-        task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
+        task.setDurationSeconds(durationPolicy.durationSeconds(startedAt, failedAt));
     }
 
 }

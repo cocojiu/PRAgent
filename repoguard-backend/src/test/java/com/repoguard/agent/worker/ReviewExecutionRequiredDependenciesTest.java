@@ -24,7 +24,8 @@ class ReviewExecutionRequiredDependenciesTest {
         assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
             null,
             new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
-            new ReviewTaskFailureOutcomePolicy()
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -35,7 +36,8 @@ class ReviewExecutionRequiredDependenciesTest {
         assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
             new ReviewTaskStateMachine(),
             null,
-            new ReviewTaskFailureOutcomePolicy()
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("humanReviewDecisionPolicy");
@@ -46,10 +48,23 @@ class ReviewExecutionRequiredDependenciesTest {
         assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
             new ReviewTaskStateMachine(),
             new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
-            null
+            null,
+            new ReviewTaskDurationPolicy()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("failureOutcomePolicy");
+    }
+
+    @Test
+    void completionApplierRequiresDurationPolicyDependency() {
+        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
+            new ReviewTaskStateMachine(),
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+            new ReviewTaskFailureOutcomePolicy(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("durationPolicy");
     }
 
     @Test
@@ -133,7 +148,8 @@ class ReviewExecutionRequiredDependenciesTest {
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
             stateMachine,
             new ReviewHumanReviewDecisionPolicy(riskLevelRanker),
-            new ReviewTaskFailureOutcomePolicy()
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
         );
         new ReviewFindingReplacementService(
             reviewFindingMapper,

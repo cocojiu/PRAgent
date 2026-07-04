@@ -138,7 +138,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
             reviewTaskStateMachine,
             new ReviewHumanReviewDecisionPolicy(riskLevelRanker),
-            new ReviewTaskFailureOutcomePolicy()
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
         );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
