@@ -10,23 +10,17 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 
 @Service
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final PullRequestReviewer pullRequestReviewer;
@@ -44,6 +38,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     private final ReviewExecutionResultWriter resultWriter;
     private final ReviewExecutionNotifier notifier;
     private final ReviewExecutionDiffStats diffStats;
+    private final ReviewExecutionLog executionLog;
 
     @Autowired
     public ReviewTaskExecutorImpl(
@@ -68,7 +63,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewExecutionFailureHandler failureHandler,
         ReviewExecutionResultWriter resultWriter,
         ReviewExecutionNotifier notifier,
-        ReviewExecutionTransactionRunner transactionRunner
+        ReviewExecutionTransactionRunner transactionRunner,
+        ReviewExecutionLog executionLog
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.pullRequestReviewer = pullRequestReviewer;
@@ -126,6 +122,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             ? new ReviewExecutionNotifier(notificationDispatchService)
             : notifier;
         this.diffStats = new ReviewExecutionDiffStats();
+        this.executionLog = executionLog == null ? new ReviewExecutionLog() : executionLog;
     }
 
     public ReviewTaskExecutorImpl(
@@ -149,6 +146,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             transactionManager,
             metrics,
             notificationDispatchService,
+            null,
             null,
             null,
             null,
@@ -197,6 +195,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -231,6 +230,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             null,
             null,
             null,
+            null,
             null
         );
     }
@@ -238,60 +238,27 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     @Override
     public void execute(ReviewTaskMessage message) {
         ReviewTask task = reviewTaskMapper.selectById(message.taskId());
-        try (LogContext.Scope ignored = task == null
-            ? LogContext.withReviewTaskMessage(message)
-            : LogContext.withReviewTask(task)) {
+        try (var ignored = executionLog.withExecutionContext(message, task)) {
             if (task == null) {
-                LOGGER.warn(
-                    "Review task skipped taskId={} repository={}/{} prNumber={} operation=review_execute result=task_not_found",
-                    message.taskId(),
-                    safePart(message.organization()),
-                    safePart(message.repository()),
-                    message.prNumber()
-                );
+                executionLog.taskNotFound(message);
                 return;
             }
             if (!reviewTaskStateMachine.canStartReview(task.getStatus())) {
-                LOGGER.info(
-                    "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=status_not_queued currentStatus={}",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber(),
-                    task.getStatus()
-                );
+                executionLog.statusNotQueued(task);
                 return;
             }
 
             LocalDateTime startedAt = LocalDateTime.now();
             String claimId = claimService.newClaimId();
             if (!markReviewing(task, startedAt, claimId)) {
-                LOGGER.info(
-                    "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=claim_failed",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber()
-                );
+                executionLog.claimFailed(task);
                 return;
             }
-            LOGGER.info(
-                "Review task started taskId={} repository={} prNumber={} operation=review_execute commit={}",
-                task.getId(),
-                repositorySlug(task),
-                task.getPrNumber(),
-                safePart(message.commit())
-            );
+            executionLog.started(task, message);
 
             try {
                 GithubPullRequestDiff diff = fetchPullRequestDiff(task);
-                LOGGER.info(
-                    "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber(),
-                    diffStats.fileCount(diff),
-                    diffStats.totalAdditions(diff),
-                    diffStats.totalDeletions(diff)
-                );
+                executionLog.diffFetched(task, diff, diffStats);
                 ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
                 ReviewExecutionResultWriter.WriteResult writeResult = completeReview(
                     task,
@@ -301,47 +268,18 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
                     claimId
                 );
                 notifier.reviewFinished(task, writeResult.findingCount());
-                LOGGER.info(
-                    "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} findingCount={} durationMs={} humanReviewRequired={}",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber(),
-                    reviewResult.riskLevel(),
-                    reviewResult.llmStatus(),
-                    writeResult.findingCount(),
-                    Duration.between(startedAt, LocalDateTime.now()).toMillis(),
-                    writeResult.humanReviewRequired()
-                );
+                executionLog.completed(task, reviewResult, writeResult, startedAt);
             } catch (ReviewTaskClaimLostException ex) {
-                LOGGER.warn(
-                    "Review task result discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber()
-                );
+                executionLog.resultClaimLost(task);
             } catch (RuntimeException ex) {
                 if (!failReview(task, startedAt, claimId, ex)) {
-                    LOGGER.warn(
-                        "Review task failure discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost exceptionType={}",
-                        task.getId(),
-                        repositorySlug(task),
-                        task.getPrNumber(),
-                        ex.getClass().getName()
-                    );
+                    executionLog.failureClaimLost(task, ex);
                     return;
                 }
                 if (metrics != null) {
                     metrics.reviewTaskFailed(ex);
                 }
-                LOGGER.warn(
-                    "Review task failed taskId={} repository={} prNumber={} operation=review_execute result=failed failureCategory={} exceptionType={} durationMs={}",
-                    task.getId(),
-                    repositorySlug(task),
-                    task.getPrNumber(),
-                    failureHandler.failureCategory(ex),
-                    ex.getClass().getName(),
-                    Duration.between(startedAt, LocalDateTime.now()).toMillis()
-                );
+                executionLog.failed(task, ex, failureHandler.failureCategory(ex), startedAt);
             }
         }
     }
@@ -381,11 +319,4 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         return false;
     }
 
-    private String repositorySlug(ReviewTask task) {
-        return safePart(task.getOrganization()) + "/" + safePart(task.getRepository());
-    }
-
-    private String safePart(String value) {
-        return value == null || value.isBlank() ? "<unknown>" : value.trim();
-    }
 }
