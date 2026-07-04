@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 class WebhookNotificationContentBuilderTest {
 
-    private final WebhookNotificationContentBuilder builder = new WebhookNotificationContentBuilder();
+    private final WebhookNotificationContentBuilder builder = new WebhookNotificationContentBuilder(
+        new WebhookNotificationEventTextFormatter()
+    );
 
     @Test
     void buildsReviewNotificationTitleAndMarkdown() {

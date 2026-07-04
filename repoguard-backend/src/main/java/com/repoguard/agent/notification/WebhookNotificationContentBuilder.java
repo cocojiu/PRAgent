@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -9,6 +10,12 @@ import org.springframework.util.StringUtils;
 class WebhookNotificationContentBuilder {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private final WebhookNotificationEventTextFormatter eventTextFormatter;
+
+    WebhookNotificationContentBuilder(WebhookNotificationEventTextFormatter eventTextFormatter) {
+        this.eventTextFormatter = Objects.requireNonNull(eventTextFormatter, "eventTextFormatter");
+    }
 
     WebhookNotificationContent reviewContent(NotificationMessage message) {
         return new WebhookNotificationContent(title(message), markdown(message));
@@ -55,13 +62,7 @@ class WebhookNotificationContentBuilder {
     }
 
     private String eventText(String eventType) {
-        return switch (NotificationEventType.from(eventType)) {
-            case REVIEW_COMPLETED -> "审查完成";
-            case HUMAN_REVIEW_REQUIRED -> "待人工复核";
-            case REVIEW_FAILED -> "审查失败";
-            case GITHUB_COMMENT_PUBLISHED -> "GitHub 评论回写";
-            case UNKNOWN -> eventType;
-        };
+        return eventTextFormatter.format(eventType);
     }
 
     private String safe(String value) {
