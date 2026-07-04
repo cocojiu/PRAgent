@@ -26,6 +26,7 @@ public class NotificationDeliveryWorker {
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
     private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder;
     private final NotificationDeliveryFailureClassifier failureClassifier;
+    private final NotificationDeliveryLogContextFormatter logContextFormatter;
 
     public NotificationDeliveryWorker(
         NotificationDeliverableEventQuery deliverableEventQuery,
@@ -34,7 +35,8 @@ public class NotificationDeliveryWorker {
         NotificationDeliveryCompletionService deliveryCompletionService,
         NotificationDeliveryEventStateUpdater eventStateUpdater,
         NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
-        NotificationDeliveryFailureClassifier failureClassifier
+        NotificationDeliveryFailureClassifier failureClassifier,
+        NotificationDeliveryLogContextFormatter logContextFormatter
     ) {
         this.deliverableEventQuery = deliverableEventQuery;
         this.payloadParser = payloadParser;
@@ -43,6 +45,7 @@ public class NotificationDeliveryWorker {
         this.eventStateUpdater = eventStateUpdater;
         this.metricsRecorder = metricsRecorder;
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
+        this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
     }
 
     @RabbitListener(queues = "${app.rabbit.notification.queue}", concurrency = "${app.rabbit.notification.worker-concurrency:1}")
@@ -56,8 +59,8 @@ public class NotificationDeliveryWorker {
             LOGGER.info(
                 "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
                 message.eventId(),
-                safePart(message.eventKey()),
-                safePart(message.eventType()),
+                logContextFormatter.safePart(message.eventKey()),
+                logContextFormatter.safePart(message.eventType()),
                 message.taskId(),
                 message.batchId(),
                 deliveryTag
@@ -68,8 +71,8 @@ public class NotificationDeliveryWorker {
             LOGGER.info(
                 "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
                 message.eventId(),
-                safePart(message.eventKey()),
-                safePart(message.eventType()),
+                logContextFormatter.safePart(message.eventKey()),
+                logContextFormatter.safePart(message.eventType()),
                 message.taskId(),
                 message.batchId(),
                 metricsRecorder.elapsedMillis(startedAt),
@@ -81,8 +84,8 @@ public class NotificationDeliveryWorker {
             LOGGER.warn(
                 "Rabbit notification message rejected eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.eventId(),
-                safePart(message.eventKey()),
-                safePart(message.eventType()),
+                logContextFormatter.safePart(message.eventKey()),
+                logContextFormatter.safePart(message.eventType()),
                 message.taskId(),
                 message.batchId(),
                 metricsRecorder.elapsedMillis(startedAt),
@@ -104,9 +107,5 @@ public class NotificationDeliveryWorker {
 
         NotificationDeliveryResultSummary resultSummary = bindingBatchDeliveryService.deliver(event, message);
         deliveryCompletionService.complete(event, resultSummary);
-    }
-
-    private String safePart(String value) {
-        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 }

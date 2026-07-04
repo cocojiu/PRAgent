@@ -185,7 +185,8 @@ class NotificationDeliveryWorkerTest {
             deliveryCompletionService(),
             new NotificationDeliveryEventStateUpdater(eventMapper),
             metricsRecorder,
-            new NotificationDeliveryFailureClassifier()
+            new NotificationDeliveryFailureClassifier(),
+            new NotificationDeliveryLogContextFormatter()
         );
     }
 
