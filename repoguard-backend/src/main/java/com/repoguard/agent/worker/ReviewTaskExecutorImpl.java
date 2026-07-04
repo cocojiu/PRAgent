@@ -120,7 +120,10 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator();
         ReviewTimelineAppender timelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
         ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(timelineAppender);
-        ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(changedFileMapper);
+        ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
+            changedFileMapper,
+            new ChangedFileEntityMapper()
+        );
         ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
             reviewFindingMapper,
             findingDeduplicator
