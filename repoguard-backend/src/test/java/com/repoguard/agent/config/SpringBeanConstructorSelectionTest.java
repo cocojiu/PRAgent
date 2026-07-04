@@ -86,6 +86,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.NotificationTextLimiter"),
             Class.forName("com.repoguard.agent.notification.WebhookNotificationContentBuilder"),
             Class.forName("com.repoguard.agent.notification.WebhookNotificationEventTextFormatter"),
+            Class.forName("com.repoguard.agent.notification.WebhookNotificationFieldFormatter"),
             Class.forName("com.repoguard.agent.notification.WebhookNotificationResponseEvaluator"),
             Class.forName("com.repoguard.agent.review.LlmReviewPipeline"),
             Class.forName("com.repoguard.agent.service.impl.MessageQueueHealthQueryService"),

@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 @Component
 class WebhookNotificationContentBuilder {
@@ -12,9 +11,14 @@ class WebhookNotificationContentBuilder {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final WebhookNotificationEventTextFormatter eventTextFormatter;
+    private final WebhookNotificationFieldFormatter fieldFormatter;
 
-    WebhookNotificationContentBuilder(WebhookNotificationEventTextFormatter eventTextFormatter) {
+    WebhookNotificationContentBuilder(
+        WebhookNotificationEventTextFormatter eventTextFormatter,
+        WebhookNotificationFieldFormatter fieldFormatter
+    ) {
         this.eventTextFormatter = Objects.requireNonNull(eventTextFormatter, "eventTextFormatter");
+        this.fieldFormatter = Objects.requireNonNull(fieldFormatter, "fieldFormatter");
     }
 
     WebhookNotificationContent reviewContent(NotificationMessage message) {
@@ -43,32 +47,33 @@ class WebhookNotificationContentBuilder {
             [查看详情](%s)
             """.formatted(
             eventText(message.eventType()),
-            safe(message.organization()),
-            safe(message.repository()),
+            text(message.organization()),
+            text(message.repository()),
             message.prNumber() == null ? "-" : message.prNumber(),
-            safe(message.title()),
-            safe(message.status()),
-            safe(message.riskLevel()),
-            message.findingCount() == null ? 0 : message.findingCount(),
-            message.commentSucceededCount() == null ? 0 : message.commentSucceededCount(),
-            message.commentFailedCount() == null ? 0 : message.commentFailedCount(),
-            message.commentSkippedCount() == null ? 0 : message.commentSkippedCount(),
-            safe(message.detailUrl())
+            text(message.title()),
+            text(message.status()),
+            text(message.riskLevel()),
+            count(message.findingCount()),
+            count(message.commentSucceededCount()),
+            count(message.commentFailedCount()),
+            count(message.commentSkippedCount()),
+            text(message.detailUrl())
         );
     }
 
     private String title(NotificationMessage message) {
-        return "RepoGuard " + eventText(message.eventType()) + " - " + safe(message.repository()) + " PR #" + (message.prNumber() == null ? "-" : message.prNumber());
+        return "RepoGuard " + eventText(message.eventType()) + " - " + text(message.repository()) + " PR #" + (message.prNumber() == null ? "-" : message.prNumber());
     }
 
     private String eventText(String eventType) {
         return eventTextFormatter.format(eventType);
     }
 
-    private String safe(String value) {
-        if (!StringUtils.hasText(value)) {
-            return "-";
-        }
-        return value.replace("\r", " ").replace("\n", " ").trim();
+    private String text(String value) {
+        return fieldFormatter.text(value);
+    }
+
+    private int count(Integer value) {
+        return fieldFormatter.count(value);
     }
 }
