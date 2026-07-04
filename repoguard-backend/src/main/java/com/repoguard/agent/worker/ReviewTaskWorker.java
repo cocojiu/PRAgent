@@ -4,9 +4,7 @@ import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.io.IOException;
-import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -21,11 +19,11 @@ public class ReviewTaskWorker {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskWorker.class);
 
     private final ReviewTaskExecutor reviewTaskExecutor;
-    private final RepoGuardMetrics metrics;
+    private final ReviewTaskWorkerMetricsRecorder metricsRecorder;
 
-    public ReviewTaskWorker(ReviewTaskExecutor reviewTaskExecutor, RepoGuardMetrics metrics) {
+    public ReviewTaskWorker(ReviewTaskExecutor reviewTaskExecutor, ReviewTaskWorkerMetricsRecorder metricsRecorder) {
         this.reviewTaskExecutor = reviewTaskExecutor;
-        this.metrics = metrics;
+        this.metricsRecorder = metricsRecorder;
     }
 
     @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "${app.rabbit.review.worker-concurrency:1}")
@@ -34,7 +32,7 @@ public class ReviewTaskWorker {
         Channel channel,
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
-        long startedAt = System.nanoTime();
+        long startedAt = metricsRecorder.startedAt();
         try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
             LOGGER.info(
                 "Rabbit review message received taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
@@ -47,41 +45,31 @@ public class ReviewTaskWorker {
             );
             reviewTaskExecutor.execute(message);
             channel.basicAck(deliveryTag, false);
-            recordConsumed(startedAt, "success");
+            metricsRecorder.recordConsumed(startedAt, "success");
             LOGGER.info(
                 "Rabbit review message consumed taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
                 message.taskId(),
                 safePart(message.organization()),
                 safePart(message.repository()),
                 message.prNumber(),
-                elapsedMillis(startedAt),
+                metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag
             );
         } catch (RuntimeException ex) {
             channel.basicReject(deliveryTag, false);
-            recordConsumed(startedAt, "rejected");
+            metricsRecorder.recordConsumed(startedAt, "rejected");
             LOGGER.warn(
                 "Rabbit review message rejected taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.taskId(),
                 safePart(message.organization()),
                 safePart(message.repository()),
                 message.prNumber(),
-                elapsedMillis(startedAt),
+                metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
                 ex.getClass().getSimpleName()
             );
         }
-    }
-
-    private void recordConsumed(long startedAt, String result) {
-        if (metrics != null) {
-            metrics.rabbitMessageConsumed(Duration.ofNanos(System.nanoTime() - startedAt), result);
-        }
-    }
-
-    private long elapsedMillis(long startedAt) {
-        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
     private String safePart(String value) {

@@ -2,10 +2,10 @@ package com.repoguard.agent.worker;
 
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
@@ -14,29 +14,33 @@ class ReviewTaskWorkerTest {
     @Test
     void handleAcknowledgesMessageAfterSuccessfulExecution() throws Exception {
         ReviewTaskExecutor executor = org.mockito.Mockito.mock(ReviewTaskExecutor.class);
-        RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+        ReviewTaskWorkerMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(ReviewTaskWorkerMetricsRecorder.class);
         Channel channel = org.mockito.Mockito.mock(Channel.class);
         ReviewTaskMessage message = message();
+        when(metricsRecorder.startedAt()).thenReturn(100L);
+        when(metricsRecorder.elapsedMillis(100L)).thenReturn(35L);
 
-        new ReviewTaskWorker(executor, metrics).handle(message, channel, 99L);
+        new ReviewTaskWorker(executor, metricsRecorder).handle(message, channel, 99L);
 
         verify(executor).execute(message);
         verify(channel).basicAck(99L, false);
-        verify(metrics).rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("success"));
+        verify(metricsRecorder).recordConsumed(100L, "success");
     }
 
     @Test
     void handleRejectsMessageWithoutRequeueWhenExecutionFails() throws Exception {
         ReviewTaskExecutor executor = org.mockito.Mockito.mock(ReviewTaskExecutor.class);
-        RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+        ReviewTaskWorkerMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(ReviewTaskWorkerMetricsRecorder.class);
         Channel channel = org.mockito.Mockito.mock(Channel.class);
         ReviewTaskMessage message = message();
+        when(metricsRecorder.startedAt()).thenReturn(200L);
+        when(metricsRecorder.elapsedMillis(200L)).thenReturn(21L);
         doThrow(new IllegalStateException("boom")).when(executor).execute(message);
 
-        new ReviewTaskWorker(executor, metrics).handle(message, channel, 100L);
+        new ReviewTaskWorker(executor, metricsRecorder).handle(message, channel, 100L);
 
         verify(channel).basicReject(100L, false);
-        verify(metrics).rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("rejected"));
+        verify(metricsRecorder).recordConsumed(200L, "rejected");
     }
 
     private ReviewTaskMessage message() {
