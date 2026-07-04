@@ -1,5 +1,6 @@
 package com.repoguard.agent.worker;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.CacheEvictionService;
@@ -18,8 +19,17 @@ class ReviewExecutionCacheInvalidatorTest {
     }
 
     @Test
-    void noopsWhenCacheEvictionServiceIsUnavailable() {
-        ReviewExecutionCacheInvalidator invalidator = new ReviewExecutionCacheInvalidator(null);
+    void requiresCacheEvictionServiceDependency() {
+        assertThatThrownBy(() -> new ReviewExecutionCacheInvalidator(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("cacheEvictionService");
+    }
+
+    @Test
+    void noopCacheEvictionServiceKeepsCompatibilityWhenCacheIsUnavailable() {
+        ReviewExecutionCacheInvalidator invalidator = new ReviewExecutionCacheInvalidator(
+            new ReviewExecutionNoopCacheEvictionService()
+        );
 
         invalidator.reviewTaskChanged();
     }

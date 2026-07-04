@@ -128,7 +128,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(reviewTaskStateMachine);
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
-        ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(null);
+        ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
+            new ReviewExecutionNoopCacheEvictionService()
+        );
         ReviewExecutionFailureHandler failureHandler = new ReviewExecutionFailureHandler(
             reviewTaskMapper,
             claimService,
