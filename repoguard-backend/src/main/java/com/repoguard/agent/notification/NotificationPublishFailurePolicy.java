@@ -12,10 +12,12 @@ class NotificationPublishFailurePolicy {
     private static final int MAX_ERROR_LENGTH = 1024;
 
     private final NotificationRetrySchedule retrySchedule;
+    private final NotificationTextLimiter textLimiter;
 
     @Autowired
-    NotificationPublishFailurePolicy(NotificationRetrySchedule retrySchedule) {
+    NotificationPublishFailurePolicy(NotificationRetrySchedule retrySchedule, NotificationTextLimiter textLimiter) {
         this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
+        this.textLimiter = Objects.requireNonNull(textLimiter, "textLimiter");
     }
 
     NotificationPublishFailureDecision decide(
@@ -29,19 +31,12 @@ class NotificationPublishFailurePolicy {
             dead ? NotificationEventStatus.DEAD.code() : NotificationEventStatus.PUBLISH_FAILED.code(),
             nextRetryCount,
             dead ? null : retrySchedule.nextRetryAt(nextRetryCount),
-            truncate(errorMessage(ex), MAX_ERROR_LENGTH)
+            textLimiter.limit(errorMessage(ex), MAX_ERROR_LENGTH)
         );
     }
 
     private String errorMessage(RuntimeException ex) {
         String message = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
         return SensitiveTextSanitizer.sanitize(message);
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
     }
 }

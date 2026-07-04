@@ -24,7 +24,7 @@ class NotificationBindingDeliveryServiceTest {
     private final NotificationBindingDeliveryService service = new NotificationBindingDeliveryService(
         deliveryLogMapper,
         registry(),
-        new NotificationDeliveryLogFactory(),
+        new NotificationDeliveryLogFactory(new NotificationTextLimiter()),
         new NotificationBindingMatcher(),
         new NotificationSuccessfulDeliveryQuery(deliveryLogMapper)
     );

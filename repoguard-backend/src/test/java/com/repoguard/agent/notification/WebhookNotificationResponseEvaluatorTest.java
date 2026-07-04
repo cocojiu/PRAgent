@@ -7,7 +7,8 @@ import org.junit.jupiter.api.Test;
 
 class WebhookNotificationResponseEvaluatorTest {
 
-    private final WebhookNotificationResponseEvaluator evaluator = new WebhookNotificationResponseEvaluator();
+    private final WebhookNotificationResponseEvaluator evaluator =
+        new WebhookNotificationResponseEvaluator(new NotificationTextLimiter());
 
     @Test
     void errcodeZeroMapResponseIsSuccessful() {

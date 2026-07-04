@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test;
 class NotificationDeliveryLogFactoryTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-06-18T10:30:00Z"), ZoneId.of("UTC"));
-    private final NotificationDeliveryLogFactory factory = new NotificationDeliveryLogFactory(clock);
+    private final NotificationDeliveryLogFactory factory =
+        new NotificationDeliveryLogFactory(clock, new NotificationTextLimiter());
 
     @Test
     void successResultCreatesSuccessLogAndClearsFailureReason() {

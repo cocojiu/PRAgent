@@ -5,6 +5,7 @@ import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -14,14 +15,16 @@ class NotificationDeliveryLogFactory {
     private static final int MAX_FAILURE_REASON_LENGTH = 1024;
 
     private final Clock clock;
+    private final NotificationTextLimiter textLimiter;
 
     @Autowired
-    NotificationDeliveryLogFactory() {
-        this(Clock.systemDefaultZone());
+    NotificationDeliveryLogFactory(NotificationTextLimiter textLimiter) {
+        this(Clock.systemDefaultZone(), textLimiter);
     }
 
-    NotificationDeliveryLogFactory(Clock clock) {
+    NotificationDeliveryLogFactory(Clock clock, NotificationTextLimiter textLimiter) {
         this.clock = clock;
+        this.textLimiter = Objects.requireNonNull(textLimiter, "textLimiter");
     }
 
     NotificationDeliveryLog create(
@@ -37,7 +40,7 @@ class NotificationDeliveryLogFactory {
         log.setProvider(binding.getProvider());
         log.setStatus(result.success() ? NotificationDeliveryStatus.SUCCESS.code() : NotificationDeliveryStatus.FAILED.code());
         log.setAttemptCount(safe(event.getRetryCount()) + 1);
-        log.setFailureReason(result.success() ? null : truncate(result.message(), MAX_FAILURE_REASON_LENGTH));
+        log.setFailureReason(result.success() ? null : textLimiter.limit(result.message(), MAX_FAILURE_REASON_LENGTH));
         log.setRequestId(result.requestId());
         log.setSentAt(now);
         log.setCreatedAt(now);
@@ -46,12 +49,5 @@ class NotificationDeliveryLogFactory {
 
     private int safe(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
     }
 }

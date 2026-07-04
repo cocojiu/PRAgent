@@ -1,12 +1,19 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.common.SensitiveTextSanitizer;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
 class WebhookNotificationResponseEvaluator {
 
     private static final int MAX_RESPONSE_LENGTH = 512;
+
+    private final NotificationTextLimiter textLimiter;
+
+    WebhookNotificationResponseEvaluator(NotificationTextLimiter textLimiter) {
+        this.textLimiter = Objects.requireNonNull(textLimiter, "textLimiter");
+    }
 
     NotificationSendResult evaluate(Object response) {
         String responseText = response == null ? "" : safeMessage(response.toString());
@@ -29,13 +36,6 @@ class WebhookNotificationResponseEvaluator {
     }
 
     private String safeMessage(String value) {
-        return truncate(SensitiveTextSanitizer.sanitize(value), MAX_RESPONSE_LENGTH);
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
+        return textLimiter.limit(SensitiveTextSanitizer.sanitize(value), MAX_RESPONSE_LENGTH);
     }
 }
