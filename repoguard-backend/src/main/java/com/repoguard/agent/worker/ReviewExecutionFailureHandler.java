@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,9 +29,7 @@ public class ReviewExecutionFailureHandler {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
-        this.completionApplier = completionApplier == null
-            ? new ReviewTaskCompletionApplier(null)
-            : completionApplier;
+        this.completionApplier = Objects.requireNonNull(completionApplier, "completionApplier");
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
         this.cacheInvalidator = cacheInvalidator;

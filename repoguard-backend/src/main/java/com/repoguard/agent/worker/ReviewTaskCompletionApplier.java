@@ -8,6 +8,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,9 +19,7 @@ class ReviewTaskCompletionApplier {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     ReviewTaskCompletionApplier(ReviewTaskStateMachine reviewTaskStateMachine) {
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
     }
 
     boolean applyCompleted(

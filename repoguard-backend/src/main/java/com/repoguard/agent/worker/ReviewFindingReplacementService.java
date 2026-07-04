@@ -6,6 +6,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,9 +20,7 @@ class ReviewFindingReplacementService {
         ReviewFindingDeduplicator findingDeduplicator
     ) {
         this.reviewFindingMapper = reviewFindingMapper;
-        this.findingDeduplicator = findingDeduplicator == null
-            ? new ReviewFindingDeduplicator()
-            : findingDeduplicator;
+        this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
     }
 
     int replace(Long taskId, ReviewResult reviewResult) {
