@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import java.time.Clock;
 import java.time.LocalDate;
@@ -21,15 +21,15 @@ public class DashboardReviewTrendWindow {
         this.clock = clock;
     }
 
-    static DashboardReviewTrendWindow forTest(Clock clock) {
+    public static DashboardReviewTrendWindow forTest(Clock clock) {
         return new DashboardReviewTrendWindow(clock);
     }
 
-    LocalDate startDate() {
+    public LocalDate startDate() {
         return LocalDate.now(clock).minusDays(DEFAULT_DAYS - 1L);
     }
 
-    int days() {
+    public int days() {
         return DEFAULT_DAYS;
     }
 }

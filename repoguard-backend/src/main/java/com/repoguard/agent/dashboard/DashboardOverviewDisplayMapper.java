@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import org.springframework.stereotype.Component;
 
@@ -31,9 +31,9 @@ public class DashboardOverviewDisplayMapper {
         };
     }
 
-    record MetricDisplay(String label, String trendType, String color) {
+    public record MetricDisplay(String label, String trendType, String color) {
     }
 
-    record RiskLevelDisplay(String name, String color) {
+    public record RiskLevelDisplay(String name, String color) {
     }
 }

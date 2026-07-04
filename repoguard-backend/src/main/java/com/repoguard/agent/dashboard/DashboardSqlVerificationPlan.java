@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import java.util.List;
 import org.springframework.stereotype.Component;

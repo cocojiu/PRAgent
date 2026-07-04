@@ -2,6 +2,8 @@ package com.repoguard.agent.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.github.GithubPullRequestClientImpl;
 import com.repoguard.agent.messaging.RabbitReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
@@ -10,8 +12,6 @@ import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
-import com.repoguard.agent.service.impl.DashboardLlmQualityTrendBuilder;
-import com.repoguard.agent.service.impl.DashboardReviewTrendWindow;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewResponseAssembler;

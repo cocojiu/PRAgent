@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

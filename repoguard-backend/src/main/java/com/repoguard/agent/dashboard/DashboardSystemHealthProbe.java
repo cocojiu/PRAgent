@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.ReviewPolicyProvider;
@@ -8,14 +8,14 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
-class DashboardSystemHealthProbe {
+public class DashboardSystemHealthProbe {
 
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyProvider reviewPolicyProvider;
     private final RabbitTemplate rabbitTemplate;
     private final DashboardStatusMapper statusMapper;
 
-    DashboardSystemHealthProbe(
+    public DashboardSystemHealthProbe(
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyProvider reviewPolicyProvider,
         RabbitTemplate rabbitTemplate,
@@ -27,7 +27,7 @@ class DashboardSystemHealthProbe {
         this.statusMapper = statusMapper;
     }
 
-    List<SystemHealthItemDto> probe() {
+    public List<SystemHealthItemDto> probe() {
         return List.of(
             new SystemHealthItemDto("MySQL", DashboardStatusMapper.HEALTH_NORMAL),
             new SystemHealthItemDto("RabbitMQ", rabbitMqHealthStatus()),

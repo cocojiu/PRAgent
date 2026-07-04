@@ -9,6 +9,13 @@ import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
+import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
+import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardStatusMapper;
+import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
@@ -82,7 +89,7 @@ class DashboardServiceImplTest {
         assertThat(cacheable).isNotNull();
         assertThat(cacheable.sync()).isTrue();
         assertThat(cacheable.key())
-            .isEqualTo("T(com.repoguard.agent.service.impl.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+            .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
     }
 
     @Test

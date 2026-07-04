@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.dashboard;
 
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.LlmQualityTrendPointDto;
@@ -31,16 +31,16 @@ public class DashboardLlmQualityTrendBuilder {
         this.clock = clock;
     }
 
-    static DashboardLlmQualityTrendBuilder forTest(DashboardLlmQualityFormatter llmQualityFormatter, Clock clock) {
+    public static DashboardLlmQualityTrendBuilder forTest(DashboardLlmQualityFormatter llmQualityFormatter, Clock clock) {
         return new DashboardLlmQualityTrendBuilder(llmQualityFormatter, clock);
     }
 
-    Window window(Integer days) {
+    public Window window(Integer days) {
         int normalizedDays = DashboardLlmTrendDays.normalize(days);
         return new Window(normalizedDays, today().minusDays(normalizedDays - 1L));
     }
 
-    List<LlmQualityTrendPointDto> build(List<DashboardLlmQualityTrendCount> trendCounts, Window window) {
+    public List<LlmQualityTrendPointDto> build(List<DashboardLlmQualityTrendCount> trendCounts, Window window) {
         Map<String, DashboardLlmQualityTrendCount> countsByDay = nullToEmpty(trendCounts).stream()
             .filter(count -> StringUtils.hasText(count.getDayKey()))
             .collect(Collectors.toMap(DashboardLlmQualityTrendCount::getDayKey, java.util.function.Function.identity(), (first, second) -> first));
@@ -85,6 +85,6 @@ public class DashboardLlmQualityTrendBuilder {
         return values == null ? List.of() : values;
     }
 
-    record Window(int days, LocalDate startDate) {
+    public record Window(int days, LocalDate startDate) {
     }
 }

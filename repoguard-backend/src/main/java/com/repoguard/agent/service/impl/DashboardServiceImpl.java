@@ -1,6 +1,13 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
+import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
+import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardStatusMapper;
+import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
@@ -69,7 +76,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(
         cacheNames = CacheNames.DASHBOARD_OVERVIEW,
-        key = "T(com.repoguard.agent.service.impl.DashboardLlmTrendDays).normalize(#llmTrendDays)",
+        key = "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)",
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
