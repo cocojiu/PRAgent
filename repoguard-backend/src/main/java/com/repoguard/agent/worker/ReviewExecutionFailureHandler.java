@@ -1,6 +1,5 @@
 package com.repoguard.agent.worker;
 
-import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -15,7 +14,7 @@ public class ReviewExecutionFailureHandler {
     private final ReviewTaskCompletionApplier completionApplier;
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
-    private final CacheEvictionService cacheEvictionService;
+    private final ReviewExecutionCacheInvalidator cacheInvalidator;
 
     public ReviewExecutionFailureHandler(
         ReviewTaskMapper reviewTaskMapper,
@@ -23,7 +22,7 @@ public class ReviewExecutionFailureHandler {
         ReviewTaskCompletionApplier completionApplier,
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
-        CacheEvictionService cacheEvictionService
+        ReviewExecutionCacheInvalidator cacheInvalidator
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
@@ -32,7 +31,7 @@ public class ReviewExecutionFailureHandler {
             : completionApplier;
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     public boolean applyFailure(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
@@ -46,7 +45,7 @@ public class ReviewExecutionFailureHandler {
         reviewTaskMapper.updateById(task);
         timelineRecorder.reviewFailed(task, ex, failedAt);
         metricsRecorder.recordFailed(ex, startedAt, failedAt);
-        evictDashboardOverview();
+        cacheInvalidator.reviewTaskChanged();
         return true;
     }
 
@@ -57,9 +56,4 @@ public class ReviewExecutionFailureHandler {
         return ex.getClass().getSimpleName();
     }
 
-    private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
-    }
 }

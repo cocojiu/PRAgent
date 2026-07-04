@@ -1,6 +1,5 @@
 package com.repoguard.agent.worker;
 
-import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -18,7 +17,7 @@ class ReviewExecutionResultWriter {
     private final ReviewFindingReplacementService findingReplacementService;
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
-    private final CacheEvictionService cacheEvictionService;
+    private final ReviewExecutionCacheInvalidator cacheInvalidator;
 
     ReviewExecutionResultWriter(
         ReviewTaskMapper reviewTaskMapper,
@@ -28,7 +27,7 @@ class ReviewExecutionResultWriter {
         ReviewFindingReplacementService findingReplacementService,
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
-        CacheEvictionService cacheEvictionService
+        ReviewExecutionCacheInvalidator cacheInvalidator
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
@@ -37,7 +36,7 @@ class ReviewExecutionResultWriter {
         this.findingReplacementService = findingReplacementService;
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheInvalidator = cacheInvalidator;
     }
 
     WriteResult applyCompleted(
@@ -59,14 +58,8 @@ class ReviewExecutionResultWriter {
         timelineRecorder.reviewGenerated(task, reviewResult, finishedAt);
         timelineRecorder.reviewTerminal(task, humanReviewRequired, finishedAt);
         metricsRecorder.recordCompleted(reviewResult, startedAt, finishedAt);
-        evictDashboardOverview();
+        cacheInvalidator.reviewTaskChanged();
         return new WriteResult(findingCount, humanReviewRequired);
-    }
-
-    private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
     }
 
     record WriteResult(int findingCount, boolean humanReviewRequired) {

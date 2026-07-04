@@ -127,13 +127,14 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(reviewTaskStateMachine);
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
+        ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(null);
         ReviewExecutionFailureHandler failureHandler = new ReviewExecutionFailureHandler(
             reviewTaskMapper,
             claimService,
             completionApplier,
             timelineRecorder,
             metricsRecorder,
-            null
+            cacheInvalidator
         );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
             reviewTaskMapper,
@@ -143,7 +144,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             findingReplacementService,
             timelineRecorder,
             metricsRecorder,
-            null
+            cacheInvalidator
         );
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,
