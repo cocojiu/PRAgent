@@ -8,7 +8,9 @@ import org.junit.jupiter.api.Test;
 
 class ReviewFindingDeduplicatorTest {
 
-    private final ReviewFindingDeduplicator deduplicator = new ReviewFindingDeduplicator();
+    private final ReviewFindingDeduplicator deduplicator = new ReviewFindingDeduplicator(
+        new ReviewFindingDeduplicationKeyResolver()
+    );
 
     @Test
     void returnsEmptyListForNullOrEmptyFindings() {

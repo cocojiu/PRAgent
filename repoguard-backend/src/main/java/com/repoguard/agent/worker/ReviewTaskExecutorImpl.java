@@ -117,7 +117,9 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     ) {
         ReviewExecutionClock clock = new ReviewExecutionClock();
         ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
-        ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator();
+        ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator(
+            new ReviewFindingDeduplicationKeyResolver()
+        );
         ReviewTimelineAppender timelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
         ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(timelineAppender);
         ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
