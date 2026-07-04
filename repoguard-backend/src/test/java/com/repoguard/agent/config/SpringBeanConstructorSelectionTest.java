@@ -76,6 +76,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryLogContextFormatter"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryWorkerClock"),
             Class.forName("com.repoguard.agent.notification.NotificationDeliveryWorkerMetricsRecorder"),
+            Class.forName("com.repoguard.agent.notification.NotificationEventKeyFactory"),
             Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy"),
             Class.forName("com.repoguard.agent.notification.NotificationRetrySchedule"),
             Class.forName("com.repoguard.agent.notification.NotificationTextLimiter"),

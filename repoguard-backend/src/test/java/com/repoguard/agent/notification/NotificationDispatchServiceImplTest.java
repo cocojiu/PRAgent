@@ -16,7 +16,8 @@ class NotificationDispatchServiceImplTest {
 
     private final NotificationEventMapper eventMapper = org.mockito.Mockito.mock(NotificationEventMapper.class);
     private final NotificationOutboxEventStore outboxEventStore = new NotificationOutboxEventStore(eventMapper);
-    private final NotificationEventPayloadBuilder payloadBuilder = new NotificationEventPayloadBuilder(new com.fasterxml.jackson.databind.ObjectMapper());
+    private final NotificationEventPayloadBuilder payloadBuilder =
+        new NotificationEventPayloadBuilder(new com.fasterxml.jackson.databind.ObjectMapper(), new NotificationEventKeyFactory());
     private final NotificationEventPublishCoordinator publishCoordinator =
         org.mockito.Mockito.mock(NotificationEventPublishCoordinator.class);
     private final NotificationDispatchServiceImpl service = new NotificationDispatchServiceImpl(

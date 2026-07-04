@@ -4,15 +4,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
 class NotificationEventPayloadBuilder {
 
     private final ObjectMapper objectMapper;
+    private final NotificationEventKeyFactory eventKeyFactory;
 
-    NotificationEventPayloadBuilder(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    NotificationEventPayloadBuilder(ObjectMapper objectMapper, NotificationEventKeyFactory eventKeyFactory) {
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.eventKeyFactory = Objects.requireNonNull(eventKeyFactory, "eventKeyFactory");
     }
 
     NotificationEventPayload build(
@@ -40,11 +43,11 @@ class NotificationEventPayloadBuilder {
             commentSkippedCount,
             "/repoguard/tasks/" + task.getId()
         );
-        return new NotificationEventPayload(eventKey(eventType, task.getId(), batchId), message, toJson(message));
-    }
-
-    private String eventKey(String eventType, Long taskId, Long batchId) {
-        return batchId == null ? eventType + ":" + taskId : eventType + ":" + taskId + ":" + batchId;
+        return new NotificationEventPayload(
+            eventKeyFactory.create(eventType, task.getId(), batchId),
+            message,
+            toJson(message)
+        );
     }
 
     private String toJson(NotificationMessage message) {

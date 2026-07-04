@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 
 class NotificationEventPayloadBuilderTest {
 
-    private final NotificationEventPayloadBuilder builder = new NotificationEventPayloadBuilder(new ObjectMapper());
+    private final NotificationEventPayloadBuilder builder =
+        new NotificationEventPayloadBuilder(new ObjectMapper(), new NotificationEventKeyFactory());
 
     @Test
     void buildsPayloadForReviewTaskEvent() {
