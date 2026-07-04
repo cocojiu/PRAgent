@@ -131,10 +131,47 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             null,
             null,
-            new ReviewExecutionClock()
+            new ReviewExecutionClock(),
+            new ReviewExecutionFailureClassifier()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("completionApplier");
+    }
+
+    @Test
+    void failureHandlerRequiresFailureClassifierDependency() {
+        ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+
+        assertThatThrownBy(() -> new ReviewExecutionFailureHandler(
+            reviewTaskMapper,
+            null,
+            new ReviewTaskCompletionApplier(
+                new ReviewTaskStateMachine(),
+                new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+                new ReviewTaskFailureOutcomePolicy(),
+                new ReviewTaskDurationPolicy()
+            ),
+            null,
+            null,
+            null,
+            new ReviewExecutionClock(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureClassifier");
+    }
+
+    @Test
+    void diffFetcherRequiresFailureClassifierDependency() {
+        assertThatThrownBy(() -> new GithubPullRequestDiffFetcher(
+            null,
+            null,
+            new ReviewExecutionClock(),
+            new ReviewLogContextFormatter(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureClassifier");
     }
 
     @Test
@@ -166,7 +203,8 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             null,
             null,
-            new ReviewExecutionClock()
+            new ReviewExecutionClock(),
+            new ReviewExecutionFailureClassifier()
         );
     }
 }

@@ -1,7 +1,6 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -17,6 +16,7 @@ public class ReviewExecutionFailureHandler {
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionCacheInvalidator cacheInvalidator;
     private final ReviewExecutionClock clock;
+    private final ReviewExecutionFailureClassifier failureClassifier;
 
     public ReviewExecutionFailureHandler(
         ReviewTaskMapper reviewTaskMapper,
@@ -25,7 +25,8 @@ public class ReviewExecutionFailureHandler {
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
         ReviewExecutionCacheInvalidator cacheInvalidator,
-        ReviewExecutionClock clock
+        ReviewExecutionClock clock,
+        ReviewExecutionFailureClassifier failureClassifier
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
@@ -34,6 +35,7 @@ public class ReviewExecutionFailureHandler {
         this.metricsRecorder = metricsRecorder;
         this.cacheInvalidator = cacheInvalidator;
         this.clock = clock;
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     public boolean applyFailure(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
@@ -51,10 +53,7 @@ public class ReviewExecutionFailureHandler {
     }
 
     public String failureCategory(RuntimeException ex) {
-        if (ex instanceof ExternalCallException externalCallException) {
-            return externalCallException.getCategory();
-        }
-        return ex.getClass().getSimpleName();
+        return failureClassifier.failureCategory(ex);
     }
 
 }

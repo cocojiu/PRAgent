@@ -143,6 +143,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
+        ReviewExecutionFailureClassifier failureClassifier = new ReviewExecutionFailureClassifier();
         ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
             new ReviewExecutionNoopCacheEvictionService()
         );
@@ -153,7 +154,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             timelineRecorder,
             metricsRecorder,
             cacheInvalidator,
-            clock
+            clock,
+            failureClassifier
         );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
             reviewTaskMapper,
@@ -169,7 +171,13 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,
             new ReviewExecutionTransactionRunner(transactionManager, 3),
-            new GithubPullRequestDiffFetcher(githubPullRequestClient, metricsRecorder, clock, logContextFormatter),
+            new GithubPullRequestDiffFetcher(
+                githubPullRequestClient,
+                metricsRecorder,
+                clock,
+                logContextFormatter,
+                failureClassifier
+            ),
             reviewTaskStateMachine,
             timelineRecorder,
             claimService,

@@ -1,7 +1,6 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.time.Duration;
@@ -19,17 +18,20 @@ class GithubPullRequestDiffFetcher {
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionClock clock;
     private final ReviewLogContextFormatter logContextFormatter;
+    private final ReviewExecutionFailureClassifier failureClassifier;
 
     GithubPullRequestDiffFetcher(
         GithubPullRequestClient githubPullRequestClient,
         ReviewExecutionMetricsRecorder metricsRecorder,
         ReviewExecutionClock clock,
-        ReviewLogContextFormatter logContextFormatter
+        ReviewLogContextFormatter logContextFormatter,
+        ReviewExecutionFailureClassifier failureClassifier
     ) {
         this.githubPullRequestClient = githubPullRequestClient;
         this.metricsRecorder = metricsRecorder;
         this.clock = clock;
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     GithubPullRequestDiff fetch(ReviewTask task) {
@@ -61,18 +63,11 @@ class GithubPullRequestDiffFetcher {
                 task.getId(),
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
-                failureCategory(ex),
+                failureClassifier.failureCategory(ex),
                 ex.getClass().getName(),
                 duration.toMillis()
             );
             throw ex;
         }
-    }
-
-    private String failureCategory(RuntimeException ex) {
-        if (ex instanceof ExternalCallException externalCallException) {
-            return externalCallException.getCategory();
-        }
-        return ex.getClass().getSimpleName();
     }
 }

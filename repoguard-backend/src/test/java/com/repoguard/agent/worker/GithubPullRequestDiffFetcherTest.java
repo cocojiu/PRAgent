@@ -23,7 +23,8 @@ class GithubPullRequestDiffFetcherTest {
         githubPullRequestClient,
         metricsRecorder,
         clock,
-        new ReviewLogContextFormatter()
+        new ReviewLogContextFormatter(),
+        new ReviewExecutionFailureClassifier()
     );
 
     @Test
