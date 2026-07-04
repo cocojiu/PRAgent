@@ -118,6 +118,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator();
         ReviewTimelineAppender timelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
+        ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(timelineAppender);
         ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(changedFileMapper);
         ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
             reviewFindingMapper,
@@ -130,7 +131,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             reviewTaskMapper,
             claimService,
             completionApplier,
-            timelineAppender,
+            timelineRecorder,
             metricsRecorder,
             null
         );
@@ -140,7 +141,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             completionApplier,
             changedFileReplacementService,
             findingReplacementService,
-            timelineAppender,
+            timelineRecorder,
             metricsRecorder,
             null
         );
@@ -149,7 +150,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             new ReviewExecutionTransactionRunner(transactionManager, 3),
             new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics),
             reviewTaskStateMachine,
-            timelineAppender,
+            timelineRecorder,
             claimService,
             failureHandler,
             resultWriter,

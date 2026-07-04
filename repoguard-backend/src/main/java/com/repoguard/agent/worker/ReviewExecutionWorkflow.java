@@ -16,7 +16,7 @@ class ReviewExecutionWorkflow {
     private final ReviewExecutionTransactionRunner transactionRunner;
     private final GithubPullRequestDiffFetcher diffFetcher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
-    private final ReviewTimelineAppender timelineAppender;
+    private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewTaskClaimService claimService;
     private final ReviewExecutionFailureHandler failureHandler;
     private final ReviewExecutionResultWriter resultWriter;
@@ -29,7 +29,7 @@ class ReviewExecutionWorkflow {
         ReviewExecutionTransactionRunner transactionRunner,
         GithubPullRequestDiffFetcher diffFetcher,
         ReviewTaskStateMachine reviewTaskStateMachine,
-        ReviewTimelineAppender timelineAppender,
+        ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewTaskClaimService claimService,
         ReviewExecutionFailureHandler failureHandler,
         ReviewExecutionResultWriter resultWriter,
@@ -40,7 +40,7 @@ class ReviewExecutionWorkflow {
         this.transactionRunner = transactionRunner;
         this.diffFetcher = diffFetcher;
         this.reviewTaskStateMachine = reviewTaskStateMachine;
-        this.timelineAppender = timelineAppender;
+        this.timelineRecorder = timelineRecorder;
         this.claimService = claimService;
         this.failureHandler = failureHandler;
         this.resultWriter = resultWriter;
@@ -102,7 +102,7 @@ class ReviewExecutionWorkflow {
             if (!claimService.claimReviewing(task, startedAt, claimId)) {
                 return false;
             }
-            timelineAppender.append(task.getId(), "Review started", startedAt, "CURRENT", 2);
+            timelineRecorder.reviewStarted(task, startedAt);
             return true;
         });
     }

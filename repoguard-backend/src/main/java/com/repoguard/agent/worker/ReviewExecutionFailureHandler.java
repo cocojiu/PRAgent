@@ -13,7 +13,7 @@ public class ReviewExecutionFailureHandler {
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskClaimService claimService;
     private final ReviewTaskCompletionApplier completionApplier;
-    private final ReviewTimelineAppender timelineAppender;
+    private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final CacheEvictionService cacheEvictionService;
 
@@ -21,7 +21,7 @@ public class ReviewExecutionFailureHandler {
         ReviewTaskMapper reviewTaskMapper,
         ReviewTaskClaimService claimService,
         ReviewTaskCompletionApplier completionApplier,
-        ReviewTimelineAppender timelineAppender,
+        ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
         CacheEvictionService cacheEvictionService
     ) {
@@ -30,7 +30,7 @@ public class ReviewExecutionFailureHandler {
         this.completionApplier = completionApplier == null
             ? new ReviewTaskCompletionApplier(null)
             : completionApplier;
-        this.timelineAppender = timelineAppender;
+        this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
         this.cacheEvictionService = cacheEvictionService;
     }
@@ -44,7 +44,7 @@ public class ReviewExecutionFailureHandler {
         task.setReviewClaimedAt(null);
         task.setReviewClaimedBy(null);
         reviewTaskMapper.updateById(task);
-        timelineAppender.append(task.getId(), failureLabel(ex), failedAt, "FAILED", 5);
+        timelineRecorder.reviewFailed(task, ex, failedAt);
         metricsRecorder.recordFailed(ex, startedAt, failedAt);
         evictDashboardOverview();
         return true;
@@ -55,19 +55,6 @@ public class ReviewExecutionFailureHandler {
             return externalCallException.getCategory();
         }
         return ex.getClass().getSimpleName();
-    }
-
-    private String failureLabel(RuntimeException ex) {
-        String message = ex.getMessage();
-        if (message == null || message.isBlank()) {
-            return "Review failed";
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return truncateLabel("Review failed: " + normalized);
-    }
-
-    private String truncateLabel(String label) {
-        return label.length() > 120 ? label.substring(0, 117) + "..." : label;
     }
 
     private void evictDashboardOverview() {
