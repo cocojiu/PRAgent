@@ -2,14 +2,16 @@ package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewTask;
 import org.junit.jupiter.api.Test;
 
 class NotificationEventPayloadBuilderTest {
 
     private final NotificationEventPayloadBuilder builder =
-        new NotificationEventPayloadBuilder(new ObjectMapper(), new NotificationEventKeyFactory());
+        new NotificationEventPayloadBuilder(
+            new NotificationEventKeyFactory(),
+            new NotificationMessageJsonSerializer(new com.fasterxml.jackson.databind.ObjectMapper())
+        );
 
     @Test
     void buildsPayloadForReviewTaskEvent() {
