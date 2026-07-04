@@ -87,6 +87,20 @@ class LlmConnectionProbeTest {
         }
     }
 
+    @Test
+    void probeClassifiesHttpErrorStatus() throws Exception {
+        try (ProbeServer server = startProbeServer("{\"error\":\"rate limited\"}", "application/json", 429)) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+
+            ConnectionProbeResult result = probe.probe(config);
+
+            assertThat(result.healthy()).isFalse();
+            assertThat(result.status()).isEqualTo("failed");
+            assertThat(result.message()).contains("llm_rate_limited", "status=429");
+        }
+    }
+
     private ReviewPolicyConfig reviewPolicyConfig(String apiKey) {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         config.setId(1L);
@@ -110,6 +124,10 @@ class LlmConnectionProbeTest {
     }
 
     private ProbeServer startProbeServer(String responseBody, String contentType) throws IOException {
+        return startProbeServer(responseBody, contentType, 200);
+    }
+
+    private ProbeServer startProbeServer(String responseBody, String contentType, int statusCode) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<String> requestBody = new AtomicReference<>("");
         AtomicReference<String> authorization = new AtomicReference<>("");
@@ -118,7 +136,7 @@ class LlmConnectionProbeTest {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", contentType);
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(statusCode, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });

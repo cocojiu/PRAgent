@@ -5,31 +5,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.security.RequireRole;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 class ControllerAuthorizationContractTest {
 
-    private static final List<Class<?>> CONTROLLERS = List.of(
-        AuthController.class,
-        CacheStatsController.class,
-        DashboardController.class,
-        DataRetentionController.class,
-        GithubWebhookController.class,
-        MessageQueueHealthController.class,
-        NotificationController.class,
-        NotificationIntegrationController.class,
-        ReviewController.class,
-        SystemConfigController.class,
-        UserManagementController.class
-    );
+    private static final String CONTROLLER_BASE_PACKAGE = "com.repoguard.agent.controller";
 
     private static final Set<String> PUBLIC_WRITE_ENDPOINTS = Set.of(
         "AuthController#register",
@@ -41,10 +35,10 @@ class ControllerAuthorizationContractTest {
     );
 
     @Test
-    void writeEndpointsRequireExplicitRoleUnlessPubliclyWhitelisted() {
+    void writeEndpointsRequireExplicitRoleUnlessPubliclyWhitelisted() throws ClassNotFoundException {
         List<String> unprotectedWriteEndpoints = new ArrayList<>();
 
-        for (Class<?> controller : CONTROLLERS) {
+        for (Class<?> controller : discoverControllers()) {
             for (Method method : controller.getDeclaredMethods()) {
                 if (!isWriteHandler(method) || isPublicWriteEndpoint(controller, method)) {
                     continue;
@@ -61,10 +55,10 @@ class ControllerAuthorizationContractTest {
     }
 
     @Test
-    void publicWriteEndpointWhitelistStaysIntentional() {
+    void publicWriteEndpointWhitelistStaysIntentional() throws ClassNotFoundException {
         List<String> existingPublicWriteEndpoints = new ArrayList<>();
 
-        for (Class<?> controller : CONTROLLERS) {
+        for (Class<?> controller : discoverControllers()) {
             for (Method method : controller.getDeclaredMethods()) {
                 if (isWriteHandler(method) && isPublicWriteEndpoint(controller, method)) {
                     existingPublicWriteEndpoints.add(endpointId(controller, method));
@@ -74,6 +68,23 @@ class ControllerAuthorizationContractTest {
 
         assertThat(existingPublicWriteEndpoints)
             .containsExactlyInAnyOrderElementsOf(PUBLIC_WRITE_ENDPOINTS);
+    }
+
+    private List<Class<?>> discoverControllers() throws ClassNotFoundException {
+        ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
+        List<String> controllerClassNames = scanner.findCandidateComponents(CONTROLLER_BASE_PACKAGE).stream()
+            .map(BeanDefinition::getBeanClassName)
+            .filter(Objects::nonNull)
+            .sorted()
+            .toList();
+
+        List<Class<?>> controllers = new ArrayList<>();
+        for (String controllerClassName : controllerClassNames) {
+            controllers.add(Class.forName(controllerClassName));
+        }
+        controllers.sort(Comparator.comparing(Class::getName));
+        return controllers;
     }
 
     private boolean isWriteHandler(Method method) {

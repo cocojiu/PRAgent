@@ -204,6 +204,49 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void reviewClassifiesHttpErrorBeforeParsingLlmResponse() throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            byte[] response = "{\"error\":\"rate limited\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(429, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(
+                99,
+                700,
+                4,
+                450,
+                "http://127.0.0.1:" + server.getAddress().getPort()
+            );
+            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
+
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+
+            ReviewResult result = new LlmPullRequestReviewer(
+                reviewPolicyProvider,
+                ruleBasedReviewer,
+                RestClient.builder(),
+                new ObjectMapper(),
+                null,
+                null
+            ).review(new ReviewTask(), diff);
+
+            assertThat(result.llmStatus()).isEqualTo("FALLBACK");
+            assertThat(result.statusDetail()).contains("llm_rate_limited", "status=429");
+            assertThat(result.riskLevel()).isEqualTo("LOW");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void reviewFallsBackOnlyFailedChunksToRules() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);

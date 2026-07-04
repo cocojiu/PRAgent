@@ -9,6 +9,7 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -16,9 +17,11 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCaller {
@@ -170,7 +173,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .exchange((request, clientResponse) -> clientResponse.getBody().readAllBytes()));
+                .exchange((request, clientResponse) -> readSuccessfulBody(clientResponse)));
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
@@ -183,6 +186,21 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             }
             throw classified;
         }
+    }
+
+    private byte[] readSuccessfulBody(ClientHttpResponse response) throws IOException {
+        byte[] body = response.getBody().readAllBytes();
+        if (!response.getStatusCode().isError()) {
+            return body;
+        }
+        throw new RestClientResponseException(
+            "LLM request failed with HTTP status " + response.getStatusCode().value(),
+            response.getStatusCode().value(),
+            response.getStatusText(),
+            response.getHeaders(),
+            body,
+            StandardCharsets.UTF_8
+        );
     }
 
     private LlmCallResult extractLlmCallResult(String response) {
