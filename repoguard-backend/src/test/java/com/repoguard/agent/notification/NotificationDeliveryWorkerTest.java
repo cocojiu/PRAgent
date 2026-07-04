@@ -26,6 +26,8 @@ class NotificationDeliveryWorkerTest {
     private final NotificationDeliveryLogMapper deliveryLogMapper = org.mockito.Mockito.mock(NotificationDeliveryLogMapper.class);
     private final NotificationChannelAdapter adapter = org.mockito.Mockito.mock(NotificationChannelAdapter.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder =
+        new NotificationDeliveryWorkerMetricsRecorder(metrics, new NotificationDeliveryWorkerClock());
 
     @Test
     void handleAcknowledgesMessageAndRecordsSuccessMetricAfterDelivery() throws Exception {
@@ -182,7 +184,7 @@ class NotificationDeliveryWorkerTest {
             bindingBatchDeliveryService(registry),
             deliveryCompletionService(),
             new NotificationDeliveryEventStateUpdater(eventMapper),
-            metrics
+            metricsRecorder
         );
     }
 

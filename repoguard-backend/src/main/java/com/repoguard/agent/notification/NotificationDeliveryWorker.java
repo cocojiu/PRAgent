@@ -3,9 +3,7 @@ package com.repoguard.agent.notification;
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +23,7 @@ public class NotificationDeliveryWorker {
     private final NotificationBindingBatchDeliveryService bindingBatchDeliveryService;
     private final NotificationDeliveryCompletionService deliveryCompletionService;
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
-    private final RepoGuardMetrics metrics;
+    private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder;
 
     public NotificationDeliveryWorker(
         NotificationDeliverableEventQuery deliverableEventQuery,
@@ -33,14 +31,14 @@ public class NotificationDeliveryWorker {
         NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
         NotificationDeliveryCompletionService deliveryCompletionService,
         NotificationDeliveryEventStateUpdater eventStateUpdater,
-        RepoGuardMetrics metrics
+        NotificationDeliveryWorkerMetricsRecorder metricsRecorder
     ) {
         this.deliverableEventQuery = deliverableEventQuery;
         this.payloadParser = payloadParser;
         this.bindingBatchDeliveryService = bindingBatchDeliveryService;
         this.deliveryCompletionService = deliveryCompletionService;
         this.eventStateUpdater = eventStateUpdater;
-        this.metrics = metrics;
+        this.metricsRecorder = metricsRecorder;
     }
 
     @RabbitListener(queues = "${app.rabbit.notification.queue}", concurrency = "${app.rabbit.notification.worker-concurrency:1}")
@@ -49,7 +47,7 @@ public class NotificationDeliveryWorker {
         Channel channel,
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
-        long startedAt = System.nanoTime();
+        long startedAt = metricsRecorder.startedAt();
         try {
             LOGGER.info(
                 "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
@@ -62,7 +60,7 @@ public class NotificationDeliveryWorker {
             );
             deliver(message.eventId());
             channel.basicAck(deliveryTag, false);
-            recordConsumed(startedAt, "success");
+            metricsRecorder.recordConsumed(startedAt, "success");
             LOGGER.info(
                 "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
                 message.eventId(),
@@ -70,12 +68,12 @@ public class NotificationDeliveryWorker {
                 safePart(message.eventType()),
                 message.taskId(),
                 message.batchId(),
-                elapsedMillis(startedAt),
+                metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag
             );
         } catch (RuntimeException ex) {
             channel.basicReject(deliveryTag, false);
-            recordConsumed(startedAt, "rejected");
+            metricsRecorder.recordConsumed(startedAt, "rejected");
             LOGGER.warn(
                 "Rabbit notification message rejected eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.eventId(),
@@ -83,7 +81,7 @@ public class NotificationDeliveryWorker {
                 safePart(message.eventType()),
                 message.taskId(),
                 message.batchId(),
-                elapsedMillis(startedAt),
+                metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
                 ex.getClass().getSimpleName()
@@ -102,16 +100,6 @@ public class NotificationDeliveryWorker {
 
         NotificationDeliveryResultSummary resultSummary = bindingBatchDeliveryService.deliver(event, message);
         deliveryCompletionService.complete(event, resultSummary);
-    }
-
-    private void recordConsumed(long startedAt, String result) {
-        if (metrics != null) {
-            metrics.rabbitMessageConsumed(Duration.ofNanos(System.nanoTime() - startedAt), result);
-        }
-    }
-
-    private long elapsedMillis(long startedAt) {
-        return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
     }
 
     private String safePart(String value) {
