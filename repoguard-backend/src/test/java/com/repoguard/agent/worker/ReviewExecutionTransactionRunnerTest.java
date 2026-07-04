@@ -27,6 +27,19 @@ class ReviewExecutionTransactionRunnerTest {
     }
 
     @Test
+    void doesNotRetryConcurrencyFailureWithoutTransactionManager() {
+        ReviewExecutionTransactionRunner runner = new ReviewExecutionTransactionRunner(null, 3);
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> runner.execute(() -> {
+            attempts.incrementAndGet();
+            throw new CannotAcquireLockException("deadlock");
+        })).isInstanceOf(CannotAcquireLockException.class);
+
+        assertThat(attempts).hasValue(1);
+    }
+
+    @Test
     void retriesConcurrencyFailureWithReadCommittedTransaction() {
         PlatformTransactionManager transactionManager = org.mockito.Mockito.mock(PlatformTransactionManager.class);
         TransactionStatus transactionStatus = org.mockito.Mockito.mock(TransactionStatus.class);

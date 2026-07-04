@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import java.util.concurrent.Callable;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,7 +17,7 @@ class ReviewExecutionTransactionRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewExecutionTransactionRunner.class);
     private static final int DEFAULT_MAX_ATTEMPTS = 3;
 
-    private final TransactionTemplate transactionTemplate;
+    private final ReviewExecutionTransactionOperations transactionOperations;
     private final int maxAttempts;
 
     @Autowired
@@ -25,7 +26,14 @@ class ReviewExecutionTransactionRunner {
     }
 
     ReviewExecutionTransactionRunner(PlatformTransactionManager transactionManager, int maxAttempts) {
-        this.transactionTemplate = buildTransactionTemplate(transactionManager);
+        this(transactionOperationsOrNoop(transactionManager), maxAttempts);
+    }
+
+    private ReviewExecutionTransactionRunner(
+        ReviewExecutionTransactionOperations transactionOperations,
+        int maxAttempts
+    ) {
+        this.transactionOperations = transactionOperations;
         this.maxAttempts = Math.max(1, maxAttempts);
     }
 
@@ -37,14 +45,11 @@ class ReviewExecutionTransactionRunner {
     }
 
     <T> T execute(Callable<T> action) {
-        if (transactionTemplate == null) {
-            return call(action);
-        }
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return transactionTemplate.execute(status -> call(action));
+                return transactionOperations.execute(() -> call(action));
             } catch (ConcurrencyFailureException ex) {
-                if (attempt >= maxAttempts) {
+                if (!transactionOperations.retryConcurrencyFailures() || attempt >= maxAttempts) {
                     throw ex;
                 }
                 LOGGER.warn(
@@ -58,13 +63,15 @@ class ReviewExecutionTransactionRunner {
         throw new IllegalStateException("Review transaction retry loop exited unexpectedly");
     }
 
-    private TransactionTemplate buildTransactionTemplate(PlatformTransactionManager transactionManager) {
+    private static ReviewExecutionTransactionOperations transactionOperationsOrNoop(
+        PlatformTransactionManager transactionManager
+    ) {
         if (transactionManager == null) {
-            return null;
+            return new NoopReviewExecutionTransactionOperations();
         }
         TransactionTemplate template = new TransactionTemplate(transactionManager);
         template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
-        return template;
+        return new SpringReviewExecutionTransactionOperations(template);
     }
 
     private <T> T call(Callable<T> action) {
@@ -74,6 +81,44 @@ class ReviewExecutionTransactionRunner {
             throw ex;
         } catch (Exception ex) {
             throw new IllegalStateException(ex);
+        }
+    }
+
+    private interface ReviewExecutionTransactionOperations {
+        <T> T execute(Supplier<T> action);
+
+        boolean retryConcurrencyFailures();
+    }
+
+    private static class SpringReviewExecutionTransactionOperations implements ReviewExecutionTransactionOperations {
+
+        private final TransactionTemplate transactionTemplate;
+
+        SpringReviewExecutionTransactionOperations(TransactionTemplate transactionTemplate) {
+            this.transactionTemplate = transactionTemplate;
+        }
+
+        @Override
+        public <T> T execute(Supplier<T> action) {
+            return transactionTemplate.execute(status -> action.get());
+        }
+
+        @Override
+        public boolean retryConcurrencyFailures() {
+            return true;
+        }
+    }
+
+    private static class NoopReviewExecutionTransactionOperations implements ReviewExecutionTransactionOperations {
+
+        @Override
+        public <T> T execute(Supplier<T> action) {
+            return action.get();
+        }
+
+        @Override
+        public boolean retryConcurrencyFailures() {
+            return false;
         }
     }
 }
