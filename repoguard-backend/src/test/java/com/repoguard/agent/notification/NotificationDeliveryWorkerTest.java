@@ -177,7 +177,8 @@ class NotificationDeliveryWorkerTest {
     }
 
     private NotificationDeliveryWorker worker() {
-        NotificationChannelAdapterRegistry registry = new NotificationChannelAdapterRegistry(List.of(adapter));
+        NotificationChannelAdapterRegistry registry =
+            new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
         return new NotificationDeliveryWorker(
             new NotificationDeliverableEventQuery(eventMapper),
             new NotificationEventPayloadParser(new ObjectMapper()),

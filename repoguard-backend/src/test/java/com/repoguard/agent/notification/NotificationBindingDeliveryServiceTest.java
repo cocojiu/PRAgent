@@ -69,7 +69,7 @@ class NotificationBindingDeliveryServiceTest {
 
     private NotificationChannelAdapterRegistry registry() {
         when(adapter.provider()).thenReturn("DINGTALK");
-        return new NotificationChannelAdapterRegistry(List.of(adapter));
+        return new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
     }
 
     private NotificationEvent event() {
