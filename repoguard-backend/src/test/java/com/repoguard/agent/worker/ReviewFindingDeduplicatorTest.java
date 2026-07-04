@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 class ReviewFindingDeduplicatorTest {
 
     private final ReviewFindingDeduplicator deduplicator = new ReviewFindingDeduplicator(
-        new ReviewFindingDeduplicationKeyResolver()
+        new ReviewFindingDeduplicationKeyResolver(),
+        new ReviewFindingMergeService()
     );
 
     @Test

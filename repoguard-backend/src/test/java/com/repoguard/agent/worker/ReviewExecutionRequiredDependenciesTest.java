@@ -40,7 +40,7 @@ class ReviewExecutionRequiredDependenciesTest {
 
         assertThatThrownBy(() -> new ReviewFindingReplacementService(
             reviewFindingMapper,
-            new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver()),
+            new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver(), new ReviewFindingMergeService()),
             null
         ))
             .isInstanceOf(NullPointerException.class)
@@ -49,9 +49,16 @@ class ReviewExecutionRequiredDependenciesTest {
 
     @Test
     void findingDeduplicatorRequiresKeyResolverDependency() {
-        assertThatThrownBy(() -> new ReviewFindingDeduplicator(null))
+        assertThatThrownBy(() -> new ReviewFindingDeduplicator(null, new ReviewFindingMergeService()))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("keyResolver");
+    }
+
+    @Test
+    void findingDeduplicatorRequiresMergeServiceDependency() {
+        assertThatThrownBy(() -> new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver(), null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("mergeService");
     }
 
     @Test
@@ -81,7 +88,7 @@ class ReviewExecutionRequiredDependenciesTest {
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(stateMachine);
         new ReviewFindingReplacementService(
             reviewFindingMapper,
-            new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver()),
+            new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver(), new ReviewFindingMergeService()),
             new ReviewFindingEntityMapper()
         );
         new ReviewExecutionFailureHandler(

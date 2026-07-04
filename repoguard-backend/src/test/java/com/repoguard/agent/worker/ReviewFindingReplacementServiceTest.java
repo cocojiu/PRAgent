@@ -20,7 +20,7 @@ class ReviewFindingReplacementServiceTest {
     private final ReviewFindingEntityMapper findingEntityMapper = org.mockito.Mockito.mock(ReviewFindingEntityMapper.class);
     private final ReviewFindingReplacementService service = new ReviewFindingReplacementService(
         reviewFindingMapper,
-        new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver()),
+        new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver(), new ReviewFindingMergeService()),
         findingEntityMapper
     );
 
