@@ -14,36 +14,23 @@ class ReviewFindingReplacementService {
 
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewFindingDeduplicator findingDeduplicator;
+    private final ReviewFindingEntityMapper findingEntityMapper;
 
     ReviewFindingReplacementService(
         ReviewFindingMapper reviewFindingMapper,
-        ReviewFindingDeduplicator findingDeduplicator
+        ReviewFindingDeduplicator findingDeduplicator,
+        ReviewFindingEntityMapper findingEntityMapper
     ) {
         this.reviewFindingMapper = reviewFindingMapper;
         this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
+        this.findingEntityMapper = Objects.requireNonNull(findingEntityMapper, "findingEntityMapper");
     }
 
     int replace(Long taskId, ReviewResult reviewResult) {
         reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
         List<ReviewFindingResult> findings = findingDeduplicator.deduplicate(reviewResult.findings());
         for (ReviewFindingResult findingResult : findings) {
-            ReviewFinding finding = new ReviewFinding();
-            finding.setTaskId(taskId);
-            finding.setCategory("FINDING");
-            finding.setSeverity(findingResult.severity());
-            finding.setSource(findingResult.source());
-            finding.setRuleId(findingResult.ruleId());
-            finding.setFilePath(findingResult.filePath());
-            finding.setLineNumber(findingResult.lineNumber());
-            finding.setMessage(findingResult.message());
-            finding.setRecommendation(findingResult.recommendation());
-            finding.setConfidence(findingResult.confidence());
-            finding.setEvidence(findingResult.evidence());
-            finding.setImpact(findingResult.impact());
-            finding.setFixExample(findingResult.fixExample());
-            finding.setIsBlocking(findingResult.isBlocking());
-            finding.setReviewDimension(findingResult.reviewDimension());
-            reviewFindingMapper.insert(finding);
+            reviewFindingMapper.insert(findingEntityMapper.toEntity(taskId, findingResult));
         }
         return findings.size();
     }

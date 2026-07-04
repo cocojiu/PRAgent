@@ -29,9 +29,18 @@ class ReviewExecutionRequiredDependenciesTest {
     void findingReplacementServiceRequiresDeduplicatorDependency() {
         ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
 
-        assertThatThrownBy(() -> new ReviewFindingReplacementService(reviewFindingMapper, null))
+        assertThatThrownBy(() -> new ReviewFindingReplacementService(reviewFindingMapper, null, new ReviewFindingEntityMapper()))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("findingDeduplicator");
+    }
+
+    @Test
+    void findingReplacementServiceRequiresEntityMapperDependency() {
+        ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+
+        assertThatThrownBy(() -> new ReviewFindingReplacementService(reviewFindingMapper, new ReviewFindingDeduplicator(), null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("findingEntityMapper");
     }
 
     @Test
@@ -59,7 +68,11 @@ class ReviewExecutionRequiredDependenciesTest {
 
         new ReviewTaskClaimService(reviewTaskMapper, stateMachine);
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(stateMachine);
-        new ReviewFindingReplacementService(reviewFindingMapper, new ReviewFindingDeduplicator());
+        new ReviewFindingReplacementService(
+            reviewFindingMapper,
+            new ReviewFindingDeduplicator(),
+            new ReviewFindingEntityMapper()
+        );
         new ReviewExecutionFailureHandler(
             reviewTaskMapper,
             null,

@@ -126,7 +126,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         );
         ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
             reviewFindingMapper,
-            findingDeduplicator
+            findingDeduplicator,
+            new ReviewFindingEntityMapper()
         );
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(reviewTaskStateMachine);
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
