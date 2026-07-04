@@ -22,7 +22,8 @@ class GithubPullRequestDiffFetcherTest {
     private final GithubPullRequestDiffFetcher fetcher = new GithubPullRequestDiffFetcher(
         githubPullRequestClient,
         metricsRecorder,
-        clock
+        clock,
+        new ReviewLogContextFormatter()
     );
 
     @Test

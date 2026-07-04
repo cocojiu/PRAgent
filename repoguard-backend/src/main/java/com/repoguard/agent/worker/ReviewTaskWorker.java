@@ -5,6 +5,7 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import java.io.IOException;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.support.AmqpHeaders;
@@ -20,10 +21,16 @@ public class ReviewTaskWorker {
 
     private final ReviewTaskExecutor reviewTaskExecutor;
     private final ReviewTaskWorkerMetricsRecorder metricsRecorder;
+    private final ReviewLogContextFormatter logContextFormatter;
 
-    public ReviewTaskWorker(ReviewTaskExecutor reviewTaskExecutor, ReviewTaskWorkerMetricsRecorder metricsRecorder) {
+    public ReviewTaskWorker(
+        ReviewTaskExecutor reviewTaskExecutor,
+        ReviewTaskWorkerMetricsRecorder metricsRecorder,
+        ReviewLogContextFormatter logContextFormatter
+    ) {
         this.reviewTaskExecutor = reviewTaskExecutor;
         this.metricsRecorder = metricsRecorder;
+        this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
     }
 
     @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "${app.rabbit.review.worker-concurrency:1}")
@@ -35,22 +42,20 @@ public class ReviewTaskWorker {
         long startedAt = metricsRecorder.startedAt();
         try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
             LOGGER.info(
-                "Rabbit review message received taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
+                "Rabbit review message received taskId={} repository={} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
                 message.taskId(),
-                safePart(message.organization()),
-                safePart(message.repository()),
+                logContextFormatter.repositorySlug(message),
                 message.prNumber(),
                 deliveryTag,
-                safePart(message.commit())
+                logContextFormatter.safePart(message.commit())
             );
             reviewTaskExecutor.execute(message);
             channel.basicAck(deliveryTag, false);
             metricsRecorder.recordConsumed(startedAt, "success");
             LOGGER.info(
-                "Rabbit review message consumed taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
+                "Rabbit review message consumed taskId={} repository={} prNumber={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
                 message.taskId(),
-                safePart(message.organization()),
-                safePart(message.repository()),
+                logContextFormatter.repositorySlug(message),
                 message.prNumber(),
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag
@@ -59,10 +64,9 @@ public class ReviewTaskWorker {
             channel.basicReject(deliveryTag, false);
             metricsRecorder.recordConsumed(startedAt, "rejected");
             LOGGER.warn(
-                "Rabbit review message rejected taskId={} repository={}/{} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
+                "Rabbit review message rejected taskId={} repository={} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.taskId(),
-                safePart(message.organization()),
-                safePart(message.repository()),
+                logContextFormatter.repositorySlug(message),
                 message.prNumber(),
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
@@ -70,9 +74,5 @@ public class ReviewTaskWorker {
                 ex.getClass().getSimpleName()
             );
         }
-    }
-
-    private String safePart(String value) {
-        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 }

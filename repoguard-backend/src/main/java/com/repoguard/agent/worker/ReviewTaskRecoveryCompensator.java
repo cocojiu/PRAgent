@@ -10,6 +10,7 @@ import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,19 +29,22 @@ public class ReviewTaskRecoveryCompensator {
     private final RabbitReviewQueueProperties properties;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewExecutionClock clock;
+    private final ReviewLogContextFormatter logContextFormatter;
 
     public ReviewTaskRecoveryCompensator(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender timelineAppender,
         RabbitReviewQueueProperties properties,
         ReviewTaskStateMachine reviewTaskStateMachine,
-        ReviewExecutionClock clock
+        ReviewExecutionClock clock,
+        ReviewLogContextFormatter logContextFormatter
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.timelineAppender = timelineAppender;
         this.properties = properties;
         this.reviewTaskStateMachine = reviewTaskStateMachine;
         this.clock = clock;
+        this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
@@ -80,7 +84,7 @@ public class ReviewTaskRecoveryCompensator {
                 LOGGER.info(
                     "Review task recovery skipped taskId={} repository={} prNumber={} operation=review_recovery result=claim_lost claimedAt={} claimedBy={} expiredBefore={}",
                     task.getId(),
-                    repositorySlug(task),
+                    logContextFormatter.repositorySlug(task),
                     task.getPrNumber(),
                     task.getReviewClaimedAt(),
                     task.getReviewClaimedBy(),
@@ -98,7 +102,7 @@ public class ReviewTaskRecoveryCompensator {
             LOGGER.warn(
                 "Review task recovery completed taskId={} repository={} prNumber={} operation=review_recovery result=requeued claimedAt={} claimedBy={} expiredBefore={} nextRetryAt={}",
                 task.getId(),
-                repositorySlug(task),
+                logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
                 task.getReviewClaimedAt(),
                 task.getReviewClaimedBy(),
@@ -106,14 +110,6 @@ public class ReviewTaskRecoveryCompensator {
                 recoveredAt
             );
         }
-    }
-
-    private String repositorySlug(ReviewTask task) {
-        return safePart(task.getOrganization()) + "/" + safePart(task.getRepository());
-    }
-
-    private String safePart(String value) {
-        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 
     private long executionTimeoutMs() {

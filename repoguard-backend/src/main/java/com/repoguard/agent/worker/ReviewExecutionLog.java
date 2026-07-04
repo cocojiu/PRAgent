@@ -7,6 +7,7 @@ import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -17,9 +18,11 @@ class ReviewExecutionLog {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
 
     private final ReviewExecutionClock clock;
+    private final ReviewLogContextFormatter logContextFormatter;
 
-    ReviewExecutionLog(ReviewExecutionClock clock) {
+    ReviewExecutionLog(ReviewExecutionClock clock, ReviewLogContextFormatter logContextFormatter) {
         this.clock = clock;
+        this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
     }
 
     LogContext.Scope withExecutionContext(ReviewTaskMessage message, ReviewTask task) {
@@ -32,7 +35,7 @@ class ReviewExecutionLog {
         LOGGER.warn(
             "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=task_not_found",
             message.taskId(),
-            messageRepositorySlug(message),
+            logContextFormatter.repositorySlug(message),
             message.prNumber()
         );
     }
@@ -41,7 +44,7 @@ class ReviewExecutionLog {
         LOGGER.info(
             "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=status_not_queued currentStatus={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             task.getStatus()
         );
@@ -51,7 +54,7 @@ class ReviewExecutionLog {
         LOGGER.info(
             "Review task skipped taskId={} repository={} prNumber={} operation=review_execute result=claim_failed",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber()
         );
     }
@@ -60,9 +63,9 @@ class ReviewExecutionLog {
         LOGGER.info(
             "Review task started taskId={} repository={} prNumber={} operation=review_execute commit={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
-            safePart(message.commit())
+            logContextFormatter.safePart(message.commit())
         );
     }
 
@@ -70,7 +73,7 @@ class ReviewExecutionLog {
         LOGGER.info(
             "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             diffStats.fileCount(diff),
             diffStats.totalAdditions(diff),
@@ -87,7 +90,7 @@ class ReviewExecutionLog {
         LOGGER.info(
             "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} findingCount={} durationMs={} humanReviewRequired={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             reviewResult.riskLevel(),
             reviewResult.llmStatus(),
@@ -101,7 +104,7 @@ class ReviewExecutionLog {
         LOGGER.warn(
             "Review task result discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber()
         );
     }
@@ -110,7 +113,7 @@ class ReviewExecutionLog {
         LOGGER.warn(
             "Review task failure discarded taskId={} repository={} prNumber={} operation=review_execute result=claim_lost exceptionType={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             ex.getClass().getName()
         );
@@ -120,23 +123,11 @@ class ReviewExecutionLog {
         LOGGER.warn(
             "Review task failed taskId={} repository={} prNumber={} operation=review_execute result=failed failureCategory={} exceptionType={} durationMs={}",
             task.getId(),
-            repositorySlug(task),
+            logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             failureCategory,
             ex.getClass().getName(),
             Duration.between(startedAt, clock.now()).toMillis()
         );
-    }
-
-    String repositorySlug(ReviewTask task) {
-        return safePart(task.getOrganization()) + "/" + safePart(task.getRepository());
-    }
-
-    private String messageRepositorySlug(ReviewTaskMessage message) {
-        return safePart(message.organization()) + "/" + safePart(message.repository());
-    }
-
-    private String safePart(String value) {
-        return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 }

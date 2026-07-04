@@ -12,7 +12,11 @@ import org.slf4j.MDC;
 
 class ReviewExecutionLogTest {
 
-    private final ReviewExecutionLog executionLog = new ReviewExecutionLog(new ReviewExecutionClock());
+    private final ReviewLogContextFormatter logContextFormatter = new ReviewLogContextFormatter();
+    private final ReviewExecutionLog executionLog = new ReviewExecutionLog(
+        new ReviewExecutionClock(),
+        logContextFormatter
+    );
 
     @AfterEach
     void clearMdc() {
@@ -53,7 +57,7 @@ class ReviewExecutionLogTest {
     void repositorySlugUsesUnknownPartsForSparseTask() {
         ReviewTask task = new ReviewTask();
 
-        assertThat(executionLog.repositorySlug(task)).isEqualTo("<unknown>/<unknown>");
+        assertThat(logContextFormatter.repositorySlug(task)).isEqualTo("<unknown>/<unknown>");
     }
 
     private ReviewTaskMessage message() {

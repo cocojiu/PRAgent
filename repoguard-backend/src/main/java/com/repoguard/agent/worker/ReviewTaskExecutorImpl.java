@@ -116,6 +116,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         NotificationDispatchService notificationDispatchService
     ) {
         ReviewExecutionClock clock = new ReviewExecutionClock();
+        ReviewLogContextFormatter logContextFormatter = new ReviewLogContextFormatter();
         ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator(
             new ReviewFindingDeduplicationKeyResolver(),
@@ -161,7 +162,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,
             new ReviewExecutionTransactionRunner(transactionManager, 3),
-            new GithubPullRequestDiffFetcher(githubPullRequestClient, metricsRecorder, clock),
+            new GithubPullRequestDiffFetcher(githubPullRequestClient, metricsRecorder, clock, logContextFormatter),
             reviewTaskStateMachine,
             timelineRecorder,
             claimService,
@@ -169,7 +170,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             resultWriter,
             new ReviewExecutionNotifier(notificationDispatchServiceOrNoop(notificationDispatchService)),
             new ReviewExecutionDiffStats(),
-            new ReviewExecutionLog(clock),
+            new ReviewExecutionLog(clock, logContextFormatter),
             clock
         );
     }

@@ -20,7 +20,7 @@ class ReviewTaskWorkerTest {
         when(metricsRecorder.startedAt()).thenReturn(100L);
         when(metricsRecorder.elapsedMillis(100L)).thenReturn(35L);
 
-        new ReviewTaskWorker(executor, metricsRecorder).handle(message, channel, 99L);
+        new ReviewTaskWorker(executor, metricsRecorder, new ReviewLogContextFormatter()).handle(message, channel, 99L);
 
         verify(executor).execute(message);
         verify(channel).basicAck(99L, false);
@@ -37,7 +37,7 @@ class ReviewTaskWorkerTest {
         when(metricsRecorder.elapsedMillis(200L)).thenReturn(21L);
         doThrow(new IllegalStateException("boom")).when(executor).execute(message);
 
-        new ReviewTaskWorker(executor, metricsRecorder).handle(message, channel, 100L);
+        new ReviewTaskWorker(executor, metricsRecorder, new ReviewLogContextFormatter()).handle(message, channel, 100L);
 
         verify(channel).basicReject(100L, false);
         verify(metricsRecorder).recordConsumed(200L, "rejected");
