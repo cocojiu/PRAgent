@@ -81,7 +81,8 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.worker.ReviewExecutionMetricsRecorder"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionTimelineRecorder"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionTransactionRunner"),
-            Class.forName("com.repoguard.agent.worker.ReviewExecutionWorkflow")
+            Class.forName("com.repoguard.agent.worker.ReviewExecutionWorkflow"),
+            Class.forName("com.repoguard.agent.worker.ReviewTaskRecoveryTimelineRecorder")
         );
 
         for (Class<?> type : concat(springManagedTypes, packagePrivateSpringManagedTypes)) {

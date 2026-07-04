@@ -8,21 +8,19 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.slf4j.MDC;
 
 class ReviewTaskRecoveryCompensatorTest {
 
     private final ReviewTaskRecoveryStore recoveryStore = org.mockito.Mockito.mock(ReviewTaskRecoveryStore.class);
-    private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
+    private final ReviewTaskRecoveryTimelineRecorder timelineRecorder =
+        org.mockito.Mockito.mock(ReviewTaskRecoveryTimelineRecorder.class);
     private final ReviewTaskRecoveryCompensator compensator = new ReviewTaskRecoveryCompensator(
         recoveryStore,
-        new ReviewTimelineAppender(reviewTimelineMapper),
+        timelineRecorder,
         new ReviewExecutionClock(),
         new ReviewLogContextFormatter(),
         new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties())
@@ -38,10 +36,7 @@ class ReviewTaskRecoveryCompensatorTest {
 
         compensator.recover(task, recoveredAt, expiredBefore);
 
-        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
-        verify(reviewTimelineMapper).insert(timelineCaptor.capture());
-        assertThat(timelineCaptor.getValue().getLabel()).contains("queued for recovery");
-        assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("CURRENT");
+        verify(timelineRecorder).recoveryQueued(task, recoveredAt);
         assertLogContextCleared();
     }
 
@@ -55,7 +50,7 @@ class ReviewTaskRecoveryCompensatorTest {
 
         compensator.recover(task, recoveredAt, expiredBefore);
 
-        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+        verify(timelineRecorder, never()).recoveryQueued(any(ReviewTask.class), any(LocalDateTime.class));
         assertLogContextCleared();
     }
 

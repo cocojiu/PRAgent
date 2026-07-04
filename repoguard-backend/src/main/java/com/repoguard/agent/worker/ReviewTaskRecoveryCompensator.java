@@ -20,20 +20,20 @@ public class ReviewTaskRecoveryCompensator {
     private static final String RECOVERY_REASON = "Review execution lease expired";
 
     private final ReviewTaskRecoveryStore recoveryStore;
-    private final ReviewTimelineAppender timelineAppender;
+    private final ReviewTaskRecoveryTimelineRecorder timelineRecorder;
     private final ReviewExecutionClock clock;
     private final ReviewLogContextFormatter logContextFormatter;
     private final ReviewTaskRecoveryPolicy recoveryPolicy;
 
     public ReviewTaskRecoveryCompensator(
         ReviewTaskRecoveryStore recoveryStore,
-        ReviewTimelineAppender timelineAppender,
+        ReviewTaskRecoveryTimelineRecorder timelineRecorder,
         ReviewExecutionClock clock,
         ReviewLogContextFormatter logContextFormatter,
         ReviewTaskRecoveryPolicy recoveryPolicy
     ) {
         this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
-        this.timelineAppender = timelineAppender;
+        this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
         this.clock = clock;
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
@@ -64,13 +64,7 @@ public class ReviewTaskRecoveryCompensator {
                 );
                 return;
             }
-            timelineAppender.append(
-                task.getId(),
-                "Review execution timed out; queued for recovery",
-                recoveredAt,
-                "CURRENT",
-                5
-            );
+            timelineRecorder.recoveryQueued(task, recoveredAt);
             LOGGER.warn(
                 "Review task recovery completed taskId={} repository={} prNumber={} operation=review_recovery result=requeued claimedAt={} claimedBy={} expiredBefore={} nextRetryAt={}",
                 task.getId(),
