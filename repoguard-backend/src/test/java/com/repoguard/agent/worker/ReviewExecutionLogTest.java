@@ -12,7 +12,7 @@ import org.slf4j.MDC;
 
 class ReviewExecutionLogTest {
 
-    private final ReviewExecutionLog executionLog = new ReviewExecutionLog();
+    private final ReviewExecutionLog executionLog = new ReviewExecutionLog(new ReviewExecutionClock());
 
     @AfterEach
     void clearMdc() {

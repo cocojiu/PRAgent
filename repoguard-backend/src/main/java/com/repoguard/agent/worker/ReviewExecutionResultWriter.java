@@ -18,6 +18,7 @@ class ReviewExecutionResultWriter {
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionCacheInvalidator cacheInvalidator;
+    private final ReviewExecutionClock clock;
 
     ReviewExecutionResultWriter(
         ReviewTaskMapper reviewTaskMapper,
@@ -27,7 +28,8 @@ class ReviewExecutionResultWriter {
         ReviewFindingReplacementService findingReplacementService,
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
-        ReviewExecutionCacheInvalidator cacheInvalidator
+        ReviewExecutionCacheInvalidator cacheInvalidator,
+        ReviewExecutionClock clock
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
@@ -37,6 +39,7 @@ class ReviewExecutionResultWriter {
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
         this.cacheInvalidator = cacheInvalidator;
+        this.clock = clock;
     }
 
     WriteResult applyCompleted(
@@ -46,7 +49,7 @@ class ReviewExecutionResultWriter {
         LocalDateTime startedAt,
         String claimId
     ) {
-        LocalDateTime finishedAt = LocalDateTime.now();
+        LocalDateTime finishedAt = clock.now();
         boolean humanReviewRequired = completionApplier.applyCompleted(task, reviewResult, startedAt, finishedAt);
         claimService.ensureClaimOwnedAndFenceTerminalStatus(task, claimId);
         task.setReviewClaimedAt(null);

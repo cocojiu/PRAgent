@@ -15,6 +15,7 @@ public class ReviewExecutionFailureHandler {
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionCacheInvalidator cacheInvalidator;
+    private final ReviewExecutionClock clock;
 
     public ReviewExecutionFailureHandler(
         ReviewTaskMapper reviewTaskMapper,
@@ -22,7 +23,8 @@ public class ReviewExecutionFailureHandler {
         ReviewTaskCompletionApplier completionApplier,
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
-        ReviewExecutionCacheInvalidator cacheInvalidator
+        ReviewExecutionCacheInvalidator cacheInvalidator,
+        ReviewExecutionClock clock
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.claimService = claimService;
@@ -32,10 +34,11 @@ public class ReviewExecutionFailureHandler {
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
         this.cacheInvalidator = cacheInvalidator;
+        this.clock = clock;
     }
 
     public boolean applyFailure(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
-        LocalDateTime failedAt = LocalDateTime.now();
+        LocalDateTime failedAt = clock.now();
         completionApplier.applyFailed(task, startedAt, failedAt);
         if (!claimService.fenceTerminalStatus(task, claimId)) {
             return false;

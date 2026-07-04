@@ -27,7 +27,8 @@ class ReviewTaskRecoveryCompensatorTest {
         reviewTaskMapper,
         new ReviewTimelineAppender(reviewTimelineMapper),
         new RabbitReviewQueueProperties(),
-        new ReviewTaskStateMachine()
+        new ReviewTaskStateMachine(),
+        new ReviewExecutionClock()
     );
 
     @Test

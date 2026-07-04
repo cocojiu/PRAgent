@@ -6,7 +6,6 @@ import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,17 +17,20 @@ class GithubPullRequestDiffFetcher {
 
     private final GithubPullRequestClient githubPullRequestClient;
     private final RepoGuardMetrics metrics;
+    private final ReviewExecutionClock clock;
 
     GithubPullRequestDiffFetcher(
         GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ReviewExecutionClock clock
     ) {
         this.githubPullRequestClient = githubPullRequestClient;
         this.metrics = metrics;
+        this.clock = clock;
     }
 
     GithubPullRequestDiff fetch(ReviewTask task) {
-        LocalDateTime startedAt = LocalDateTime.now();
+        var startedAt = clock.now();
         try {
             LOGGER.info(
                 "GitHub diff fetch started taskId={} repository={} prNumber={} operation=github_diff_fetch",
@@ -37,21 +39,23 @@ class GithubPullRequestDiffFetcher {
                 task.getPrNumber()
             );
             GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
+            Duration duration = Duration.between(startedAt, clock.now());
             if (metrics != null) {
-                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "success");
+                metrics.githubDiffDuration(duration, "success");
             }
             LOGGER.info(
                 "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
                 task.getId(),
                 repositorySlug(task),
                 task.getPrNumber(),
-                Duration.between(startedAt, LocalDateTime.now()).toMillis(),
+                duration.toMillis(),
                 diff.files() == null ? 0 : diff.files().size()
             );
             return diff;
         } catch (RuntimeException ex) {
+            Duration duration = Duration.between(startedAt, clock.now());
             if (metrics != null) {
-                metrics.githubDiffDuration(Duration.between(startedAt, LocalDateTime.now()), "failed");
+                metrics.githubDiffDuration(duration, "failed");
             }
             LOGGER.warn(
                 "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
@@ -60,7 +64,7 @@ class GithubPullRequestDiffFetcher {
                 task.getPrNumber(),
                 failureCategory(ex),
                 ex.getClass().getName(),
-                Duration.between(startedAt, LocalDateTime.now()).toMillis()
+                duration.toMillis()
             );
             throw ex;
         }

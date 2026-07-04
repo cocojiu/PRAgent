@@ -23,6 +23,7 @@ class ReviewExecutionWorkflow {
     private final ReviewExecutionNotifier notifier;
     private final ReviewExecutionDiffStats diffStats;
     private final ReviewExecutionLog executionLog;
+    private final ReviewExecutionClock clock;
 
     ReviewExecutionWorkflow(
         PullRequestReviewer pullRequestReviewer,
@@ -35,7 +36,8 @@ class ReviewExecutionWorkflow {
         ReviewExecutionResultWriter resultWriter,
         ReviewExecutionNotifier notifier,
         ReviewExecutionDiffStats diffStats,
-        ReviewExecutionLog executionLog
+        ReviewExecutionLog executionLog,
+        ReviewExecutionClock clock
     ) {
         this.pullRequestReviewer = pullRequestReviewer;
         this.transactionRunner = transactionRunner;
@@ -48,6 +50,7 @@ class ReviewExecutionWorkflow {
         this.notifier = notifier;
         this.diffStats = diffStats;
         this.executionLog = executionLog;
+        this.clock = clock;
     }
 
     void execute(ReviewTaskMessage message, ReviewTask task) {
@@ -61,7 +64,7 @@ class ReviewExecutionWorkflow {
                 return;
             }
 
-            LocalDateTime startedAt = LocalDateTime.now();
+            LocalDateTime startedAt = clock.now();
             String claimId = claimService.newClaimId();
             if (!markReviewing(task, startedAt, claimId)) {
                 executionLog.claimFailed(task);

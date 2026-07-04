@@ -27,23 +27,26 @@ public class ReviewTaskRecoveryCompensator {
     private final ReviewTimelineAppender timelineAppender;
     private final RabbitReviewQueueProperties properties;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final ReviewExecutionClock clock;
 
     public ReviewTaskRecoveryCompensator(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineAppender timelineAppender,
         RabbitReviewQueueProperties properties,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewExecutionClock clock
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.timelineAppender = timelineAppender;
         this.properties = properties;
         this.reviewTaskStateMachine = reviewTaskStateMachine;
+        this.clock = clock;
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
     @Transactional
     public void recoverStuckTasks() {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = clock.now();
         LocalDateTime expiredBefore = now.minusNanos(executionTimeoutMs() * 1_000_000);
         List<ReviewTask> tasks = reviewTaskMapper.selectList(
             new LambdaQueryWrapper<ReviewTask>()

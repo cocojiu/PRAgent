@@ -115,6 +115,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         RepoGuardMetrics metrics,
         NotificationDispatchService notificationDispatchService
     ) {
+        ReviewExecutionClock clock = new ReviewExecutionClock();
         ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator();
         ReviewTimelineAppender timelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
@@ -134,7 +135,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             completionApplier,
             timelineRecorder,
             metricsRecorder,
-            cacheInvalidator
+            cacheInvalidator,
+            clock
         );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
             reviewTaskMapper,
@@ -144,12 +146,13 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             findingReplacementService,
             timelineRecorder,
             metricsRecorder,
-            cacheInvalidator
+            cacheInvalidator,
+            clock
         );
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,
             new ReviewExecutionTransactionRunner(transactionManager, 3),
-            new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics),
+            new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics, clock),
             reviewTaskStateMachine,
             timelineRecorder,
             claimService,
@@ -157,7 +160,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             resultWriter,
             new ReviewExecutionNotifier(notificationDispatchService),
             new ReviewExecutionDiffStats(),
-            new ReviewExecutionLog()
+            new ReviewExecutionLog(clock),
+            clock
         );
     }
 }

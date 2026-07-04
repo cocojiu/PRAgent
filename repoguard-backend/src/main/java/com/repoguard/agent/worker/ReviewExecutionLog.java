@@ -16,6 +16,12 @@ class ReviewExecutionLog {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskExecutorImpl.class);
 
+    private final ReviewExecutionClock clock;
+
+    ReviewExecutionLog(ReviewExecutionClock clock) {
+        this.clock = clock;
+    }
+
     LogContext.Scope withExecutionContext(ReviewTaskMessage message, ReviewTask task) {
         return task == null
             ? LogContext.withReviewTaskMessage(message)
@@ -86,7 +92,7 @@ class ReviewExecutionLog {
             reviewResult.riskLevel(),
             reviewResult.llmStatus(),
             writeResult.findingCount(),
-            Duration.between(startedAt, LocalDateTime.now()).toMillis(),
+            Duration.between(startedAt, clock.now()).toMillis(),
             writeResult.humanReviewRequired()
         );
     }
@@ -118,7 +124,7 @@ class ReviewExecutionLog {
             task.getPrNumber(),
             failureCategory,
             ex.getClass().getName(),
-            Duration.between(startedAt, LocalDateTime.now()).toMillis()
+            Duration.between(startedAt, clock.now()).toMillis()
         );
     }
 
