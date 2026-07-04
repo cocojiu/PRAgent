@@ -14,7 +14,10 @@ import org.junit.jupiter.api.Test;
 class ReviewTaskCompletionApplierTest {
 
     private final ReviewTaskCompletionApplier applier =
-        new ReviewTaskCompletionApplier(new ReviewTaskStateMachine(), new RiskLevelRanker());
+        new ReviewTaskCompletionApplier(
+            new ReviewTaskStateMachine(),
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker())
+        );
 
     @Test
     void appliesCompletedReviewWithoutHumanReview() {

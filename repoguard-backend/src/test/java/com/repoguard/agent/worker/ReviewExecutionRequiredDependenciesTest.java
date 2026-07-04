@@ -21,14 +21,24 @@ class ReviewExecutionRequiredDependenciesTest {
 
     @Test
     void completionApplierRequiresStateMachineDependency() {
-        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(null, new RiskLevelRanker()))
+        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
+            null,
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker())
+        ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
     }
 
     @Test
-    void completionApplierRequiresRiskLevelRankerDependency() {
+    void completionApplierRequiresHumanReviewDecisionPolicyDependency() {
         assertThatThrownBy(() -> new ReviewTaskCompletionApplier(new ReviewTaskStateMachine(), null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("humanReviewDecisionPolicy");
+    }
+
+    @Test
+    void humanReviewDecisionPolicyRequiresRiskLevelRankerDependency() {
+        assertThatThrownBy(() -> new ReviewHumanReviewDecisionPolicy(null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("riskLevelRanker");
     }
@@ -104,7 +114,10 @@ class ReviewExecutionRequiredDependenciesTest {
         RiskLevelRanker riskLevelRanker = new RiskLevelRanker();
 
         new ReviewTaskClaimService(reviewTaskMapper, stateMachine);
-        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(stateMachine, riskLevelRanker);
+        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
+            stateMachine,
+            new ReviewHumanReviewDecisionPolicy(riskLevelRanker)
+        );
         new ReviewFindingReplacementService(
             reviewFindingMapper,
             new ReviewFindingDeduplicator(

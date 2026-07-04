@@ -5,7 +5,6 @@ import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import com.repoguard.agent.review.RiskLevelRanker;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -14,14 +13,16 @@ import org.springframework.stereotype.Component;
 @Component
 class ReviewTaskCompletionApplier {
 
-    private static final String HUMAN_REVIEW_THRESHOLD = "MEDIUM";
-
     private final ReviewTaskStateMachine reviewTaskStateMachine;
-    private final RiskLevelRanker riskLevelRanker;
+    private final ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy;
 
-    ReviewTaskCompletionApplier(ReviewTaskStateMachine reviewTaskStateMachine, RiskLevelRanker riskLevelRanker) {
+    ReviewTaskCompletionApplier(
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy
+    ) {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
-        this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
+        this.humanReviewDecisionPolicy =
+            Objects.requireNonNull(humanReviewDecisionPolicy, "humanReviewDecisionPolicy");
     }
 
     boolean applyCompleted(
@@ -30,7 +31,7 @@ class ReviewTaskCompletionApplier {
         LocalDateTime startedAt,
         LocalDateTime finishedAt
     ) {
-        boolean humanReviewRequired = requiresHumanReview(reviewResult.riskLevel());
+        boolean humanReviewRequired = humanReviewDecisionPolicy.requiresHumanReview(reviewResult.riskLevel());
         task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
         task.setRiskLevel(reviewResult.riskLevel());
         task.setLlmStatus(reviewResult.llmStatus());
@@ -62,7 +63,4 @@ class ReviewTaskCompletionApplier {
         task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
     }
 
-    boolean requiresHumanReview(String riskLevel) {
-        return riskLevelRanker.atLeast(riskLevel, HUMAN_REVIEW_THRESHOLD);
-    }
 }
