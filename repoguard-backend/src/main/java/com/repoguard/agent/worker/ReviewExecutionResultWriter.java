@@ -52,8 +52,7 @@ class ReviewExecutionResultWriter {
         LocalDateTime finishedAt = clock.now();
         boolean humanReviewRequired = completionApplier.applyCompleted(task, reviewResult, startedAt, finishedAt);
         claimService.ensureClaimOwnedAndFenceTerminalStatus(task, claimId);
-        task.setReviewClaimedAt(null);
-        task.setReviewClaimedBy(null);
+        claimService.releaseReviewClaim(task);
         reviewTaskMapper.updateById(task);
         changedFileReplacementService.replace(task.getId(), diff);
         timelineRecorder.diffFetched(task, finishedAt);

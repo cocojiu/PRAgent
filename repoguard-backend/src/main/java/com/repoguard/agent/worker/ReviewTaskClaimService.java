@@ -57,6 +57,12 @@ public class ReviewTaskClaimService {
         }
     }
 
+    public void releaseReviewClaim(ReviewTask task) {
+        Objects.requireNonNull(task, "task");
+        task.setReviewClaimedAt(null);
+        task.setReviewClaimedBy(null);
+    }
+
     public boolean fenceTerminalStatus(ReviewTask task, String claimId) {
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()

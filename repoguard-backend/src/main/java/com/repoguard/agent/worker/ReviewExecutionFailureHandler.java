@@ -42,8 +42,7 @@ public class ReviewExecutionFailureHandler {
         if (!claimService.fenceTerminalStatus(task, claimId)) {
             return false;
         }
-        task.setReviewClaimedAt(null);
-        task.setReviewClaimedBy(null);
+        claimService.releaseReviewClaim(task);
         reviewTaskMapper.updateById(task);
         timelineRecorder.reviewFailed(task, ex, failedAt);
         metricsRecorder.recordFailed(ex, startedAt, failedAt);
