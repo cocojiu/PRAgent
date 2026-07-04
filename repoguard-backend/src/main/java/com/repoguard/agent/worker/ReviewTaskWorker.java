@@ -22,15 +22,18 @@ public class ReviewTaskWorker {
     private final ReviewTaskExecutor reviewTaskExecutor;
     private final ReviewTaskWorkerMetricsRecorder metricsRecorder;
     private final ReviewLogContextFormatter logContextFormatter;
+    private final ReviewExecutionFailureClassifier failureClassifier;
 
     public ReviewTaskWorker(
         ReviewTaskExecutor reviewTaskExecutor,
         ReviewTaskWorkerMetricsRecorder metricsRecorder,
-        ReviewLogContextFormatter logContextFormatter
+        ReviewLogContextFormatter logContextFormatter,
+        ReviewExecutionFailureClassifier failureClassifier
     ) {
         this.reviewTaskExecutor = reviewTaskExecutor;
         this.metricsRecorder = metricsRecorder;
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     @RabbitListener(queues = "${app.rabbit.review.queue}", concurrency = "${app.rabbit.review.worker-concurrency:1}")
@@ -71,7 +74,7 @@ public class ReviewTaskWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
-                ex.getClass().getSimpleName()
+                failureClassifier.failureCategory(ex)
             );
         }
     }

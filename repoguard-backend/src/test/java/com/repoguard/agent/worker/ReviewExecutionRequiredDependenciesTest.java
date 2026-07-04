@@ -175,6 +175,18 @@ class ReviewExecutionRequiredDependenciesTest {
     }
 
     @Test
+    void workerRequiresFailureClassifierDependency() {
+        assertThatThrownBy(() -> new ReviewTaskWorker(
+            null,
+            null,
+            new ReviewLogContextFormatter(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureClassifier");
+    }
+
+    @Test
     void requiredDependenciesAllowExplicitWiring() {
         ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
         ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
