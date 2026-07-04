@@ -158,10 +158,18 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             claimService,
             failureHandler,
             resultWriter,
-            new ReviewExecutionNotifier(notificationDispatchService),
+            new ReviewExecutionNotifier(notificationDispatchServiceOrNoop(notificationDispatchService)),
             new ReviewExecutionDiffStats(),
             new ReviewExecutionLog(clock),
             clock
         );
+    }
+
+    private static NotificationDispatchService notificationDispatchServiceOrNoop(
+        NotificationDispatchService notificationDispatchService
+    ) {
+        return notificationDispatchService == null
+            ? new ReviewExecutionNoopNotificationDispatchService()
+            : notificationDispatchService;
     }
 }
