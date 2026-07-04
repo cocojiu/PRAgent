@@ -1,0 +1,35 @@
+{
+  "date": "2026-07-04",
+  "branch": "PRAgent-test",
+  "optimizationOrder": 9,
+  "title": "Review 执行指标记录边界收敛",
+  "status": "completed",
+  "goal": "继续按 Worker 执行边界优化建议拆分审查执行链路，将完成、失败和耗时指标从 workflow、result writer、failure handler 中收敛到独立指标记录组件。",
+  "changes": [
+    "新增 ReviewExecutionMetricsRecorder，集中记录审查完成计数、失败计数和 completed/failed 耗时指标。",
+    "ReviewExecutionResultWriter 改为委托 metrics recorder 记录完成指标，不再直接依赖 RepoGuardMetrics。",
+    "ReviewExecutionFailureHandler 改为在失败状态成功落库后委托 metrics recorder 记录失败计数和失败耗时。",
+    "ReviewExecutionWorkflow 移除 RepoGuardMetrics 依赖，只保留执行流程编排和日志编排职责。",
+    "新增 ReviewExecutionMetricsRecorderTest，覆盖完成指标、失败指标和 metrics 不可用时的兼容降级。"
+  ],
+  "verification": {
+    "status": "passed",
+    "commands": [
+      {
+        "command": "mvn \"-Dtest=ReviewExecutionMetricsRecorderTest,ReviewTaskExecutorImplTest,SpringBeanConstructorSelectionTest\" test",
+        "result": "passed",
+        "summary": "15 tests, 0 failures, 0 errors, 0 skipped"
+      },
+      {
+        "command": "mvn \"-Dtest=ReviewExecutionMetricsRecorderTest,ReviewTaskExecutorImplTest,ReviewTaskWorkerTest,ReviewTaskRecoveryCompensatorTest,GithubPullRequestDiffFetcherTest,ReviewTaskCompletionApplierTest,SpringBeanConstructorSelectionTest\" test",
+        "result": "passed",
+        "summary": "24 tests, 0 failures, 0 errors, 0 skipped"
+      },
+      {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -SkipBackendTests",
+        "result": "passed",
+        "summary": "git diff whitespace、Flyway naming、demo data guard、secret/token scan 均通过；前端构建按参数跳过"
+      }
+    ]
+  }
+}

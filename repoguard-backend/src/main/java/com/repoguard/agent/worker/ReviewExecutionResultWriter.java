@@ -4,10 +4,8 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +18,7 @@ class ReviewExecutionResultWriter {
     private final ChangedFileReplacementService changedFileReplacementService;
     private final ReviewFindingReplacementService findingReplacementService;
     private final ReviewTimelineAppender timelineAppender;
-    private final RepoGuardMetrics metrics;
+    private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final CacheEvictionService cacheEvictionService;
 
     ReviewExecutionResultWriter(
@@ -30,7 +28,7 @@ class ReviewExecutionResultWriter {
         ChangedFileReplacementService changedFileReplacementService,
         ReviewFindingReplacementService findingReplacementService,
         ReviewTimelineAppender timelineAppender,
-        RepoGuardMetrics metrics,
+        ReviewExecutionMetricsRecorder metricsRecorder,
         CacheEvictionService cacheEvictionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
@@ -39,7 +37,7 @@ class ReviewExecutionResultWriter {
         this.changedFileReplacementService = changedFileReplacementService;
         this.findingReplacementService = findingReplacementService;
         this.timelineAppender = timelineAppender;
-        this.metrics = metrics;
+        this.metricsRecorder = metricsRecorder;
         this.cacheEvictionService = cacheEvictionService;
     }
 
@@ -67,10 +65,7 @@ class ReviewExecutionResultWriter {
             humanReviewRequired ? "CURRENT" : "DONE",
             5
         );
-        if (metrics != null) {
-            metrics.reviewTaskCompleted(reviewResult.riskLevel(), reviewResult.llmStatus());
-            metrics.reviewTaskDuration(Duration.between(startedAt, finishedAt), "completed");
-        }
+        metricsRecorder.recordCompleted(reviewResult, startedAt, finishedAt);
         evictDashboardOverview();
         return new WriteResult(findingCount, humanReviewRequired);
     }

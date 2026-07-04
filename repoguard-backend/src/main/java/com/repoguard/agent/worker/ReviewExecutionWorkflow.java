@@ -3,7 +3,6 @@ package com.repoguard.agent.worker;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
@@ -15,7 +14,6 @@ class ReviewExecutionWorkflow {
 
     private final PullRequestReviewer pullRequestReviewer;
     private final ReviewExecutionTransactionRunner transactionRunner;
-    private final RepoGuardMetrics metrics;
     private final GithubPullRequestDiffFetcher diffFetcher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewTimelineAppender timelineAppender;
@@ -29,7 +27,6 @@ class ReviewExecutionWorkflow {
     ReviewExecutionWorkflow(
         PullRequestReviewer pullRequestReviewer,
         ReviewExecutionTransactionRunner transactionRunner,
-        RepoGuardMetrics metrics,
         GithubPullRequestDiffFetcher diffFetcher,
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTimelineAppender timelineAppender,
@@ -41,7 +38,6 @@ class ReviewExecutionWorkflow {
     ) {
         this.pullRequestReviewer = pullRequestReviewer;
         this.transactionRunner = transactionRunner;
-        this.metrics = metrics;
         this.diffFetcher = diffFetcher;
         this.reviewTaskStateMachine = reviewTaskStateMachine;
         this.timelineAppender = timelineAppender;
@@ -91,9 +87,6 @@ class ReviewExecutionWorkflow {
                 if (!failReview(task, startedAt, claimId, ex)) {
                     executionLog.failureClaimLost(task, ex);
                     return;
-                }
-                if (metrics != null) {
-                    metrics.reviewTaskFailed(ex);
                 }
                 executionLog.failed(task, ex, failureHandler.failureCategory(ex), startedAt);
             }
