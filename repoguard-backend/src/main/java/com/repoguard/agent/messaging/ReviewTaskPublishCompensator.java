@@ -1,11 +1,8 @@
 package com.repoguard.agent.messaging;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
@@ -26,9 +23,8 @@ public class ReviewTaskPublishCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskPublishCompensator.class);
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
+    private final ReviewTaskPublishOutboxStore outboxStore;
     private final RabbitReviewQueueProperties properties;
     private final String instanceId;
     private final RepoGuardMetrics metrics;
@@ -41,6 +37,7 @@ public class ReviewTaskPublishCompensator {
         ReviewTaskPublisher reviewTaskPublisher,
         RabbitReviewQueueProperties properties,
         RepoGuardMetrics metrics,
+        ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
@@ -50,6 +47,7 @@ public class ReviewTaskPublishCompensator {
             properties,
             "repoguard-" + UUID.randomUUID(),
             metrics,
+            outboxStore,
             reviewTaskStateMachine
         );
     }
@@ -61,7 +59,7 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         String instanceId
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null, null);
     }
 
     ReviewTaskPublishCompensator(
@@ -72,7 +70,7 @@ public class ReviewTaskPublishCompensator {
         String instanceId,
         RepoGuardMetrics metrics
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null, null);
     }
 
     ReviewTaskPublishCompensator(
@@ -82,11 +80,13 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         String instanceId,
         RepoGuardMetrics metrics,
+        ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskPublisher = reviewTaskPublisher;
+        this.outboxStore = outboxStore == null
+            ? new ReviewTaskPublishOutboxStore(reviewTaskMapper, reviewTimelineMapper, reviewTaskStateMachine)
+            : outboxStore;
         this.properties = properties;
         this.instanceId = instanceId;
         this.metrics = metrics;
@@ -99,33 +99,7 @@ public class ReviewTaskPublishCompensator {
     public void compensatePublishFailures() {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime expiredBefore = now.minusNanos(leaseMs() * 1_000_000);
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>()
-                .and(wrapper -> wrapper
-                    .and(failed -> failed
-                        .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
-                        .le(ReviewTask::getNextPublishRetryAt, now)
-                        .lt(ReviewTask::getPublishAttempts, maxAttempts())
-                    )
-                    .or(staleQueued -> staleQueued
-                        .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
-                        .and(queued -> queued
-                            .and(claimed -> claimed
-                                .isNotNull(ReviewTask::getPublishClaimedAt)
-                                .le(ReviewTask::getPublishClaimedAt, expiredBefore)
-                            )
-                            .or(unclaimed -> unclaimed
-                                .isNull(ReviewTask::getPublishClaimedAt)
-                                .le(ReviewTask::getCreatedAt, expiredBefore)
-                            )
-                        )
-                        .lt(ReviewTask::getPublishAttempts, maxAttempts())
-                    )
-                )
-                .orderByAsc(ReviewTask::getPublishClaimedAt)
-                .orderByAsc(ReviewTask::getNextPublishRetryAt)
-                .last("limit " + batchSize())
-        );
+        List<ReviewTask> tasks = outboxStore.loadDuePublishEvents(now, expiredBefore, maxAttempts(), batchSize());
         for (ReviewTask task : tasks) {
             compensate(task);
         }
@@ -172,8 +146,8 @@ public class ReviewTaskPublishCompensator {
             }
             try {
                 reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
-                clearPublishClaim(task, claimedAt);
-                appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
+                outboxStore.clearPublishClaim(task, claimedAt, instanceId);
+                outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
                 if (metrics != null) {
                     metrics.rabbitPublishCompensationSucceeded();
                 }
@@ -188,7 +162,7 @@ public class ReviewTaskPublishCompensator {
             } catch (MessagePublishException ex) {
                 String errorMessage = errorMessage(ex);
                 if (markPublishFailed(task, claimedAt, ex)) {
-                    appendTimeline(
+                    outboxStore.appendTimeline(
                         task.getId(),
                         "Message publish retry failed: " + truncate(errorMessage),
                         LocalDateTime.now(),
@@ -223,44 +197,7 @@ public class ReviewTaskPublishCompensator {
 
     private boolean claimTask(ReviewTask task, LocalDateTime claimedAt) {
         LocalDateTime expiredBefore = claimedAt.minusNanos(leaseMs() * 1_000_000);
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .and(wrapper -> wrapper
-                    .and(failed -> failed
-                        .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
-                        .le("next_publish_retry_at", claimedAt)
-                        .lt("publish_attempts", maxAttempts())
-                        .and(claim -> claim
-                            .isNull("publish_claimed_at")
-                            .or()
-                            .le("publish_claimed_at", expiredBefore)
-                        )
-                    )
-                    .or(staleQueued -> staleQueued
-                        .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                        .and(queued -> queued
-                            .and(claimed -> claimed
-                                .isNotNull("publish_claimed_at")
-                                .le("publish_claimed_at", expiredBefore)
-                            )
-                            .or(unclaimed -> unclaimed
-                                .isNull("publish_claimed_at")
-                                .le("created_at", expiredBefore)
-                            )
-                        )
-                        .lt("publish_attempts", maxAttempts())
-                    )
-                )
-                .set("publish_claimed_at", claimedAt)
-                .set("publish_claimed_by", instanceId)
-        );
-        if (updated > 0) {
-            task.setPublishClaimedAt(claimedAt);
-            task.setPublishClaimedBy(instanceId);
-            return true;
-        }
-        return false;
+        return outboxStore.claimForPublish(task, claimedAt, instanceId, expiredBefore, maxAttempts());
     }
 
     private String recoverySource(ReviewTask task) {
@@ -273,73 +210,13 @@ public class ReviewTaskPublishCompensator {
     }
 
     private boolean markQueuedBeforePublish(ReviewTask task, LocalDateTime claimedAt, int nextAttempt) {
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .in(
-                    "status",
-                    reviewTaskStateMachine.statusWhenPublishFailed(),
-                    reviewTaskStateMachine.statusWhenQueued()
-                )
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
-                .set("status", reviewTaskStateMachine.statusWhenQueued())
-                .set("llm_status", "PENDING")
-                .set("publish_attempts", nextAttempt)
-                .set("next_publish_retry_at", null)
-                .set("last_publish_error", null)
-        );
-        if (updated <= 0) {
-            return false;
-        }
-        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-        task.setLlmStatus("PENDING");
-        task.setPublishAttempts(nextAttempt);
-        task.setNextPublishRetryAt(null);
-        task.setLastPublishError(null);
-        return true;
-    }
-
-    private void clearPublishClaim(ReviewTask task, LocalDateTime claimedAt) {
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
-                .set("publish_claimed_at", null)
-                .set("publish_claimed_by", null)
-        );
-        if (updated > 0) {
-            task.setPublishClaimedAt(null);
-            task.setPublishClaimedBy(null);
-        }
+        return outboxStore.markQueuedForPublish(task, claimedAt, instanceId, nextAttempt);
     }
 
     private boolean markPublishFailed(ReviewTask task, LocalDateTime claimedAt, MessagePublishException ex) {
         LocalDateTime nextRetryAt = LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000);
         String error = truncate(errorMessage(ex));
-        int updated = reviewTaskMapper.update(
-            new UpdateWrapper<ReviewTask>()
-                .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
-                .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
-                .set("next_publish_retry_at", nextRetryAt)
-                .set("last_publish_error", error)
-                .set("publish_claimed_at", null)
-                .set("publish_claimed_by", null)
-        );
-        if (updated <= 0) {
-            return false;
-        }
-        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
-        task.setNextPublishRetryAt(nextRetryAt);
-        task.setLastPublishError(error);
-        task.setPublishClaimedAt(null);
-        task.setPublishClaimedBy(null);
-        return true;
+        return outboxStore.markClaimedPublishFailed(task, claimedAt, instanceId, nextRetryAt, error);
     }
 
     private ReviewTaskMessage toMessage(ReviewTask task, LocalDateTime queuedAt) {
@@ -352,26 +229,6 @@ public class ReviewTaskPublishCompensator {
             queuedAt,
             LogContext.currentTraceId()
         );
-    }
-
-    private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(truncate(label));
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 
     private int safeAttempts(ReviewTask task) {

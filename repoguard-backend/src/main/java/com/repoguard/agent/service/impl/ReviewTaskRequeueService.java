@@ -1,18 +1,16 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.LlmStatus;
@@ -26,11 +24,11 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ReviewTaskRequeueService {
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
     private final RabbitReviewQueueProperties properties;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final MessageQueueAuditRecorder auditRecorder;
+    private final ReviewTaskPublishOutboxStore outboxStore;
     private final TransactionTemplate transactionTemplate;
 
     ReviewTaskRequeueService(
@@ -40,16 +38,23 @@ class ReviewTaskRequeueService {
         ReviewTaskPublisher reviewTaskPublisher,
         PlatformTransactionManager transactionManager,
         ReviewTaskStateMachine reviewTaskStateMachine,
-        MessageQueueAuditRecorder auditRecorder
+        MessageQueueAuditRecorder auditRecorder,
+        ReviewTaskPublishOutboxStore outboxStore
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
         this.properties = properties;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         this.auditRecorder = auditRecorder;
+        this.outboxStore = outboxStore == null
+            ? new ReviewTaskPublishOutboxStore(
+                reviewTaskMapper,
+                reviewTimelineMapper,
+                this.reviewTaskStateMachine
+            )
+            : outboxStore;
         this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 
@@ -104,7 +109,8 @@ class ReviewTaskRequeueService {
         task.setPublishClaimedAt(null);
         task.setPublishClaimedBy(null);
         reviewTaskMapper.updateById(task);
-        appendTimeline(task.getId(), "Message manually requeued", queuedAt, "CURRENT");
+        outboxStore.markCurrentTimelinesDone(task.getId());
+        outboxStore.appendTimeline(task.getId(), "Message manually requeued", queuedAt, "CURRENT");
 
         return new RequeuePublishContext(
             task.getId(),
@@ -129,47 +135,16 @@ class ReviewTaskRequeueService {
         return transactionTemplate.execute(status -> callback.execute());
     }
 
-    private void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(truncate(label));
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
     private void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
-        task.setLlmStatus(LlmStatus.PENDING.code());
-        task.setPublishAttempts(safeAttempts(task) + 1);
-        task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, properties.getPublishCompensationIntervalMs()) * 1_000_000));
-        task.setLastPublishError(truncate(errorMessage(ex)));
-        task.setPublishClaimedAt(null);
-        task.setPublishClaimedBy(null);
-        reviewTaskMapper.updateById(task);
-        appendTimeline(task.getId(), "Message manual requeue failed: " + errorMessage(ex), failedAt, "FAILED");
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
+        outboxStore.markDirectPublishFailed(
+            task,
+            ex,
+            failedAt,
+            Math.max(1000, properties.getPublishCompensationIntervalMs()),
+            "Message manual requeue failed: ",
+            false,
+            true
         );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
-    }
-
-    private int safeAttempts(ReviewTask task) {
-        return task.getPublishAttempts() == null ? 0 : task.getPublishAttempts();
     }
 
     private String errorMessage(Exception ex) {

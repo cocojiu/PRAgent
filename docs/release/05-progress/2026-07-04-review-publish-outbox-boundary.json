@@ -1,0 +1,29 @@
+{
+  "date": "2026-07-04",
+  "branch": "PRAgent-test",
+  "optimizationOrder": 3,
+  "title": "Review 发布 outbox 边界收敛",
+  "status": "completed",
+  "goal": "将 Review 任务发布相关的内嵌 outbox 字段操作集中到明确边界，减少 after-commit 发布、补偿发布和人工重入队之间的重复状态写入逻辑。",
+  "changes": [
+    "新增 ReviewTaskPublishOutboxStore，集中管理待发布任务查询、claim、重置为 queued、发布失败、claim 清理和 timeline 写入。",
+    "ReviewTaskPublishCompensator 改为只负责补偿流程编排，具体 outbox 状态迁移委托给 store。",
+    "ReviewTaskAfterCommitPublisher 和 ReviewTaskRequeueService 的发布失败落库改为复用同一个 store。",
+    "MessageQueueHealthServiceImpl 在 Spring 装配路径直接注入健康查询和重入队子服务，ReviewTaskRequeueService 通过构造器接收 outbox store。"
+  ],
+  "verification": {
+    "status": "passed",
+    "commands": [
+      {
+        "command": "mvn \"-Dtest=ReviewTaskPublishCompensatorTest,ReviewTaskAfterCommitPublisherTest,MessageQueueHealthServiceImplTest,ReviewTaskExecutorImplTest,ReviewServiceImplTest,SpringBeanConstructorSelectionTest\" test",
+        "result": "passed",
+        "summary": "65 tests, 0 failures, 0 errors, 0 skipped"
+      },
+      {
+        "command": "powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -SkipBackendTests",
+        "result": "passed",
+        "summary": "git diff whitespace、Flyway naming、demo data guard、secret/token scan 均通过；前端构建按参数跳过"
+      }
+    ]
+  }
+}

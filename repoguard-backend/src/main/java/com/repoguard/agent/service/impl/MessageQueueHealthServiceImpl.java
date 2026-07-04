@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
@@ -49,7 +50,7 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     @Autowired
-    public MessageQueueHealthServiceImpl(
+    MessageQueueHealthServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         SystemSettingLogMapper systemSettingLogMapper,
@@ -58,7 +59,9 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         RabbitTemplate rabbitTemplate,
         ReviewTaskPublisher reviewTaskPublisher,
         PlatformTransactionManager transactionManager,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        MessageQueueHealthQueryService healthQueryService,
+        ReviewTaskRequeueService requeueService
     ) {
         this(
             reviewTaskMapper,
@@ -72,8 +75,8 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
             null,
             reviewTaskStateMachine,
             null,
-            null,
-            null
+            healthQueryService,
+            requeueService
         );
     }
 
@@ -154,6 +157,11 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
         MessageQueueAuditRecorder audit = auditRecorder == null
             ? new MessageQueueAuditRecorder(systemSettingLogMapper)
             : auditRecorder;
+        ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            stateMachine
+        );
         this.healthQueryService = healthQueryService == null
             ? new MessageQueueHealthQueryService(
                 reviewTaskMapper,
@@ -172,7 +180,8 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
                 reviewTaskPublisher,
                 transactionManager,
                 stateMachine,
-                audit
+                audit,
+                outboxStore
             )
             : requeueService;
     }

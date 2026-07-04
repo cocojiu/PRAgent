@@ -1,15 +1,12 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
-import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
-import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.concurrent.Executor;
@@ -22,10 +19,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Component
 public class ReviewTaskAfterCommitPublisher {
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskPublisher reviewTaskPublisher;
-    private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final ReviewTaskPublishOutboxStore outboxStore;
     private final Executor reviewPublishExecutor;
 
     @Autowired
@@ -34,6 +29,7 @@ public class ReviewTaskAfterCommitPublisher {
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskAfterCommitPublisherExecutor reviewPublishExecutor
     ) {
         this(
@@ -41,6 +37,7 @@ public class ReviewTaskAfterCommitPublisher {
             reviewTimelineMapper,
             reviewTaskPublisher,
             reviewTaskStateMachine,
+            outboxStore,
             (Executor) reviewPublishExecutor
         );
     }
@@ -52,12 +49,28 @@ public class ReviewTaskAfterCommitPublisher {
         ReviewTaskStateMachine reviewTaskStateMachine,
         Executor reviewPublishExecutor
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
+        this(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            reviewTaskStateMachine,
+            null,
+            reviewPublishExecutor
+        );
+    }
+
+    ReviewTaskAfterCommitPublisher(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTaskPublisher reviewTaskPublisher,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewTaskPublishOutboxStore outboxStore,
+        Executor reviewPublishExecutor
+    ) {
         this.reviewTaskPublisher = reviewTaskPublisher;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.outboxStore = outboxStore == null
+            ? new ReviewTaskPublishOutboxStore(reviewTaskMapper, reviewTimelineMapper, reviewTaskStateMachine)
+            : outboxStore;
         this.reviewPublishExecutor = reviewPublishExecutor == null ? Runnable::run : reviewPublishExecutor;
     }
 
@@ -100,47 +113,14 @@ public class ReviewTaskAfterCommitPublisher {
     }
 
     public void markPublishFailed(ReviewTask task, MessagePublishException ex, LocalDateTime failedAt) {
-        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
-        task.setLlmStatus(LlmStatus.PENDING.code());
-        clearLlmQuality(task);
-        task.setPublishAttempts((task.getPublishAttempts() == null ? 0 : task.getPublishAttempts()) + 1);
-        task.setNextPublishRetryAt(failedAt.plusSeconds(60));
-        task.setLastPublishError(truncate(errorMessage(ex)));
-        reviewTaskMapper.updateById(task);
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(task.getId());
-        timeline.setLabel(truncate("Message publish failed: " + errorMessage(ex)));
-        timeline.setEventTime(failedAt);
-        timeline.setStatus("FAILED");
-        timeline.setSortOrder(nextTimelineSortOrder(task.getId()));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
+        outboxStore.markDirectPublishFailed(
+            task,
+            ex,
+            failedAt,
+            60000,
+            "Message publish failed: ",
+            true,
+            false
         );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
-    }
-
-    private void clearLlmQuality(ReviewTask task) {
-        task.setLlmProvider(null);
-        task.setLlmModel(null);
-        task.setLlmDurationMs(null);
-        task.setLlmParseStatus(null);
-        task.setLlmFallbackReason(null);
-        task.setLlmPromptSummary(null);
-    }
-
-    private String errorMessage(Exception ex) {
-        return MessagePublishFailureSanitizer.sanitize(ex);
-    }
-
-    private String truncate(String value) {
-        return value.length() > 120 ? value.substring(0, 117) + "..." : value;
     }
 }
