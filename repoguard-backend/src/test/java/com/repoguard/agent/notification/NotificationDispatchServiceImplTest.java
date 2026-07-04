@@ -23,7 +23,8 @@ class NotificationDispatchServiceImplTest {
     private final NotificationDispatchServiceImpl service = new NotificationDispatchServiceImpl(
         outboxEventStore,
         payloadBuilder,
-        publishCoordinator
+        publishCoordinator,
+        new NotificationDispatchRequestFactory(new NotificationCounterNormalizer())
     );
 
     @Test

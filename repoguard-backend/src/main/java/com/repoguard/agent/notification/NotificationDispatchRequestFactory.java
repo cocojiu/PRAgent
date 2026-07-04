@@ -2,10 +2,17 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.ReviewTask;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
 class NotificationDispatchRequestFactory {
+
+    private final NotificationCounterNormalizer counterNormalizer;
+
+    NotificationDispatchRequestFactory(NotificationCounterNormalizer counterNormalizer) {
+        this.counterNormalizer = Objects.requireNonNull(counterNormalizer, "counterNormalizer");
+    }
 
     NotificationDispatchRequest reviewFinished(ReviewTask task, int findingCount) {
         String eventType = Boolean.TRUE.equals(task.getHumanReviewRequired())
@@ -22,14 +29,10 @@ class NotificationDispatchRequestFactory {
         return new NotificationDispatchRequest(
             NotificationEventType.GITHUB_COMMENT_PUBLISHED.code(),
             batchId,
-            safe(response.totalFindings()),
-            safe(response.succeededCount()),
-            safe(response.failedCount()),
-            safe(response.skippedCount())
+            counterNormalizer.safe(response.totalFindings()),
+            counterNormalizer.safe(response.succeededCount()),
+            counterNormalizer.safe(response.failedCount()),
+            counterNormalizer.safe(response.skippedCount())
         );
-    }
-
-    private int safe(Integer value) {
-        return value == null ? 0 : value;
     }
 }

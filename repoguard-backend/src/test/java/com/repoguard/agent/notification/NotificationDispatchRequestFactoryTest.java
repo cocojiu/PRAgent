@@ -9,7 +9,8 @@ import org.junit.jupiter.api.Test;
 
 class NotificationDispatchRequestFactoryTest {
 
-    private final NotificationDispatchRequestFactory factory = new NotificationDispatchRequestFactory();
+    private final NotificationDispatchRequestFactory factory =
+        new NotificationDispatchRequestFactory(new NotificationCounterNormalizer());
 
     @Test
     void reviewFinishedUsesHumanReviewEventWhenManualReviewRequired() {

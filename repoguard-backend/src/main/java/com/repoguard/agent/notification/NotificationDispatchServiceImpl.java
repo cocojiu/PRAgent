@@ -19,14 +19,6 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
     public NotificationDispatchServiceImpl(
         NotificationOutboxEventStore outboxEventStore,
         NotificationEventPayloadBuilder payloadBuilder,
-        NotificationEventPublishCoordinator publishCoordinator
-    ) {
-        this(outboxEventStore, payloadBuilder, publishCoordinator, new NotificationDispatchRequestFactory());
-    }
-
-    NotificationDispatchServiceImpl(
-        NotificationOutboxEventStore outboxEventStore,
-        NotificationEventPayloadBuilder payloadBuilder,
         NotificationEventPublishCoordinator publishCoordinator,
         NotificationDispatchRequestFactory requestFactory
     ) {
