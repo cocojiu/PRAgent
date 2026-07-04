@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 
 class LlmRuleReviewMergerTest {
 
-    private final LlmRuleReviewMerger merger = new LlmRuleReviewMerger();
+    private final LlmRuleReviewMerger merger = new LlmRuleReviewMerger(new RiskLevelRanker());
 
     @Test
     void mergeReturnsLlmReviewWhenRuleReviewHasNoFindings() {

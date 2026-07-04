@@ -10,6 +10,7 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.review.RiskLevelRanker;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -20,7 +21,10 @@ class ReviewFindingReplacementServiceTest {
     private final ReviewFindingEntityMapper findingEntityMapper = org.mockito.Mockito.mock(ReviewFindingEntityMapper.class);
     private final ReviewFindingReplacementService service = new ReviewFindingReplacementService(
         reviewFindingMapper,
-        new ReviewFindingDeduplicator(new ReviewFindingDeduplicationKeyResolver(), new ReviewFindingMergeService()),
+        new ReviewFindingDeduplicator(
+            new ReviewFindingDeduplicationKeyResolver(),
+            new ReviewFindingMergeService(new RiskLevelRanker())
+        ),
         findingEntityMapper
     );
 

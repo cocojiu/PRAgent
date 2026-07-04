@@ -57,7 +57,7 @@ class LlmReviewPipeline {
     ) {
         this.ruleBasedReviewer = ruleBasedReviewer;
         this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
-        this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger() : reviewMerger;
+        this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger(new RiskLevelRanker()) : reviewMerger;
         this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
         this.metrics = metrics;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");

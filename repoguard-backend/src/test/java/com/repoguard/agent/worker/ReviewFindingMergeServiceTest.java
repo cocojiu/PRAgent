@@ -3,11 +3,12 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.review.ReviewFindingResult;
+import com.repoguard.agent.review.RiskLevelRanker;
 import org.junit.jupiter.api.Test;
 
 class ReviewFindingMergeServiceTest {
 
-    private final ReviewFindingMergeService mergeService = new ReviewFindingMergeService();
+    private final ReviewFindingMergeService mergeService = new ReviewFindingMergeService(new RiskLevelRanker());
 
     @Test
     void keepsStrongerFindingAsPrimaryAndMergesSupportingFields() {

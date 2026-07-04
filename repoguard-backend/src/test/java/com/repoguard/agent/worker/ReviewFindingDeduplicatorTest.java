@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.review.ReviewFindingResult;
+import com.repoguard.agent.review.RiskLevelRanker;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -10,7 +11,7 @@ class ReviewFindingDeduplicatorTest {
 
     private final ReviewFindingDeduplicator deduplicator = new ReviewFindingDeduplicator(
         new ReviewFindingDeduplicationKeyResolver(),
-        new ReviewFindingMergeService()
+        new ReviewFindingMergeService(new RiskLevelRanker())
     );
 
     @Test

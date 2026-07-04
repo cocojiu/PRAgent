@@ -5,9 +5,9 @@ import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.RiskLevelRanker;
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -17,9 +17,11 @@ class ReviewTaskCompletionApplier {
     private static final String HUMAN_REVIEW_THRESHOLD = "MEDIUM";
 
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final RiskLevelRanker riskLevelRanker;
 
-    ReviewTaskCompletionApplier(ReviewTaskStateMachine reviewTaskStateMachine) {
+    ReviewTaskCompletionApplier(ReviewTaskStateMachine reviewTaskStateMachine, RiskLevelRanker riskLevelRanker) {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
     }
 
     boolean applyCompleted(
@@ -61,20 +63,6 @@ class ReviewTaskCompletionApplier {
     }
 
     boolean requiresHumanReview(String riskLevel) {
-        return riskRank(riskLevel) >= riskRank(HUMAN_REVIEW_THRESHOLD);
-    }
-
-    private int riskRank(String riskLevel) {
-        if (riskLevel == null) {
-            return 0;
-        }
-        return switch (riskLevel.toUpperCase(Locale.ROOT)) {
-            case "CRITICAL" -> 5;
-            case "HIGH" -> 4;
-            case "MEDIUM" -> 3;
-            case "LOW" -> 2;
-            case "INFO" -> 1;
-            default -> 0;
-        };
+        return riskLevelRanker.atLeast(riskLevel, HUMAN_REVIEW_THRESHOLD);
     }
 }

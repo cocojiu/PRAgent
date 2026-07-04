@@ -23,7 +23,7 @@ final class ReviewQualityEvaluationRunner {
         this.objectMapper = objectMapper;
         this.ruleReviewer = ruleReviewer;
         this.resultParser = new LlmReviewResultParser(objectMapper);
-        this.resultMerger = new LlmRuleReviewMerger();
+        this.resultMerger = new LlmRuleReviewMerger(new RiskLevelRanker());
         this.diffChunker = new PullRequestDiffChunker();
     }
 

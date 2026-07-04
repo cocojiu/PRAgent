@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.RiskLevelRanker;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class ReviewTaskCompletionApplierTest {
 
     private final ReviewTaskCompletionApplier applier =
-        new ReviewTaskCompletionApplier(new ReviewTaskStateMachine());
+        new ReviewTaskCompletionApplier(new ReviewTaskStateMachine(), new RiskLevelRanker());
 
     @Test
     void appliesCompletedReviewWithoutHumanReview() {

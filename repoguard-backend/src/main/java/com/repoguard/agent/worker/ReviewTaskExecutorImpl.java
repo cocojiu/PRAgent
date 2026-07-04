@@ -11,6 +11,7 @@ import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.RiskLevelRanker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -117,10 +118,11 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
     ) {
         ReviewExecutionClock clock = new ReviewExecutionClock();
         ReviewLogContextFormatter logContextFormatter = new ReviewLogContextFormatter();
+        RiskLevelRanker riskLevelRanker = new RiskLevelRanker();
         ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator(
             new ReviewFindingDeduplicationKeyResolver(),
-            new ReviewFindingMergeService()
+            new ReviewFindingMergeService(riskLevelRanker)
         );
         ReviewTimelineAppender timelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
         ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(timelineAppender);
@@ -133,7 +135,10 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             findingDeduplicator,
             new ReviewFindingEntityMapper()
         );
-        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(reviewTaskStateMachine);
+        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
+            reviewTaskStateMachine,
+            riskLevelRanker
+        );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
         ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(

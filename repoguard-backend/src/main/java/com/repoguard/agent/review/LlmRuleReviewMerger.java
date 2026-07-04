@@ -1,10 +1,17 @@
 package com.repoguard.agent.review;
 
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
 class LlmRuleReviewMerger {
+
+    private final RiskLevelRanker riskLevelRanker;
+
+    LlmRuleReviewMerger(RiskLevelRanker riskLevelRanker) {
+        this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
+    }
 
     ReviewResult mergeWithRuleReview(ReviewResult llmReview, ReviewResult ruleReview) {
         if (ruleReview == null || ruleReview.findings() == null || ruleReview.findings().isEmpty()) {
@@ -28,19 +35,6 @@ class LlmRuleReviewMerger {
     }
 
     String maxRisk(String current, String candidate) {
-        return riskRank(candidate) > riskRank(current) ? candidate : current;
-    }
-
-    private int riskRank(String riskLevel) {
-        if (riskLevel == null) {
-            return 0;
-        }
-        return switch (riskLevel.trim().toUpperCase()) {
-            case "CRITICAL" -> 4;
-            case "HIGH" -> 3;
-            case "MEDIUM" -> 2;
-            case "LOW" -> 1;
-            default -> 0;
-        };
+        return riskLevelRanker.higher(current, candidate);
     }
 }

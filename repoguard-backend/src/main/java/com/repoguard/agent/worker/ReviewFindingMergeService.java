@@ -1,14 +1,24 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.review.ReviewFindingResult;
+import com.repoguard.agent.review.RiskLevelRanker;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
 class ReviewFindingMergeService {
 
+    private final RiskLevelRanker riskLevelRanker;
+
+    ReviewFindingMergeService(RiskLevelRanker riskLevelRanker) {
+        this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
+    }
+
     ReviewFindingResult merge(ReviewFindingResult first, ReviewFindingResult second) {
-        ReviewFindingResult stronger = riskRank(second.severity()) > riskRank(first.severity()) ? second : first;
+        ReviewFindingResult stronger = riskLevelRanker.rank(second.severity()) > riskLevelRanker.rank(first.severity())
+            ? second
+            : first;
         return new ReviewFindingResult(
             stronger.severity(),
             mergeSource(first.source(), second.source()),
@@ -63,19 +73,5 @@ class ReviewFindingMergeService {
             return null;
         }
         return value.trim();
-    }
-
-    private int riskRank(String riskLevel) {
-        if (riskLevel == null) {
-            return 0;
-        }
-        return switch (riskLevel.toUpperCase(Locale.ROOT)) {
-            case "CRITICAL" -> 5;
-            case "HIGH" -> 4;
-            case "MEDIUM" -> 3;
-            case "LOW" -> 2;
-            case "INFO" -> 1;
-            default -> 0;
-        };
     }
 }
