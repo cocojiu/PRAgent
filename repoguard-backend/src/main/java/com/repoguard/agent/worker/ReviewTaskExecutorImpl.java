@@ -152,7 +152,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,
             new ReviewExecutionTransactionRunner(transactionManager, 3),
-            new GithubPullRequestDiffFetcher(githubPullRequestClient, metrics, clock),
+            new GithubPullRequestDiffFetcher(githubPullRequestClient, metricsRecorder, clock),
             reviewTaskStateMachine,
             timelineRecorder,
             claimService,

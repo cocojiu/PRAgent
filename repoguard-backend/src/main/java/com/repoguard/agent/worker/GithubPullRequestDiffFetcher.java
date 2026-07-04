@@ -4,7 +4,6 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,16 +15,16 @@ class GithubPullRequestDiffFetcher {
     private static final Logger LOGGER = LoggerFactory.getLogger(GithubPullRequestDiffFetcher.class);
 
     private final GithubPullRequestClient githubPullRequestClient;
-    private final RepoGuardMetrics metrics;
+    private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionClock clock;
 
     GithubPullRequestDiffFetcher(
         GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics,
+        ReviewExecutionMetricsRecorder metricsRecorder,
         ReviewExecutionClock clock
     ) {
         this.githubPullRequestClient = githubPullRequestClient;
-        this.metrics = metrics;
+        this.metricsRecorder = metricsRecorder;
         this.clock = clock;
     }
 
@@ -40,9 +39,7 @@ class GithubPullRequestDiffFetcher {
             );
             GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
             Duration duration = Duration.between(startedAt, clock.now());
-            if (metrics != null) {
-                metrics.githubDiffDuration(duration, "success");
-            }
+            metricsRecorder.recordGithubDiffFetch(duration, "success");
             LOGGER.info(
                 "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
                 task.getId(),
@@ -54,9 +51,7 @@ class GithubPullRequestDiffFetcher {
             return diff;
         } catch (RuntimeException ex) {
             Duration duration = Duration.between(startedAt, clock.now());
-            if (metrics != null) {
-                metrics.githubDiffDuration(duration, "failed");
-            }
+            metricsRecorder.recordGithubDiffFetch(duration, "failed");
             LOGGER.warn(
                 "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
                 task.getId(),

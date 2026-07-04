@@ -39,11 +39,19 @@ class ReviewExecutionMetricsRecorderTest {
     }
 
     @Test
+    void recordGithubDiffFetchWritesDiffDurationMetric() {
+        recorder.recordGithubDiffFetch(Duration.ofSeconds(5), "success");
+
+        verify(metrics).githubDiffDuration(Duration.ofSeconds(5), "success");
+    }
+
+    @Test
     void noopsWhenMetricsAreUnavailable() {
         ReviewExecutionMetricsRecorder disabledRecorder = new ReviewExecutionMetricsRecorder(null);
         LocalDateTime startedAt = LocalDateTime.parse("2026-07-04T20:00:00");
 
         disabledRecorder.recordCompleted(ReviewResult.completed("LOW", List.of()), startedAt, startedAt.plusSeconds(1));
         disabledRecorder.recordFailed(new RuntimeException("ignored"), startedAt, startedAt.plusSeconds(1));
+        disabledRecorder.recordGithubDiffFetch(Duration.ofSeconds(1), "success");
     }
 }

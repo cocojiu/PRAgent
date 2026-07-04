@@ -30,4 +30,11 @@ class ReviewExecutionMetricsRecorder {
         metrics.reviewTaskFailed(ex);
         metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
     }
+
+    void recordGithubDiffFetch(Duration duration, String result) {
+        if (metrics == null) {
+            return;
+        }
+        metrics.githubDiffDuration(duration, result);
+    }
 }

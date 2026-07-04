@@ -9,7 +9,6 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,11 +17,11 @@ import org.junit.jupiter.api.Test;
 class GithubPullRequestDiffFetcherTest {
 
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
-    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final ReviewExecutionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(ReviewExecutionMetricsRecorder.class);
     private final TestReviewExecutionClock clock = new TestReviewExecutionClock();
     private final GithubPullRequestDiffFetcher fetcher = new GithubPullRequestDiffFetcher(
         githubPullRequestClient,
-        metrics,
+        metricsRecorder,
         clock
     );
 
@@ -42,7 +41,7 @@ class GithubPullRequestDiffFetcherTest {
 
         assertThat(fetched).isSameAs(diff);
         verify(githubPullRequestClient).fetchPullRequestDiff(task);
-        verify(metrics).githubDiffDuration(Duration.ofSeconds(5), "success");
+        verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(5), "success");
     }
 
     @Test
@@ -54,7 +53,7 @@ class GithubPullRequestDiffFetcherTest {
 
         assertThatThrownBy(() -> fetcher.fetch(task)).isSameAs(failure);
 
-        verify(metrics).githubDiffDuration(Duration.ofSeconds(3), "failed");
+        verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(3), "failed");
     }
 
     private ReviewTask task() {
