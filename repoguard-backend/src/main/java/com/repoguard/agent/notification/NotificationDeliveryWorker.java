@@ -4,6 +4,7 @@ import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,7 @@ public class NotificationDeliveryWorker {
     private final NotificationDeliveryCompletionService deliveryCompletionService;
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
     private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder;
+    private final NotificationDeliveryFailureClassifier failureClassifier;
 
     public NotificationDeliveryWorker(
         NotificationDeliverableEventQuery deliverableEventQuery,
@@ -31,7 +33,8 @@ public class NotificationDeliveryWorker {
         NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
         NotificationDeliveryCompletionService deliveryCompletionService,
         NotificationDeliveryEventStateUpdater eventStateUpdater,
-        NotificationDeliveryWorkerMetricsRecorder metricsRecorder
+        NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
+        NotificationDeliveryFailureClassifier failureClassifier
     ) {
         this.deliverableEventQuery = deliverableEventQuery;
         this.payloadParser = payloadParser;
@@ -39,6 +42,7 @@ public class NotificationDeliveryWorker {
         this.deliveryCompletionService = deliveryCompletionService;
         this.eventStateUpdater = eventStateUpdater;
         this.metricsRecorder = metricsRecorder;
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     @RabbitListener(queues = "${app.rabbit.notification.queue}", concurrency = "${app.rabbit.notification.worker-concurrency:1}")
@@ -84,7 +88,7 @@ public class NotificationDeliveryWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
-                ex.getClass().getSimpleName()
+                failureClassifier.failureCategory(ex)
             );
         }
     }

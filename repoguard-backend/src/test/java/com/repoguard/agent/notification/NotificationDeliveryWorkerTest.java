@@ -184,7 +184,8 @@ class NotificationDeliveryWorkerTest {
             bindingBatchDeliveryService(registry),
             deliveryCompletionService(),
             new NotificationDeliveryEventStateUpdater(eventMapper),
-            metricsRecorder
+            metricsRecorder,
+            new NotificationDeliveryFailureClassifier()
         );
     }
 
