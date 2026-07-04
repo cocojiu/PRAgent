@@ -1,12 +1,8 @@
 package com.repoguard.agent.worker;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -23,24 +19,21 @@ public class ReviewTaskRecoveryCompensator {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskRecoveryCompensator.class);
     private static final String RECOVERY_REASON = "Review execution lease expired";
 
-    private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTaskRecoveryStore recoveryStore;
     private final ReviewTimelineAppender timelineAppender;
-    private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewExecutionClock clock;
     private final ReviewLogContextFormatter logContextFormatter;
     private final ReviewTaskRecoveryPolicy recoveryPolicy;
 
     public ReviewTaskRecoveryCompensator(
-        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskRecoveryStore recoveryStore,
         ReviewTimelineAppender timelineAppender,
-        ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewExecutionClock clock,
         ReviewLogContextFormatter logContextFormatter,
         ReviewTaskRecoveryPolicy recoveryPolicy
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
         this.timelineAppender = timelineAppender;
-        this.reviewTaskStateMachine = reviewTaskStateMachine;
         this.clock = clock;
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
@@ -51,14 +44,7 @@ public class ReviewTaskRecoveryCompensator {
     public void recoverStuckTasks() {
         LocalDateTime now = clock.now();
         LocalDateTime expiredBefore = recoveryPolicy.expiredBefore(now);
-        List<ReviewTask> tasks = reviewTaskMapper.selectList(
-            new LambdaQueryWrapper<ReviewTask>()
-                .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenReviewing())
-                .isNotNull(ReviewTask::getReviewClaimedAt)
-                .le(ReviewTask::getReviewClaimedAt, expiredBefore)
-                .orderByAsc(ReviewTask::getReviewClaimedAt)
-                .last("limit " + recoveryPolicy.batchSize())
-        );
+        List<ReviewTask> tasks = recoveryStore.findExpiredReviewingTasks(expiredBefore, recoveryPolicy.batchSize());
         for (ReviewTask task : tasks) {
             recover(task, now, expiredBefore);
         }
@@ -66,20 +52,7 @@ public class ReviewTaskRecoveryCompensator {
 
     void recover(ReviewTask task, LocalDateTime recoveredAt, LocalDateTime expiredBefore) {
         try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
-            int updated = reviewTaskMapper.update(
-                new UpdateWrapper<ReviewTask>()
-                    .eq("id", task.getId())
-                    .eq("status", reviewTaskStateMachine.statusWhenReviewing())
-                    .eq("review_claimed_by", task.getReviewClaimedBy())
-                    .le("review_claimed_at", expiredBefore)
-                    .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
-                    .set("publish_attempts", 0)
-                    .set("next_publish_retry_at", recoveredAt)
-                    .set("last_publish_error", RECOVERY_REASON)
-                    .set("review_claimed_at", null)
-                    .set("review_claimed_by", null)
-            );
-            if (updated <= 0) {
+            if (!recoveryStore.requeueIfClaimOwned(task, recoveredAt, expiredBefore, RECOVERY_REASON)) {
                 LOGGER.info(
                     "Review task recovery skipped taskId={} repository={} prNumber={} operation=review_recovery result=claim_lost claimedAt={} claimedBy={} expiredBefore={}",
                     task.getId(),

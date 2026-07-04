@@ -6,14 +6,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -21,12 +18,11 @@ import org.slf4j.MDC;
 
 class ReviewTaskRecoveryCompensatorTest {
 
-    private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+    private final ReviewTaskRecoveryStore recoveryStore = org.mockito.Mockito.mock(ReviewTaskRecoveryStore.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskRecoveryCompensator compensator = new ReviewTaskRecoveryCompensator(
-        reviewTaskMapper,
+        recoveryStore,
         new ReviewTimelineAppender(reviewTimelineMapper),
-        new ReviewTaskStateMachine(),
         new ReviewExecutionClock(),
         new ReviewLogContextFormatter(),
         new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties())
@@ -37,20 +33,10 @@ class ReviewTaskRecoveryCompensatorTest {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-06-20T12:00:00");
         LocalDateTime expiredBefore = recoveredAt.minusMinutes(30);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(recoveryStore.requeueIfClaimOwned(task, recoveredAt, expiredBefore, "Review execution lease expired"))
+            .thenReturn(true);
 
         compensator.recover(task, recoveredAt, expiredBefore);
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
-        verify(reviewTaskMapper).update(wrapperCaptor.capture());
-        assertThat(wrapperCaptor.getValue().getSqlSegment())
-            .contains("review_claimed_at")
-            .contains("review_claimed_by");
-        assertThat(wrapperCaptor.getValue().getSqlSet())
-            .contains("next_publish_retry_at");
-        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
-            .contains("PUBLISH_FAILED", recoveredAt, "Review execution lease expired");
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -63,9 +49,11 @@ class ReviewTaskRecoveryCompensatorTest {
     void recoverDoesNothingWhenAnotherRecoveryAlreadyWonClaim() {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-06-20T12:00:00");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        LocalDateTime expiredBefore = recoveredAt.minusMinutes(30);
+        when(recoveryStore.requeueIfClaimOwned(task, recoveredAt, expiredBefore, "Review execution lease expired"))
+            .thenReturn(false);
 
-        compensator.recover(task, recoveredAt, recoveredAt.minusMinutes(30));
+        compensator.recover(task, recoveredAt, expiredBefore);
 
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
         assertLogContextCleared();
