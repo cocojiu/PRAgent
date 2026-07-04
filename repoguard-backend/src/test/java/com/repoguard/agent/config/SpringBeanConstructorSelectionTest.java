@@ -75,7 +75,8 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy"),
             Class.forName("com.repoguard.agent.review.LlmReviewPipeline"),
             Class.forName("com.repoguard.agent.service.impl.MessageQueueHealthQueryService"),
-            Class.forName("com.repoguard.agent.worker.ReviewExecutionTransactionRunner")
+            Class.forName("com.repoguard.agent.worker.ReviewExecutionTransactionRunner"),
+            Class.forName("com.repoguard.agent.worker.ReviewExecutionWorkflow")
         );
 
         for (Class<?> type : concat(springManagedTypes, packagePrivateSpringManagedTypes)) {
