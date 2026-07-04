@@ -23,7 +23,8 @@ class ReviewExecutionRequiredDependenciesTest {
     void completionApplierRequiresStateMachineDependency() {
         assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
             null,
-            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker())
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+            new ReviewTaskFailureOutcomePolicy()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -31,9 +32,24 @@ class ReviewExecutionRequiredDependenciesTest {
 
     @Test
     void completionApplierRequiresHumanReviewDecisionPolicyDependency() {
-        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(new ReviewTaskStateMachine(), null))
+        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
+            new ReviewTaskStateMachine(),
+            null,
+            new ReviewTaskFailureOutcomePolicy()
+        ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("humanReviewDecisionPolicy");
+    }
+
+    @Test
+    void completionApplierRequiresFailureOutcomePolicyDependency() {
+        assertThatThrownBy(() -> new ReviewTaskCompletionApplier(
+            new ReviewTaskStateMachine(),
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureOutcomePolicy");
     }
 
     @Test
@@ -116,7 +132,8 @@ class ReviewExecutionRequiredDependenciesTest {
         new ReviewTaskClaimService(reviewTaskMapper, stateMachine);
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
             stateMachine,
-            new ReviewHumanReviewDecisionPolicy(riskLevelRanker)
+            new ReviewHumanReviewDecisionPolicy(riskLevelRanker),
+            new ReviewTaskFailureOutcomePolicy()
         );
         new ReviewFindingReplacementService(
             reviewFindingMapper,

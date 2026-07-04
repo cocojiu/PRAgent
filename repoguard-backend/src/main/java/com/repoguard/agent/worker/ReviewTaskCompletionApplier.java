@@ -2,7 +2,6 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.HumanReviewStatus;
-import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.Duration;
@@ -15,14 +14,17 @@ class ReviewTaskCompletionApplier {
 
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy;
+    private final ReviewTaskFailureOutcomePolicy failureOutcomePolicy;
 
     ReviewTaskCompletionApplier(
         ReviewTaskStateMachine reviewTaskStateMachine,
-        ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy
+        ReviewHumanReviewDecisionPolicy humanReviewDecisionPolicy,
+        ReviewTaskFailureOutcomePolicy failureOutcomePolicy
     ) {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.humanReviewDecisionPolicy =
             Objects.requireNonNull(humanReviewDecisionPolicy, "humanReviewDecisionPolicy");
+        this.failureOutcomePolicy = Objects.requireNonNull(failureOutcomePolicy, "failureOutcomePolicy");
     }
 
     boolean applyCompleted(
@@ -57,8 +59,8 @@ class ReviewTaskCompletionApplier {
 
     void applyFailed(ReviewTask task, LocalDateTime startedAt, LocalDateTime failedAt) {
         task.setStatus(reviewTaskStateMachine.statusWhenFailed());
-        task.setRiskLevel("HIGH");
-        task.setLlmStatus(LlmStatus.FAILED.code());
+        task.setRiskLevel(failureOutcomePolicy.failedRiskLevel());
+        task.setLlmStatus(failureOutcomePolicy.failedLlmStatus());
         task.setFinishedAt(failedAt);
         task.setDurationSeconds((int) Duration.between(startedAt, failedAt).toSeconds());
     }

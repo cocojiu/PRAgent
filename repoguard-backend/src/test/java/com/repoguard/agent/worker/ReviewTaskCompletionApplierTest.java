@@ -16,7 +16,8 @@ class ReviewTaskCompletionApplierTest {
     private final ReviewTaskCompletionApplier applier =
         new ReviewTaskCompletionApplier(
             new ReviewTaskStateMachine(),
-            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker())
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+            new ReviewTaskFailureOutcomePolicy()
         );
 
     @Test
