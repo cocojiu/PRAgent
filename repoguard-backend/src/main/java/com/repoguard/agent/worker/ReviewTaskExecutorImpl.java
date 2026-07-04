@@ -156,6 +156,7 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             failureHandler,
             resultWriter,
             new ReviewExecutionNotifier(notificationDispatchService),
+            new ReviewExecutionDiffStats(),
             new ReviewExecutionLog()
         );
     }

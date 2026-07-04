@@ -2,7 +2,9 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import org.springframework.stereotype.Component;
 
+@Component
 class ReviewExecutionDiffStats {
 
     int fileCount(GithubPullRequestDiff diff) {

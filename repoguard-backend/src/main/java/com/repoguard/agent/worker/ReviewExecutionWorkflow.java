@@ -34,6 +34,7 @@ class ReviewExecutionWorkflow {
         ReviewExecutionFailureHandler failureHandler,
         ReviewExecutionResultWriter resultWriter,
         ReviewExecutionNotifier notifier,
+        ReviewExecutionDiffStats diffStats,
         ReviewExecutionLog executionLog
     ) {
         this.pullRequestReviewer = pullRequestReviewer;
@@ -45,7 +46,7 @@ class ReviewExecutionWorkflow {
         this.failureHandler = failureHandler;
         this.resultWriter = resultWriter;
         this.notifier = notifier;
-        this.diffStats = new ReviewExecutionDiffStats();
+        this.diffStats = diffStats;
         this.executionLog = executionLog;
     }
 
