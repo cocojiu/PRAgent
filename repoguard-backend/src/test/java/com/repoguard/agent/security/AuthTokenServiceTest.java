@@ -27,6 +27,7 @@ class AuthTokenServiceTest {
         assertThat(authenticatedUser.get().id()).isEqualTo(1001L);
         assertThat(authenticatedUser.get().username()).isEqualTo("admin");
         assertThat(authenticatedUser.get().role()).isEqualTo("ADMIN");
+        assertThat(authenticatedUser.get().sessionVersion()).isEqualTo(7);
     }
 
     @Test
@@ -80,6 +81,7 @@ class AuthTokenServiceTest {
         user.setId(1001L);
         user.setUsername("admin");
         user.setRole("ADMIN");
+        user.setSessionVersion(7);
         return user;
     }
 

@@ -66,13 +66,22 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
+        if (safeSessionVersion(currentUser) != authenticatedUser.get().sessionVersion()) {
+            writeUnauthorized(response, "Authentication token is invalid or expired");
+            return;
+        }
         request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, new AuthTokenService.AuthenticatedUser(
             currentUser.getId(),
             currentUser.getUsername(),
             currentUser.getRole(),
-            authenticatedUser.get().expiresAt()
+            authenticatedUser.get().expiresAt(),
+            safeSessionVersion(currentUser)
         ));
         filterChain.doFilter(request, response);
+    }
+
+    private int safeSessionVersion(UserAccount user) {
+        return user.getSessionVersion() == null ? 0 : user.getSessionVersion();
     }
 
     private boolean requiresAuth(HttpServletRequest request) {

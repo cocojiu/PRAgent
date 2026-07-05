@@ -97,6 +97,7 @@ public class AuthServiceImpl implements AuthService {
         user.setRole(ROLE_VIEWER);
         user.setStatus(STATUS_ACTIVE);
         user.setFailedLoginCount(0);
+        user.setSessionVersion(0);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         user.setLastLoginAt(now);
@@ -174,6 +175,7 @@ public class AuthServiceImpl implements AuthService {
             .set("status", STATUS_REVOKED)
             .set("revoked_at", now)
             .set("updated_at", now));
+        rotateSessionVersion(user, now);
         recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
     }
@@ -263,6 +265,12 @@ public class AuthServiceImpl implements AuthService {
         storedToken.setLastUsedAt(now);
         storedToken.setUpdatedAt(now);
         return true;
+    }
+
+    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
+        user.setSessionVersion((user.getSessionVersion() == null ? 0 : user.getSessionVersion()) + 1);
+        user.setUpdatedAt(now);
+        userAccountMapper.updateById(user);
     }
 
     private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {

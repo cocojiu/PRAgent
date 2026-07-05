@@ -16,6 +16,7 @@ public class UserAccount {
     private String status;
     private Integer failedLoginCount;
     private LocalDateTime lockedUntil;
+    private Integer sessionVersion;
     private LocalDateTime lastLoginAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -82,6 +83,14 @@ public class UserAccount {
 
     public void setLockedUntil(LocalDateTime lockedUntil) {
         this.lockedUntil = lockedUntil;
+    }
+
+    public Integer getSessionVersion() {
+        return sessionVersion;
+    }
+
+    public void setSessionVersion(Integer sessionVersion) {
+        this.sessionVersion = sessionVersion;
     }
 
     public LocalDateTime getLastLoginAt() {

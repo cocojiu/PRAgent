@@ -81,6 +81,7 @@ class AuthServiceImplTest {
         assertThat(saved.getPasswordHash()).doesNotContain("Secure123");
         assertThat(saved.getRole()).isEqualTo("VIEWER");
         assertThat(saved.getFailedLoginCount()).isZero();
+        assertThat(saved.getSessionVersion()).isZero();
         assertThat(response.accessToken()).isNotBlank();
         assertThat(response.refreshToken()).isNotBlank();
         assertThat(response.user().username()).isEqualTo("admin");
@@ -311,12 +312,15 @@ class AuthServiceImplTest {
     @Test
     void resetRefreshTokenVerifiesPasswordAndRevokesExistingTokens() {
         UserAccount user = existingUser();
+        user.setSessionVersion(3);
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
 
         AuthResponse response = authService.resetRefreshToken(new AuthRefreshTokenResetRequest("admin", "Secure123", false));
 
         assertThat(response.refreshToken()).isNotBlank();
+        assertThat(user.getSessionVersion()).isEqualTo(4);
+        verify(userAccountMapper).updateById(user);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
@@ -340,6 +344,7 @@ class AuthServiceImplTest {
         user.setRole("ADMIN");
         user.setStatus("ACTIVE");
         user.setFailedLoginCount(0);
+        user.setSessionVersion(0);
         return user;
     }
 }

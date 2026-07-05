@@ -34,7 +34,11 @@ public class AuthTokenService {
     public TokenIssue issueAccessToken(UserAccount user) {
         long ttlSeconds = authProperties.getAccessTokenTtlSeconds();
         long expiresAt = Instant.now(clock).plusSeconds(ttlSeconds).getEpochSecond();
-        String payload = user.getId() + ":" + user.getUsername() + ":" + user.getRole() + ":" + expiresAt;
+        String payload = user.getId() + ":"
+            + user.getUsername() + ":"
+            + user.getRole() + ":"
+            + safeSessionVersion(user) + ":"
+            + expiresAt;
         String encodedPayload = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         String signature = sign(encodedPayload);
         return new TokenIssue(encodedPayload + "." + signature, ttlSeconds);
@@ -74,22 +78,32 @@ public class AuthTokenService {
         } catch (IllegalArgumentException ex) {
             return Optional.empty();
         }
-        String[] payloadParts = payload.split(":", 4);
-        if (payloadParts.length != 4) {
+        String[] payloadParts = payload.split(":", 5);
+        if (payloadParts.length != 4 && payloadParts.length != 5) {
             return Optional.empty();
         }
         long userId;
         long expiresAt;
+        int sessionVersion = 0;
         try {
             userId = Long.parseLong(payloadParts[0]);
-            expiresAt = Long.parseLong(payloadParts[3]);
+            if (payloadParts.length == 5) {
+                sessionVersion = Integer.parseInt(payloadParts[3]);
+                expiresAt = Long.parseLong(payloadParts[4]);
+            } else {
+                expiresAt = Long.parseLong(payloadParts[3]);
+            }
         } catch (NumberFormatException ex) {
             return Optional.empty();
         }
         if (Instant.now(clock).getEpochSecond() >= expiresAt) {
             return Optional.empty();
         }
-        return Optional.of(new AuthenticatedUser(userId, payloadParts[1], payloadParts[2], expiresAt));
+        return Optional.of(new AuthenticatedUser(userId, payloadParts[1], payloadParts[2], expiresAt, sessionVersion));
+    }
+
+    private int safeSessionVersion(UserAccount user) {
+        return user.getSessionVersion() == null ? 0 : user.getSessionVersion();
     }
 
     private String sign(String encodedPayload) {
@@ -112,6 +126,9 @@ public class AuthTokenService {
     public record TokenIssue(String token, long expiresInSeconds) {
     }
 
-    public record AuthenticatedUser(Long id, String username, String role, long expiresAt) {
+    public record AuthenticatedUser(Long id, String username, String role, long expiresAt, int sessionVersion) {
+        public AuthenticatedUser(Long id, String username, String role, long expiresAt) {
+            this(id, username, role, expiresAt, 0);
+        }
     }
 }

@@ -105,6 +105,7 @@ class UserManagementServiceImplTest {
         assertThat(saved.getPasswordHash()).doesNotContain("Secure123");
         assertThat(saved.getRole()).isEqualTo("VIEWER");
         assertThat(saved.getStatus()).isEqualTo("ACTIVE");
+        assertThat(saved.getSessionVersion()).isZero();
         assertThat(created.role()).isEqualTo("VIEWER");
         assertThat(created.status()).isEqualTo("ACTIVE");
 
@@ -142,6 +143,7 @@ class UserManagementServiceImplTest {
         var updated = userManagementService.updateRole(new UserOperationAuditContext(1002L, "10.0.0.1", "JUnit"), 1001L, "VIEWER");
 
         assertThat(updated.role()).isEqualTo("VIEWER");
+        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
@@ -181,6 +183,7 @@ class UserManagementServiceImplTest {
         var updated = userManagementService.updateStatus(auditContext(), 1003L, "DISABLED");
 
         assertThat(updated.status()).isEqualTo("DISABLED");
+        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
@@ -203,6 +206,7 @@ class UserManagementServiceImplTest {
         assertThat(updated.status()).isEqualTo("ACTIVE");
         assertThat(updated.failedLoginCount()).isZero();
         assertThat(updated.lockedUntil()).isNull();
+        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).update(isNull(), any(Wrapper.class));
     }

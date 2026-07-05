@@ -100,6 +100,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         user.setRole(ROLE_VIEWER);
         user.setStatus(STATUS_ACTIVE);
         user.setFailedLoginCount(0);
+        user.setSessionVersion(0);
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         try {
@@ -121,7 +122,7 @@ public class UserManagementServiceImpl implements UserManagementService {
             ensureAnotherActiveAdmin(userId);
         }
         user.setRole(normalizedRole);
-        user.setUpdatedAt(LocalDateTime.now());
+        rotateSessionVersion(user, LocalDateTime.now());
         userAccountMapper.updateById(user);
         revokeActiveRefreshTokens(user.getId());
         recordAudit(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
@@ -142,7 +143,8 @@ public class UserManagementServiceImpl implements UserManagementService {
             ensureAnotherActiveAdmin(userId);
         }
         user.setStatus(normalizedStatus);
-        user.setUpdatedAt(LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        rotateSessionVersion(user, now);
         if (STATUS_ACTIVE.equals(normalizedStatus)) {
             user.setFailedLoginCount(0);
             user.setLockedUntil(null);
@@ -204,6 +206,11 @@ public class UserManagementServiceImpl implements UserManagementService {
             .set("status", STATUS_REVOKED)
             .set("revoked_at", now)
             .set("updated_at", now));
+    }
+
+    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
+        user.setSessionVersion((user.getSessionVersion() == null ? 0 : user.getSessionVersion()) + 1);
+        user.setUpdatedAt(now);
     }
 
     private UserAccount findByUsername(String username) {

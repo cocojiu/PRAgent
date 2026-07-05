@@ -148,6 +148,23 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void protectedApiRejectsTokenWhenSessionVersionChanged() throws ServletException, IOException {
+        UserAccount issuedUser = user();
+        issuedUser.setSessionVersion(1);
+        UserAccount currentUser = user();
+        currentUser.setSessionVersion(2);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/config/github");
+        request.addHeader("Authorization", "Bearer " + authTokenService.issueAccessToken(issuedUser).token());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        Mockito.when(userAccountMapper.selectById(1001L)).thenReturn(currentUser);
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
     void protectedApiUsesCurrentDatabaseRoleForAuthenticatedUserAttribute() throws ServletException, IOException {
         UserAccount issuedUser = user();
         issuedUser.setRole("ADMIN");
@@ -167,6 +184,7 @@ class AuthTokenFilterTest {
                 assertThat(authenticatedUser.id()).isEqualTo(1001L);
                 assertThat(authenticatedUser.username()).isEqualTo("admin");
                 assertThat(authenticatedUser.role()).isEqualTo("VIEWER");
+                assertThat(authenticatedUser.sessionVersion()).isZero();
             });
     }
 
