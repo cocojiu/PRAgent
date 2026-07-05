@@ -146,6 +146,31 @@ class RepoGuardMetricsTest {
         )).isEqualTo(128.0);
     }
 
+    @Test
+    void recordsSqlQueryDurationAndRowsWithStableTags() {
+        metrics.sqlQuery(Duration.ofMillis(18), "DashboardMapper.selectMetricStat", "SELECT", "success", 6);
+
+        assertThat(timerCount(
+            "repoguard.sql.query.duration",
+            "statement", "dashboardmapper.selectmetricstat",
+            "command", "select",
+            "result", "success"
+        )).isEqualTo(1);
+        assertThat(summaryTotal(
+            "repoguard.sql.query.rows",
+            "statement", "dashboardmapper.selectmetricstat",
+            "command", "select",
+            "result", "success"
+        )).isEqualTo(6.0);
+        assertThat(meterRegistry.find("repoguard.sql.query.rows")
+            .tag("statement", "dashboardmapper.selectmetricstat")
+            .tag("command", "select")
+            .tag("result", "success")
+            .summary()
+            .getId()
+            .getBaseUnit()).isEqualTo("rows");
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }

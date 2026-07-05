@@ -128,6 +128,25 @@ public class RepoGuardMetrics {
         ).record(Math.max(0L, responseBytes));
     }
 
+    public void sqlQuery(Duration duration, String statement, String command, String result, long rows) {
+        String normalizedStatement = normalize(statement);
+        String normalizedCommand = normalize(command);
+        String normalizedResult = normalize(result);
+        timer(
+            "repoguard.sql.query.duration",
+            "statement", normalizedStatement,
+            "command", normalizedCommand,
+            "result", normalizedResult
+        ).record(nonNegative(duration));
+        summaryWithUnit(
+            "repoguard.sql.query.rows",
+            "rows",
+            "statement", normalizedStatement,
+            "command", normalizedCommand,
+            "result", normalizedResult
+        ).record(Math.max(0L, rows));
+    }
+
     public void rabbitPublishFailed(String reason) {
         counter("repoguard.rabbit.publish.failed", "reason", normalize(reason)).increment();
     }
@@ -178,8 +197,12 @@ public class RepoGuardMetrics {
     }
 
     private DistributionSummary summary(String name, String... tags) {
+        return summaryWithUnit(name, "bytes", tags);
+    }
+
+    private DistributionSummary summaryWithUnit(String name, String baseUnit, String... tags) {
         return DistributionSummary.builder(name)
-            .baseUnit("bytes")
+            .baseUnit(baseUnit)
             .tags(tags)
             .register(meterRegistry);
     }

@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-05",
+  "item": "OPT-ARCH-028",
+  "title": "SQL query duration and row-count observability",
+  "status": "completed",
+  "scope": [
+    "MyBatis Executor.query records duration by mapped statement, command type and result",
+    "successful SELECT queries record returned row counts",
+    "failed queries still record duration and a failed result tag without swallowing the exception",
+    "statement tags strip the stable project mapper package and do not include raw SQL or parameters"
+  ],
+  "verification": [
+    "mvn \"-Dtest=SqlQueryObservationInterceptorTest,RepoGuardMetricsTest\" test",
+    "mvn test"
+  ],
+  "remaining": [
+    "dashboard cache hit observation",
+    "frontend long task and initial request waterfall observation"
+  ]
+}
