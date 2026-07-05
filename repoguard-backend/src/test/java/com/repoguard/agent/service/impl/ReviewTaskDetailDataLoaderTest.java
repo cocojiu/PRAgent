@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -28,8 +28,11 @@ class ReviewTaskDetailDataLoaderTest {
 
     @Test
     void loadsDetailDataAndSeparatesFindingsFromMissingTests() {
-        when(changedFileMapper.selectList(any(Wrapper.class))).thenReturn(List.of(changedFile()));
-        when(reviewFindingMapper.selectList(any(Wrapper.class))).thenReturn(List.of(finding(), missingTest()));
+        when(changedFileMapper.selectPage(any(), any())).thenReturn(page(List.of(changedFile())));
+        when(reviewFindingMapper.selectPage(any(), any())).thenReturn(
+            page(List.of(finding())),
+            page(List.of(missingTest()))
+        );
         when(timelineQueryService.loadItemsByTaskId(521L)).thenReturn(List.of(
             new ReviewTimelineItem("Review completed", "10:21:00", "done"),
             new ReviewTimelineItem("Review running", "10:20:00", "current")
@@ -53,6 +56,16 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.missingTests().getFirst().method()).isEqualTo("authorize");
         assertThat(result.timeline()).extracting("label").containsExactly("Review completed", "Review running");
         assertThat(result.timeline()).extracting("status").containsExactly("done", "current");
+        assertThat(result.changedFileTotal()).isEqualTo(1);
+        assertThat(result.findingTotal()).isEqualTo(1);
+        assertThat(result.missingTestTotal()).isEqualTo(1);
+    }
+
+    private <T> Page<T> page(List<T> records) {
+        Page<T> page = Page.of(1, 20);
+        page.setRecords(records);
+        page.setTotal(records.size());
+        return page;
     }
 
     private ChangedFile changedFile() {

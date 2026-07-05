@@ -72,7 +72,7 @@ public class ReviewTaskDetailDataLoader {
             Page.of(page, pageSize),
             changedFilePageQuery(taskId, hasFinding)
         );
-        return new PageResponse<>(findingAssembler.toChangedFileDtos(result.getRecords()), result.getTotal());
+        return new PageResponse<>(findingAssembler.toChangedFileDtos(pageRecords(result)), pageTotal(result));
     }
 
     public PageResponse<ReviewFindingDto> loadFindingsPage(
@@ -87,7 +87,7 @@ public class ReviewTaskDetailDataLoader {
             Page.of(page, pageSize),
             findingPageQuery(taskId, severity, category, feedbackStatus)
         );
-        return new PageResponse<>(findingAssembler.toFindingDtos(result.getRecords()), result.getTotal());
+        return new PageResponse<>(findingAssembler.toFindingDtos(pageRecords(result)), pageTotal(result));
     }
 
     public PageResponse<MissingTestDto> loadMissingTestsPage(Long taskId, int page, int pageSize) {
@@ -98,7 +98,18 @@ public class ReviewTaskDetailDataLoader {
                 .eq(ReviewFinding::getCategory, CATEGORY_MISSING_TEST)
                 .orderByAsc(ReviewFinding::getId)
         );
-        return new PageResponse<>(findingAssembler.toMissingTestDtos(result.getRecords()), result.getTotal());
+        return new PageResponse<>(findingAssembler.toMissingTestDtos(pageRecords(result)), pageTotal(result));
+    }
+
+    private <T> List<T> pageRecords(Page<T> page) {
+        if (page == null || page.getRecords() == null) {
+            return List.of();
+        }
+        return page.getRecords();
+    }
+
+    private long pageTotal(Page<?> page) {
+        return page == null ? 0L : page.getTotal();
     }
 
     private LambdaQueryWrapper<ChangedFile> changedFilePageQuery(Long taskId, Boolean hasFinding) {

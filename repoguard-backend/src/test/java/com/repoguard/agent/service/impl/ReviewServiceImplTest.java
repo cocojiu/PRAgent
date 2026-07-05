@@ -555,8 +555,7 @@ class ReviewServiceImplTest {
         failedTask.setRiskLevel("HIGH");
         failedTask.setLlmStatus("FAILED");
         when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
-        when(changedFileMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        mockDetailPages(List.of(), List.of(), List.of());
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
             timeline("Task queued"),
             timeline("Review failed: 403 Resource not accessible by integration")
@@ -576,8 +575,7 @@ class ReviewServiceImplTest {
         failedTask.setRiskLevel("HIGH");
         failedTask.setLlmStatus("FAILED");
         when(reviewTaskMapper.selectById(521L)).thenReturn(failedTask);
-        when(changedFileMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        mockDetailPages(List.of(), List.of(), List.of());
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
             timeline("Task queued"),
             timeline("Review failed: LLM external call failed: category=llm_service_unavailable retryable=true status=503")
@@ -592,15 +590,14 @@ class ReviewServiceImplTest {
     @Test
     void getReviewDetailBuildsPrRiskProfileFromFindingsAndChangedFiles() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(
+        mockDetailPages(List.of(
             changedFile("repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", "ADD", 180, 20),
             changedFile("repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", "MODIFY", 90, 15),
             changedFile("README.md", "MODIFY", 3, 1)
-        ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        ), List.of(
             finding(1L, "HIGH", "repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", 4, "DDL risk", "Add rollback plan"),
             finding(2L, "MEDIUM", "repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", 42, "Auth bypass risk", "Add guard")
-        ));
+        ), List.of());
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
 
         var result = service.getReviewDetail(521L);
@@ -626,8 +623,7 @@ class ReviewServiceImplTest {
                 + "aggregateRisk=HIGH; aggregateFindings=7; failedChunks=1; chunkReasons=security,config,build"
         );
         when(reviewTaskMapper.selectById(521L)).thenReturn(task);
-        when(changedFileMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        mockDetailPages(List.of(), List.of(), List.of());
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
 
         var result = service.getReviewDetail(521L);
@@ -645,8 +641,7 @@ class ReviewServiceImplTest {
         ReviewTask task = task();
         task.setLlmPromptSummary("PR octocat/Hello-World#1; files=2; additions=8; deletions=1");
         when(reviewTaskMapper.selectById(521L)).thenReturn(task);
-        when(changedFileMapper.selectList(any())).thenReturn(List.of());
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        mockDetailPages(List.of(), List.of(), List.of());
         when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(timeline("Task queued")));
 
         var result = service.getReviewDetail(521L);
@@ -1014,6 +1009,22 @@ class ReviewServiceImplTest {
 
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+    }
+
+    private void mockDetailPages(
+        List<ChangedFile> changedFiles,
+        List<ReviewFinding> findings,
+        List<ReviewFinding> missingTests
+    ) {
+        when(changedFileMapper.selectPage(any(), any())).thenReturn(page(changedFiles));
+        when(reviewFindingMapper.selectPage(any(), any())).thenReturn(page(findings), page(missingTests));
+    }
+
+    private <T> Page<T> page(List<T> records) {
+        Page<T> page = Page.of(1, 20);
+        page.setRecords(records);
+        page.setTotal(records.size());
+        return page;
     }
 
     private ReviewTask task() {
