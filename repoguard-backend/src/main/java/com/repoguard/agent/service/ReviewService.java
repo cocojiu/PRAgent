@@ -19,6 +19,7 @@ import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
+import java.util.List;
 
 public interface ReviewService {
 
@@ -26,6 +27,8 @@ public interface ReviewService {
      * 根据接口层筛选条件查询评审任务列表，并转换为数据库查询条件。
      */
     PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query);
+
+    List<String> listRepositories();
 
     /**
      * 加载单个评审任务，以及前端详情页需要的所有只读区块。

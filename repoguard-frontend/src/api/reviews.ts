@@ -32,6 +32,9 @@ export const fetchReviewMissingTests = (
   params?: { page?: number; pageSize?: number }
 ) => apiRequest("fetchReviewMissingTests", { id, ...params });
 
+export const fetchReviewRepositories = () =>
+  apiRequest("fetchReviewRepositories", undefined);
+
 export const fetchReviewStatus = (id: number) => apiRequest("fetchReviewStatus", { id });
 
 export const fetchGithubCommentPreview = (id: number) =>

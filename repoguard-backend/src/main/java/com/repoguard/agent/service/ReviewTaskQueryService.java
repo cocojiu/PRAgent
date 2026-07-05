@@ -8,10 +8,13 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import java.util.List;
 
 public interface ReviewTaskQueryService {
 
     PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query);
+
+    List<String> listRepositories();
 
     ReviewTaskDetail getReviewDetail(Long id);
 

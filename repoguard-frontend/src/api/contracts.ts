@@ -106,6 +106,7 @@ export type ApiContract = {
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
   fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
   fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;
+  fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
   fetchGithubCommentPreview: ApiOperation<{ id: number }, GithubCommentPreview>;
   fetchGithubCommentPublicationHistory: ApiOperation<
@@ -237,6 +238,9 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewMissingTests: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/missing-tests`,
     query: input => ({ page: input.page, pageSize: input.pageSize })
+  },
+  fetchReviewRepositories: {
+    path: () => "/api/v1/reviews/repositories"
   },
   fetchReviewStatus: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/status`

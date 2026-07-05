@@ -1,6 +1,6 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { fetchReviews } from "@/api/reviews";
+import { fetchReviewRepositories, fetchReviews } from "@/api/reviews";
 import type { MetricGridItem } from "@/components/MetricGrid.vue";
 import type { ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
@@ -30,7 +30,6 @@ export const useReviewTasksList = () => {
   const currentPage = ref(1);
   const pageSize = ref(8);
   let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
-  let repositoryLoadTimer: ReturnType<typeof setTimeout> | undefined;
   let taskRequestSeq = 0;
 
   const repositories = computed(() => allRepositories.value);
@@ -99,8 +98,7 @@ export const useReviewTasksList = () => {
 
   const loadRepositories = async () => {
     try {
-      const page = await fetchReviews({ page: 1, pageSize: 100 });
-      allRepositories.value = Array.from(new Set(page.items.map((task) => task.repository))).sort();
+      allRepositories.value = await fetchReviewRepositories();
     } catch (error) {
       ElMessage.error(getErrorMessage(error, "请求失败"));
     }
@@ -132,12 +130,7 @@ export const useReviewTasksList = () => {
 
   const initializeReviewTasksList = () => {
     void loadTasks();
-    if (repositoryLoadTimer) {
-      clearTimeout(repositoryLoadTimer);
-    }
-    repositoryLoadTimer = setTimeout(() => {
-      void loadRepositories();
-    }, 500);
+    void loadRepositories();
   };
 
   watch([repoFilter, statusFilter, riskFilter, sourceFilter, keyword], scheduleFilterLoad);
@@ -149,9 +142,6 @@ export const useReviewTasksList = () => {
   onUnmounted(() => {
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
-    }
-    if (repositoryLoadTimer) {
-      clearTimeout(repositoryLoadTimer);
     }
   });
 

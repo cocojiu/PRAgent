@@ -89,6 +89,11 @@ class ReviewControllerTest {
         }
 
         @Override
+        public List<String> listRepositories() {
+            return List.of("api", "spring-boot-demo", "web");
+        }
+
+        @Override
         public ReviewTaskDetail getReviewDetail(Long id) {
             return new ReviewTaskDetail(
                 id,
@@ -443,6 +448,17 @@ class ReviewControllerTest {
         mockMvc.perform(get("/api/v1/reviews")
                 .param("keyword", "x".repeat(256)))
             .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void listRepositoriesReturnsLightweightOptions() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/repositories"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data", hasSize(3)))
+            .andExpect(jsonPath("$.data[0]").value("api"))
+            .andExpect(jsonPath("$.data[1]").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data[2]").value("web"));
     }
 
     @Test

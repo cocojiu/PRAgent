@@ -60,6 +60,15 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         """)
     List<ReviewTask> selectMessageQueueExceptionTasks();
 
+    @Select("""
+        select distinct repository
+        from review_task
+        where repository is not null
+          and trim(repository) <> ''
+        order by repository asc
+        """)
+    List<String> selectDistinctRepositories();
+
     class MessageQueueHealthSummary {
         private Long total;
         private Long publishFailed;

@@ -103,6 +103,12 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     }
 
     @Override
+    public List<String> listRepositories() {
+        List<String> repositories = reviewTaskMapper.selectDistinctRepositories();
+        return repositories == null ? List.of() : repositories;
+    }
+
+    @Override
     public ReviewTaskDetail getReviewDetail(Long id) {
         ReviewTask task = queryItemLoader.loadRequired(id);
         ReviewTaskDetailData detailData = detailDataLoader.load(id);

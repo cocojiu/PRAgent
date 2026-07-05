@@ -39,6 +39,7 @@ import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -215,6 +216,11 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     public PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query) {
         return reviewTaskQueryService.listReviews(query);
+    }
+
+    @Override
+    public List<String> listRepositories() {
+        return reviewTaskQueryService.listRepositories();
     }
 
     @Override
