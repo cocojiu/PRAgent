@@ -14,12 +14,32 @@ class ReviewTaskRecoveryTimelineRecorder {
         this.timelineAppender = Objects.requireNonNull(timelineAppender, "timelineAppender");
     }
 
+    void requeuePending(ReviewTask task, LocalDateTime eventTime) {
+        timelineAppender.append(
+            task.getId(),
+            "Review execution timed out; requeue pending",
+            eventTime,
+            "CURRENT",
+            5
+        );
+    }
+
     void recoveryQueued(ReviewTask task, LocalDateTime eventTime) {
         timelineAppender.append(
             task.getId(),
-            "Review execution timed out; queued for recovery",
+            "Review execution timeout recovered; message requeued",
             eventTime,
             "CURRENT",
+            5
+        );
+    }
+
+    void recoveryPublishFailed(ReviewTask task, LocalDateTime eventTime, String error) {
+        timelineAppender.append(
+            task.getId(),
+            "Review execution recovery publish failed: " + error,
+            eventTime,
+            "FAILED",
             5
         );
     }

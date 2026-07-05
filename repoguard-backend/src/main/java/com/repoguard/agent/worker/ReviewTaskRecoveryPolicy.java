@@ -28,4 +28,8 @@ class ReviewTaskRecoveryPolicy {
     int batchSize() {
         return Math.max(MIN_BATCH_SIZE, properties.getReviewRecoveryBatchSize());
     }
+
+    long publishRetryDelayMs() {
+        return Math.max(1000, properties.getPublishCompensationIntervalMs());
+    }
 }

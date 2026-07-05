@@ -131,26 +131,29 @@ class MessageQueueHealthQueryService {
         long total = safeCount(summary == null ? null : summary.getTotal());
         long publishFailed = safeCount(summary == null ? null : summary.getPublishFailed());
         long executionTimeout = safeCount(summary == null ? null : summary.getExecutionTimeout());
+        long requeuePending = safeCount(summary == null ? null : summary.getRequeuePending());
         long claimed = safeCount(summary == null ? null : summary.getClaimed());
         long dlqBacklog = safeCount(summary == null ? null : summary.getDlqBacklog());
-        long publishSucceeded = Math.max(0, total - publishFailed - executionTimeout - dlqBacklog);
-        recordQueueDepth(publishFailed, executionTimeout, claimed, dlqBacklog);
+        long publishSucceeded = Math.max(0, total - publishFailed - executionTimeout - requeuePending - dlqBacklog);
+        recordQueueDepth(publishFailed, executionTimeout, requeuePending, claimed, dlqBacklog);
 
         return List.of(
             new MessageQueueMetricDto("Publish succeeded", String.valueOf(publishSucceeded), "Current active config", "trend", "blue"),
             new MessageQueueMetricDto("Publish failed", String.valueOf(publishFailed), "Waiting for compensation", publishFailed > 0 ? "trend danger" : "trend", "red"),
             new MessageQueueMetricDto("Execution timeout", String.valueOf(executionTimeout), "Review lease expired", executionTimeout > 0 ? "trend danger" : "trend", "orange"),
+            new MessageQueueMetricDto("Requeue pending", String.valueOf(requeuePending), "Execution recovery publishing", requeuePending > 0 ? "trend danger" : "trend", "orange"),
             new MessageQueueMetricDto("Compensating", String.valueOf(claimed), "Claimed by workers", claimed > 0 ? "trend danger" : "trend", "orange"),
             new MessageQueueMetricDto("DLQ backlog", String.valueOf(dlqBacklog), "Database observed status", dlqBacklog > 0 ? "trend danger" : "trend", "red")
         );
     }
 
-    private void recordQueueDepth(long publishFailed, long executionTimeout, long claimed, long dlqBacklog) {
+    private void recordQueueDepth(long publishFailed, long executionTimeout, long requeuePending, long claimed, long dlqBacklog) {
         if (metrics == null) {
             return;
         }
         metrics.rabbitQueueDepth(properties.getQueue(), "publish_failed", publishFailed);
         metrics.rabbitQueueDepth(properties.getQueue(), "execution_timeout", executionTimeout);
+        metrics.rabbitQueueDepth(properties.getQueue(), "requeue_pending", requeuePending);
         metrics.rabbitQueueDepth(properties.getQueue(), "claimed", claimed);
         metrics.rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", dlqBacklog);
     }
@@ -193,6 +196,7 @@ class MessageQueueHealthQueryService {
 
     private boolean isExceptionTask(ReviewTask task) {
         return isPublishFailed(task) || reviewTaskStateMachine.isExecutionTimeout(task.getStatus())
+            || reviewTaskStateMachine.isRequeuePending(task.getStatus())
             || STATUS_DLQ.equals(task.getStatus());
     }
 

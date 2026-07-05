@@ -66,7 +66,7 @@ class MessageQueueHealthServiceImplTest {
 
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(6L, 3L, 1L, 1L, 1L));
+        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(7L, 3L, 1L, 1L, 1L, 1L));
         when(reviewTaskMapper.selectLatestPublishFailureReason()).thenReturn("routing failed");
         when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of(
             task(1L, "QUEUED", 0, null, null, null, LocalDateTime.of(2026, 6, 10, 20, 0)),
@@ -74,7 +74,8 @@ class MessageQueueHealthServiceImplTest {
             task(3L, "PUBLISH_FAILED", 1, LocalDateTime.of(2026, 6, 10, 21, 12), "repoguard-a1", "broker unavailable", LocalDateTime.of(2026, 6, 10, 21, 1)),
             task(4L, "PUBLISH_FAILED", 3, null, null, "max attempts reached", LocalDateTime.of(2026, 6, 10, 21, 2)),
             task(5L, "DLQ", 3, null, null, "routing failed", LocalDateTime.of(2026, 6, 10, 21, 3)),
-            task(6L, "EXECUTION_TIMEOUT", 0, LocalDateTime.of(2026, 6, 10, 21, 15), null, "Review execution lease expired", LocalDateTime.of(2026, 6, 10, 21, 4))
+            task(6L, "EXECUTION_TIMEOUT", 0, LocalDateTime.of(2026, 6, 10, 21, 15), null, "Review execution lease expired", LocalDateTime.of(2026, 6, 10, 21, 4)),
+            task(7L, "REQUEUE_PENDING", 0, null, null, "Review execution lease expired", LocalDateTime.of(2026, 6, 10, 21, 5))
         ));
 
         MessageQueueHealthResponse health = service.getHealth();
@@ -89,14 +90,16 @@ class MessageQueueHealthServiceImplTest {
         assertThat(metricValues).containsEntry("Publish succeeded", "1");
         assertThat(metricValues).containsEntry("Publish failed", "3");
         assertThat(metricValues).containsEntry("Execution timeout", "1");
+        assertThat(metricValues).containsEntry("Requeue pending", "1");
         assertThat(metricValues).containsEntry("Compensating", "1");
         assertThat(metricValues).containsEntry("DLQ backlog", "1");
         assertThat(health.retryCompensation().maxAttempts()).isEqualTo(3);
         assertThat(health.retryCompensation().claimedTaskCount()).isEqualTo(1);
         assertThat(health.retryCompensation().latestFailureReason()).isEqualTo("routing failed");
-        assertThat(health.exceptionTasks()).hasSize(5);
-        assertThat(health.exceptionTasks().get(0).status()).isEqualTo("EXECUTION_TIMEOUT");
-        assertThat(health.exceptionTasks().get(1).status()).isEqualTo("DLQ");
+        assertThat(health.exceptionTasks()).hasSize(6);
+        assertThat(health.exceptionTasks().get(0).status()).isEqualTo("REQUEUE_PENDING");
+        assertThat(health.exceptionTasks().get(1).status()).isEqualTo("EXECUTION_TIMEOUT");
+        assertThat(health.exceptionTasks().get(2).status()).isEqualTo("DLQ");
         assertThat(health.exceptionTasks()).anyMatch(task -> "RETRY_EXHAUSTED".equals(task.status()));
         assertThat(health.exceptionTasks()).anyMatch(task -> "PUBLISH_CLAIMED".equals(task.status()));
         assertThat(health.dataSource()).isEqualTo("DATABASE_TASK_STATE");
@@ -107,7 +110,7 @@ class MessageQueueHealthServiceImplTest {
     void healthReturnsDisconnectedWhenRuntimeProbeTimesOut() {
         properties.setHealthCheckTimeoutMs(50);
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
-        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(0L, 0L, 0L, 0L, 0L));
+        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(0L, 0L, 0L, 0L, 0L, 0L));
         when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenAnswer(invocation -> {
             Thread.sleep(500);
@@ -240,6 +243,7 @@ class MessageQueueHealthServiceImplTest {
         Long total,
         Long publishFailed,
         Long executionTimeout,
+        Long requeuePending,
         Long claimed,
         Long dlqBacklog
     ) {
@@ -247,6 +251,7 @@ class MessageQueueHealthServiceImplTest {
         summary.setTotal(total);
         summary.setPublishFailed(publishFailed);
         summary.setExecutionTimeout(executionTimeout);
+        summary.setRequeuePending(requeuePending);
         summary.setClaimed(claimed);
         summary.setDlqBacklog(dlqBacklog);
         summary.setLatestFailureCreatedAt(LocalDateTime.of(2026, 6, 10, 21, 3));

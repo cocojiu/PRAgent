@@ -18,6 +18,7 @@ class ReviewTaskRecoveryPolicyTest {
 
         assertThat(policy.executionTimeoutMs()).isEqualTo(60000);
         assertThat(policy.batchSize()).isEqualTo(1);
+        assertThat(policy.publishRetryDelayMs()).isEqualTo(60000);
     }
 
     @Test
@@ -25,11 +26,13 @@ class ReviewTaskRecoveryPolicyTest {
         RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
         properties.setReviewExecutionTimeoutMs(120000);
         properties.setReviewRecoveryBatchSize(25);
+        properties.setPublishCompensationIntervalMs(5000);
         ReviewTaskRecoveryPolicy policy = new ReviewTaskRecoveryPolicy(properties);
         LocalDateTime now = LocalDateTime.parse("2026-07-05T00:20:00");
 
         assertThat(policy.executionTimeoutMs()).isEqualTo(120000);
         assertThat(policy.batchSize()).isEqualTo(25);
+        assertThat(policy.publishRetryDelayMs()).isEqualTo(5000);
         assertThat(policy.expiredBefore(now)).isEqualTo(LocalDateTime.parse("2026-07-05T00:18:00"));
     }
 

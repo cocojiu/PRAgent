@@ -207,7 +207,15 @@ public class RepoGuardMetrics {
     }
 
     public void rabbitPublishFailed(String reason) {
-        counter("repoguard.rabbit.publish.failed", "reason", normalize(reason)).increment();
+        rabbitPublishFailed("publish", reason);
+    }
+
+    public void rabbitPublishFailed(String failurePhase, String reason) {
+        counter(
+            "repoguard.rabbit.publish.failed",
+            "failure_phase", normalize(failurePhase),
+            "reason", normalize(reason)
+        ).increment();
     }
 
     public void rabbitMessageConsumed(Duration duration, String result) {
@@ -236,9 +244,14 @@ public class RepoGuardMetrics {
     }
 
     public void rabbitPublishCompensationFailed(String reason) {
+        rabbitPublishCompensationFailed("publish", reason);
+    }
+
+    public void rabbitPublishCompensationFailed(String failurePhase, String reason) {
         counter(
             "repoguard.rabbit.publish.compensation",
             "result", "failed",
+            "failure_phase", normalize(failurePhase),
             "reason", normalize(reason)
         ).increment();
     }

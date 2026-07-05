@@ -80,7 +80,14 @@ class RepoGuardMetricsTest {
 
         assertThat(counter(
             "repoguard.rabbit.publish.failed",
+            "failure_phase", "publish",
             "reason", "confirm_timed_out"
+        )).isEqualTo(1.0);
+        metrics.rabbitPublishFailed("execute", "Recovery publish failed");
+        assertThat(counter(
+            "repoguard.rabbit.publish.failed",
+            "failure_phase", "execute",
+            "reason", "recovery_publish_failed"
         )).isEqualTo(1.0);
         assertThat(counter(
             "repoguard.rabbit.publish.compensation",
@@ -89,6 +96,7 @@ class RepoGuardMetricsTest {
         assertThat(counter(
             "repoguard.rabbit.publish.compensation",
             "result", "failed",
+            "failure_phase", "publish",
             "reason", "publisher_confirm_nacked"
         )).isEqualTo(1.0);
     }

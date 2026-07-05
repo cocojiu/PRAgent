@@ -44,13 +44,13 @@ class ReviewTaskRecoveryStoreTest {
     }
 
     @Test
-    void requeuesTaskOnlyWhenClaimFenceMatches() {
+    void marksRequeuePendingOnlyWhenClaimFenceMatches() {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-07-05T00:40:00");
         LocalDateTime expiredBefore = recoveredAt.minusMinutes(30);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
 
-        boolean requeued = store.requeueIfClaimOwned(task, recoveredAt, expiredBefore, "expired");
+        boolean requeued = store.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired");
 
         assertThat(requeued).isTrue();
         @SuppressWarnings("unchecked")
@@ -60,9 +60,47 @@ class ReviewTaskRecoveryStoreTest {
             .contains("review_claimed_at")
             .contains("review_claimed_by");
         assertThat(wrapperCaptor.getValue().getSqlSet())
+            .contains("llm_status")
             .contains("next_publish_retry_at");
         assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
-            .contains("EXECUTION_TIMEOUT", recoveredAt, "expired");
+            .contains("REQUEUE_PENDING", "PENDING", "expired");
+        assertThat(task.getStatus()).isEqualTo("REQUEUE_PENDING");
+        assertThat(task.getReviewClaimedAt()).isNull();
+        assertThat(task.getReviewClaimedBy()).isNull();
+    }
+
+    @Test
+    void marksQueuedForRecoveryPublishFromRequeuePending() {
+        ReviewTask task = stuckTask();
+        task.setStatus("REQUEUE_PENDING");
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+
+        boolean queued = store.markQueuedForRecoveryPublish(task, LocalDateTime.parse("2026-07-05T00:40:00"), 1);
+
+        assertThat(queued).isTrue();
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getLastPublishError()).isNull();
+    }
+
+    @Test
+    void marksRecoveryPublishFailureAsPublishFailed() {
+        ReviewTask task = stuckTask();
+        task.setStatus("QUEUED");
+        LocalDateTime nextRetryAt = LocalDateTime.parse("2026-07-05T00:41:00");
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+
+        boolean failed = store.markRecoveryPublishFailed(
+            task,
+            LocalDateTime.parse("2026-07-05T00:40:00"),
+            nextRetryAt,
+            "publisher confirm timed out"
+        );
+
+        assertThat(failed).isTrue();
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getNextPublishRetryAt()).isEqualTo(nextRetryAt);
+        assertThat(task.getLastPublishError()).isEqualTo("publisher confirm timed out");
     }
 
     @Test
@@ -70,7 +108,7 @@ class ReviewTaskRecoveryStoreTest {
         ReviewTask task = stuckTask();
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
 
-        boolean requeued = store.requeueIfClaimOwned(
+        boolean requeued = store.markRequeuePendingIfClaimOwned(
             task,
             LocalDateTime.parse("2026-07-05T00:40:00"),
             LocalDateTime.parse("2026-07-05T00:10:00"),

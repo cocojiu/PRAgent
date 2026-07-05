@@ -31,6 +31,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
             count(*) as total,
             sum(case when status = 'PUBLISH_FAILED' then 1 else 0 end) as publishFailed,
             sum(case when status = 'EXECUTION_TIMEOUT' then 1 else 0 end) as executionTimeout,
+            sum(case when status = 'REQUEUE_PENDING' then 1 else 0 end) as requeuePending,
             sum(case when publish_claimed_at is not null then 1 else 0 end) as claimed,
             sum(case when status = 'DLQ' then 1 else 0 end) as dlqBacklog,
             max(case
@@ -54,7 +55,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
     @Select("""
         select *
         from review_task
-        where status in ('PUBLISH_FAILED', 'EXECUTION_TIMEOUT', 'DLQ')
+        where status in ('PUBLISH_FAILED', 'EXECUTION_TIMEOUT', 'REQUEUE_PENDING', 'DLQ')
         order by created_at desc
         limit 20
         """)
@@ -73,6 +74,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         private Long total;
         private Long publishFailed;
         private Long executionTimeout;
+        private Long requeuePending;
         private Long claimed;
         private Long dlqBacklog;
         private LocalDateTime latestFailureCreatedAt;
@@ -99,6 +101,14 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
 
         public void setExecutionTimeout(Long executionTimeout) {
             this.executionTimeout = executionTimeout;
+        }
+
+        public Long getRequeuePending() {
+            return requeuePending;
+        }
+
+        public void setRequeuePending(Long requeuePending) {
+            this.requeuePending = requeuePending;
         }
 
         public Long getClaimed() {

@@ -32,6 +32,7 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.statusWhenQueued()).isEqualTo("QUEUED");
         assertThat(stateMachine.statusWhenPublishFailed()).isEqualTo("PUBLISH_FAILED");
         assertThat(stateMachine.statusWhenExecutionTimeout()).isEqualTo("EXECUTION_TIMEOUT");
+        assertThat(stateMachine.statusWhenRequeuePending()).isEqualTo("REQUEUE_PENDING");
         assertThat(stateMachine.statusWhenFailed()).isEqualTo("FAILED");
         assertThat(stateMachine.statusAfterReviewCompleted(false)).isEqualTo("COMPLETED");
         assertThat(stateMachine.statusAfterReviewCompleted(true)).isEqualTo("PENDING_HUMAN_REVIEW");
@@ -76,7 +77,11 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.isPublishFailed("PUBLISH_FAILED")).isTrue();
         assertThat(stateMachine.isPublishFailed("QUEUED")).isFalse();
         assertThat(stateMachine.isExecutionTimeout("EXECUTION_TIMEOUT")).isTrue();
-        assertThat(stateMachine.isPublishRecoveryCandidate("EXECUTION_TIMEOUT")).isTrue();
+        assertThat(stateMachine.isRequeuePending("REQUEUE_PENDING")).isTrue();
+        assertThat(stateMachine.isPublishRecoveryCandidate("PUBLISH_FAILED")).isTrue();
+        assertThat(stateMachine.isPublishRecoveryCandidate("EXECUTION_TIMEOUT")).isFalse();
+        assertThat(stateMachine.isManualPublishRequeueCandidate("EXECUTION_TIMEOUT")).isTrue();
+        assertThat(stateMachine.publishRecoveryCandidateStatuses()).containsExactly("PUBLISH_FAILED");
         assertThatThrownBy(() -> stateMachine.ensurePublishRequeueAllowed("FAILED", false))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Only publish failed or execution timeout message tasks can be requeued");

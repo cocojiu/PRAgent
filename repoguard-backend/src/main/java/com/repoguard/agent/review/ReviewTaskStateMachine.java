@@ -28,6 +28,10 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.EXECUTION_TIMEOUT.code();
     }
 
+    public String statusWhenRequeuePending() {
+        return ReviewTaskStatus.REQUEUE_PENDING.code();
+    }
+
     public String statusWhenFailed() {
         return ReviewTaskStatus.FAILED.code();
     }
@@ -45,7 +49,7 @@ public class ReviewTaskStateMachine {
     }
 
     public void ensurePublishRequeueAllowed(String status, boolean publishClaimed) {
-        if (!isPublishRecoveryCandidate(status)) {
+        if (!isManualPublishRequeueCandidate(status)) {
             throw new BusinessException(
                 ErrorCode.BAD_REQUEST,
                 "Only publish failed or execution timeout message tasks can be requeued"
@@ -64,20 +68,27 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.EXECUTION_TIMEOUT == ReviewTaskStatus.from(status);
     }
 
+    public boolean isRequeuePending(String status) {
+        return ReviewTaskStatus.REQUEUE_PENDING == ReviewTaskStatus.from(status);
+    }
+
     public boolean isPublishRecoveryCandidate(String status) {
+        return ReviewTaskStatus.PUBLISH_FAILED == ReviewTaskStatus.from(status);
+    }
+
+    public boolean isManualPublishRequeueCandidate(String status) {
         ReviewTaskStatus taskStatus = ReviewTaskStatus.from(status);
         return taskStatus == ReviewTaskStatus.PUBLISH_FAILED
             || taskStatus == ReviewTaskStatus.EXECUTION_TIMEOUT;
     }
 
     public List<String> publishRecoveryCandidateStatuses() {
-        return List.of(ReviewTaskStatus.PUBLISH_FAILED.code(), ReviewTaskStatus.EXECUTION_TIMEOUT.code());
+        return List.of(ReviewTaskStatus.PUBLISH_FAILED.code());
     }
 
     public List<String> publishQueueCandidateStatuses() {
         return List.of(
             ReviewTaskStatus.PUBLISH_FAILED.code(),
-            ReviewTaskStatus.EXECUTION_TIMEOUT.code(),
             ReviewTaskStatus.QUEUED.code()
         );
     }
