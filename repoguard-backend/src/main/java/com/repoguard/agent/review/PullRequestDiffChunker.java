@@ -14,13 +14,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class PullRequestDiffChunker {
 
-    private static final int MAX_FILES_PER_CHUNK = 4;
-    private static final int MAX_LINES_PER_CHUNK = 450;
-    private static final int LARGE_PR_FILE_THRESHOLD = 6;
-    private static final int LARGE_PR_LINE_THRESHOLD = 700;
-
     private final DiffRiskClassifier riskClassifier;
     private final SemanticDiffSegmenter segmenter;
+    private final SemanticDiffChunkPlanner chunkPlanner;
 
     public PullRequestDiffChunker() {
         this(new DiffRiskClassifier());
@@ -33,50 +29,28 @@ public class PullRequestDiffChunker {
     PullRequestDiffChunker(DiffRiskClassifier riskClassifier, SemanticDiffSegmenter segmenter) {
         this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
         this.segmenter = segmenter == null ? new SemanticDiffSegmenter(this.riskClassifier) : segmenter;
+        this.chunkPlanner = new SemanticDiffChunkPlanner();
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
-        return chunk(diff, ChunkingPolicy.defaults());
+        return chunk(diff, DiffChunkingPolicy.defaults());
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicyConfig config) {
-        return chunk(diff, ChunkingPolicy.from(config));
+        return chunk(diff, DiffChunkingPolicy.from(config));
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicySettings settings) {
-        return chunk(diff, ChunkingPolicy.from(settings));
+        return chunk(diff, DiffChunkingPolicy.from(settings));
     }
 
-    private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ChunkingPolicy policy) {
+    private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, DiffChunkingPolicy policy) {
         List<GithubChangedFile> files = diff.files() == null ? List.of() : diff.files();
         if (!requiresChunking(files, policy)) {
             return List.of(toChunk(diff, files, 1, 1));
         }
 
-        List<List<SemanticDiffSegment>> groupedSegments = new ArrayList<>();
-        List<SemanticDiffSegment> current = new ArrayList<>();
-        int currentLines = 0;
-        String currentGroupKey = null;
-        for (SemanticDiffSegment segment : prioritizedSegments(files)) {
-            int segmentLines = segment.changedLines();
-            boolean semanticBoundary = currentGroupKey != null
-                && (!currentGroupKey.equals(segment.chunkGroupKey()) || splitsSameFileScope(current, segment));
-            boolean currentFull = !current.isEmpty()
-                && (distinctFileCount(current) >= policy.maxFilesPerChunk()
-                    || currentLines + segmentLines > policy.maxLinesPerChunk());
-            if (currentFull || (semanticBoundary && currentLines > 0)) {
-                groupedSegments.add(current);
-                current = new ArrayList<>();
-                currentLines = 0;
-                currentGroupKey = null;
-            }
-            current.add(segment);
-            currentLines += segmentLines;
-            currentGroupKey = segment.chunkGroupKey();
-        }
-        if (!current.isEmpty()) {
-            groupedSegments.add(current);
-        }
+        List<List<SemanticDiffSegment>> groupedSegments = chunkPlanner.groupSegments(prioritizedSegments(files), policy);
 
         List<PullRequestDiffChunk> chunks = new ArrayList<>();
         for (int i = 0; i < groupedSegments.size(); i++) {
@@ -85,7 +59,7 @@ public class PullRequestDiffChunker {
         return chunks;
     }
 
-    private boolean requiresChunking(List<GithubChangedFile> files, ChunkingPolicy policy) {
+    private boolean requiresChunking(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
         int totalLines = files.stream().mapToInt(this::changedLines).sum();
         return files.size() > policy.largePrFileThreshold()
             || totalLines > policy.largePrLineThreshold()
@@ -112,7 +86,7 @@ public class PullRequestDiffChunker {
     }
 
     private PullRequestDiffChunk toChunk(GithubPullRequestDiff source, List<GithubChangedFile> files, int index, int total) {
-        return toChunk(source, files, index, total, ChunkingPolicy.defaults());
+        return toChunk(source, files, index, total, DiffChunkingPolicy.defaults());
     }
 
     private PullRequestDiffChunk toSemanticChunk(
@@ -120,7 +94,7 @@ public class PullRequestDiffChunker {
         List<SemanticDiffSegment> segments,
         int index,
         int total,
-        ChunkingPolicy policy
+        DiffChunkingPolicy policy
     ) {
         List<GithubChangedFile> files = segments.stream().map(SemanticDiffSegment::file).toList();
         int additions = segments.stream().mapToInt(SemanticDiffSegment::additions).sum();
@@ -141,7 +115,7 @@ public class PullRequestDiffChunker {
         List<GithubChangedFile> files,
         int index,
         int total,
-        ChunkingPolicy policy
+        DiffChunkingPolicy policy
     ) {
         int additions = files.stream().mapToInt(file -> safeInt(file.additions())).sum();
         int deletions = files.stream().mapToInt(file -> safeInt(file.deletions())).sum();
@@ -156,7 +130,7 @@ public class PullRequestDiffChunker {
         );
     }
 
-    private List<String> chunkReasons(List<GithubChangedFile> files, ChunkingPolicy policy) {
+    private List<String> chunkReasons(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
         List<String> reasons = new ArrayList<>();
         int changedLines = files.stream().mapToInt(this::changedLines).sum();
         if (files.size() > 1) {
@@ -175,7 +149,7 @@ public class PullRequestDiffChunker {
     private List<String> semanticChunkReasons(
         List<GithubChangedFile> sourceFiles,
         List<SemanticDiffSegment> segments,
-        ChunkingPolicy policy
+        DiffChunkingPolicy policy
     ) {
         List<String> reasons = new ArrayList<>();
         int changedLines = segments.stream().mapToInt(SemanticDiffSegment::changedLines).sum();
@@ -221,66 +195,11 @@ public class PullRequestDiffChunker {
         return filenames.size();
     }
 
-    private boolean splitsSameFileScope(List<SemanticDiffSegment> current, SemanticDiffSegment next) {
-        return current.stream().anyMatch(segment -> sameFile(segment.file(), next.file())
-            && !segment.semanticKey().equals(next.semanticKey()));
-    }
-
-    private boolean sameFile(GithubChangedFile left, GithubChangedFile right) {
-        String leftPath = left.filename() == null ? "" : left.filename();
-        String rightPath = right.filename() == null ? "" : right.filename();
-        return leftPath.equals(rightPath);
-    }
-
     private int changedLines(GithubChangedFile file) {
         return safeInt(file.additions()) + safeInt(file.deletions());
     }
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private record ChunkingPolicy(
-        int maxFilesPerChunk,
-        int maxLinesPerChunk,
-        int largePrFileThreshold,
-        int largePrLineThreshold
-    ) {
-        static ChunkingPolicy defaults() {
-            return new ChunkingPolicy(
-                MAX_FILES_PER_CHUNK,
-                MAX_LINES_PER_CHUNK,
-                LARGE_PR_FILE_THRESHOLD,
-                LARGE_PR_LINE_THRESHOLD
-            );
-        }
-
-        static ChunkingPolicy from(ReviewPolicyConfig config) {
-            if (config == null) {
-                return defaults();
-            }
-            return new ChunkingPolicy(
-                positive(config.getChunkMaxFiles(), MAX_FILES_PER_CHUNK),
-                positive(config.getChunkMaxLines(), MAX_LINES_PER_CHUNK),
-                positive(config.getChunkFileThreshold(), LARGE_PR_FILE_THRESHOLD),
-                positive(config.getChunkLineThreshold(), LARGE_PR_LINE_THRESHOLD)
-            );
-        }
-
-        static ChunkingPolicy from(ReviewPolicySettings settings) {
-            if (settings == null) {
-                return defaults();
-            }
-            return new ChunkingPolicy(
-                positive(settings.chunkMaxFiles(), MAX_FILES_PER_CHUNK),
-                positive(settings.chunkMaxLines(), MAX_LINES_PER_CHUNK),
-                positive(settings.chunkFileThreshold(), LARGE_PR_FILE_THRESHOLD),
-                positive(settings.chunkLineThreshold(), LARGE_PR_LINE_THRESHOLD)
-            );
-        }
-
-        private static int positive(Integer value, int fallback) {
-            return value == null || value < 1 ? fallback : value;
-        }
     }
 }
