@@ -29,8 +29,8 @@
       :failed-rules="failedRules"
       :system-health="systemHealth"
       :last-health-check-at="lastHealthCheckAt"
-      :loading="loading"
-      @refresh="loadOverview"
+      :loading="healthLoading"
+      @refresh="loadSystemHealth"
     />
   </div>
 </template>
@@ -61,6 +61,7 @@ const metricIconMap = {
 const getMetricIcon = useMetricIcon(metricIconMap, FileText);
 const {
   loading,
+  healthLoading,
   errorMessage,
   lastHealthCheckAt,
   llmTrendDays,
@@ -77,6 +78,7 @@ const {
   llmQualityByRepository,
   llmQualityTrend,
   loadOverview,
+  loadSystemHealth,
   updateLlmTrendDays
 } = useDashboardOverview();
 

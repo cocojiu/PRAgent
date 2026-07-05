@@ -24,6 +24,7 @@ import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
+import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.math.BigDecimal;
@@ -97,11 +98,16 @@ public class DashboardServiceImpl implements DashboardService {
             buildRuleHits(ruleHitCounts),
             buildHighRiskReviews(highRiskReviews),
             buildFailedRules(ruleHitCounts),
-            systemHealthProbe.probe(),
+            List.of(),
             buildLlmQualityByModel(llmQualityByModelStats),
             buildLlmQualityByRepository(llmQualityByRepositoryStats),
             llmQualityTrendBuilder.build(llmQualityTrendCounts, llmTrendWindow)
         );
+    }
+
+    @Override
+    public List<SystemHealthItemDto> getSystemHealth() {
+        return systemHealthProbe.probe();
     }
 
     private DashboardMetricStats loadMetricStats(LocalDate startDate) {

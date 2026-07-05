@@ -93,12 +93,12 @@ class DashboardServiceImplTest {
     }
 
     @Test
-    void overviewReportsConfiguredDependenciesAsHealthy() {
+    void systemHealthReportsConfiguredDependenciesAsHealthy() {
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
-        Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
+        Map<String, String> health = healthByName(service.getSystemHealth());
 
         assertThat(health).containsEntry("MySQL", "正常");
         assertThat(health).containsEntry("RabbitMQ", "正常");
@@ -107,17 +107,27 @@ class DashboardServiceImplTest {
     }
 
     @Test
-    void overviewKeepsRenderingWhenDependencyHealthChecksFail() {
+    void systemHealthKeepsRenderingWhenDependencyHealthChecksFail() {
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
             .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(ReviewPolicySettings.empty());
 
-        Map<String, String> health = healthByName(service.getOverview(null).systemHealth());
+        Map<String, String> health = healthByName(service.getSystemHealth());
 
         assertThat(health).containsEntry("RabbitMQ", "异常");
         assertThat(health).containsEntry("GitHub", "异常");
         assertThat(health).containsEntry("Spring AI", "未接入");
+    }
+
+    @Test
+    void overviewDoesNotRunSynchronousDependencyHealthProbe() {
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
+            .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
+
+        var overview = service.getOverview(null);
+
+        assertThat(overview.systemHealth()).isEmpty();
     }
 
     @Test

@@ -61,8 +61,7 @@ class DashboardControllerTest {
             .andExpect(jsonPath("$.data.failedRules[0].trend").value("0.0%"))
             .andExpect(jsonPath("$.data.failedRules[0].direction").value("down"))
             .andExpect(jsonPath("$.data.failedRules[0].percent").value("40.0%"))
-            .andExpect(jsonPath("$.data.systemHealth[0].name").value("MySQL"))
-            .andExpect(jsonPath("$.data.systemHealth[0].status").value("正常"))
+            .andExpect(jsonPath("$.data.systemHealth", hasSize(0)))
             .andExpect(jsonPath("$.data.llmQualityByModel[0].model").value("openai / gpt-4.1"))
             .andExpect(jsonPath("$.data.llmQualityByModel[0].taskCount").value(4))
             .andExpect(jsonPath("$.data.llmQualityByModel[0].averageDuration").value("2.5s"))
@@ -102,11 +101,16 @@ class DashboardControllerTest {
                 List.of(new ChartSliceDto("硬编码密钥检测", 2, "#ef4444", "40.0%")),
                 List.of(new HighRiskReviewDto("新增用户导出接口", "spring-boot-demo", "high", 5, "2025-05-31 14:32", "已完成")),
                 List.of(new FailedRuleStatDto("硬编码密钥检测", 2, "0.0%", "down", "40.0%")),
-                List.of(new SystemHealthItemDto("MySQL", "正常")),
+                List.of(),
                 List.of(new LlmQualityByModelDto("openai / gpt-4.1", 4, "2.5s", "1200", "$0.12", "95.0%", "3.0%", "2.0%", "80.0%", "5.0%")),
                 List.of(new LlmQualityByRepositoryDto("demo/repo", 3, "4.0%", "1.0%", "75.0%", "6.0%")),
                 List.of(new LlmQualityTrendPointDto("2026-06-22", 5, "96.0%", "2.0%", "2.0%"))
             );
+        }
+
+        @Override
+        public List<SystemHealthItemDto> getSystemHealth() {
+            return List.of(new SystemHealthItemDto("MySQL", "正常"));
         }
     }
 }

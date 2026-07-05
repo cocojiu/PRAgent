@@ -35,6 +35,7 @@ class ApiContractTest {
         NotificationController.class,
         NotificationIntegrationController.class,
         ReviewController.class,
+        SystemHealthController.class,
         SystemConfigController.class,
         UserManagementController.class
     );

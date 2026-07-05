@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { fetchDashboardOverview } from "@/api/dashboard";
+import { fetchDashboardOverview, fetchSystemHealthSummary } from "@/api/dashboard";
 import type { MetricGridItem } from "@/components/MetricGrid.vue";
 import { getErrorMessage } from "@/utils/errors";
 import type { DashboardOverview } from "@/types";
@@ -26,6 +26,7 @@ export const llmTrendWindowOptions = [
 
 export const useDashboardOverview = () => {
   const loading = ref(false);
+  const healthLoading = ref(false);
   const errorMessage = ref("");
   const lastHealthCheckAt = ref("-");
   const llmTrendDays = ref(7);
@@ -59,12 +60,28 @@ export const useDashboardOverview = () => {
     errorMessage.value = "";
     try {
       overview.value = await fetchDashboardOverview(llmTrendDays.value);
-      lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
+      void loadSystemHealth();
     } catch (error) {
       errorMessage.value = getErrorMessage(error, "仪表盘数据加载失败");
       ElMessage.error(errorMessage.value);
     } finally {
       loading.value = false;
+    }
+  };
+
+  const loadSystemHealth = async () => {
+    healthLoading.value = true;
+    try {
+      const systemHealth = await fetchSystemHealthSummary();
+      overview.value = {
+        ...overview.value,
+        systemHealth
+      };
+      lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
+    } catch (error) {
+      ElMessage.warning(getErrorMessage(error, "系统健康检查加载失败"));
+    } finally {
+      healthLoading.value = false;
     }
   };
 
@@ -75,6 +92,7 @@ export const useDashboardOverview = () => {
 
   return {
     loading,
+    healthLoading,
     errorMessage,
     lastHealthCheckAt,
     llmTrendDays,
@@ -92,6 +110,7 @@ export const useDashboardOverview = () => {
     llmQualityByRepository,
     llmQualityTrend,
     loadOverview,
+    loadSystemHealth,
     updateLlmTrendDays
   };
 };

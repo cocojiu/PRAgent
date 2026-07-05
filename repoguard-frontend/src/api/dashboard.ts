@@ -5,3 +5,6 @@ import { apiRequest } from "@/api/contracts";
  */
 export const fetchDashboardOverview = (llmTrendDays = 7) =>
   apiRequest("fetchDashboardOverview", { llmTrendDays });
+
+export const fetchSystemHealthSummary = () =>
+  apiRequest("fetchSystemHealthSummary", undefined);

@@ -41,6 +41,7 @@ import type {
   ReviewTaskStatus,
   ServiceIntegrationConfig,
   ServiceIntegrationConfigRequest,
+  SystemHealthItem,
   SystemSettings,
   SystemSettingsRequest
 } from "@/types";
@@ -99,6 +100,7 @@ export type ApiContract = {
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
   logout: ApiOperation<{ refreshToken?: string } | undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
+  fetchSystemHealthSummary: ApiOperation<undefined, SystemHealthItem[]>;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
@@ -194,6 +196,9 @@ const apiEndpoints: ApiEndpointMap = {
   fetchDashboardOverview: {
     path: () => "/api/v1/dashboard/overview",
     query: input => ({ llmTrendDays: input.llmTrendDays })
+  },
+  fetchSystemHealthSummary: {
+    path: () => "/api/v1/system/health/summary"
   },
   fetchReviews: {
     path: () => "/api/v1/reviews",
