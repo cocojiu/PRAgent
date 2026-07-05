@@ -7,8 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.repoguard.agent.dto.ChartSliceDto;
+import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
+import com.repoguard.agent.dto.DashboardRulesResponse;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
@@ -87,9 +89,46 @@ class DashboardControllerTest {
         assertThat(dashboardService.lastLlmTrendDays).isEqualTo(30);
     }
 
+    @Test
+    void moduleEndpointsReturnStableDashboardContracts() throws Exception {
+        mockMvc.perform(get("/api/v1/dashboard/summary"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].value").value("8"))
+            .andExpect(jsonPath("$.data[0].trendType").value("up"));
+
+        mockMvc.perform(get("/api/v1/dashboard/review-trend"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].date").value("05-31"))
+            .andExpect(jsonPath("$.data[0].value").value(1));
+
+        mockMvc.perform(get("/api/v1/dashboard/risk-distribution"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].value").value(1))
+            .andExpect(jsonPath("$.data[0].percent").value("12.5%"));
+
+        mockMvc.perform(get("/api/v1/dashboard/rules"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.ruleHits[0].value").value(2))
+            .andExpect(jsonPath("$.data.failedRules[0].count").value(2));
+
+        mockMvc.perform(get("/api/v1/dashboard/high-risk-reviews"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].repository").value("spring-boot-demo"))
+            .andExpect(jsonPath("$.data[0].riskLevel").value("high"));
+
+        mockMvc.perform(get("/api/v1/dashboard/llm-quality").param("llmTrendDays", "90"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.byModel[0].taskCount").value(4))
+            .andExpect(jsonPath("$.data.byRepository[0].taskCount").value(3))
+            .andExpect(jsonPath("$.data.trend[0].taskCount").value(5));
+
+        assertThat(dashboardService.lastLlmQualityTrendDays).isEqualTo(90);
+    }
+
     private static final class RecordingDashboardService implements DashboardService {
 
         private Integer lastLlmTrendDays;
+        private Integer lastLlmQualityTrendDays;
 
         @Override
         public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
@@ -102,6 +141,16 @@ class DashboardControllerTest {
                 List.of(new HighRiskReviewDto("新增用户导出接口", "spring-boot-demo", "high", 5, "2025-05-31 14:32", "已完成")),
                 List.of(new FailedRuleStatDto("硬编码密钥检测", 2, "0.0%", "down", "40.0%")),
                 List.of(),
+                List.of(new LlmQualityByModelDto("openai / gpt-4.1", 4, "2.5s", "1200", "$0.12", "95.0%", "3.0%", "2.0%", "80.0%", "5.0%")),
+                List.of(new LlmQualityByRepositoryDto("demo/repo", 3, "4.0%", "1.0%", "75.0%", "6.0%")),
+                List.of(new LlmQualityTrendPointDto("2026-06-22", 5, "96.0%", "2.0%", "2.0%"))
+            );
+        }
+
+        @Override
+        public DashboardLlmQualityResponse getLlmQuality(Integer llmTrendDays) {
+            this.lastLlmQualityTrendDays = llmTrendDays;
+            return new DashboardLlmQualityResponse(
                 List.of(new LlmQualityByModelDto("openai / gpt-4.1", 4, "2.5s", "1200", "$0.12", "95.0%", "3.0%", "2.0%", "80.0%", "5.0%")),
                 List.of(new LlmQualityByRepositoryDto("demo/repo", 3, "4.0%", "1.0%", "75.0%", "6.0%")),
                 List.of(new LlmQualityTrendPointDto("2026-06-22", 5, "96.0%", "2.0%", "2.0%"))

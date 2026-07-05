@@ -2,9 +2,11 @@ package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
@@ -90,6 +92,62 @@ class DashboardServiceImplTest {
         assertThat(cacheable.sync()).isTrue();
         assertThat(cacheable.key())
             .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+    }
+
+    @Test
+    void dashboardModuleMethodsUseSeparatedSynchronizedCaches() throws Exception {
+        assertCache("getSummary", CacheNames.DASHBOARD_SUMMARY, "'summary'");
+        assertCache("getReviewTrend", CacheNames.DASHBOARD_REVIEW_TREND, "'reviewTrend'");
+        assertCache("getRiskDistribution", CacheNames.DASHBOARD_RISK_DISTRIBUTION, "'riskDistribution'");
+        assertCache("getRules", CacheNames.DASHBOARD_RULES, "'rules'");
+        assertCache("getHighRiskReviews", CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, "'highRiskReviews'");
+
+        Cacheable llmQualityCache = DashboardServiceImpl.class
+            .getMethod("getLlmQuality", Integer.class)
+            .getAnnotation(Cacheable.class);
+        assertThat(llmQualityCache.cacheNames()).containsExactly(CacheNames.DASHBOARD_LLM_QUALITY);
+        assertThat(llmQualityCache.sync()).isTrue();
+        assertThat(llmQualityCache.key())
+            .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+    }
+
+    @Test
+    void summaryModuleLoadsOnlyMetricAggregate() {
+        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+
+        var summary = service.getSummary();
+
+        verify(dashboardMapper).selectMetricStat(LocalDate.of(2026, 6, 13));
+        verify(dashboardMapper, never()).selectReviewTrendCounts(any());
+        verify(dashboardMapper, never()).selectRuleHitCounts(any());
+        verify(dashboardMapper, never()).selectLlmQualityByModelStats(any());
+        assertThat(summary).hasSize(4);
+        assertThat(summary.get(0).value()).isEqualTo("3");
+    }
+
+    @Test
+    void llmQualityModuleLoadsOnlyLlmQualityAggregates() {
+        when(dashboardMapper.selectLlmQualityByModelStats(any())).thenReturn(List.of(
+            llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L)
+        ));
+        when(dashboardMapper.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
+            llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L)
+        ));
+        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+            llmQualityTrendCount("2026-06-19", 3L, 2L, 0L, 1L)
+        ));
+
+        var llmQuality = service.getLlmQuality(7);
+
+        verify(dashboardMapper).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
+        verify(dashboardMapper).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
+        verify(dashboardMapper).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
+        verify(dashboardMapper, never()).selectMetricStat(any());
+        verify(dashboardMapper, never()).selectRiskLevelCounts(any());
+        verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
+        assertThat(llmQuality.byModel()).hasSize(1);
+        assertThat(llmQuality.byRepository()).hasSize(1);
+        assertThat(llmQuality.trend()).hasSize(7);
     }
 
     @Test
@@ -359,6 +417,15 @@ class DashboardServiceImplTest {
 
     private Map<String, String> healthByName(List<SystemHealthItemDto> healthItems) {
         return healthItems.stream().collect(Collectors.toMap(SystemHealthItemDto::name, SystemHealthItemDto::status));
+    }
+
+    private void assertCache(String methodName, String cacheName, String key) throws NoSuchMethodException {
+        Cacheable cacheable = DashboardServiceImpl.class
+            .getMethod(methodName)
+            .getAnnotation(Cacheable.class);
+        assertThat(cacheable.cacheNames()).containsExactly(cacheName);
+        assertThat(cacheable.sync()).isTrue();
+        assertThat(cacheable.key()).isEqualTo(key);
     }
 
     private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {

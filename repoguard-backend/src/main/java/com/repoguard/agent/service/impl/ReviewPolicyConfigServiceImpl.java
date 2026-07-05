@@ -44,7 +44,18 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
+    @CacheEvict(
+        cacheNames = {
+            CacheNames.DASHBOARD_OVERVIEW,
+            CacheNames.DASHBOARD_SUMMARY,
+            CacheNames.DASHBOARD_REVIEW_TREND,
+            CacheNames.DASHBOARD_RISK_DISTRIBUTION,
+            CacheNames.DASHBOARD_RULES,
+            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
+            CacheNames.DASHBOARD_LLM_QUALITY
+        },
+        allEntries = true
+    )
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
         String apiKey = resolveSecretValue(config.getApiKeyValue(), request.apiKey());

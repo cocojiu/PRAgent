@@ -55,7 +55,18 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
+    @CacheEvict(
+        cacheNames = {
+            CacheNames.DASHBOARD_OVERVIEW,
+            CacheNames.DASHBOARD_SUMMARY,
+            CacheNames.DASHBOARD_REVIEW_TREND,
+            CacheNames.DASHBOARD_RISK_DISTRIBUTION,
+            CacheNames.DASHBOARD_RULES,
+            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
+            CacheNames.DASHBOARD_LLM_QUALITY
+        },
+        allEntries = true
+    )
     public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
         SystemSettingsConfig settingsConfig = loadSystemSettings();
         ReviewPolicyConfig reviewPolicyConfig = loadReviewPolicy();

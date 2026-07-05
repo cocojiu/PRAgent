@@ -19,6 +19,12 @@ public class CacheConfig {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(List.of(
             caffeineCache(CacheNames.DASHBOARD_OVERVIEW, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_SUMMARY, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_REVIEW_TREND, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_RISK_DISTRIBUTION, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_RULES, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, Duration.ofSeconds(30), 256),
+            caffeineCache(CacheNames.DASHBOARD_LLM_QUALITY, Duration.ofSeconds(30), 256),
             caffeineCache(CacheNames.GITHUB_OPEN_PULL_REQUESTS, Duration.ofSeconds(60), 128),
             caffeineCache(CacheNames.REVIEW_RULES, Duration.ofMinutes(10), 64)
         ));

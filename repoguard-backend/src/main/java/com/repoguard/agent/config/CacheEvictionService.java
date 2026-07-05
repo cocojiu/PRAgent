@@ -15,6 +15,12 @@ public class CacheEvictionService {
 
     public void evictDashboardOverview() {
         clear(CacheNames.DASHBOARD_OVERVIEW);
+        clear(CacheNames.DASHBOARD_SUMMARY);
+        clear(CacheNames.DASHBOARD_REVIEW_TREND);
+        clear(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
+        clear(CacheNames.DASHBOARD_RULES);
+        clear(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
+        clear(CacheNames.DASHBOARD_LLM_QUALITY);
     }
 
     public void evictGithubOpenPullRequests() {

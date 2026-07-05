@@ -48,6 +48,26 @@ class CacheStatsServiceImplTest {
         assertThat(statsFor(CacheNames.GITHUB_OPEN_PULL_REQUESTS).estimatedSize()).isZero();
     }
 
+    @Test
+    void dashboardEvictionClearsOverviewAndModuleCaches() {
+        Cache overview = cacheManager.getCache(CacheNames.DASHBOARD_OVERVIEW);
+        Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
+        Cache llmQuality = cacheManager.getCache(CacheNames.DASHBOARD_LLM_QUALITY);
+        assertThat(overview).isNotNull();
+        assertThat(summary).isNotNull();
+        assertThat(llmQuality).isNotNull();
+
+        overview.put("overview", "value");
+        summary.put("summary", "value");
+        llmQuality.put("7", "value");
+
+        evictionService.evictDashboardOverview();
+
+        assertThat(overview.get("overview")).isNull();
+        assertThat(summary.get("summary")).isNull();
+        assertThat(llmQuality.get("7")).isNull();
+    }
+
     private CacheStatsItemDto statsFor(String cacheName) {
         CacheStatsResponse response = service.getStats();
         return response.caches().stream()

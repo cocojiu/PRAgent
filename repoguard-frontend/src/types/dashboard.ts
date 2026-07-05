@@ -84,3 +84,14 @@ export interface DashboardOverview {
   llmQualityByRepository: LlmQualityByRepository[];
   llmQualityTrend: LlmQualityTrendPoint[];
 }
+
+export interface DashboardRules {
+  ruleHits: Required<ChartSlice>[];
+  failedRules: FailedRuleStat[];
+}
+
+export interface DashboardLlmQuality {
+  byModel: LlmQualityByModel[];
+  byRepository: LlmQualityByRepository[];
+  trend: LlmQualityTrendPoint[];
+}

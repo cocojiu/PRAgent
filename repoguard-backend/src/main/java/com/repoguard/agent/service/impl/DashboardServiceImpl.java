@@ -12,12 +12,14 @@ import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
+import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
+import com.repoguard.agent.dto.DashboardRulesResponse;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
@@ -81,34 +83,81 @@ public class DashboardServiceImpl implements DashboardService {
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        LocalDate latestReviewDate = dashboardMapper.selectLatestReviewTaskDate();
+        LocalDate latestReviewDate = latestReviewDate();
         DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate);
         LocalDate reviewTrendStartDate = reviewTrendWindow.startDate(latestReviewDate);
-        DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
-        List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
-        List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate);
-        List<DashboardLlmQualityModelStat> llmQualityByModelStats = dashboardMapper.selectLlmQualityByModelStats(reviewTrendStartDate);
-        List<DashboardLlmQualityRepositoryStat> llmQualityByRepositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats(reviewTrendStartDate);
-        List<DashboardLlmQualityTrendCount> llmQualityTrendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());
-        List<DashboardRuleHitCount> ruleHitCounts = dashboardMapper.selectRuleHitCounts(reviewTrendStartDate);
+        DashboardRulesResponse rules = buildRules(dashboardMapper.selectRuleHitCounts(reviewTrendStartDate));
+        DashboardLlmQualityResponse llmQuality = buildLlmQuality(reviewTrendStartDate, llmTrendWindow);
 
         return new DashboardOverviewResponse(
-            buildMetrics(metricStats),
-            buildTrend(reviewTrendCounts),
+            buildMetrics(loadMetricStats(reviewTrendStartDate)),
+            buildTrend(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate)),
             buildRiskDistribution(reviewTrendStartDate),
-            buildRuleHits(ruleHitCounts),
-            buildHighRiskReviews(highRiskReviews),
-            buildFailedRules(ruleHitCounts),
+            rules.ruleHits(),
+            buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate)),
+            rules.failedRules(),
             List.of(),
-            buildLlmQualityByModel(llmQualityByModelStats),
-            buildLlmQualityByRepository(llmQualityByRepositoryStats),
-            llmQualityTrendBuilder.build(llmQualityTrendCounts, llmTrendWindow)
+            llmQuality.byModel(),
+            llmQuality.byRepository(),
+            llmQuality.trend()
+        );
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_SUMMARY, key = "'summary'", sync = true)
+    public List<DashboardMetricDto> getSummary() {
+        return buildMetrics(loadMetricStats(reviewTrendStartDate()));
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_REVIEW_TREND, key = "'reviewTrend'", sync = true)
+    public List<ReviewTrendPointDto> getReviewTrend() {
+        return buildTrend(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate()));
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_RISK_DISTRIBUTION, key = "'riskDistribution'", sync = true)
+    public List<ChartSliceDto> getRiskDistribution() {
+        return buildRiskDistribution(reviewTrendStartDate());
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_RULES, key = "'rules'", sync = true)
+    public DashboardRulesResponse getRules() {
+        return buildRules(dashboardMapper.selectRuleHitCounts(reviewTrendStartDate()));
+    }
+
+    @Override
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, key = "'highRiskReviews'", sync = true)
+    public List<HighRiskReviewDto> getHighRiskReviews() {
+        return buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate()));
+    }
+
+    @Override
+    @Cacheable(
+        cacheNames = CacheNames.DASHBOARD_LLM_QUALITY,
+        key = "T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)",
+        sync = true
+    )
+    public DashboardLlmQualityResponse getLlmQuality(Integer llmTrendDays) {
+        LocalDate latestReviewDate = latestReviewDate();
+        return buildLlmQuality(
+            reviewTrendWindow.startDate(latestReviewDate),
+            llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate)
         );
     }
 
     @Override
     public List<SystemHealthItemDto> getSystemHealth() {
         return systemHealthProbe.probe();
+    }
+
+    private LocalDate reviewTrendStartDate() {
+        return reviewTrendWindow.startDate(latestReviewDate());
+    }
+
+    private LocalDate latestReviewDate() {
+        return dashboardMapper.selectLatestReviewTaskDate();
     }
 
     private DashboardMetricStats loadMetricStats(LocalDate startDate) {
@@ -195,6 +244,13 @@ public class DashboardServiceImpl implements DashboardService {
             .toList();
     }
 
+    private DashboardRulesResponse buildRules(List<DashboardRuleHitCount> ruleHitCounts) {
+        return new DashboardRulesResponse(
+            buildRuleHits(ruleHitCounts),
+            buildFailedRules(ruleHitCounts)
+        );
+    }
+
     private List<LlmQualityByModelDto> buildLlmQualityByModel(List<DashboardLlmQualityModelStat> stats) {
         return nullToEmpty(stats).stream()
             .map(stat -> new LlmQualityByModelDto(
@@ -223,6 +279,20 @@ public class DashboardServiceImpl implements DashboardService {
                 llmQualityFormatter.rate(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
             ))
             .toList();
+    }
+
+    private DashboardLlmQualityResponse buildLlmQuality(
+        LocalDate reviewTrendStartDate,
+        DashboardLlmQualityTrendBuilder.Window llmTrendWindow
+    ) {
+        List<DashboardLlmQualityModelStat> modelStats = dashboardMapper.selectLlmQualityByModelStats(reviewTrendStartDate);
+        List<DashboardLlmQualityRepositoryStat> repositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats(reviewTrendStartDate);
+        List<DashboardLlmQualityTrendCount> trendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());
+        return new DashboardLlmQualityResponse(
+            buildLlmQualityByModel(modelStats),
+            buildLlmQualityByRepository(repositoryStats),
+            llmQualityTrendBuilder.build(trendCounts, llmTrendWindow)
+        );
     }
 
     private DashboardMetricDto metric(DashboardOverviewDisplayMapper.MetricDisplay display, String value, String trend) {

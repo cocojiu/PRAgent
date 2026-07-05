@@ -3,7 +3,11 @@ import type { AuthResponse, CurrentUser, LoginRequest, RegisterRequest } from "@
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import type {
   ConnectionTestResult,
+  ChartSlice,
+  DashboardLlmQuality,
+  DashboardMetric,
   DashboardOverview,
+  DashboardRules,
   FindingFeedbackRequest,
   FindingFeedbackResponse,
   ChangedFile,
@@ -13,6 +17,7 @@ import type {
   GithubIntegrationConfig,
   GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
+  HighRiskReview,
   HumanReviewRequest,
   HumanReviewResponse,
   ManualReviewRequest,
@@ -36,6 +41,7 @@ import type {
   ReviewRuleConfigRequest,
   ReviewRulesResponse,
   ReviewRuleStatusRequest,
+  ReviewTrendPoint,
   ReviewTask,
   ReviewTaskDetail,
   ReviewTaskStatus,
@@ -100,6 +106,12 @@ export type ApiContract = {
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
   logout: ApiOperation<{ refreshToken?: string } | undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
+  fetchDashboardSummary: ApiOperation<undefined, DashboardMetric[]>;
+  fetchDashboardReviewTrend: ApiOperation<undefined, ReviewTrendPoint[]>;
+  fetchDashboardRiskDistribution: ApiOperation<undefined, Required<ChartSlice>[]>;
+  fetchDashboardRules: ApiOperation<undefined, DashboardRules>;
+  fetchDashboardHighRiskReviews: ApiOperation<undefined, HighRiskReview[]>;
+  fetchDashboardLlmQuality: ApiOperation<{ llmTrendDays: number }, DashboardLlmQuality>;
   fetchSystemHealthSummary: ApiOperation<undefined, SystemHealthItem[]>;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
@@ -196,6 +208,25 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchDashboardOverview: {
     path: () => "/api/v1/dashboard/overview",
+    query: input => ({ llmTrendDays: input.llmTrendDays })
+  },
+  fetchDashboardSummary: {
+    path: () => "/api/v1/dashboard/summary"
+  },
+  fetchDashboardReviewTrend: {
+    path: () => "/api/v1/dashboard/review-trend"
+  },
+  fetchDashboardRiskDistribution: {
+    path: () => "/api/v1/dashboard/risk-distribution"
+  },
+  fetchDashboardRules: {
+    path: () => "/api/v1/dashboard/rules"
+  },
+  fetchDashboardHighRiskReviews: {
+    path: () => "/api/v1/dashboard/high-risk-reviews"
+  },
+  fetchDashboardLlmQuality: {
+    path: () => "/api/v1/dashboard/llm-quality",
     query: input => ({ llmTrendDays: input.llmTrendDays })
   },
   fetchSystemHealthSummary: {

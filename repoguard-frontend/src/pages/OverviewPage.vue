@@ -14,7 +14,7 @@
     />
 
     <LlmQualitySection
-      :loading="loading"
+      :loading="moduleLoading || llmQualityLoading"
       :trend-days="llmTrendDays"
       :trend-window-options="llmTrendWindowOptions"
       :quality-trend="llmQualityTrend"
@@ -61,6 +61,8 @@ const metricIconMap = {
 const getMetricIcon = useMetricIcon(metricIconMap, FileText);
 const {
   loading,
+  moduleLoading,
+  llmQualityLoading,
   healthLoading,
   errorMessage,
   lastHealthCheckAt,
