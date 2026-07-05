@@ -2,7 +2,6 @@ import type { ApiResponse } from "@/api/apiEnvelope";
 import {
   hasSessionMarker,
   isSessionRemembered,
-  resolveRefreshToken,
   saveAuthTokens
 } from "@/api/authSession";
 
@@ -30,21 +29,12 @@ export class AuthSessionRefreshCoordinator {
   }
 
   private async doRefreshSession() {
-    const refreshToken = resolveRefreshToken();
-    if (!refreshToken && !hasSessionMarker()) {
+    if (!hasSessionMarker()) {
       return false;
     }
     const remember = isSessionRemembered();
-    const headers = new Headers();
-    let requestBody: string | undefined;
-    if (refreshToken) {
-      headers.set("Content-Type", "application/json");
-      requestBody = JSON.stringify({ refreshToken });
-    }
     const response = await fetch(this.buildUrl("/api/v1/auth/refresh"), {
       method: "POST",
-      headers,
-      body: requestBody,
       credentials: this.credentials
     });
     if (!response.ok) {

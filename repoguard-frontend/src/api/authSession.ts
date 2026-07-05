@@ -31,12 +31,7 @@ export const clearAuthToken = () => {
 export const hasAuthToken = () => Boolean(resolveAccessToken() || hasSessionMarker() || resolveRefreshToken());
 
 export const resolveRefreshToken = () => {
-  if (typeof window === "undefined") {
-    return "";
-  }
-  return window.sessionStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
-    || window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
-    || "";
+  return "";
 };
 
 export const resolveAccessToken = () => {
@@ -52,7 +47,6 @@ export const resolveAccessToken = () => {
 
 export const isSessionRemembered = () => Boolean(
   window.localStorage.getItem(SESSION_MARKER_STORAGE_KEY)
-    || window.localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
 );
 
 export const hasSessionMarker = () => Boolean(

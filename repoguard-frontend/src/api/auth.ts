@@ -1,4 +1,4 @@
-import { clearAuthToken, hasAuthToken, resolveRefreshToken, saveAuthTokens } from "@/api/client";
+import { clearAuthToken, hasAuthToken, saveAuthTokens } from "@/api/client";
 import { apiRequest } from "@/api/contracts";
 
 export interface AuthUser {
@@ -50,10 +50,9 @@ export const register = async (payload: RegisterRequest) => {
 export const getCurrentUser = () => apiRequest("getCurrentUser", undefined);
 
 export const logout = async () => {
-  const refreshToken = resolveRefreshToken();
-  if (refreshToken || hasAuthToken()) {
+  if (hasAuthToken()) {
     try {
-      await apiRequest("logout", refreshToken ? { refreshToken } : undefined);
+      await apiRequest("logout", undefined);
     } finally {
       clearAuthToken();
     }

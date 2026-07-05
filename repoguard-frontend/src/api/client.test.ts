@@ -34,6 +34,7 @@ describe("auth token client", () => {
 
   it("refreshes a request by using the HttpOnly refresh cookie session marker", async () => {
     saveAuthTokens("expired-access", "refresh-token", true);
+    window.localStorage.setItem("repoguard.refreshToken", "legacy-refresh-token");
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(apiResponse(null, 401))
       .mockResolvedValueOnce(apiResponse({ accessToken: "new-access" }))
