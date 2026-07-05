@@ -74,8 +74,55 @@ function Resolve-ToolCommand {
     }
 }
 
+function Get-TrackedRepositoryFiles {
+    $trackedFiles = & git -C $Root ls-files
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to list tracked files"
+    }
+    return $trackedFiles | ForEach-Object { $_ -replace '\\', '/' }
+}
+
+function Test-TestOrTemporaryScriptPath {
+    param(
+        [string] $Path
+    )
+
+    $extension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+    $scriptExtensions = @(".sh", ".ps1", ".bat", ".cmd")
+    if ($scriptExtensions -notcontains $extension) {
+        return $false
+    }
+
+    $normalizedPath = ($Path -replace '\\', '/').ToLowerInvariant()
+    $fileName = [System.IO.Path]::GetFileNameWithoutExtension($normalizedPath)
+    return $normalizedPath -match '(^|/)(test|tests|__tests__|tmp|temp|scratch)(/|$)' `
+        -or $fileName -match '(^|[-_.])(test|spec|tmp|temp|scratch|debug|local)([-_.]|$)'
+}
+
 Invoke-Check "git diff whitespace check" {
     Invoke-CommandChecked -FilePath "git" -Arguments @("diff", "--check") -WorkingDirectory $Root
+}
+
+Invoke-Check "repository governance tracked file guard" {
+    $invalidMarkdown = @()
+    $invalidScripts = @()
+
+    foreach ($relativePath in Get-TrackedRepositoryFiles) {
+        $extension = [System.IO.Path]::GetExtension($relativePath).ToLowerInvariant()
+        if ($extension -eq ".md" -and $relativePath -ne "README.md") {
+            $invalidMarkdown += $relativePath
+        }
+        if (Test-TestOrTemporaryScriptPath -Path $relativePath) {
+            $invalidScripts += $relativePath
+        }
+    }
+
+    if ($invalidMarkdown.Count -gt 0) {
+        throw "Only root README.md may be tracked as markdown. Invalid markdown files:`n$($invalidMarkdown -join "`n")"
+    }
+    if ($invalidScripts.Count -gt 0) {
+        throw "Test or temporary scripts must not be tracked. Invalid script files:`n$($invalidScripts -join "`n")"
+    }
 }
 
 Invoke-Check "Flyway migration naming and duplicate version check" {
@@ -141,10 +188,7 @@ Invoke-Check "Flyway migration demo data guard" {
 }
 
 Invoke-Check "secret and token leakage heuristic scan" {
-    $trackedFiles = & git -C $Root ls-files
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to list tracked files"
-    }
+    $trackedFiles = Get-TrackedRepositoryFiles
 
     $scannedExtensions = @(
         ".java", ".ts", ".vue", ".js", ".json", ".yml", ".yaml", ".properties",

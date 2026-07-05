@@ -46,6 +46,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Repository governance guard
+        shell: pwsh
+        run: ./scripts/production-readiness-check.ps1 -SkipBackendTests
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
