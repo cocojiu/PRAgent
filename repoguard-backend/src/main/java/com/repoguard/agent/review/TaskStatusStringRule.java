@@ -39,6 +39,7 @@ class TaskStatusStringRule implements ReviewRule {
             || trimmedLine.contains("setHumanReviewStatus(\""))
             && (trimmedLine.contains("QUEUED") || trimmedLine.contains("REVIEWING")
                 || trimmedLine.contains("COMPLETED") || trimmedLine.contains("FAILED")
-                || trimmedLine.contains("PUBLISH_FAILED") || trimmedLine.contains("PENDING_HUMAN_REVIEW"));
+                || trimmedLine.contains("PUBLISH_FAILED") || trimmedLine.contains("EXECUTION_TIMEOUT")
+                || trimmedLine.contains("PENDING_HUMAN_REVIEW"));
     }
 }

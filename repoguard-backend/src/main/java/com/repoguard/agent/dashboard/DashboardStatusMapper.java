@@ -42,6 +42,7 @@ public class DashboardStatusMapper {
             case FAILED -> "失败";
             case QUEUED -> "排队中";
             case PUBLISH_FAILED -> "发布失败";
+            case EXECUTION_TIMEOUT -> "执行超时";
             case PENDING_HUMAN_REVIEW -> "待人工复核";
             case APPROVED -> "已通过";
             case CHANGES_REQUESTED -> "需修改";

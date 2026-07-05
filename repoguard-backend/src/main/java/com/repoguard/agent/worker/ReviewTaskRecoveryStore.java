@@ -44,7 +44,7 @@ class ReviewTaskRecoveryStore {
                 .eq("status", reviewTaskStateMachine.statusWhenReviewing())
                 .eq("review_claimed_by", task.getReviewClaimedBy())
                 .le("review_claimed_at", expiredBefore)
-                .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
+                .set("status", reviewTaskStateMachine.statusWhenExecutionTimeout())
                 .set("publish_attempts", 0)
                 .set("next_publish_retry_at", recoveredAt)
                 .set("last_publish_error", recoveryReason)

@@ -24,6 +24,10 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.PUBLISH_FAILED.code();
     }
 
+    public String statusWhenExecutionTimeout() {
+        return ReviewTaskStatus.EXECUTION_TIMEOUT.code();
+    }
+
     public String statusWhenFailed() {
         return ReviewTaskStatus.FAILED.code();
     }
@@ -41,8 +45,11 @@ public class ReviewTaskStateMachine {
     }
 
     public void ensurePublishRequeueAllowed(String status, boolean publishClaimed) {
-        if (ReviewTaskStatus.PUBLISH_FAILED != ReviewTaskStatus.from(status)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only publish failed message tasks can be requeued");
+        if (!isPublishRecoveryCandidate(status)) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Only publish failed or execution timeout message tasks can be requeued"
+            );
         }
         if (publishClaimed) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Claimed message tasks cannot be requeued manually");
@@ -51,6 +58,28 @@ public class ReviewTaskStateMachine {
 
     public boolean isPublishFailed(String status) {
         return ReviewTaskStatus.PUBLISH_FAILED == ReviewTaskStatus.from(status);
+    }
+
+    public boolean isExecutionTimeout(String status) {
+        return ReviewTaskStatus.EXECUTION_TIMEOUT == ReviewTaskStatus.from(status);
+    }
+
+    public boolean isPublishRecoveryCandidate(String status) {
+        ReviewTaskStatus taskStatus = ReviewTaskStatus.from(status);
+        return taskStatus == ReviewTaskStatus.PUBLISH_FAILED
+            || taskStatus == ReviewTaskStatus.EXECUTION_TIMEOUT;
+    }
+
+    public List<String> publishRecoveryCandidateStatuses() {
+        return List.of(ReviewTaskStatus.PUBLISH_FAILED.code(), ReviewTaskStatus.EXECUTION_TIMEOUT.code());
+    }
+
+    public List<String> publishQueueCandidateStatuses() {
+        return List.of(
+            ReviewTaskStatus.PUBLISH_FAILED.code(),
+            ReviewTaskStatus.EXECUTION_TIMEOUT.code(),
+            ReviewTaskStatus.QUEUED.code()
+        );
     }
 
     public List<String> dataRetentionCandidateStatuses() {

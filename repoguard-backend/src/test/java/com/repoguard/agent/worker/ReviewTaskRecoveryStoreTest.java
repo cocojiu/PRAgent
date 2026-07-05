@@ -62,7 +62,7 @@ class ReviewTaskRecoveryStoreTest {
         assertThat(wrapperCaptor.getValue().getSqlSet())
             .contains("next_publish_retry_at");
         assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
-            .contains("PUBLISH_FAILED", recoveredAt, "expired");
+            .contains("EXECUTION_TIMEOUT", recoveredAt, "expired");
     }
 
     @Test

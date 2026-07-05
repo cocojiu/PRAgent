@@ -28,6 +28,7 @@ class TaskStatusStringRuleTest {
         assertThat(rule.evaluate(context("src/App.java", "task.setReviewStatus(\"COMPLETED\");", Map.of()))).isPresent();
         assertThat(rule.evaluate(context("src/App.java", "task.setHumanReviewStatus(\"FAILED\");", Map.of()))).isPresent();
         assertThat(rule.evaluate(context("src/App.java", "task.setStatus(\"PUBLISH_FAILED\");", Map.of()))).isPresent();
+        assertThat(rule.evaluate(context("src/App.java", "task.setStatus(\"EXECUTION_TIMEOUT\");", Map.of()))).isPresent();
         assertThat(rule.evaluate(context("src/App.java", "task.setStatus(\"PENDING_HUMAN_REVIEW\");", Map.of()))).isPresent();
     }
 

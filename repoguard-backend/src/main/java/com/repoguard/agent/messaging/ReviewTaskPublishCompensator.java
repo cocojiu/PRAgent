@@ -204,6 +204,9 @@ public class ReviewTaskPublishCompensator {
         if (reviewTaskStateMachine.isPublishFailed(task.getStatus())) {
             return "publish_failed";
         }
+        if (reviewTaskStateMachine.isExecutionTimeout(task.getStatus())) {
+            return "execution_timeout";
+        }
         return task.getPublishClaimedAt() == null
             ? "stale_unclaimed_queued"
             : "stale_queued_claim";

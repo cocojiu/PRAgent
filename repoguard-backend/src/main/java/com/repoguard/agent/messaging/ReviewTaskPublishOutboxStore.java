@@ -41,7 +41,7 @@ public class ReviewTaskPublishOutboxStore {
             new LambdaQueryWrapper<ReviewTask>()
                 .and(wrapper -> wrapper
                     .and(failed -> failed
-                        .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenPublishFailed())
+                        .in(ReviewTask::getStatus, reviewTaskStateMachine.publishRecoveryCandidateStatuses())
                         .le(ReviewTask::getNextPublishRetryAt, now)
                         .lt(ReviewTask::getPublishAttempts, maxAttempts)
                     )
@@ -78,7 +78,7 @@ public class ReviewTaskPublishOutboxStore {
                 .eq("id", task.getId())
                 .and(wrapper -> wrapper
                     .and(failed -> failed
-                        .eq("status", reviewTaskStateMachine.statusWhenPublishFailed())
+                        .in("status", reviewTaskStateMachine.publishRecoveryCandidateStatuses())
                         .le("next_publish_retry_at", claimedAt)
                         .lt("publish_attempts", maxAttempts)
                         .and(claim -> claim
@@ -122,11 +122,7 @@ public class ReviewTaskPublishOutboxStore {
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
-                .in(
-                    "status",
-                    reviewTaskStateMachine.statusWhenPublishFailed(),
-                    reviewTaskStateMachine.statusWhenQueued()
-                )
+                .in("status", reviewTaskStateMachine.publishQueueCandidateStatuses())
                 .eq("publish_claimed_at", claimedAt)
                 .eq("publish_claimed_by", instanceId)
                 .set("status", reviewTaskStateMachine.statusWhenQueued())

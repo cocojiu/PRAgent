@@ -75,6 +75,23 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void compensateRequeuesExecutionTimeoutTaskWhenPublishSucceeds() {
+        ReviewTask task = task();
+        task.setStatus("EXECUTION_TIMEOUT");
+        task.setPublishAttempts(0);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
+
+        compensator.compensate(task);
+
+        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getNextPublishRetryAt()).isNull();
+        assertThat(task.getLastPublishError()).isNull();
+    }
+
+    @Test
     void compensateKeepsTaskPublishFailedWhenPublishStillFails() {
         ReviewTask task = task();
         task.setPublishAttempts(1);
@@ -244,6 +261,8 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(staleQueuedBranch).isGreaterThan(attemptsLimit);
         assertThat(sqlSegment.indexOf("publish_attempts", staleQueuedBranch)).isGreaterThan(staleQueuedBranch);
         assertThat(sqlSegment).contains("created_at");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+            .contains("PUBLISH_FAILED", "EXECUTION_TIMEOUT");
     }
 
     private ReviewTask task() {
