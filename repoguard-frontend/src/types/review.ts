@@ -47,6 +47,9 @@ export interface ReviewTaskDetail extends ReviewTask {
   findings: ReviewFinding[];
   missingTests: MissingTest[];
   changedFiles: ChangedFile[];
+  findingTotal: number;
+  missingTestTotal: number;
+  changedFileTotal: number;
   timeline: TimelineItem[];
   riskProfile: PrRiskProfile;
   prSummary: PrReviewSummary;

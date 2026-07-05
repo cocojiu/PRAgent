@@ -38,7 +38,10 @@ public record ReviewTaskDetail(
     String humanReviewStatus,
     String humanReviewNote,
     String humanReviewBy,
-    String humanReviewedAt
+    String humanReviewedAt,
+    Long findingTotal,
+    Long missingTestTotal,
+    Long changedFileTotal
 ) {
     public ReviewTaskDetail(
         Long id,
@@ -101,7 +104,10 @@ public record ReviewTaskDetail(
             "not_required",
             null,
             null,
-            null
+            null,
+            sizeOf(findings),
+            sizeOf(missingTests),
+            sizeOf(changedFiles)
         );
     }
 
@@ -165,7 +171,14 @@ public record ReviewTaskDetail(
             "not_required",
             null,
             null,
-            null
+            null,
+            sizeOf(findings),
+            sizeOf(missingTests),
+            sizeOf(changedFiles)
         );
+    }
+
+    private static long sizeOf(List<?> items) {
+        return items == null ? 0L : items.size();
     }
 }

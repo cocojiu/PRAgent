@@ -40,6 +40,30 @@ public class ReviewTaskDetailAssembler {
         List<ChangedFileDto> changedFiles,
         List<ReviewTimelineItem> timeline
     ) {
+        return assemble(
+            task,
+            item,
+            findings,
+            missingTests,
+            changedFiles,
+            timeline,
+            sizeOf(findings),
+            sizeOf(missingTests),
+            sizeOf(changedFiles)
+        );
+    }
+
+    public ReviewTaskDetail assemble(
+        ReviewTask task,
+        ReviewTaskListItem item,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        List<ReviewTimelineItem> timeline,
+        long findingTotal,
+        long missingTestTotal,
+        long changedFileTotal
+    ) {
         PrRiskProfileDto riskProfile = riskProfileBuilder.build(item, findings, changedFiles);
         String effectiveRiskLevel = effectiveRiskLevel(item.riskLevel(), riskProfile);
         return new ReviewTaskDetail(
@@ -89,7 +113,10 @@ public class ReviewTaskDetailAssembler {
             item.humanReviewStatus(),
             item.humanReviewNote(),
             item.humanReviewBy(),
-            item.humanReviewedAt()
+            item.humanReviewedAt(),
+            findingTotal,
+            missingTestTotal,
+            changedFileTotal
         );
     }
 
@@ -155,5 +182,9 @@ public class ReviewTaskDetailAssembler {
 
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private long sizeOf(List<?> items) {
+        return items == null ? 0L : items.size();
     }
 }

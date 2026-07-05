@@ -6,6 +6,9 @@ export const normalizeReviewTaskDetail = (task: ReviewTaskDetail): ReviewTaskDet
   llmStatus: task.llmStatus as ReviewStatus,
   humanReviewRequired: Boolean(task.humanReviewRequired),
   humanReviewStatus: task.humanReviewStatus ?? "not_required",
+  findingTotal: task.findingTotal ?? task.findings?.length ?? 0,
+  missingTestTotal: task.missingTestTotal ?? task.missingTests?.length ?? 0,
+  changedFileTotal: task.changedFileTotal ?? task.changedFiles?.length ?? 0,
   riskProfile: {
     score: task.riskProfile?.score ?? 0,
     level: (task.riskProfile?.level ?? "info") as RiskLevel,

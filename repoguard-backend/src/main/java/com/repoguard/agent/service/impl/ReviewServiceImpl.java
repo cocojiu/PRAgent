@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.GithubIntegrationProvider;
+import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
@@ -12,8 +13,10 @@ import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -222,6 +225,28 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     public ReviewTaskDetail getReviewDetail(Long id) {
         return reviewTaskQueryService.getReviewDetail(id);
+    }
+
+    @Override
+    public PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus
+    ) {
+        return reviewTaskQueryService.listReviewFindings(id, page, pageSize, severity, category, feedbackStatus);
+    }
+
+    @Override
+    public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+        return reviewTaskQueryService.listChangedFiles(id, page, pageSize, hasFinding);
+    }
+
+    @Override
+    public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+        return reviewTaskQueryService.listMissingTests(id, page, pageSize);
     }
 
     @Override

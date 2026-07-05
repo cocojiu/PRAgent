@@ -157,7 +157,52 @@ class ReviewControllerTest {
                 "pending",
                 "Need owner confirmation",
                 "review-lead",
-                "2026-06-12 11:00:00"
+                "2026-06-12 11:00:00",
+                1L,
+                1L,
+                1L
+            );
+        }
+
+        @Override
+        public PageResponse<ReviewFindingDto> listReviewFindings(
+            Long id,
+            int page,
+            int pageSize,
+            String severity,
+            String category,
+            String feedbackStatus
+        ) {
+            return new PageResponse<>(List.of(new ReviewFindingDto(
+                1L,
+                "high",
+                "src/App.java",
+                12,
+                "Use logger",
+                "Replace stdout with logger",
+                "HIGH",
+                "System.out.println(password)",
+                "Secret may leak to stdout",
+                "log.info(\"user exported\")",
+                true,
+                "security",
+                "valid",
+                "Confirmed by owner",
+                "review-lead",
+                "2026-06-12 12:00:00"
+            )), 1);
+        }
+
+        @Override
+        public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+            return new PageResponse<>(List.of(new ChangedFileDto("src/App.java", "modified", 12, 3)), 1);
+        }
+
+        @Override
+        public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+            return new PageResponse<>(
+                List.of(new MissingTestDto("UserExportControllerTest", "exportUsers", "controller", "Add authorization regression test")),
+                1
             );
         }
 
@@ -433,9 +478,12 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.findings[0].isBlocking").value(true))
             .andExpect(jsonPath("$.data.findings[0].reviewDimension").value("security"))
             .andExpect(jsonPath("$.data.findings[0].feedbackStatus").value("valid"))
+            .andExpect(jsonPath("$.data.findingTotal").value(1))
             .andExpect(jsonPath("$.data.missingTests[0].file").value("UserExportControllerTest"))
+            .andExpect(jsonPath("$.data.missingTestTotal").value(1))
             .andExpect(jsonPath("$.data.changedFiles[0].path").value("src/App.java"))
             .andExpect(jsonPath("$.data.changedFiles[0].changeType").value("modified"))
+            .andExpect(jsonPath("$.data.changedFileTotal").value(1))
             .andExpect(jsonPath("$.data.timeline[0].label").value("GitHub diff fetched"))
             .andExpect(jsonPath("$.data.riskProfile.score").value(91))
             .andExpect(jsonPath("$.data.riskProfile.level").value("critical"))
@@ -456,6 +504,50 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.humanReviewNote").value("Need owner confirmation"))
             .andExpect(jsonPath("$.data.humanReviewBy").value("review-lead"))
             .andExpect(jsonPath("$.data.humanReviewedAt").value("2026-06-12 11:00:00"));
+    }
+
+    @Test
+    void listReviewFindingsReturnsPagedItems() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/findings")
+                .param("page", "1")
+                .param("pageSize", "20")
+                .param("severity", "high")
+                .param("category", "security")
+                .param("feedbackStatus", "valid"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].id").value(1))
+            .andExpect(jsonPath("$.data.items[0].severity").value("high"))
+            .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"));
+    }
+
+    @Test
+    void listChangedFilesReturnsPagedItems() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/changed-files")
+                .param("page", "1")
+                .param("pageSize", "20")
+                .param("hasFinding", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].path").value("src/App.java"))
+            .andExpect(jsonPath("$.data.items[0].changeType").value("modified"));
+    }
+
+    @Test
+    void listMissingTestsReturnsPagedItems() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/missing-tests")
+                .param("page", "1")
+                .param("pageSize", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items", hasSize(1)))
+            .andExpect(jsonPath("$.data.items[0].file").value("UserExportControllerTest"))
+            .andExpect(jsonPath("$.data.items[0].method").value("exportUsers"));
     }
 
     @Test

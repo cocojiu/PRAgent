@@ -1,8 +1,11 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
@@ -110,8 +113,36 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             detailData.findings(),
             detailData.missingTests(),
             detailData.changedFiles(),
-            detailData.timeline()
+            detailData.timeline(),
+            detailData.findingTotal(),
+            detailData.missingTestTotal(),
+            detailData.changedFileTotal()
         );
+    }
+
+    @Override
+    public PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus
+    ) {
+        queryItemLoader.loadRequired(id);
+        return detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus);
+    }
+
+    @Override
+    public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+        queryItemLoader.loadRequired(id);
+        return detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
+    }
+
+    @Override
+    public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+        queryItemLoader.loadRequired(id);
+        return detailDataLoader.loadMissingTestsPage(id, page, pageSize);
     }
 
     @Override

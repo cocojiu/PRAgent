@@ -1,8 +1,8 @@
 <template>
-  <article class="dashboard-card findings-card">
+  <article v-loading="loading" class="dashboard-card findings-card">
     <div class="card-title-row">
       <h2>LLM Findings</h2>
-      <span class="count-badge">{{ findings.length }} 条</span>
+      <span class="count-badge">{{ total }} 条</span>
     </div>
     <div v-if="findings.length" class="finding-list">
       <section v-for="(finding, index) in findings" :key="`${finding.file}-${finding.line}-${index}`" class="finding-item">
@@ -95,6 +95,15 @@
       </section>
     </div>
     <el-empty v-else description="暂无审查问题" />
+    <el-pagination
+      v-if="total > pageSize"
+      class="detail-pagination"
+      layout="prev, pager, next"
+      :current-page="currentPage"
+      :page-size="pageSize"
+      :total="total"
+      @current-change="$emit('pageChange', $event)"
+    />
   </article>
 </template>
 
@@ -105,6 +114,10 @@ defineProps<{
   canManage: boolean;
   feedbackSavingId: number | null;
   findings: ReviewFinding[];
+  loading: boolean;
+  currentPage: number;
+  pageSize: number;
+  total: number;
   riskText: (risk: RiskLevel) => string;
   findingFeedbackStatusClass: (status?: FindingFeedbackStatus | string) => string;
   findingFeedbackStatusText: (status?: FindingFeedbackStatus | string) => string;
@@ -112,6 +125,7 @@ defineProps<{
 
 defineEmits<{
   feedback: [findingId: number, status: FindingFeedbackStatus];
+  pageChange: [page: number];
 }>();
 
 const confidenceText = (confidence?: string) => {

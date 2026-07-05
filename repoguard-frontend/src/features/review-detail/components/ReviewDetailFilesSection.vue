@@ -1,5 +1,5 @@
 <template>
-  <article class="dashboard-card">
+  <article v-loading="missingTestsLoading" class="dashboard-card">
     <h2>缺失测试</h2>
     <el-table :data="missingTests" class="rg-table" size="large" aria-label="缺失测试列表">
       <el-table-column prop="file" label="文件" min-width="320" />
@@ -10,9 +10,18 @@
         <el-empty description="暂无缺失测试建议" />
       </template>
     </el-table>
+    <el-pagination
+      v-if="missingTestsTotal > pageSize"
+      class="detail-pagination"
+      layout="prev, pager, next"
+      :current-page="missingTestsPage"
+      :page-size="pageSize"
+      :total="missingTestsTotal"
+      @current-change="$emit('missingTestsPageChange', $event)"
+    />
   </article>
 
-  <article class="dashboard-card">
+  <article v-loading="changedFilesLoading" class="dashboard-card">
     <h2>变更文件</h2>
     <el-table :data="changedFiles" class="rg-table" size="large" aria-label="变更文件列表">
       <el-table-column label="文件路径" min-width="420">
@@ -38,6 +47,15 @@
         <el-empty description="暂无变更文件" />
       </template>
     </el-table>
+    <el-pagination
+      v-if="changedFilesTotal > pageSize"
+      class="detail-pagination"
+      layout="prev, pager, next"
+      :current-page="changedFilesPage"
+      :page-size="pageSize"
+      :total="changedFilesTotal"
+      @current-change="$emit('changedFilesPageChange', $event)"
+    />
   </article>
 </template>
 
@@ -49,6 +67,18 @@ type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 defineProps<{
   missingTests: MissingTest[];
   changedFiles: ChangedFileWithFindingCount[];
+  missingTestsLoading: boolean;
+  changedFilesLoading: boolean;
+  missingTestsPage: number;
+  changedFilesPage: number;
+  pageSize: number;
+  missingTestsTotal: number;
+  changedFilesTotal: number;
   changeTypeText: (changeType: ChangedFile["changeType"] | string) => string;
+}>();
+
+defineEmits<{
+  missingTestsPageChange: [page: number];
+  changedFilesPageChange: [page: number];
 }>();
 </script>

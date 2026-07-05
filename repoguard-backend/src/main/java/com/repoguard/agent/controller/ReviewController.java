@@ -2,6 +2,7 @@ package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
+import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
@@ -12,8 +13,10 @@ import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -85,6 +88,44 @@ public class ReviewController {
     @GetMapping("/{id}")
     public ApiResponse<ReviewTaskDetail> getReviewDetail(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.getReviewDetail(id));
+    }
+
+    @GetMapping("/{id}/findings")
+    public ApiResponse<PageResponse<ReviewFindingDto>> listReviewFindings(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
+        @RequestParam(required = false) @Size(max = 32) String severity,
+        @RequestParam(required = false) @Size(max = 64) String category,
+        @RequestParam(required = false) @Size(max = 32) String feedbackStatus
+    ) {
+        return ApiResponse.ok(reviewService.listReviewFindings(
+            id,
+            page,
+            pageSize,
+            checkedParam("severity", severity, 32),
+            checkedParam("category", category, 64),
+            checkedParam("feedbackStatus", feedbackStatus, 32)
+        ));
+    }
+
+    @GetMapping("/{id}/changed-files")
+    public ApiResponse<PageResponse<ChangedFileDto>> listChangedFiles(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize,
+        @RequestParam(required = false) Boolean hasFinding
+    ) {
+        return ApiResponse.ok(reviewService.listChangedFiles(id, page, pageSize, hasFinding));
+    }
+
+    @GetMapping("/{id}/missing-tests")
+    public ApiResponse<PageResponse<MissingTestDto>> listMissingTests(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(reviewService.listMissingTests(id, page, pageSize));
     }
 
     @GetMapping("/{id}/status")

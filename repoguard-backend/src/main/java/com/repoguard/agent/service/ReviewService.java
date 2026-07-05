@@ -1,9 +1,12 @@
 package com.repoguard.agent.service;
 
+import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -28,6 +31,19 @@ public interface ReviewService {
      * 加载单个评审任务，以及前端详情页需要的所有只读区块。
      */
     ReviewTaskDetail getReviewDetail(Long id);
+
+    PageResponse<ReviewFindingDto> listReviewFindings(
+        Long id,
+        int page,
+        int pageSize,
+        String severity,
+        String category,
+        String feedbackStatus
+    );
+
+    PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding);
+
+    PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize);
 
     ReviewTaskStatusResponse getReviewStatus(Long id);
 

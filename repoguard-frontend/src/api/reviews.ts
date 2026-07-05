@@ -17,6 +17,21 @@ export const fetchReviews = (query: ReviewQuery) =>
  */
 export const fetchReviewDetail = (id: number) => apiRequest("fetchReviewDetail", { id });
 
+export const fetchReviewFindings = (
+  id: number,
+  params?: { page?: number; pageSize?: number; severity?: string; category?: string; feedbackStatus?: string }
+) => apiRequest("fetchReviewFindings", { id, ...params });
+
+export const fetchReviewChangedFiles = (
+  id: number,
+  params?: { page?: number; pageSize?: number; hasFinding?: boolean }
+) => apiRequest("fetchReviewChangedFiles", { id, ...params });
+
+export const fetchReviewMissingTests = (
+  id: number,
+  params?: { page?: number; pageSize?: number }
+) => apiRequest("fetchReviewMissingTests", { id, ...params });
+
 export const fetchReviewStatus = (id: number) => apiRequest("fetchReviewStatus", { id });
 
 export const fetchGithubCommentPreview = (id: number) =>

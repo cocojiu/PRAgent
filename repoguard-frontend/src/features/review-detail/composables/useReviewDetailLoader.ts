@@ -8,6 +8,7 @@ import { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "../reviewD
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
 
 type UseReviewDetailLoaderOptions = {
+  afterDetailLoaded?: (task: ReviewTaskDetail) => void;
   clearGithubCommentPreviewAndHistory: () => void;
   getTaskId: () => number;
   isTerminalReviewStatus: (status?: ReviewStatus | string) => boolean;
@@ -26,6 +27,7 @@ const formatRefreshTime = () =>
   }).format(new Date());
 
 export const useReviewDetailLoader = ({
+  afterDetailLoaded,
   clearGithubCommentPreviewAndHistory,
   getTaskId,
   isTerminalReviewStatus,
@@ -72,6 +74,7 @@ export const useReviewDetailLoader = ({
     try {
       const task = normalizeReviewTaskDetail(await fetchReviewDetail(id));
       selectedTask.value = task;
+      afterDetailLoaded?.(task);
       pollErrorMessage.value = "";
       pollFailureCount.value = 0;
       lastRefreshedAt.value = formatRefreshTime();

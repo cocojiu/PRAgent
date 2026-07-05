@@ -6,6 +6,7 @@ import type {
   DashboardOverview,
   FindingFeedbackRequest,
   FindingFeedbackResponse,
+  ChangedFile,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
@@ -25,9 +26,11 @@ import type {
   NotificationDelivery,
   NotificationEvent,
   PageResponse,
+  MissingTest,
   ReviewPolicyConfig,
   ReviewPolicyConfigRequest,
   ReviewQuery,
+  ReviewFinding,
   ReviewRetryResponse,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
@@ -64,6 +67,22 @@ type NotificationPageInput = {
   taskId?: number;
 };
 
+type ReviewDetailPageInput = {
+  id: number;
+  page?: number;
+  pageSize?: number;
+};
+
+type ReviewFindingsPageInput = ReviewDetailPageInput & {
+  severity?: string;
+  category?: string;
+  feedbackStatus?: string;
+};
+
+type ReviewChangedFilesPageInput = ReviewDetailPageInput & {
+  hasFinding?: boolean;
+};
+
 type UserRoleInput = {
   id: number;
   role: UserRole;
@@ -82,6 +101,9 @@ export type ApiContract = {
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
+  fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
+  fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
+  fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
   fetchGithubCommentPreview: ApiOperation<{ id: number }, GithubCommentPreview>;
   fetchGithubCommentPublicationHistory: ApiOperation<
@@ -188,6 +210,28 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchReviewDetail: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}`
+  },
+  fetchReviewFindings: {
+    path: input => `/api/v1/reviews/${idSegment(input.id)}/findings`,
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      severity: input.severity,
+      category: input.category,
+      feedbackStatus: input.feedbackStatus
+    })
+  },
+  fetchReviewChangedFiles: {
+    path: input => `/api/v1/reviews/${idSegment(input.id)}/changed-files`,
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      hasFinding: input.hasFinding === undefined ? undefined : String(input.hasFinding)
+    })
+  },
+  fetchReviewMissingTests: {
+    path: input => `/api/v1/reviews/${idSegment(input.id)}/missing-tests`,
+    query: input => ({ page: input.page, pageSize: input.pageSize })
   },
   fetchReviewStatus: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/status`

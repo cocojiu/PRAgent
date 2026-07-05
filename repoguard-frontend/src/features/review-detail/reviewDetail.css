@@ -1036,6 +1036,11 @@
   color: #64748b;
 }
 
+.detail-pagination {
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
 @media (max-width: 1280px) {
   .detail-kpi-grid,
   .detail-layout {

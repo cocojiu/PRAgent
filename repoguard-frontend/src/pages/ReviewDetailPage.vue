@@ -84,15 +84,15 @@
       <ReviewDetailKpiGrid
         :task="selectedTask"
         :started-at="reviewTimeline[0]?.time ?? '-'"
-        :finding-count="reviewFindings.length"
-        :changed-file-count="changedFiles.length"
+        :finding-count="findingTotal"
+        :changed-file-count="changedFileTotal"
       />
 
       <div class="detail-layout">
         <main class="detail-main">
           <ReviewDetailSummaryCard
             :task="selectedTask"
-            :finding-count="reviewFindings.length"
+            :finding-count="findingTotal"
             :finding-counts="findingCounts"
             :risk-profile="riskProfile"
             :status-text="statusText"
@@ -114,10 +114,15 @@
             :can-manage="canManage"
             :feedback-saving-id="feedbackSavingId"
             :findings="reviewFindings"
+            :loading="findingsLoading"
+            :current-page="findingsPage"
+            :page-size="DETAIL_SECTION_PAGE_SIZE"
+            :total="findingTotal"
             :risk-text="riskText"
             :finding-feedback-status-class="findingFeedbackStatusClass"
             :finding-feedback-status-text="findingFeedbackStatusText"
             @feedback="submitFindingFeedback"
+            @page-change="loadFindingsPage"
           />
 
           <ReviewDetailGithubCommentsCard
@@ -156,7 +161,16 @@
           <ReviewDetailFilesSection
             :missing-tests="missingTests"
             :changed-files="changedFilesWithFindingCounts"
+            :missing-tests-loading="missingTestsLoading"
+            :changed-files-loading="changedFilesLoading"
+            :missing-tests-page="missingTestsPage"
+            :changed-files-page="changedFilesPage"
+            :page-size="DETAIL_SECTION_PAGE_SIZE"
+            :missing-tests-total="missingTestTotal"
+            :changed-files-total="changedFileTotal"
             :change-type-text="changeTypeText"
+            @missing-tests-page-change="loadMissingTestsPage"
+            @changed-files-page-change="loadChangedFilesPage"
           />
         </main>
 
@@ -187,8 +201,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
+import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { fetchReviewChangedFiles, fetchReviewFindings, fetchReviewMissingTests } from "@/api/reviews";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -231,15 +247,24 @@ import {
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
 import type { ReviewStatus } from "@/types";
+import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
 const MAX_POLL_INTERVAL_MS = 30000;
+const DETAIL_SECTION_PAGE_SIZE = 20;
 
 const router = useRouter();
 const route = useRoute();
+
+const findingsPage = ref(1);
+const changedFilesPage = ref(1);
+const missingTestsPage = ref(1);
+const findingsLoading = ref(false);
+const changedFilesLoading = ref(false);
+const missingTestsLoading = ref(false);
 
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
@@ -269,6 +294,13 @@ const {
 } = useReviewDetailGithubComments();
 let stopPolling = () => {};
 let syncPolling = () => {};
+
+const resetDetailSectionPages = () => {
+  findingsPage.value = 1;
+  changedFilesPage.value = 1;
+  missingTestsPage.value = 1;
+};
+
 const {
   errorMessage,
   lastRefreshedAt,
@@ -281,6 +313,7 @@ const {
   selectedTask,
   silentRefreshing
 } = useReviewDetailLoader({
+  afterDetailLoaded: resetDetailSectionPages,
   clearGithubCommentPreviewAndHistory,
   getTaskId: () => Number(route.params.id),
   isTerminalReviewStatus,
@@ -320,6 +353,9 @@ const {
   failureReason,
   selectedTask
 });
+const findingTotal = computed(() => selectedTask.value?.findingTotal ?? reviewFindings.value.length);
+const missingTestTotal = computed(() => selectedTask.value?.missingTestTotal ?? missingTests.value.length);
+const changedFileTotal = computed(() => selectedTask.value?.changedFileTotal ?? changedFiles.value.length);
 const {
   llmCostText,
   llmDurationText,
@@ -413,6 +449,87 @@ const refreshLoadedGithubCommentPreview = async (id: number) => {
     return;
   }
   await loadGithubCommentPreview(id);
+};
+
+const loadFindingsPage = async (page: number) => {
+  if (!selectedTask.value || findingsLoading.value) {
+    return;
+  }
+  const taskId = selectedTask.value.id;
+  findingsLoading.value = true;
+  try {
+    const result = await fetchReviewFindings(taskId, {
+      page,
+      pageSize: DETAIL_SECTION_PAGE_SIZE
+    });
+    if (!selectedTask.value || selectedTask.value.id !== taskId) {
+      return;
+    }
+    selectedTask.value = {
+      ...selectedTask.value,
+      findings: result.items,
+      findingTotal: result.total
+    };
+    findingsPage.value = page;
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "请求失败"));
+  } finally {
+    findingsLoading.value = false;
+  }
+};
+
+const loadChangedFilesPage = async (page: number) => {
+  if (!selectedTask.value || changedFilesLoading.value) {
+    return;
+  }
+  const taskId = selectedTask.value.id;
+  changedFilesLoading.value = true;
+  try {
+    const result = await fetchReviewChangedFiles(taskId, {
+      page,
+      pageSize: DETAIL_SECTION_PAGE_SIZE
+    });
+    if (!selectedTask.value || selectedTask.value.id !== taskId) {
+      return;
+    }
+    selectedTask.value = {
+      ...selectedTask.value,
+      changedFiles: result.items,
+      changedFileTotal: result.total
+    };
+    changedFilesPage.value = page;
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "请求失败"));
+  } finally {
+    changedFilesLoading.value = false;
+  }
+};
+
+const loadMissingTestsPage = async (page: number) => {
+  if (!selectedTask.value || missingTestsLoading.value) {
+    return;
+  }
+  const taskId = selectedTask.value.id;
+  missingTestsLoading.value = true;
+  try {
+    const result = await fetchReviewMissingTests(taskId, {
+      page,
+      pageSize: DETAIL_SECTION_PAGE_SIZE
+    });
+    if (!selectedTask.value || selectedTask.value.id !== taskId) {
+      return;
+    }
+    selectedTask.value = {
+      ...selectedTask.value,
+      missingTests: result.items,
+      missingTestTotal: result.total
+    };
+    missingTestsPage.value = page;
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "请求失败"));
+  } finally {
+    missingTestsLoading.value = false;
+  }
 };
 
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
