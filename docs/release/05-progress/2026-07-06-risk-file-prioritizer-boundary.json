@@ -1,0 +1,21 @@
+{
+  "date": "2026-07-06",
+  "item": "OPT-ARCH-026",
+  "title": "Extract risk file prioritization from pull request diff chunking",
+  "status": "completed",
+  "scope": [
+    "added RiskFilePrioritizer to own high-risk file and semantic segment ordering",
+    "PullRequestDiffChunker now delegates prioritized segment ordering before chunk grouping",
+    "existing semantic chunk grouping, chunk reasons and public chunking contracts remain unchanged",
+    "new tests lock risk priority ordering for database migration, security, config, delivery pipeline and standard files"
+  ],
+  "verification": [
+    "mvn \"-Dtest=RiskFilePrioritizerTest,PullRequestDiffChunkerTest,SemanticDiffSegmenterTest,LlmPullRequestReviewerTest,LlmReviewPromptBuilderTest,LlmReviewPipelineTest\" test",
+    "mvn test",
+    "mvn -DskipTests package",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/production-readiness-check.ps1 -SkipBackendTests"
+  ],
+  "remaining": [
+    "continue extracting chunk budget decisions and chunk reason assembly from PullRequestDiffChunker in a later optimization item"
+  ]
+}

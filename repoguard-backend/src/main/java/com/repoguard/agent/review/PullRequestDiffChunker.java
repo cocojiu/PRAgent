@@ -5,7 +5,6 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -17,6 +16,7 @@ public class PullRequestDiffChunker {
     private final DiffRiskClassifier riskClassifier;
     private final SemanticDiffSegmenter segmenter;
     private final SemanticDiffChunkPlanner chunkPlanner;
+    private final RiskFilePrioritizer riskFilePrioritizer;
 
     public PullRequestDiffChunker() {
         this(new DiffRiskClassifier());
@@ -30,6 +30,7 @@ public class PullRequestDiffChunker {
         this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
         this.segmenter = segmenter == null ? new SemanticDiffSegmenter(this.riskClassifier) : segmenter;
         this.chunkPlanner = new SemanticDiffChunkPlanner();
+        this.riskFilePrioritizer = new RiskFilePrioritizer(this.riskClassifier);
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
@@ -50,7 +51,10 @@ public class PullRequestDiffChunker {
             return List.of(toChunk(diff, files, 1, 1));
         }
 
-        List<List<SemanticDiffSegment>> groupedSegments = chunkPlanner.groupSegments(prioritizedSegments(files), policy);
+        List<List<SemanticDiffSegment>> groupedSegments = chunkPlanner.groupSegments(
+            riskFilePrioritizer.prioritizeSegments(files, segmenter),
+            policy
+        );
 
         List<PullRequestDiffChunk> chunks = new ArrayList<>();
         for (int i = 0; i < groupedSegments.size(); i++) {
@@ -64,25 +68,6 @@ public class PullRequestDiffChunker {
         return files.size() > policy.largePrFileThreshold()
             || totalLines > policy.largePrLineThreshold()
             || (files.stream().anyMatch(file -> !riskClassifier.reasons(file).isEmpty()) && files.size() > 1);
-    }
-
-    private List<GithubChangedFile> prioritized(List<GithubChangedFile> files) {
-        return files.stream()
-            .sorted(Comparator
-                .comparingInt(riskClassifier::priority)
-                .thenComparing(GithubChangedFile::filename, Comparator.nullsLast(String::compareTo)))
-            .toList();
-    }
-
-    private List<SemanticDiffSegment> prioritizedSegments(List<GithubChangedFile> files) {
-        return prioritized(files).stream()
-            .flatMap(file -> segmenter.segments(file).stream())
-            .sorted(Comparator
-                .comparingInt(SemanticDiffSegment::riskPriority)
-                .thenComparing(SemanticDiffSegment::chunkGroupKey)
-                .thenComparing(SemanticDiffSegment::semanticKey)
-                .thenComparing(segment -> segment.file().filename(), Comparator.nullsLast(String::compareTo)))
-            .toList();
     }
 
     private PullRequestDiffChunk toChunk(GithubPullRequestDiff source, List<GithubChangedFile> files, int index, int total) {
