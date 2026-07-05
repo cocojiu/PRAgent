@@ -1,0 +1,19 @@
+{
+  "date": "2026-07-06",
+  "item": "OPT-ARCH-021",
+  "title": "Align Admin API key scope with controller authorization matrix",
+  "status": "completed",
+  "scope": [
+    "Admin API key policy covers every controller endpoint protected by @RequireRole(\"ADMIN\")",
+    "sensitive ADMIN read endpoints stay listed in the controller authorization matrix",
+    "message queue, notification operations and user management endpoints are no longer missing from the Admin API key policy",
+    "policy drift is guarded by reflection-based tests over controller mappings"
+  ],
+  "verification": [
+    "mvn \"-Dtest=AdminApiKeyAccessPolicyTest,AdminApiKeyFilterTest,ControllerAuthorizationContractTest\" test",
+    "mvn test"
+  ],
+  "remaining": [
+    "evaluate whether Admin API key scope should become externally configurable after production operations settle"
+  ]
+}

@@ -83,9 +83,45 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
+    void protectedMessageQueueHealthEndpointRejectsMissingAdminKey() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/message-queue/health");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
+    void protectedUserManagementEndpointRejectsMissingAdminKey() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/users");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
     void protectedNotificationRetryEndpointRejectsMissingAdminKey() throws ServletException, IOException {
         AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/notification-events/42/retry");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
+    void protectedNotificationReadEndpointRejectsMissingAdminKey() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/notification-deliveries");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         filter.doFilter(request, response, new MockFilterChain());

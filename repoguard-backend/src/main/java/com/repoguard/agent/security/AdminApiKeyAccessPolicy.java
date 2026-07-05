@@ -10,13 +10,17 @@ final class AdminApiKeyAccessPolicy {
     private static final List<ProtectedEndpoint> PROTECTED_ENDPOINTS = List.of(
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/config", "Configuration read and write APIs"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/config/**", "Configuration read and write APIs"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/message-queue/**", "Message queue operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/notification-events", "Notification event operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/notification-events/**", "Notification event operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/notification-deliveries", "Notification delivery operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/users", "User management operations"),
+        new ProtectedEndpoint(ANY_METHOD, "/api/v1/users/**", "User management operations"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/manual", "Manual review creation"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/retry", "Review retry"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/human-review", "Human review decision"),
         new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/github-comments", "GitHub comment publish"),
-        new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/findings/{findingId}/feedback", "Finding feedback"),
-        new ProtectedEndpoint("POST", "/api/v1/message-queue/tasks/{taskId}/requeue", "Message queue requeue"),
-        new ProtectedEndpoint("POST", "/api/v1/notification-events/{id}/retry", "Notification event retry")
+        new ProtectedEndpoint("POST", "/api/v1/reviews/{id}/findings/{findingId}/feedback", "Finding feedback")
     );
 
     private AdminApiKeyAccessPolicy() {

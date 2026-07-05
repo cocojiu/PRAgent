@@ -45,7 +45,9 @@ class ControllerAuthorizationContractTest {
         "NotificationIntegrationController#listBindings",
         "NotificationIntegrationController#listEvents",
         "NotificationIntegrationController#listDeliveries",
-        "MessageQueueHealthController#getHealth"
+        "MessageQueueHealthController#getHealth",
+        "UserManagementController#listUsers",
+        "UserManagementController#listOperationAudits"
     );
 
     @Test
@@ -88,10 +90,17 @@ class ControllerAuthorizationContractTest {
     void sensitiveReadEndpointsRequireExplicitRole() throws ClassNotFoundException {
         List<String> unprotectedSensitiveReadEndpoints = new ArrayList<>();
         List<String> existingSensitiveReadEndpoints = new ArrayList<>();
+        List<String> adminReadEndpoints = new ArrayList<>();
 
         for (Class<?> controller : discoverControllers()) {
             for (Method method : controller.getDeclaredMethods()) {
-                if (!isReadHandler(method) || !isSensitiveReadEndpoint(controller, method)) {
+                if (!isReadHandler(method)) {
+                    continue;
+                }
+                if (hasRequireRole(controller, method)) {
+                    adminReadEndpoints.add(endpointId(controller, method));
+                }
+                if (!isSensitiveReadEndpoint(controller, method)) {
                     continue;
                 }
                 existingSensitiveReadEndpoints.add(endpointId(controller, method));
@@ -102,6 +111,9 @@ class ControllerAuthorizationContractTest {
         }
 
         assertThat(existingSensitiveReadEndpoints)
+            .containsExactlyInAnyOrderElementsOf(SENSITIVE_READ_ENDPOINTS);
+        assertThat(adminReadEndpoints)
+            .as("Every ADMIN read endpoint must stay in the sensitive read matrix")
             .containsExactlyInAnyOrderElementsOf(SENSITIVE_READ_ENDPOINTS);
         assertThat(unprotectedSensitiveReadEndpoints)
             .as("Sensitive GET endpoints must declare @RequireRole on the method or controller")
