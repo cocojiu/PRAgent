@@ -412,7 +412,8 @@ class SystemConfigControllerTest {
             "spring-boot-demo",
             null,
             null,
-            "2026-06-06 01:30:00"
+            "2026-06-06 01:30:00",
+            "configured"
         );
     }
 
@@ -434,7 +435,8 @@ class SystemConfigControllerTest {
             450,
             BigDecimal.valueOf(0.50),
             BigDecimal.valueOf(1.50),
-            "2026-06-06 01:30:00"
+            "2026-06-06 01:30:00",
+            "configured"
         );
     }
 
@@ -448,7 +450,8 @@ class SystemConfigControllerTest {
             "repoguard",
             null,
             null,
-            "2026-06-06 01:30:00"
+            "2026-06-06 01:30:00",
+            "configured"
         );
     }
 
@@ -462,7 +465,8 @@ class SystemConfigControllerTest {
             "/",
             null,
             null,
-            "2026-06-06 01:30:00"
+            "2026-06-06 01:30:00",
+            "configured"
         );
     }
 

@@ -96,6 +96,24 @@ class SecretReEncryptionServiceTest {
         verify(integrationConfigMapper, never()).updateById(Mockito.any(IntegrationConfig.class));
     }
 
+    @Test
+    void dryRunReportsKeyMismatchAndDamagedCiphertext() {
+        IntegrationConfig mismatched = integrationConfig(1L, "GITHUB", "enc:v2:legacy-key:not-a-real-payload");
+        ReviewPolicyConfig damaged = reviewPolicyConfig(1L, "dashscope", "enc:v2:" + OLD_KEY_ID + ":not-a-real-payload");
+        when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of(mismatched));
+        when(reviewPolicyConfigMapper.selectList(isNull())).thenReturn(List.of(damaged));
+
+        var result = service.reEncrypt(request(false, null));
+
+        assertThat(result.failedCount()).isEqualTo(2);
+        assertThat(result.items()).extracting("status").containsExactly("KEY_MISMATCH", "DECRYPT_FAILED");
+        assertThat(result.items().getFirst().sourceKeyId()).isEqualTo("legacy-key");
+        assertThat(result.items().getFirst().targetKeyId()).isEqualTo(NEW_KEY_ID);
+        assertThat(result.items().get(1).sourceKeyId()).isEqualTo(OLD_KEY_ID);
+        verify(integrationConfigMapper, never()).updateById(Mockito.any(IntegrationConfig.class));
+        verify(reviewPolicyConfigMapper, never()).updateById(Mockito.any(ReviewPolicyConfig.class));
+    }
+
     private SecretReEncryptionRequest request(boolean execute, String confirmText) {
         return new SecretReEncryptionRequest(
             OLD_KEY,

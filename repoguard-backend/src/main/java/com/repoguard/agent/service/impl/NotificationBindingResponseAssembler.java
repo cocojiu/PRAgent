@@ -3,10 +3,10 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.NotificationBindingDto;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretValueView;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 /**
  * Converts notification channel binding entities into API response DTOs.
@@ -24,6 +24,8 @@ public class NotificationBindingResponseAssembler {
     }
 
     public NotificationBindingDto assemble(NotificationChannelBinding binding) {
+        SecretValueView webhookUrl = SecretValueView.inspect(secretCryptoService, binding.getWebhookUrlValue());
+        SecretValueView secret = SecretValueView.inspect(secretCryptoService, binding.getSecretValue());
         return new NotificationBindingDto(
             binding.getId(),
             binding.getName(),
@@ -31,8 +33,8 @@ public class NotificationBindingResponseAssembler {
             binding.getOrganization(),
             binding.getRepository(),
             binding.getEnabled(),
-            hasSecret(binding.getWebhookUrlValue()) ? MASKED_SECRET : null,
-            hasSecret(binding.getSecretValue()) ? MASKED_SECRET : null,
+            SecretValueView.STATUS_CONFIGURED.equals(webhookUrl.status()) ? MASKED_SECRET : null,
+            SecretValueView.STATUS_CONFIGURED.equals(secret.status()) ? MASKED_SECRET : null,
             binding.getNotifyReviewCompleted(),
             binding.getNotifyReviewFailed(),
             binding.getNotifyHumanReviewRequired(),
@@ -41,12 +43,10 @@ public class NotificationBindingResponseAssembler {
             format(binding.getLastCheckedAt()),
             binding.getLastError(),
             format(binding.getCreatedAt()),
-            format(binding.getUpdatedAt())
+            format(binding.getUpdatedAt()),
+            webhookUrl.status(),
+            secret.status()
         );
-    }
-
-    private boolean hasSecret(String encrypted) {
-        return StringUtils.hasText(secretCryptoService.decrypt(encrypted));
     }
 
     private String format(LocalDateTime value) {

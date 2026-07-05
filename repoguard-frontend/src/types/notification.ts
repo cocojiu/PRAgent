@@ -6,7 +6,9 @@ export interface NotificationBinding {
   repository: string;
   enabled: boolean;
   webhookUrl?: string;
+  webhookUrlStatus?: "missing" | "configured" | "key_mismatch" | "decrypt_failed";
   secret?: string;
+  secretStatus?: "missing" | "configured" | "key_mismatch" | "decrypt_failed";
   notifyReviewCompleted: boolean;
   notifyReviewFailed: boolean;
   notifyHumanReviewRequired: boolean;

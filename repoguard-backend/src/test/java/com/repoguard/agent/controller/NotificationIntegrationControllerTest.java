@@ -210,7 +210,9 @@ class NotificationIntegrationControllerTest {
                 "2026-06-22 18:00:00",
                 null,
                 "2026-06-20 10:00:00",
-                "2026-06-22 18:00:00"
+                "2026-06-22 18:00:00",
+                "configured",
+                "configured"
             )), 1);
         }
 

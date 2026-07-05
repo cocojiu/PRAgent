@@ -52,6 +52,20 @@ class NotificationBindingRequestApplierTest {
     }
 
     @Test
+    void applyUpdateCanReplaceBrokenExistingSecretsWithoutDecryptingThem() {
+        NotificationChannelBinding binding = bindingWithSecrets();
+        binding.setWebhookUrlValue("enc:broken-webhook");
+        binding.setSecretValue("enc:broken-secret");
+        when(secretCryptoService.encrypt("https://new.example/webhook")).thenReturn("enc:new-webhook");
+        when(secretCryptoService.encrypt("new-secret")).thenReturn("enc:new-secret");
+
+        applier.apply(binding, request("https://new.example/webhook", "new-secret"), now(), false);
+
+        assertThat(binding.getWebhookUrlValue()).isEqualTo("enc:new-webhook");
+        assertThat(binding.getSecretValue()).isEqualTo("enc:new-secret");
+    }
+
+    @Test
     void applyRejectsMissingWebhookUrl() {
         NotificationChannelBinding binding = new NotificationChannelBinding();
 

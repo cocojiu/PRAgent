@@ -19,6 +19,7 @@ public record ReviewPolicyConfigDto(
     Integer chunkMaxLines,
     BigDecimal inputTokenPricePerMillion,
     BigDecimal outputTokenPricePerMillion,
-    String updatedAt
+    String updatedAt,
+    String secretStatus
 ) {
 }

@@ -9,6 +9,7 @@ public record ServiceIntegrationConfigDto(
     String resource,
     String lastCheckedAt,
     String lastError,
-    String updatedAt
+    String updatedAt,
+    String secretStatus
 ) {
 }

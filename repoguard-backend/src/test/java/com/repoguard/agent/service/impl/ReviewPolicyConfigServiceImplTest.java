@@ -77,6 +77,30 @@ class ReviewPolicyConfigServiceImplTest {
     }
 
     @Test
+    void getReviewPolicyReportsDecryptFailedWithoutThrowing() {
+        ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:local:not-a-real-payload");
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+        var result = service.getReviewPolicy();
+
+        assertThat(result.apiKey()).isNull();
+        assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
+    }
+
+    @Test
+    void updateReviewPolicyCanReplaceMismatchedExistingApiKeyWithoutDecryptingIt() {
+        ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:old-key:not-a-real-payload");
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+        var result = service.updateReviewPolicy(request("sk-repaired-9999"));
+
+        assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-repaired-9999");
+        assertThat(result.apiKey()).isEqualTo("****9999");
+        assertThat(result.secretStatus()).isEqualTo("configured");
+        verify(reviewPolicyConfigMapper).updateById(config);
+    }
+
+    @Test
     void updateReviewPolicyStoresNewApiKeyAndTrimsOptionalBaseUrl() {
         ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);

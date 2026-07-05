@@ -26,6 +26,8 @@ public class SecretReEncryptionService {
     private static final String STATUS_SKIPPED_EMPTY = "SKIPPED_EMPTY";
     private static final String STATUS_SKIPPED_TARGET_KEY = "SKIPPED_TARGET_KEY";
     private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_KEY_MISMATCH = "KEY_MISMATCH";
+    private static final String STATUS_DECRYPT_FAILED = "DECRYPT_FAILED";
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
@@ -62,7 +64,7 @@ public class SecretReEncryptionService {
         int reEncryptedCount = (int) items.stream()
             .filter(item -> STATUS_RE_ENCRYPTED.equals(item.status()) || STATUS_WOULD_RE_ENCRYPT.equals(item.status()))
             .count();
-        int failedCount = (int) items.stream().filter(item -> STATUS_FAILED.equals(item.status())).count();
+        int failedCount = (int) items.stream().filter(item -> isFailedStatus(item.status())).count();
         int skippedCount = items.size() - reEncryptedCount - failedCount;
         return new SecretReEncryptionResponse(
             execute,
@@ -135,11 +137,26 @@ public class SecretReEncryptionService {
         if (!StringUtils.hasText(value)) {
             return item(tableName, recordId, fieldName, provider, "empty", null, targetCrypto, STATUS_SKIPPED_EMPTY, "No secret value configured");
         }
+        String sourceKeyId = null;
+        String sourceFormat = "unknown";
         try {
-            String sourceKeyId = sourceCrypto.encryptedKeyId(value);
-            String sourceFormat = resolveSourceFormat(value, sourceKeyId);
+            sourceKeyId = sourceCrypto.encryptedKeyId(value);
+            sourceFormat = resolveSourceFormat(value, sourceKeyId);
             if (targetCrypto.isVersionedCiphertext(value) && targetCrypto.activeKeyId().equals(targetCrypto.encryptedKeyId(value))) {
                 return item(tableName, recordId, fieldName, provider, sourceFormat, sourceKeyId, targetCrypto, STATUS_SKIPPED_TARGET_KEY, "Already encrypted with target key id");
+            }
+            if (sourceCrypto.isVersionedCiphertext(value) && !sourceCrypto.activeKeyId().equals(sourceKeyId)) {
+                return item(
+                    tableName,
+                    recordId,
+                    fieldName,
+                    provider,
+                    sourceFormat,
+                    sourceKeyId,
+                    targetCrypto,
+                    STATUS_KEY_MISMATCH,
+                    "Encrypted secret key id does not match source encryption key id"
+                );
             }
             sourceCrypto.decrypt(value);
             return item(
@@ -154,12 +171,18 @@ public class SecretReEncryptionService {
                 execute ? "Secret was re-encrypted" : "Secret can be re-encrypted"
             );
         } catch (Exception ex) {
-            return item(tableName, recordId, fieldName, provider, "unknown", null, targetCrypto, STATUS_FAILED, ex.getMessage());
+            return item(tableName, recordId, fieldName, provider, sourceFormat, sourceKeyId, targetCrypto, STATUS_DECRYPT_FAILED, ex.getMessage());
         }
     }
 
     private boolean shouldUpdate(SecretReEncryptionItemDto item, boolean execute) {
         return execute && STATUS_RE_ENCRYPTED.equals(item.status());
+    }
+
+    private boolean isFailedStatus(String status) {
+        return STATUS_FAILED.equals(status)
+            || STATUS_KEY_MISMATCH.equals(status)
+            || STATUS_DECRYPT_FAILED.equals(status);
     }
 
     private String resolveSourceFormat(String value, String sourceKeyId) {

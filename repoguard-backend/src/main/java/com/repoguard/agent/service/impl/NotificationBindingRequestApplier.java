@@ -36,14 +36,12 @@ public class NotificationBindingRequestApplier {
         binding.setOrganization(request.organization().trim());
         binding.setRepository(request.repository().trim());
         binding.setEnabled(Boolean.TRUE.equals(request.enabled()));
-        String existingWebhookUrl = create ? null : secretCryptoService.decrypt(binding.getWebhookUrlValue());
-        String existingSecret = create ? null : secretCryptoService.decrypt(binding.getSecretValue());
-        String webhookUrl = resolveSecret(existingWebhookUrl, request.webhookUrl());
+        String webhookUrl = resolveSecret(create ? null : binding.getWebhookUrlValue(), request.webhookUrl());
         if (!StringUtils.hasText(webhookUrl)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Webhook URL is required");
         }
         binding.setWebhookUrlValue(secretCryptoService.encrypt(webhookUrl));
-        binding.setSecretValue(secretCryptoService.encrypt(resolveSecret(existingSecret, request.secret())));
+        binding.setSecretValue(secretCryptoService.encrypt(resolveSecret(create ? null : binding.getSecretValue(), request.secret())));
         binding.setNotifyReviewCompleted(request.notifyReviewCompleted());
         binding.setNotifyReviewFailed(request.notifyReviewFailed());
         binding.setNotifyHumanReviewRequired(request.notifyHumanReviewRequired());
@@ -53,9 +51,9 @@ public class NotificationBindingRequestApplier {
         binding.setUpdatedAt(now);
     }
 
-    private String resolveSecret(String existing, String requested) {
+    private String resolveSecret(String encryptedExisting, String requested) {
         if (MASKED_SECRET.equals(requested)) {
-            return existing;
+            return secretCryptoService.decrypt(encryptedExisting);
         }
         return trim(requested);
     }

@@ -5,6 +5,7 @@ import type {
   IntegrationDiagnosticItem,
   IntegrationField,
   ReviewPolicyConfig,
+  SecretStatus,
   ServiceIntegrationConfig
 } from "@/types";
 import { providerMap } from "./integrationDefaults";
@@ -14,11 +15,11 @@ type IntegrationPatch = Pick<IntegrationConfig, "fields" | "message" | "metaLabe
 };
 
 export const buildGithubIntegrationPatch = (config: GithubIntegrationConfig): IntegrationPatch => ({
-  status: config.status === "configured" ? "connected" : config.status === "failed" ? "failed" : "missing_secret",
-  statusText: config.status === "configured" ? "已连接" : config.status === "failed" ? "连接失败" : "缺少 Token",
+  status: secretIntegrationStatus(config.secretStatus, config.status),
+  statusText: secretIntegrationStatusText(config.secretStatus, "Token", config.status),
   metaLabel: "更新时间",
   metaValue: config.updatedAt ?? "未更新",
-  message: config.lastError ?? (config.status === "configured" ? "GitHub 配置已保存" : "请配置 GitHub Token"),
+  message: config.lastError ?? secretIntegrationMessage(config.secretStatus, "GitHub Token", "GitHub 配置已保存", config.status),
   fields: [
     { label: "API Base URL", value: config.baseUrl, type: "text" },
     { label: "Token", value: config.token ?? "", type: "password", placeholder: "GitHub token" },
@@ -30,13 +31,16 @@ export const buildGithubIntegrationPatch = (config: GithubIntegrationConfig): In
 export const buildServiceIntegrationPatch = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfig): IntegrationPatch => {
   const isConfigured = config.status === "configured";
   const isFailed = config.status === "failed";
+  const secretBroken = isSecretBroken(config.secretStatus);
   const serviceName = id === "mysql" ? "MySQL" : "RabbitMQ";
   return {
-    status: isConfigured ? "connected" : isFailed ? "failed" : "missing_secret",
-    statusText: isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置",
+    status: secretBroken ? "failed" : isConfigured ? "connected" : isFailed ? "failed" : "missing_secret",
+    statusText: secretBroken ? "密文异常" : isConfigured ? "已连接" : isFailed ? "连接失败" : "未配置",
     metaLabel: config.lastCheckedAt ? "检测时间" : "更新时间",
     metaValue: config.lastCheckedAt ?? config.updatedAt ?? "未更新",
-    message: config.lastError ?? (isConfigured
+    message: config.lastError ?? (secretBroken
+      ? `${serviceName} 保存的密文不可解密，请重新填写密钥或执行密钥轮换修复`
+      : isConfigured
       ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
       : `请配置用于检测的 ${serviceName} 连接信息`),
     diagnostics: [
@@ -68,11 +72,16 @@ const serviceFields = (id: "mysql" | "rabbitmq", config: ServiceIntegrationConfi
 };
 
 export const buildReviewPolicyIntegrationPatch = (config: ReviewPolicyConfig): IntegrationPatch => ({
-  status: config.apiKey ? "connected" : "missing_secret",
-  statusText: config.apiKey ? "已连接" : "缺少 API Key",
+  status: secretIntegrationStatus(config.secretStatus, config.apiKey ? "configured" : "not_configured"),
+  statusText: secretIntegrationStatusText(config.secretStatus, "API Key", config.apiKey ? "configured" : "not_configured"),
   metaLabel: "模型名称",
   metaValue: config.modelName,
-  message: config.apiKey ? "LLM 配置已保存" : "请配置 LLM API Key",
+  message: secretIntegrationMessage(
+    config.secretStatus,
+    "LLM API Key",
+    "LLM 配置已保存",
+    config.apiKey ? "configured" : "not_configured"
+  ),
   fields: [
     {
       label: "Provider",
@@ -160,4 +169,61 @@ const serviceConfigStatusText = (status: ServiceIntegrationConfig["status"]) => 
     default:
       return "未配置";
   }
+};
+
+const isSecretBroken = (status?: SecretStatus) => status === "key_mismatch" || status === "decrypt_failed";
+
+const secretIntegrationStatus = (secretStatus: SecretStatus | undefined, configStatus: string): IntegrationConfig["status"] => {
+  const normalizedStatus = normalizedSecretStatus(secretStatus, configStatus);
+  if (isSecretBroken(normalizedStatus)) {
+    return "failed";
+  }
+  if (normalizedStatus === "configured" || configStatus === "configured") {
+    return "connected";
+  }
+  if (configStatus === "failed") {
+    return "failed";
+  }
+  return "missing_secret";
+};
+
+const secretIntegrationStatusText = (
+  secretStatus: SecretStatus | undefined,
+  secretName: string,
+  configStatus: string
+) => {
+  const normalizedStatus = normalizedSecretStatus(secretStatus, configStatus);
+  if (normalizedStatus === "key_mismatch") {
+    return "密钥不匹配";
+  }
+  if (normalizedStatus === "decrypt_failed") {
+    return "密文异常";
+  }
+  if (normalizedStatus === "configured" || configStatus === "configured") {
+    return "已连接";
+  }
+  return `缺少 ${secretName}`;
+};
+
+const secretIntegrationMessage = (
+  secretStatus: SecretStatus | undefined,
+  secretName: string,
+  configuredMessage: string,
+  configStatus: string
+) => {
+  const normalizedStatus = normalizedSecretStatus(secretStatus, configStatus);
+  if (normalizedStatus === "key_mismatch") {
+    return `${secretName} 的 key id 与当前加密密钥不匹配，请重新填写或执行密钥轮换修复`;
+  }
+  if (normalizedStatus === "decrypt_failed") {
+    return `${secretName} 密文不可解密，请重新填写或执行重加密预检`;
+  }
+  return normalizedStatus === "configured" ? configuredMessage : `请配置 ${secretName}`;
+};
+
+const normalizedSecretStatus = (secretStatus: SecretStatus | undefined, configStatus: string): SecretStatus => {
+  if (secretStatus) {
+    return secretStatus;
+  }
+  return configStatus === "configured" ? "configured" : "missing";
 };

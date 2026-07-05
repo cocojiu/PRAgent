@@ -1,4 +1,5 @@
 export type IntegrationStatus = "connected" | "missing_secret" | "failed";
+export type SecretStatus = "missing" | "configured" | "key_mismatch" | "decrypt_failed";
 
 export interface IntegrationField {
   label: string;
@@ -32,6 +33,7 @@ export interface GithubIntegrationConfig {
   status: "configured" | "not_configured" | "failed";
   baseUrl: string;
   token?: string;
+  secretStatus?: SecretStatus;
   defaultOwner?: string;
   defaultRepo?: string;
   lastCheckedAt?: string;
@@ -52,6 +54,7 @@ export interface ServiceIntegrationConfig {
   baseUrl: string;
   username?: string;
   secret?: string;
+  secretStatus?: SecretStatus;
   resource?: string;
   lastCheckedAt?: string;
   lastError?: string;
@@ -71,6 +74,7 @@ export interface ReviewPolicyConfig {
   modelName: string;
   baseUrl?: string;
   apiKey?: string;
+  secretStatus?: SecretStatus;
   timeoutSeconds: number;
   temperature: number;
   maxTokens: number;

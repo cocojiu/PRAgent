@@ -9,6 +9,7 @@ public record GithubIntegrationConfigDto(
     String defaultRepo,
     String lastCheckedAt,
     String lastError,
-    String updatedAt
+    String updatedAt,
+    String secretStatus
 ) {
 }

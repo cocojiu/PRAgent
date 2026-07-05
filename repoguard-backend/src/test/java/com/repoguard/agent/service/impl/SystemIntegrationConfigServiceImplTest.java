@@ -100,6 +100,46 @@ class SystemIntegrationConfigServiceImplTest {
     }
 
     @Test
+    void getGithubIntegrationReportsKeyMismatchWithoutDecryptingSecret() {
+        IntegrationConfig config = githubConfig("enc:v2:old-key:not-a-real-payload");
+        when(integrationConfigMapper.selectOne(any())).thenReturn(config);
+
+        var result = service.getGithubIntegration();
+
+        assertThat(result.token()).isNull();
+        assertThat(result.secretStatus()).isEqualTo("key_mismatch");
+    }
+
+    @Test
+    void getMysqlIntegrationReportsDecryptFailedWithoutBreakingConfigPage() {
+        IntegrationConfig config = serviceConfig("MYSQL", "enc:v2:local:not-a-real-payload");
+        when(integrationConfigMapper.selectOne(any())).thenReturn(config);
+
+        var result = service.getMysqlIntegration();
+
+        assertThat(result.secret()).isNull();
+        assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
+    }
+
+    @Test
+    void updateGithubIntegrationCanReplaceDamagedExistingTokenWithoutDecryptingIt() {
+        IntegrationConfig config = githubConfig("enc:v2:local:not-a-real-payload");
+        when(integrationConfigMapper.selectOne(any())).thenReturn(config);
+
+        var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
+            "https://api.github.com",
+            "ghp_repaired_secret_1234",
+            "repo-guard-demo",
+            "spring-boot-demo"
+        ));
+
+        assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("ghp_repaired_secret_1234");
+        assertThat(result.token()).isEqualTo("****1234");
+        assertThat(result.secretStatus()).isEqualTo("configured");
+        verify(integrationConfigMapper).updateById(config);
+    }
+
+    @Test
     void updateMysqlIntegrationKeepsExistingSecretWhenMaskedValueIsSubmitted() {
         IntegrationConfig config = serviceConfig("MYSQL", "mysql-existing-1234");
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);

@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.SystemIntegrationConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -55,7 +56,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
-        String token = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.token());
+        String token = resolveSecretValue(config.getTokenValue(), request.token());
         config.setBaseUrl(request.baseUrl().trim());
         config.setTokenValue(secretCryptoService.encrypt(token));
         config.setDefaultOwner(trimToNull(request.defaultOwner()));
@@ -127,7 +128,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
 
     private ServiceIntegrationConfigDto updateServiceIntegration(String provider, ServiceIntegrationConfigRequest request) {
         IntegrationConfig config = loadServiceIntegration(provider);
-        String secret = resolveSecretValue(secretCryptoService.decrypt(config.getTokenValue()), request.secret());
+        String secret = resolveSecretValue(config.getTokenValue(), request.secret());
         config.setBaseUrl(request.baseUrl().trim());
         config.setDefaultOwner(trimToNull(request.username()));
         config.setDefaultRepo(trimToNull(request.resource()));
@@ -234,51 +235,46 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     }
 
     private GithubIntegrationConfigDto toGithubDto(IntegrationConfig config) {
+        SecretValueView secret = SecretValueView.inspect(secretCryptoService, config.getTokenValue());
         return new GithubIntegrationConfigDto(
             config.getProvider(),
             lower(config.getStatus()),
             config.getBaseUrl(),
-            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
+            secret.maskedValue(),
             config.getDefaultOwner(),
             config.getDefaultRepo(),
             format(config.getLastCheckedAt()),
             config.getLastError(),
-            format(config.getUpdatedAt())
+            format(config.getUpdatedAt()),
+            secret.status()
         );
     }
 
     private ServiceIntegrationConfigDto toServiceIntegrationDto(IntegrationConfig config) {
+        SecretValueView secret = SecretValueView.inspect(secretCryptoService, config.getTokenValue());
         return new ServiceIntegrationConfigDto(
             config.getProvider(),
             lower(config.getStatus()),
             config.getBaseUrl(),
             config.getDefaultOwner(),
-            maskSecret(secretCryptoService.decrypt(config.getTokenValue())),
+            secret.maskedValue(),
             config.getDefaultRepo(),
             format(config.getLastCheckedAt()),
             config.getLastError(),
-            format(config.getUpdatedAt())
+            format(config.getUpdatedAt()),
+            secret.status()
         );
     }
 
-    private String resolveSecretValue(String currentValue, String submittedValue) {
+    private String resolveSecretValue(String encryptedCurrentValue, String submittedValue) {
         if (submittedValue == null) {
-            return currentValue;
+            return secretCryptoService.decrypt(encryptedCurrentValue);
         }
         String trimmed = submittedValue.trim();
         if (trimmed.startsWith("****")) {
-            return currentValue;
+            return secretCryptoService.decrypt(encryptedCurrentValue);
         }
         return StringUtils.hasText(trimmed) ? trimmed : null;
-    }
-
-    private String maskSecret(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        String trimmed = value.trim();
-        int visible = Math.min(4, trimmed.length());
-        return "****" + trimmed.substring(trimmed.length() - visible);
     }
 
     private String trimToNull(String value) {

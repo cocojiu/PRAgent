@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.ReviewPolicyConfigService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -46,7 +47,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     @CacheEvict(cacheNames = CacheNames.DASHBOARD_OVERVIEW, allEntries = true)
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
-        String apiKey = resolveSecretValue(secretCryptoService.decrypt(config.getApiKeyValue()), request.apiKey());
+        String apiKey = resolveSecretValue(config.getApiKeyValue(), request.apiKey());
         config.setLlmEnabled(request.llmEnabled());
         config.setLlmProvider(request.llmProvider().trim());
         config.setModelName(request.modelName().trim());
@@ -106,12 +107,13 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     }
 
     private ReviewPolicyConfigDto toReviewPolicyDto(ReviewPolicyConfig config) {
+        SecretValueView secret = SecretValueView.inspect(secretCryptoService, config.getApiKeyValue());
         return new ReviewPolicyConfigDto(
             config.getLlmEnabled(),
             config.getLlmProvider(),
             config.getModelName(),
             config.getBaseUrl(),
-            maskSecret(secretCryptoService.decrypt(config.getApiKeyValue())),
+            secret.maskedValue(),
             config.getTimeoutSeconds(),
             config.getTemperature(),
             config.getMaxTokens(),
@@ -123,28 +125,20 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
             valueOrDefault(config.getChunkMaxLines(), DEFAULT_CHUNK_MAX_LINES),
             decimalOrZero(config.getInputTokenPricePerMillion()),
             decimalOrZero(config.getOutputTokenPricePerMillion()),
-            format(config.getUpdatedAt())
+            format(config.getUpdatedAt()),
+            secret.status()
         );
     }
 
-    private String resolveSecretValue(String currentValue, String submittedValue) {
+    private String resolveSecretValue(String encryptedCurrentValue, String submittedValue) {
         if (submittedValue == null) {
-            return currentValue;
+            return secretCryptoService.decrypt(encryptedCurrentValue);
         }
         String trimmed = submittedValue.trim();
         if (trimmed.startsWith("****")) {
-            return currentValue;
+            return secretCryptoService.decrypt(encryptedCurrentValue);
         }
         return StringUtils.hasText(trimmed) ? trimmed : null;
-    }
-
-    private String maskSecret(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        String trimmed = value.trim();
-        int visible = Math.min(4, trimmed.length());
-        return "****" + trimmed.substring(trimmed.length() - visible);
     }
 
     private String trimToNull(String value) {

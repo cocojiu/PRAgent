@@ -17,6 +17,8 @@ public record NotificationBindingDto(
     String lastCheckedAt,
     String lastError,
     String createdAt,
-    String updatedAt
+    String updatedAt,
+    String webhookUrlStatus,
+    String secretStatus
 ) {
 }

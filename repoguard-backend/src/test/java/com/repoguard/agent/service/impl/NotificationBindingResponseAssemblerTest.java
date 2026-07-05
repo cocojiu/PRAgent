@@ -43,6 +43,24 @@ class NotificationBindingResponseAssemblerTest {
 
         assertThat(result.webhookUrl()).isNull();
         assertThat(result.secret()).isNull();
+        assertThat(result.webhookUrlStatus()).isEqualTo("missing");
+        assertThat(result.secretStatus()).isEqualTo("missing");
+    }
+
+    @Test
+    void assembleReportsBrokenSecretsWithoutThrowing() {
+        SecretCryptoService realCrypto = new SecretCryptoService("test-encryption-key");
+        NotificationBindingResponseAssembler realAssembler = new NotificationBindingResponseAssembler(realCrypto);
+        NotificationChannelBinding binding = binding();
+        binding.setWebhookUrlValue("enc:v2:old-key:not-a-real-payload");
+        binding.setSecretValue("enc:v2:local:not-a-real-payload");
+
+        var result = realAssembler.assemble(binding);
+
+        assertThat(result.webhookUrl()).isNull();
+        assertThat(result.webhookUrlStatus()).isEqualTo("key_mismatch");
+        assertThat(result.secret()).isNull();
+        assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
     }
 
     private NotificationChannelBinding binding() {
