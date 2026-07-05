@@ -2,9 +2,11 @@ package com.repoguard.agent.observability;
 
 import com.repoguard.agent.external.ExternalCallException;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -98,6 +100,34 @@ public class RepoGuardMetrics {
             .record(nonNegative(duration));
     }
 
+    public void apiRequest(
+        Duration duration,
+        String method,
+        String path,
+        int status,
+        String outcome,
+        long responseBytes
+    ) {
+        String normalizedMethod = normalizeHttpMethod(method);
+        String normalizedPath = normalizePath(path);
+        String normalizedStatus = normalizeHttpStatus(status);
+        String normalizedOutcome = normalize(outcome);
+        timer(
+            "repoguard.api.request.duration",
+            "method", normalizedMethod,
+            "path", normalizedPath,
+            "status", normalizedStatus,
+            "outcome", normalizedOutcome
+        ).record(nonNegative(duration));
+        summary(
+            "repoguard.api.response.bytes",
+            "method", normalizedMethod,
+            "path", normalizedPath,
+            "status", normalizedStatus,
+            "outcome", normalizedOutcome
+        ).record(Math.max(0L, responseBytes));
+    }
+
     public void rabbitPublishFailed(String reason) {
         counter("repoguard.rabbit.publish.failed", "reason", normalize(reason)).increment();
     }
@@ -147,6 +177,13 @@ public class RepoGuardMetrics {
             .register(meterRegistry);
     }
 
+    private DistributionSummary summary(String name, String... tags) {
+        return DistributionSummary.builder(name)
+            .baseUnit("bytes")
+            .tags(tags)
+            .register(meterRegistry);
+    }
+
     private Duration nonNegative(Duration duration) {
         if (duration == null || duration.isNegative()) {
             return Duration.ZERO;
@@ -166,6 +203,25 @@ public class RepoGuardMetrics {
             return Boolean.toString(externalCallException.isRetryable());
         }
         return UNKNOWN;
+    }
+
+    private String normalizeHttpMethod(String value) {
+        if (!StringUtils.hasText(value)) {
+            return UNKNOWN;
+        }
+        return value.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z]+", "_");
+    }
+
+    private String normalizeHttpStatus(int status) {
+        return status <= 0 ? UNKNOWN : Integer.toString(status);
+    }
+
+    private String normalizePath(String value) {
+        if (!StringUtils.hasText(value)) {
+            return UNKNOWN;
+        }
+        String normalized = value.trim().replaceAll("\\s+", "");
+        return StringUtils.hasText(normalized) ? normalized.toLowerCase(Locale.ROOT) : UNKNOWN;
     }
 
     private String normalize(String value) {

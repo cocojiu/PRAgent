@@ -126,6 +126,26 @@ class RepoGuardMetricsTest {
             .value()).isEqualTo(7.0);
     }
 
+    @Test
+    void recordsApiRequestDurationAndResponseBytesWithStableTags() {
+        metrics.apiRequest(Duration.ofMillis(42), "get", "/api/v1/reviews/{id}", 200, "success", 128);
+
+        assertThat(timerCount(
+            "repoguard.api.request.duration",
+            "method", "GET",
+            "path", "/api/v1/reviews/{id}",
+            "status", "200",
+            "outcome", "success"
+        )).isEqualTo(1);
+        assertThat(summaryTotal(
+            "repoguard.api.response.bytes",
+            "method", "GET",
+            "path", "/api/v1/reviews/{id}",
+            "status", "200",
+            "outcome", "success"
+        )).isEqualTo(128.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }
@@ -136,5 +156,9 @@ class RepoGuardMetricsTest {
 
     private double timerTotalSeconds(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).timer().totalTime(java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    private double summaryTotal(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).summary().totalAmount();
     }
 }

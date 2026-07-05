@@ -13,7 +13,7 @@ public class TraceIdFilterConfig {
         FilterRegistrationBean<TraceIdFilter> registration = new FilterRegistrationBean<>();
         registration.setFilter(new TraceIdFilter());
         registration.addUrlPatterns("/*");
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE - 10);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
         return registration;
     }
 }
