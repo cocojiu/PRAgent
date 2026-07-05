@@ -7,6 +7,8 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
+import com.repoguard.agent.observability.RepoGuardMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -77,7 +79,8 @@ class CacheStatsServiceImplTest {
     }
 
     private static CacheManager initializedCacheManager() {
-        SimpleCacheManager cacheManager = (SimpleCacheManager) new CacheConfig().cacheManager();
+        RepoGuardMetrics metrics = new RepoGuardMetrics(new SimpleMeterRegistry());
+        SimpleCacheManager cacheManager = (SimpleCacheManager) new CacheConfig().cacheManager(metrics);
         cacheManager.afterPropertiesSet();
         return cacheManager;
     }

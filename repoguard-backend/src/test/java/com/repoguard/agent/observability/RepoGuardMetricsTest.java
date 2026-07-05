@@ -171,6 +171,29 @@ class RepoGuardMetricsTest {
             .getBaseUnit()).isEqualTo("rows");
     }
 
+    @Test
+    void recordsDashboardCacheAccessAndOperations() {
+        metrics.dashboardCacheAccess("dashboardSummary", "hit");
+        metrics.dashboardCacheAccess("dashboardSummary", "miss");
+        metrics.dashboardCacheOperation("dashboardSummary", "clear");
+
+        assertThat(counter(
+            "repoguard.dashboard.cache.access",
+            "cache", "dashboardsummary",
+            "result", "hit"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.dashboard.cache.access",
+            "cache", "dashboardsummary",
+            "result", "miss"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.dashboard.cache.operation",
+            "cache", "dashboardsummary",
+            "operation", "clear"
+        )).isEqualTo(1.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }

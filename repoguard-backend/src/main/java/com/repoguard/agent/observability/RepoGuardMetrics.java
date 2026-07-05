@@ -147,6 +147,22 @@ public class RepoGuardMetrics {
         ).record(Math.max(0L, rows));
     }
 
+    public void dashboardCacheAccess(String cacheName, String result) {
+        counter(
+            "repoguard.dashboard.cache.access",
+            "cache", normalize(cacheName),
+            "result", normalize(result)
+        ).increment();
+    }
+
+    public void dashboardCacheOperation(String cacheName, String operation) {
+        counter(
+            "repoguard.dashboard.cache.operation",
+            "cache", normalize(cacheName),
+            "operation", normalize(operation)
+        ).increment();
+    }
+
     public void rabbitPublishFailed(String reason) {
         counter("repoguard.rabbit.publish.failed", "reason", normalize(reason)).increment();
     }

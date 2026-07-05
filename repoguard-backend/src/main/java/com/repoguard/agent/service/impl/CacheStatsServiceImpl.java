@@ -31,8 +31,8 @@ public class CacheStatsServiceImpl implements CacheStatsService {
 
     private CacheStatsItemDto toStatsItem(String cacheName) {
         Cache cache = cacheManager.getCache(cacheName);
-        if (cache instanceof CaffeineCache caffeineCache) {
-            com.github.benmanes.caffeine.cache.Cache<Object, Object> nativeCache = caffeineCache.getNativeCache();
+        Object nativeCacheCandidate = cache == null ? null : cache.getNativeCache();
+        if (nativeCacheCandidate instanceof com.github.benmanes.caffeine.cache.Cache<?, ?> nativeCache) {
             CacheStats stats = nativeCache.stats();
             return new CacheStatsItemDto(
                 cacheName,
