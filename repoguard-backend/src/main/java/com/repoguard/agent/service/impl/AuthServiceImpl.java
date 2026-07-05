@@ -153,6 +153,11 @@ public class AuthServiceImpl implements AuthService {
             recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "account unavailable");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
         }
+        if (safeSessionVersion(storedToken) != safeSessionVersion(user)) {
+            revokeIfPresent(storedToken, now);
+            recordAudit(storedToken.getUserId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_FAILURE, "session version changed");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+        }
 
         if (!revokeActiveRefreshToken(storedToken, now)) {
             recordAudit(storedToken.getUserId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token already used");
@@ -214,6 +219,7 @@ public class AuthServiceImpl implements AuthService {
         UserRefreshToken storedToken = new UserRefreshToken();
         storedToken.setUserId(user.getId());
         storedToken.setTokenHash(authTokenService.hashRefreshToken(refreshToken.token()));
+        storedToken.setSessionVersion(safeSessionVersion(user));
         storedToken.setStatus(STATUS_ACTIVE);
         storedToken.setExpiresAt(now.plusSeconds(refreshToken.expiresInSeconds()));
         storedToken.setCreatedAt(now);
@@ -271,6 +277,14 @@ public class AuthServiceImpl implements AuthService {
         user.setSessionVersion((user.getSessionVersion() == null ? 0 : user.getSessionVersion()) + 1);
         user.setUpdatedAt(now);
         userAccountMapper.updateById(user);
+    }
+
+    private int safeSessionVersion(UserAccount user) {
+        return user.getSessionVersion() == null ? 0 : user.getSessionVersion();
+    }
+
+    private int safeSessionVersion(UserRefreshToken refreshToken) {
+        return refreshToken.getSessionVersion() == null ? 0 : refreshToken.getSessionVersion();
     }
 
     private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {

@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-06",
+  "item": "OPT-ARCH-022",
+  "title": "Strengthen access token and refresh token session-version invalidation",
+  "status": "completed",
+  "scope": [
+    "refresh token rows now store the issuing user session_version",
+    "refresh flow rejects and revokes tokens when the stored version no longer matches the current user session_version",
+    "new refresh tokens inherit the current user session_version so role changes, disables and forced resets close refresh-token race windows",
+    "tests cover refresh-token version mismatch, session-version persistence and existing access-token stale-session rejection"
+  ],
+  "verification": [
+    "mvn \"-Dtest=AuthServiceImplTest,AuthTokenFilterTest,AuthTokenServiceTest,UserManagementServiceImplTest\" test",
+    "mvn test",
+    "mvn -DskipTests package"
+  ],
+  "remaining": [
+    "consider adding short-lived operation confirmation tokens for the most sensitive admin actions"
+  ]
+}

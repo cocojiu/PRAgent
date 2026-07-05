@@ -11,6 +11,7 @@ public class UserRefreshToken {
     private Long id;
     private Long userId;
     private String tokenHash;
+    private Integer sessionVersion;
     private String status;
     private LocalDateTime expiresAt;
     private LocalDateTime revokedAt;
@@ -40,6 +41,14 @@ public class UserRefreshToken {
 
     public void setTokenHash(String tokenHash) {
         this.tokenHash = tokenHash;
+    }
+
+    public Integer getSessionVersion() {
+        return sessionVersion;
+    }
+
+    public void setSessionVersion(Integer sessionVersion) {
+        this.sessionVersion = sessionVersion;
     }
 
     public String getStatus() {
