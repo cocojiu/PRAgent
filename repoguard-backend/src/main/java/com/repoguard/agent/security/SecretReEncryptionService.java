@@ -6,8 +6,10 @@ import com.repoguard.agent.dto.SecretReEncryptionItemDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
 import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -31,13 +33,16 @@ public class SecretReEncryptionService {
 
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final NotificationChannelBindingMapper notificationChannelBindingMapper;
 
     public SecretReEncryptionService(
         IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        NotificationChannelBindingMapper notificationChannelBindingMapper
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.notificationChannelBindingMapper = notificationChannelBindingMapper;
     }
 
     @Transactional
@@ -59,6 +64,9 @@ public class SecretReEncryptionService {
         }
         for (ReviewPolicyConfig config : reviewPolicyConfigMapper.selectList(null)) {
             items.add(processReviewPolicy(config, sourceCrypto, targetCrypto, execute));
+        }
+        for (NotificationChannelBinding binding : notificationChannelBindingMapper.selectList(null)) {
+            items.addAll(processNotificationBinding(binding, sourceCrypto, targetCrypto, execute));
         }
 
         int reEncryptedCount = (int) items.stream()
@@ -122,6 +130,52 @@ public class SecretReEncryptionService {
             reviewPolicyConfigMapper.updateById(config);
         }
         return item;
+    }
+
+    private List<SecretReEncryptionItemDto> processNotificationBinding(
+        NotificationChannelBinding binding,
+        SecretCryptoService sourceCrypto,
+        SecretCryptoService targetCrypto,
+        boolean execute
+    ) {
+        List<SecretReEncryptionItemDto> items = new ArrayList<>();
+        SecretReEncryptionItemDto webhookUrl = processValue(
+            "notification_channel_binding",
+            binding.getId(),
+            "webhook_url_value",
+            binding.getProvider(),
+            binding.getWebhookUrlValue(),
+            sourceCrypto,
+            targetCrypto,
+            execute
+        );
+        SecretReEncryptionItemDto secret = processValue(
+            "notification_channel_binding",
+            binding.getId(),
+            "secret_value",
+            binding.getProvider(),
+            binding.getSecretValue(),
+            sourceCrypto,
+            targetCrypto,
+            execute
+        );
+        items.add(webhookUrl);
+        items.add(secret);
+
+        boolean updated = false;
+        if (shouldUpdate(webhookUrl, execute)) {
+            binding.setWebhookUrlValue(targetCrypto.encrypt(sourceCrypto.decrypt(binding.getWebhookUrlValue())));
+            updated = true;
+        }
+        if (shouldUpdate(secret, execute)) {
+            binding.setSecretValue(targetCrypto.encrypt(sourceCrypto.decrypt(binding.getSecretValue())));
+            updated = true;
+        }
+        if (updated) {
+            binding.setUpdatedAt(LocalDateTime.now());
+            notificationChannelBindingMapper.updateById(binding);
+        }
+        return items;
     }
 
     private SecretReEncryptionItemDto processValue(

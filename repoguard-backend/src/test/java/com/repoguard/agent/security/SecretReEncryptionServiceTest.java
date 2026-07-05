@@ -10,12 +10,15 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
+import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -28,10 +31,19 @@ class SecretReEncryptionServiceTest {
 
     private final IntegrationConfigMapper integrationConfigMapper = Mockito.mock(IntegrationConfigMapper.class);
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = Mockito.mock(ReviewPolicyConfigMapper.class);
+    private final NotificationChannelBindingMapper notificationChannelBindingMapper = Mockito.mock(NotificationChannelBindingMapper.class);
     private final SecretReEncryptionService service = new SecretReEncryptionService(
         integrationConfigMapper,
-        reviewPolicyConfigMapper
+        reviewPolicyConfigMapper,
+        notificationChannelBindingMapper
     );
+
+    @BeforeEach
+    void setUp() {
+        when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of());
+        when(reviewPolicyConfigMapper.selectList(isNull())).thenReturn(List.of());
+        when(notificationChannelBindingMapper.selectList(isNull())).thenReturn(List.of());
+    }
 
     @Test
     void dryRunReportsReEncryptableSecretsWithoutUpdatingRows() {
@@ -50,6 +62,74 @@ class SecretReEncryptionServiceTest {
         assertThat(result.items()).extracting("status").containsOnly("WOULD_RE_ENCRYPT");
         verify(integrationConfigMapper, never()).updateById(Mockito.any(IntegrationConfig.class));
         verify(reviewPolicyConfigMapper, never()).updateById(Mockito.any(ReviewPolicyConfig.class));
+    }
+
+    @Test
+    void dryRunReportsNotificationBindingSecretsWithoutUpdatingRows() {
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
+        NotificationChannelBinding binding = notificationBinding(
+            1L,
+            "DINGTALK",
+            oldCrypto.encrypt("https://example.com/webhook"),
+            oldCrypto.encrypt("signing-secret")
+        );
+        when(notificationChannelBindingMapper.selectList(isNull())).thenReturn(List.of(binding));
+
+        var result = service.reEncrypt(request(false, null));
+
+        assertThat(result.executed()).isFalse();
+        assertThat(result.scannedCount()).isEqualTo(2);
+        assertThat(result.reEncryptedCount()).isEqualTo(2);
+        assertThat(result.failedCount()).isZero();
+        assertThat(result.items()).extracting("tableName").containsOnly("notification_channel_binding");
+        assertThat(result.items()).extracting("fieldName").containsExactly("webhook_url_value", "secret_value");
+        assertThat(result.items()).extracting("status").containsOnly("WOULD_RE_ENCRYPT");
+        verify(notificationChannelBindingMapper, never()).updateById(Mockito.any(NotificationChannelBinding.class));
+    }
+
+    @Test
+    void executeReEncryptsNotificationBindingSecretsWithTargetKey() {
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
+        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, false);
+        NotificationChannelBinding binding = notificationBinding(
+            1L,
+            "WECOM",
+            oldCrypto.encrypt("https://example.com/wecom"),
+            oldCrypto.encrypt("wecom-secret")
+        );
+        when(notificationChannelBindingMapper.selectList(isNull())).thenReturn(List.of(binding));
+
+        var result = service.reEncrypt(request(true, "RE-ENCRYPT"));
+
+        assertThat(result.executed()).isTrue();
+        assertThat(result.scannedCount()).isEqualTo(2);
+        assertThat(result.reEncryptedCount()).isEqualTo(2);
+        assertThat(binding.getWebhookUrlValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
+        assertThat(binding.getSecretValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
+        assertThat(newCrypto.decrypt(binding.getWebhookUrlValue())).isEqualTo("https://example.com/wecom");
+        assertThat(newCrypto.decrypt(binding.getSecretValue())).isEqualTo("wecom-secret");
+        assertThat(binding.getUpdatedAt()).isNotNull();
+        verify(notificationChannelBindingMapper).updateById(binding);
+    }
+
+    @Test
+    void dryRunReportsNotificationBindingKeyMismatchAndDamagedCiphertext() {
+        NotificationChannelBinding binding = notificationBinding(
+            1L,
+            "DINGTALK",
+            "enc:v2:legacy-key:not-a-real-payload",
+            "enc:v2:" + OLD_KEY_ID + ":not-a-real-payload"
+        );
+        when(notificationChannelBindingMapper.selectList(isNull())).thenReturn(List.of(binding));
+
+        var result = service.reEncrypt(request(false, null));
+
+        assertThat(result.failedCount()).isEqualTo(2);
+        assertThat(result.items()).extracting("fieldName").containsExactly("webhook_url_value", "secret_value");
+        assertThat(result.items()).extracting("status").containsExactly("KEY_MISMATCH", "DECRYPT_FAILED");
+        assertThat(result.items().getFirst().sourceKeyId()).isEqualTo("legacy-key");
+        assertThat(result.items().get(1).sourceKeyId()).isEqualTo(OLD_KEY_ID);
+        verify(notificationChannelBindingMapper, never()).updateById(Mockito.any(NotificationChannelBinding.class));
     }
 
     @Test
@@ -153,5 +233,20 @@ class SecretReEncryptionServiceTest {
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
+    }
+
+    private NotificationChannelBinding notificationBinding(Long id, String provider, String webhookUrlValue, String secretValue) {
+        NotificationChannelBinding binding = new NotificationChannelBinding();
+        binding.setId(id);
+        binding.setName(provider + " binding");
+        binding.setProvider(provider);
+        binding.setOrganization("octocat");
+        binding.setRepository("Hello-World");
+        binding.setEnabled(true);
+        binding.setWebhookUrlValue(webhookUrlValue);
+        binding.setSecretValue(secretValue);
+        binding.setCreatedAt(LocalDateTime.now());
+        binding.setUpdatedAt(LocalDateTime.now());
+        return binding;
     }
 }
