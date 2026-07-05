@@ -122,7 +122,10 @@
 
           <ReviewDetailGithubCommentsCard
             :can-manage="canManage"
+            :can-load-github-comments="isTerminalTask"
             :can-publish-github-comments="canPublishGithubComments"
+            :preview-loading="previewLoading"
+            :history-loading="historyLoading"
             :publishing-comments="publishingComments"
             :human-review-publish-block-reason="humanReviewPublishBlockReason"
             :preview-error="previewError"
@@ -146,6 +149,7 @@
             :publication-message-text="publicationMessageText"
             :publication-batch-status-class="publicationBatchStatusClass"
             :publication-batch-status-text="publicationBatchStatusText"
+            @load-preview="loadGithubCommentData"
             @publish="confirmPublishGithubComments"
           />
 
@@ -249,9 +253,11 @@ const {
   githubCommentPreview,
   githubCommentPublishResult,
   historyError,
+  historyLoading,
   loadGithubCommentPreview,
   loadGithubCommentPublicationHistory,
   previewError,
+  previewLoading,
   publicationHistoryBatches,
   publishedCommentCount,
   publishingComments,
@@ -278,8 +284,6 @@ const {
   clearGithubCommentPreviewAndHistory,
   getTaskId: () => Number(route.params.id),
   isTerminalReviewStatus,
-  loadGithubCommentPreview,
-  loadGithubCommentPublicationHistory,
   maxPollFailures: MAX_POLL_FAILURES,
   resetGithubCommentPublishResult,
   stopPolling: () => stopPolling(),
@@ -404,11 +408,18 @@ const { submittingHumanReview, submitHumanReviewDecision } = useReviewDetailHuma
   selectedTask
 });
 
+const refreshLoadedGithubCommentPreview = async (id: number) => {
+  if (!githubCommentPreview.value) {
+    return;
+  }
+  await loadGithubCommentPreview(id);
+};
+
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
   canManage,
   findingFeedbackPromptTitle,
   isTerminalTask,
-  loadGithubCommentPreview,
+  loadGithubCommentPreview: refreshLoadedGithubCommentPreview,
   resetGithubCommentPublishResult,
   selectedTask
 });
@@ -433,6 +444,17 @@ const openPrUrl = () => {
   if (selectedTask.value?.prUrl) {
     window.open(selectedTask.value.prUrl, "_blank", "noopener,noreferrer");
   }
+};
+
+const loadGithubCommentData = async () => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id) || !isTerminalTask.value) {
+    return;
+  }
+  await Promise.all([
+    loadGithubCommentPreview(id),
+    loadGithubCommentPublicationHistory(id)
+  ]);
 };
 
 watch(

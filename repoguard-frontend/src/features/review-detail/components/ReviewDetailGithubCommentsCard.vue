@@ -1,8 +1,20 @@
 <template>
-  <article class="dashboard-card github-preview-card">
+  <article v-loading="previewLoading || historyLoading" class="dashboard-card github-preview-card">
     <div class="card-title-row">
       <h2>GitHub 评论预览</h2>
       <el-button
+        v-if="!githubCommentPreview"
+        type="primary"
+        plain
+        :disabled="!canLoadGithubComments"
+        :loading="previewLoading || historyLoading"
+        @click="$emit('loadPreview')"
+      >
+        <Github :size="16" />
+        加载预览
+      </el-button>
+      <el-button
+        v-else
         type="primary"
         :disabled="!canManage || !canPublishGithubComments"
         :loading="publishingComments"
@@ -156,7 +168,17 @@
       </div>
       <el-empty v-else-if="!historyError" description="暂无回写历史" />
     </template>
-    <el-empty v-else-if="!previewError" description="评论预览加载中" />
+    <el-empty v-else-if="!previewError" description="评论预览尚未加载">
+      <el-button
+        type="primary"
+        plain
+        :disabled="!canLoadGithubComments"
+        :loading="previewLoading || historyLoading"
+        @click="$emit('loadPreview')"
+      >
+        加载评论预览
+      </el-button>
+    </el-empty>
   </article>
 </template>
 
@@ -175,7 +197,10 @@ import type {
 
 defineProps<{
   canManage: boolean;
+  canLoadGithubComments: boolean;
   canPublishGithubComments: boolean;
+  previewLoading: boolean;
+  historyLoading: boolean;
   publishingComments: boolean;
   humanReviewPublishBlockReason: string;
   previewError: string;
@@ -202,6 +227,7 @@ defineProps<{
 }>();
 
 defineEmits<{
+  loadPreview: [];
   publish: [];
 }>();
 </script>

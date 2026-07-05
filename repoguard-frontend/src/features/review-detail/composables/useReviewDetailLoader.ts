@@ -11,8 +11,6 @@ type UseReviewDetailLoaderOptions = {
   clearGithubCommentPreviewAndHistory: () => void;
   getTaskId: () => number;
   isTerminalReviewStatus: (status?: ReviewStatus | string) => boolean;
-  loadGithubCommentPreview: (id: number) => Promise<void>;
-  loadGithubCommentPublicationHistory: (id: number) => Promise<void>;
   maxPollFailures: number;
   resetGithubCommentPublishResult: () => void;
   stopPolling: () => void;
@@ -31,8 +29,6 @@ export const useReviewDetailLoader = ({
   clearGithubCommentPreviewAndHistory,
   getTaskId,
   isTerminalReviewStatus,
-  loadGithubCommentPreview,
-  loadGithubCommentPublicationHistory,
   maxPollFailures,
   resetGithubCommentPublishResult,
   stopPolling,
@@ -46,12 +42,8 @@ export const useReviewDetailLoader = ({
   const lastRefreshedAt = ref("");
   const selectedTask = ref<ReviewTaskDetail | null>(null);
 
-  const loadTerminalGithubCommentData = async (id: number, status: ReviewStatus | string) => {
+  const clearNonTerminalGithubCommentData = (status: ReviewStatus | string) => {
     if (isTerminalReviewStatus(status)) {
-      await Promise.all([
-        loadGithubCommentPreview(id),
-        loadGithubCommentPublicationHistory(id)
-      ]);
       return;
     }
     clearGithubCommentPreviewAndHistory();
@@ -83,7 +75,7 @@ export const useReviewDetailLoader = ({
       pollErrorMessage.value = "";
       pollFailureCount.value = 0;
       lastRefreshedAt.value = formatRefreshTime();
-      await loadTerminalGithubCommentData(id, task.status);
+      clearNonTerminalGithubCommentData(task.status);
       syncPolling();
     } catch (error) {
       if (!options.silent) {

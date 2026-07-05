@@ -7,6 +7,8 @@ import { getErrorMessage } from "@/utils/errors";
 export const useReviewDetailGithubComments = () => {
   const previewError = ref("");
   const historyError = ref("");
+  const previewLoading = ref(false);
+  const historyLoading = ref(false);
   const publishingComments = ref(false);
   const githubCommentPreview = ref<GithubCommentPreview | null>(null);
   const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | null>(null);
@@ -18,21 +20,27 @@ export const useReviewDetailGithubComments = () => {
 
   const loadGithubCommentPreview = async (id: number) => {
     previewError.value = "";
+    previewLoading.value = true;
     try {
       githubCommentPreview.value = await fetchGithubCommentPreview(id);
     } catch (error) {
       githubCommentPreview.value = null;
       previewError.value = getErrorMessage(error, "请求失败");
+    } finally {
+      previewLoading.value = false;
     }
   };
 
   const loadGithubCommentPublicationHistory = async (id: number) => {
     historyError.value = "";
+    historyLoading.value = true;
     try {
       githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id);
     } catch (error) {
       githubCommentPublicationHistory.value = null;
       historyError.value = getErrorMessage(error, "请求失败");
+    } finally {
+      historyLoading.value = false;
     }
   };
 
@@ -75,7 +83,9 @@ export const useReviewDetailGithubComments = () => {
     githubCommentPublicationHistory,
     githubCommentPublishResult,
     historyError,
+    historyLoading,
     previewError,
+    previewLoading,
     publicationHistoryBatches,
     publishedCommentCount,
     publishingComments,
