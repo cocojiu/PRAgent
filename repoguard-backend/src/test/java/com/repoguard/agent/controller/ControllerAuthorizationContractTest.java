@@ -31,6 +31,7 @@ class ControllerAuthorizationContractTest {
         "AuthController#refresh",
         "AuthController#resetRefreshToken",
         "AuthController#logout",
+        "FrontendPerformanceController#recordPerformance",
         "GithubWebhookController#receive"
     );
 

@@ -163,6 +163,49 @@ public class RepoGuardMetrics {
         ).increment();
     }
 
+    public void frontendApiWaterfallRequest(
+        Duration duration,
+        String route,
+        String operation,
+        String method,
+        String status,
+        String result
+    ) {
+        String normalizedRoute = normalize(route);
+        String normalizedOperation = normalize(operation);
+        String normalizedMethod = normalizeHttpMethod(method);
+        String normalizedStatus = normalize(status);
+        String normalizedResult = normalize(result);
+        timer(
+            "repoguard.frontend.api.waterfall.duration",
+            "route", normalizedRoute,
+            "operation", normalizedOperation,
+            "method", normalizedMethod,
+            "status", normalizedStatus,
+            "result", normalizedResult
+        ).record(nonNegative(duration));
+        counter(
+            "repoguard.frontend.api.waterfall.request",
+            "route", normalizedRoute,
+            "operation", normalizedOperation,
+            "method", normalizedMethod,
+            "status", normalizedStatus,
+            "result", normalizedResult
+        ).increment();
+    }
+
+    public void frontendLongTask(Duration duration, String route) {
+        String normalizedRoute = normalize(route);
+        timer(
+            "repoguard.frontend.long_task.duration",
+            "route", normalizedRoute
+        ).record(nonNegative(duration));
+        counter(
+            "repoguard.frontend.long_task",
+            "route", normalizedRoute
+        ).increment();
+    }
+
     public void rabbitPublishFailed(String reason) {
         counter("repoguard.rabbit.publish.failed", "reason", normalize(reason)).increment();
     }

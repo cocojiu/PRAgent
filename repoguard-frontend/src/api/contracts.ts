@@ -1,4 +1,5 @@
 import { request } from "@/api/client";
+import { observeFrontendApiRequest } from "@/observability/frontendPerformance";
 import type { AuthResponse, CurrentUser, LoginRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import type {
@@ -52,6 +53,7 @@ import type {
   SystemSettingsRequest,
   TimelineItem
 } from "@/types";
+import { RequestError } from "@/utils/errors";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 type QueryParams = Record<string, string | number | undefined>;
@@ -488,5 +490,32 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   if (payload !== undefined) {
     options.body = JSON.stringify(payload);
   }
-  return request<ApiContract[Operation]["response"]>(endpoint.path(input), endpoint.query?.(input), options);
+  const startedAtMs = currentTimeMs();
+  try {
+    const response = await request<ApiContract[Operation]["response"]>(
+      endpoint.path(input),
+      endpoint.query?.(input),
+      options
+    );
+    observeFrontendApiRequest({
+      operation: String(operation),
+      method,
+      result: "success",
+      startedAtMs,
+      durationMs: currentTimeMs() - startedAtMs
+    });
+    return response;
+  } catch (error) {
+    observeFrontendApiRequest({
+      operation: String(operation),
+      method,
+      status: error instanceof RequestError ? error.status : undefined,
+      result: "failed",
+      startedAtMs,
+      durationMs: currentTimeMs() - startedAtMs
+    });
+    throw error;
+  }
 };
+
+const currentTimeMs = () => (typeof performance === "undefined" ? Date.now() : performance.now());

@@ -31,7 +31,13 @@ import "./features/review-tasks/reviewTasks.css";
 import "./features/system-settings/systemSettings.css";
 import "./features/user-management/userManagement.css";
 import App from "./App.vue";
+import { startFrontendPerformanceObservation } from "./observability/frontendPerformance";
 import { router } from "./router";
+
+startFrontendPerformanceObservation(() => {
+  const name = router.currentRoute.value.name;
+  return typeof name === "string" ? name : undefined;
+});
 
 const app = createApp(App);
 

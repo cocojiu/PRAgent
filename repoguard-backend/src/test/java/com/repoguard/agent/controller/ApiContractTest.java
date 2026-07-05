@@ -30,6 +30,7 @@ class ApiContractTest {
         CacheStatsController.class,
         DashboardController.class,
         DataRetentionController.class,
+        FrontendPerformanceController.class,
         GithubWebhookController.class,
         MessageQueueHealthController.class,
         NotificationController.class,

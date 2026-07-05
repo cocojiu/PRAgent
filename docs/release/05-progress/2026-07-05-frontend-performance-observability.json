@@ -1,0 +1,24 @@
+{
+  "date": "2026-07-05",
+  "item": "OPT-ARCH-028",
+  "title": "Frontend long task and initial API waterfall observability",
+  "status": "completed",
+  "scope": [
+    "frontend records initial API request waterfall by typed operation and route",
+    "frontend observes browser long task entries during the initial load window",
+    "authenticated frontend reports are batched to /api/v1/observability/frontend/performance",
+    "backend records frontend API waterfall and long task metrics with bounded tags"
+  ],
+  "verification": [
+    "mvn \"-Dtest=FrontendPerformanceControllerTest,FrontendPerformanceObservationServiceImplTest,RepoGuardMetricsTest,ApiContractTest,ControllerAuthorizationContractTest\" test",
+    "node node_modules/vitest/vitest.mjs run src/observability/frontendPerformance.test.ts src/api/contracts.test.ts src/api/client.test.ts",
+    "mvn test",
+    "node node_modules/vitest/vitest.mjs run",
+    "node node_modules/vue-tsc/bin/vue-tsc.js -b",
+    "node node_modules/vite/bin/vite.js build",
+    "node node_modules/eslint/bin/eslint.js \"src/**/*.{ts,vue}\""
+  ],
+  "remaining": [
+    "collect production baseline data and tune alert thresholds for oversized responses and frontend long tasks"
+  ]
+}
