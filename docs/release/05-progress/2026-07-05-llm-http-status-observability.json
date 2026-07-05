@@ -1,0 +1,18 @@
+{
+  "date": "2026-07-05",
+  "item": "OPT-ARCH-020",
+  "title": "Explicit LLM HTTP status classification",
+  "status": "completed",
+  "scope": [
+    "LLM reviewer checks HTTP error status before parsing response bodies",
+    "LLM connection probe checks HTTP error status before parsing smoke-test responses",
+    "LLM HTTP 401/403, 429, 5xx, invalid request and model-not-found statuses map to stable external call categories",
+    "non-JSON successful LLM responses remain distinguishable as parse failures"
+  ],
+  "verification": [
+    "mvn \"-Dtest=ExternalCallErrorClassifierTest,LlmPullRequestReviewerTest,LlmConnectionProbeTest,LlmConnectionProbeResponseParserTest\" test"
+  ],
+  "remaining": [
+    "collect production error-rate baseline by llm failure category"
+  ]
+}

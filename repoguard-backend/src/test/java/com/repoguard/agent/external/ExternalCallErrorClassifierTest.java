@@ -34,6 +34,30 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void classifiesLlmHttpStatusFailuresWithRetrySemantics() {
+        ExternalCallException unauthorized = ExternalCallErrorClassifier.llm(responseException(401, "Unauthorized"));
+        ExternalCallException forbidden = ExternalCallErrorClassifier.llm(responseException(403, "Forbidden"));
+        ExternalCallException rateLimited = ExternalCallErrorClassifier.llm(responseException(429, "Too Many Requests"));
+        ExternalCallException unavailable = ExternalCallErrorClassifier.llm(responseException(503, "Service Unavailable"));
+        ExternalCallException invalid = ExternalCallErrorClassifier.llm(responseException(422, "Invalid request"));
+        ExternalCallException notFound = ExternalCallErrorClassifier.llm(responseException(404, "model not found"));
+
+        assertThat(unauthorized.getCategory()).isEqualTo("llm_auth_failed");
+        assertThat(unauthorized.isRetryable()).isFalse();
+        assertThat(unauthorized.getStatusCode()).isEqualTo(401);
+        assertThat(forbidden.getCategory()).isEqualTo("llm_auth_failed");
+        assertThat(forbidden.isRetryable()).isFalse();
+        assertThat(rateLimited.getCategory()).isEqualTo("llm_rate_limited");
+        assertThat(rateLimited.isRetryable()).isTrue();
+        assertThat(unavailable.getCategory()).isEqualTo("llm_service_unavailable");
+        assertThat(unavailable.isRetryable()).isTrue();
+        assertThat(invalid.getCategory()).isEqualTo("llm_request_invalid");
+        assertThat(invalid.isRetryable()).isFalse();
+        assertThat(notFound.getCategory()).isEqualTo("llm_model_or_endpoint_not_found");
+        assertThat(notFound.isRetryable()).isFalse();
+    }
+
+    @Test
     void classifiesTimeoutWithoutHttpStatusAsRetryable() {
         ResourceAccessException timeout = new ResourceAccessException(
             "Read timed out",
