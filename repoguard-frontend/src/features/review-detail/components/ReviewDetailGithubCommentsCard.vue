@@ -62,6 +62,14 @@
         <span>已发布：{{ publishedCommentCount }}</span>
         <span>不可回写：{{ githubCommentPreview.blockedCount }}</span>
       </div>
+      <div class="comment-preview-controls">
+        <span class="count-badge">预览项：{{ githubCommentPreview.itemTotal }}</span>
+        <el-switch
+          :model-value="previewCommentableOnly"
+          active-text="仅可回写"
+          @change="$emit('previewCommentableOnlyChange', Boolean($event))"
+        />
+      </div>
       <div v-if="githubCommentPublishResult" class="comment-publish-summary">
         <span>已尝试：{{ githubCommentPublishResult.attemptedCount }}</span>
         <span>成功：{{ githubCommentPublishResult.succeededCount }}</span>
@@ -100,6 +108,15 @@
         </section>
       </div>
       <el-empty v-else description="暂无评论草稿" />
+      <el-pagination
+        v-if="githubCommentPreview.itemTotal > githubCommentPreview.pageSize"
+        class="detail-pagination"
+        layout="prev, pager, next"
+        :current-page="githubCommentPreview.page"
+        :page-size="githubCommentPreview.pageSize"
+        :total="githubCommentPreview.itemTotal"
+        @current-change="$emit('previewPageChange', $event)"
+      />
       <div v-if="githubCommentPublishResult?.items.length" class="comment-result-list">
         <section
           v-for="item in githubCommentPublishResult.items"
@@ -205,6 +222,7 @@ defineProps<{
   humanReviewPublishBlockReason: string;
   previewError: string;
   historyError: string;
+  previewCommentableOnly: boolean;
   githubCommentPreview: GithubCommentPreview | null;
   githubCommentPublishResult: GithubCommentPublish | null;
   writebackCheck?: GithubCommentWritebackCheck;
@@ -228,6 +246,8 @@ defineProps<{
 
 defineEmits<{
   loadPreview: [];
+  previewCommentableOnlyChange: [value: boolean];
+  previewPageChange: [page: number];
   publish: [];
 }>();
 </script>

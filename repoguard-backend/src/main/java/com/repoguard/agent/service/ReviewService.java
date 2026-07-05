@@ -52,6 +52,8 @@ public interface ReviewService {
 
     GithubCommentPreviewResponse getGithubCommentPreview(Long id);
 
+    GithubCommentPreviewResponse getGithubCommentPreview(Long id, int page, int pageSize, boolean commentableOnly);
+
     /**
      * 将可回写审查发现发布到 GitHub，并记录本次操作的批次历史。
      */

@@ -131,6 +131,16 @@ public class GithubCommentApplicationServiceImpl implements GithubCommentApplica
     }
 
     @Override
+    public GithubCommentPreviewResponse getGithubCommentPreview(
+        Long taskId,
+        int page,
+        int pageSize,
+        boolean commentableOnly
+    ) {
+        return previewService.getPreview(taskId, page, pageSize, commentableOnly);
+    }
+
+    @Override
     public GithubCommentPublishResponse publishGithubComments(Long taskId) {
         return publishService.publishGithubComments(taskId);
     }

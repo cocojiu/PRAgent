@@ -135,6 +135,7 @@
             :human-review-publish-block-reason="humanReviewPublishBlockReason"
             :preview-error="previewError"
             :history-error="historyError"
+            :preview-commentable-only="previewCommentableOnly"
             :github-comment-preview="githubCommentPreview"
             :github-comment-publish-result="githubCommentPublishResult"
             :writeback-check="writebackCheck"
@@ -155,6 +156,8 @@
             :publication-batch-status-class="publicationBatchStatusClass"
             :publication-batch-status-text="publicationBatchStatusText"
             @load-preview="loadGithubCommentData"
+            @preview-commentable-only-change="loadGithubCommentPreviewCommentableOnly"
+            @preview-page-change="loadGithubCommentPreviewPage"
             @publish="confirmPublishGithubComments"
           />
 
@@ -282,6 +285,7 @@ const {
   loadGithubCommentPreview,
   loadGithubCommentPublicationHistory,
   previewError,
+  previewCommentableOnly,
   previewLoading,
   publicationHistoryBatches,
   publishedCommentCount,
@@ -451,6 +455,22 @@ const refreshLoadedGithubCommentPreview = async (id: number) => {
   await loadGithubCommentPreview(id);
 };
 
+const loadGithubCommentPreviewPage = async (page: number) => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id) || !isTerminalTask.value || !githubCommentPreview.value) {
+    return;
+  }
+  await loadGithubCommentPreview(id, { page });
+};
+
+const loadGithubCommentPreviewCommentableOnly = async (commentableOnly: boolean) => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id) || !isTerminalTask.value) {
+    return;
+  }
+  await loadGithubCommentPreview(id, { page: 1, commentableOnly });
+};
+
 const loadFindingsPage = async (page: number) => {
   if (!selectedTask.value || findingsLoading.value) {
     return;
@@ -569,7 +589,7 @@ const loadGithubCommentData = async () => {
     return;
   }
   await Promise.all([
-    loadGithubCommentPreview(id),
+    loadGithubCommentPreview(id, { page: 1 }),
     loadGithubCommentPublicationHistory(id)
   ]);
 };

@@ -70,6 +70,37 @@ class GithubCommentPreviewServiceImplTest {
     }
 
     @Test
+    void getPreviewSupportsPaginationAndCommentableFilter() {
+        stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(
+            changedFile("README.md", "MODIFY"),
+            changedFile("src/App.java", "MODIFY")
+        ));
+        ReviewFinding skippedFinding = finding(2L, "LOW", "README.md", 9, "Known safe", "No change");
+        skippedFinding.setFeedbackStatus("FALSE_POSITIVE");
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+            finding(1L, "HIGH", "README.md", 8, "Use structured logging", "Replace stdout"),
+            skippedFinding,
+            finding(3L, "MEDIUM", "src/App.java", 10, "Validate input", "Add validation")
+        ));
+        when(publicationMapper.selectList(any())).thenReturn(List.of(publication(1L, "line", "finding")));
+
+        var preview = service.getPreview(521L, 2, 1, true);
+
+        assertThat(preview.totalFindings()).isEqualTo(3);
+        assertThat(preview.commentableCount()).isEqualTo(2);
+        assertThat(preview.publishedCount()).isEqualTo(1);
+        assertThat(preview.blockedCount()).isEqualTo(1);
+        assertThat(preview.itemTotal()).isEqualTo(2);
+        assertThat(preview.page()).isEqualTo(2);
+        assertThat(preview.pageSize()).isEqualTo(1);
+        assertThat(preview.commentableOnly()).isTrue();
+        assertThat(preview.items()).hasSize(1);
+        assertThat(preview.items().getFirst().findingId()).isEqualTo(3L);
+        assertThat(preview.items().getFirst().commentable()).isTrue();
+    }
+
+    @Test
     void getPreviewReportsRepositoryMismatchWithoutBlockingDraftConstruction() {
         stubTaskAndSettings(settings("another-owner", "another-repo", "CONFIGURED", "ghp_test", null));
         when(changedFileMapper.selectList(any())).thenReturn(List.of());

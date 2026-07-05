@@ -100,6 +100,11 @@ export interface GithubCommentPreview {
   totalFindings: number;
   commentableCount: number;
   blockedCount: number;
+  publishedCount: number;
+  itemTotal: number;
+  page: number;
+  pageSize: number;
+  commentableOnly: boolean;
   items: GithubCommentPreviewItem[];
 }
 

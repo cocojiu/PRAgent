@@ -140,8 +140,21 @@ public class ReviewController {
     }
 
     @GetMapping("/{id}/github-comments/preview")
-    public ApiResponse<GithubCommentPreviewResponse> getGithubCommentPreview(@PathVariable @Min(1) Long id) {
-        return ApiResponse.ok(reviewService.getGithubCommentPreview(id));
+    public ApiResponse<GithubCommentPreviewResponse> getGithubCommentPreview(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(required = false) @Min(1) Integer page,
+        @RequestParam(required = false) @Min(1) @Max(100) Integer pageSize,
+        @RequestParam(defaultValue = "false") boolean commentableOnly
+    ) {
+        if (page == null && pageSize == null && !commentableOnly) {
+            return ApiResponse.ok(reviewService.getGithubCommentPreview(id));
+        }
+        return ApiResponse.ok(reviewService.getGithubCommentPreview(
+            id,
+            page == null ? 1 : page,
+            pageSize == null ? 20 : pageSize,
+            commentableOnly
+        ));
     }
 
     /**

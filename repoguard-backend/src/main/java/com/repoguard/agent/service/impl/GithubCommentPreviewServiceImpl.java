@@ -83,6 +83,15 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
 
     @Override
     public GithubCommentPreviewResponse getPreview(Long taskId) {
+        return buildPreview(taskId, null, null, false);
+    }
+
+    @Override
+    public GithubCommentPreviewResponse getPreview(Long taskId, int page, int pageSize, boolean commentableOnly) {
+        return buildPreview(taskId, page, pageSize, commentableOnly);
+    }
+
+    private GithubCommentPreviewResponse buildPreview(Long taskId, Integer page, Integer pageSize, boolean commentableOnly) {
         ReviewTask task = reviewTaskMapper.selectById(taskId);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
@@ -103,12 +112,25 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
             previewData.actionableFindings()
         );
 
+        if (page == null || pageSize == null) {
+            return responseAssembler.assemble(
+                task,
+                githubIntegrationProvider.getSettings(),
+                previewData,
+                prSummary,
+                publicationData
+            );
+        }
+
         return responseAssembler.assemble(
             task,
             githubIntegrationProvider.getSettings(),
             previewData,
             prSummary,
-            publicationData
+            publicationData,
+            page,
+            pageSize,
+            commentableOnly
         );
     }
 

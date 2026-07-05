@@ -266,6 +266,16 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    public GithubCommentPreviewResponse getGithubCommentPreview(
+        Long id,
+        int page,
+        int pageSize,
+        boolean commentableOnly
+    ) {
+        return githubCommentApplicationService.getGithubCommentPreview(id, page, pageSize, commentableOnly);
+    }
+
+    @Override
     public GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long id, int page, int pageSize, String status) {
         return githubCommentApplicationService.getGithubCommentPublicationHistory(id, page, pageSize, status);
     }

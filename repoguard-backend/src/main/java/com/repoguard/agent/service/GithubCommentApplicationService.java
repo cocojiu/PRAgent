@@ -8,6 +8,8 @@ public interface GithubCommentApplicationService {
 
     GithubCommentPreviewResponse getGithubCommentPreview(Long taskId);
 
+    GithubCommentPreviewResponse getGithubCommentPreview(Long taskId, int page, int pageSize, boolean commentableOnly);
+
     GithubCommentPublishResponse publishGithubComments(Long taskId);
 
     default GithubCommentPublicationHistoryResponse getGithubCommentPublicationHistory(Long taskId) {

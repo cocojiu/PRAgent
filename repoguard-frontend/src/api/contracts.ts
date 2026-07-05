@@ -90,6 +90,10 @@ type ReviewChangedFilesPageInput = ReviewDetailPageInput & {
   hasFinding?: boolean;
 };
 
+type GithubCommentPreviewInput = ReviewDetailPageInput & {
+  commentableOnly?: boolean;
+};
+
 type UserRoleInput = {
   id: number;
   role: UserRole;
@@ -120,7 +124,7 @@ export type ApiContract = {
   fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;
   fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
-  fetchGithubCommentPreview: ApiOperation<{ id: number }, GithubCommentPreview>;
+  fetchGithubCommentPreview: ApiOperation<GithubCommentPreviewInput, GithubCommentPreview>;
   fetchGithubCommentPublicationHistory: ApiOperation<
     { id: number; page?: number; pageSize?: number; status?: string },
     GithubCommentPublicationHistory
@@ -277,7 +281,12 @@ const apiEndpoints: ApiEndpointMap = {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/status`
   },
   fetchGithubCommentPreview: {
-    path: input => `/api/v1/reviews/${idSegment(input.id)}/github-comments/preview`
+    path: input => `/api/v1/reviews/${idSegment(input.id)}/github-comments/preview`,
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      commentableOnly: input.commentableOnly === undefined ? undefined : String(input.commentableOnly)
+    })
   },
   fetchGithubCommentPublicationHistory: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/github-comments/publications`,

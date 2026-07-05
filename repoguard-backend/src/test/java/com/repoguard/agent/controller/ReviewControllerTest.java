@@ -275,6 +275,31 @@ class ReviewControllerTest {
         }
 
         @Override
+        public GithubCommentPreviewResponse getGithubCommentPreview(
+            Long id,
+            int page,
+            int pageSize,
+            boolean commentableOnly
+        ) {
+            GithubCommentPreviewResponse preview = getGithubCommentPreview(id);
+            return new GithubCommentPreviewResponse(
+                preview.taskId(),
+                preview.prNumber(),
+                preview.prUrl(),
+                preview.writebackCheck(),
+                preview.totalFindings(),
+                preview.commentableCount(),
+                preview.blockedCount(),
+                preview.publishedCount(),
+                25,
+                page,
+                pageSize,
+                commentableOnly,
+                preview.items()
+            );
+        }
+
+        @Override
         public GithubCommentPublishResponse publishGithubComments(Long id) {
             return new GithubCommentPublishResponse(
                 id,
@@ -599,6 +624,11 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.totalFindings").value(1))
             .andExpect(jsonPath("$.data.commentableCount").value(1))
             .andExpect(jsonPath("$.data.blockedCount").value(0))
+            .andExpect(jsonPath("$.data.publishedCount").value(0))
+            .andExpect(jsonPath("$.data.itemTotal").value(1))
+            .andExpect(jsonPath("$.data.page").value(1))
+            .andExpect(jsonPath("$.data.pageSize").value(1))
+            .andExpect(jsonPath("$.data.commentableOnly").value(false))
             .andExpect(jsonPath("$.data.writebackCheck.status").value("ready"))
             .andExpect(jsonPath("$.data.writebackCheck.level").value("success"))
             .andExpect(jsonPath("$.data.writebackCheck.taskOwner").value("repo-guard-demo"))
@@ -621,6 +651,20 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.items[0].targetType").value("line"))
             .andExpect(jsonPath("$.data.items[0].published").value(false))
             .andExpect(jsonPath("$.data.items[0].feedbackStatus").value("unreviewed"));
+    }
+
+    @Test
+    void getGithubCommentPreviewForwardsPaginationParameters() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/github-comments/preview")
+                .param("page", "2")
+                .param("pageSize", "1")
+                .param("commentableOnly", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.taskId").value(512))
+            .andExpect(jsonPath("$.data.itemTotal").value(25))
+            .andExpect(jsonPath("$.data.page").value(2))
+            .andExpect(jsonPath("$.data.pageSize").value(1))
+            .andExpect(jsonPath("$.data.commentableOnly").value(true));
     }
 
     @Test

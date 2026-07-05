@@ -37,8 +37,10 @@ export const fetchReviewRepositories = () =>
 
 export const fetchReviewStatus = (id: number) => apiRequest("fetchReviewStatus", { id });
 
-export const fetchGithubCommentPreview = (id: number) =>
-  apiRequest("fetchGithubCommentPreview", { id });
+export const fetchGithubCommentPreview = (
+  id: number,
+  params?: { page?: number; pageSize?: number; commentableOnly?: boolean }
+) => apiRequest("fetchGithubCommentPreview", { id, ...params });
 
 export const fetchGithubCommentPublicationHistory = (
   id: number,

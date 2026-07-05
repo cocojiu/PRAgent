@@ -4,18 +4,25 @@ import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.PrReviewSummaryDto;
+import com.repoguard.agent.entity.GithubCommentPublication;
+import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewData;
 import com.repoguard.agent.service.impl.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class GithubCommentPreviewResponseAssembler {
 
     private final GithubCommentWritebackCheckBuilder writebackCheckBuilder;
     private final GithubCommentPreviewItemBuilder previewItemBuilder;
+    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
+    private static final String FEEDBACK_VALID = "VALID";
 
     @Autowired
     public GithubCommentPreviewResponseAssembler() {
@@ -37,18 +44,47 @@ public class GithubCommentPreviewResponseAssembler {
         PrReviewSummaryDto prSummary,
         GithubCommentPreviewPublicationData publicationData
     ) {
-        List<GithubCommentPreviewItem> items = new java.util.ArrayList<>();
-        items.add(previewItemBuilder.buildPrSummaryItem(prSummary, publicationData.prSummaryPublication()));
-        items.addAll(previewData.actionableFindings().stream()
-            .map(finding -> previewItemBuilder.buildFindingItem(
-                finding,
-                previewData.changedFileByPath().get(finding.getFilePath()),
-                publicationData.publicationByFindingId().get(finding.getId())
-            ))
-            .toList());
+        return assembleInternal(task, githubSettings, previewData, prSummary, publicationData, 1, null, false);
+    }
 
-        int commentableCount = (int) items.stream().filter(GithubCommentPreviewItem::commentable).count();
-        int publishedCount = (int) items.stream().filter(item -> Boolean.TRUE.equals(item.published())).count();
+    public GithubCommentPreviewResponse assemble(
+        ReviewTask task,
+        GithubIntegrationSettings githubSettings,
+        GithubCommentPreviewData previewData,
+        PrReviewSummaryDto prSummary,
+        GithubCommentPreviewPublicationData publicationData,
+        int page,
+        int pageSize,
+        boolean commentableOnly
+    ) {
+        return assembleInternal(task, githubSettings, previewData, prSummary, publicationData, page, pageSize, commentableOnly);
+    }
+
+    private GithubCommentPreviewResponse assembleInternal(
+        ReviewTask task,
+        GithubIntegrationSettings githubSettings,
+        GithubCommentPreviewData previewData,
+        PrReviewSummaryDto prSummary,
+        GithubCommentPreviewPublicationData publicationData,
+        int page,
+        Integer pageSize,
+        boolean commentableOnly
+    ) {
+        List<PreviewCandidate> candidates = buildCandidates(previewData, publicationData);
+        int commentableCount = (int) candidates.stream().filter(PreviewCandidate::commentable).count();
+        int publishedCount = (int) candidates.stream().filter(PreviewCandidate::published).count();
+        int blockedCount = candidates.size() - commentableCount - publishedCount;
+
+        List<PreviewCandidate> filteredCandidates = candidates.stream()
+            .filter(candidate -> !commentableOnly || candidate.commentable())
+            .toList();
+        List<PreviewCandidate> pageCandidates = pageSize == null
+            ? filteredCandidates
+            : pageSlice(filteredCandidates, page, pageSize);
+        List<GithubCommentPreviewItem> items = pageCandidates.stream()
+            .map(candidate -> buildPreviewItem(candidate, previewData, prSummary, publicationData))
+            .toList();
+        int responsePageSize = pageSize == null ? items.size() : Math.max(1, pageSize);
         return new GithubCommentPreviewResponse(
             task.getId(),
             task.getPrNumber(),
@@ -56,8 +92,89 @@ public class GithubCommentPreviewResponseAssembler {
             writebackCheckBuilder.build(task, githubSettings),
             previewData.actionableFindings().size(),
             commentableCount,
-            items.size() - commentableCount - publishedCount,
+            blockedCount,
+            publishedCount,
+            filteredCandidates.size(),
+            Math.max(1, page),
+            responsePageSize,
+            commentableOnly,
             items
         );
+    }
+
+    private List<PreviewCandidate> buildCandidates(
+        GithubCommentPreviewData previewData,
+        GithubCommentPreviewPublicationData publicationData
+    ) {
+        List<PreviewCandidate> candidates = new ArrayList<>();
+        candidates.add(PreviewCandidate.prSummary(publicationData.prSummaryPublication()));
+        candidates.addAll(previewData.actionableFindings().stream()
+            .map(finding -> PreviewCandidate.finding(
+                finding,
+                publicationData.publicationByFindingId().get(finding.getId())
+            ))
+            .toList());
+        return candidates;
+    }
+
+    private List<PreviewCandidate> pageSlice(List<PreviewCandidate> candidates, int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safePageSize = Math.max(1, pageSize);
+        long offset = (long) (safePage - 1) * safePageSize;
+        int fromIndex = offset >= candidates.size() ? candidates.size() : (int) offset;
+        int toIndex = Math.min(fromIndex + safePageSize, candidates.size());
+        return candidates.subList(fromIndex, toIndex);
+    }
+
+    private GithubCommentPreviewItem buildPreviewItem(
+        PreviewCandidate candidate,
+        GithubCommentPreviewData previewData,
+        PrReviewSummaryDto prSummary,
+        GithubCommentPreviewPublicationData publicationData
+    ) {
+        if (candidate.prSummary()) {
+            return previewItemBuilder.buildPrSummaryItem(prSummary, publicationData.prSummaryPublication());
+        }
+        return previewItemBuilder.buildFindingItem(
+            candidate.finding(),
+            previewData.changedFileByPath().get(candidate.finding().getFilePath()),
+            candidate.publication()
+        );
+    }
+
+    private record PreviewCandidate(
+        ReviewFinding finding,
+        GithubCommentPublication publication,
+        boolean prSummary
+    ) {
+        static PreviewCandidate prSummary(GithubCommentPublication publication) {
+            return new PreviewCandidate(null, publication, true);
+        }
+
+        static PreviewCandidate finding(
+            ReviewFinding finding,
+            GithubCommentPublication publication
+        ) {
+            return new PreviewCandidate(finding, publication, false);
+        }
+
+        boolean published() {
+            return publication != null
+                && Boolean.TRUE.equals(publication.getSuccess())
+                && StringUtils.hasText(publication.getGithubUrl());
+        }
+
+        boolean commentable() {
+            if (published()) {
+                return false;
+            }
+            if (prSummary) {
+                return true;
+            }
+            String feedbackStatus = StringUtils.hasText(finding.getFeedbackStatus())
+                ? finding.getFeedbackStatus().trim().toUpperCase(Locale.ROOT)
+                : FEEDBACK_UNREVIEWED;
+            return FEEDBACK_UNREVIEWED.equals(feedbackStatus) || FEEDBACK_VALID.equals(feedbackStatus);
+        }
     }
 }

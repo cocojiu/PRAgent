@@ -5,4 +5,6 @@ import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 public interface GithubCommentPreviewService {
 
     GithubCommentPreviewResponse getPreview(Long taskId);
+
+    GithubCommentPreviewResponse getPreview(Long taskId, int page, int pageSize, boolean commentableOnly);
 }

@@ -4,25 +4,47 @@ import { fetchGithubCommentPreview, fetchGithubCommentPublicationHistory, publis
 import type { GithubCommentPreview, GithubCommentPublicationBatch, GithubCommentPublicationHistory, GithubCommentPublish } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
+const GITHUB_COMMENT_PREVIEW_PAGE_SIZE = 10;
+
+type GithubCommentPreviewLoadOptions = {
+  page?: number;
+  commentableOnly?: boolean;
+};
+
 export const useReviewDetailGithubComments = () => {
   const previewError = ref("");
   const historyError = ref("");
   const previewLoading = ref(false);
   const historyLoading = ref(false);
   const publishingComments = ref(false);
+  const previewPage = ref(1);
+  const previewPageSize = GITHUB_COMMENT_PREVIEW_PAGE_SIZE;
+  const previewCommentableOnly = ref(false);
   const githubCommentPreview = ref<GithubCommentPreview | null>(null);
   const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | null>(null);
   const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
 
-  const publishedCommentCount = computed(() => githubCommentPreview.value?.items.filter((item) => item.published).length ?? 0);
+  const publishedCommentCount = computed(() =>
+    githubCommentPreview.value?.publishedCount
+      ?? githubCommentPreview.value?.items.filter((item) => item.published).length
+      ?? 0
+  );
   const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
   const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
 
-  const loadGithubCommentPreview = async (id: number) => {
+  const loadGithubCommentPreview = async (id: number, options: GithubCommentPreviewLoadOptions = {}) => {
     previewError.value = "";
     previewLoading.value = true;
+    const page = options.page ?? previewPage.value;
+    const commentableOnly = options.commentableOnly ?? previewCommentableOnly.value;
     try {
-      githubCommentPreview.value = await fetchGithubCommentPreview(id);
+      githubCommentPreview.value = await fetchGithubCommentPreview(id, {
+        page,
+        pageSize: previewPageSize,
+        commentableOnly
+      });
+      previewPage.value = githubCommentPreview.value.page;
+      previewCommentableOnly.value = githubCommentPreview.value.commentableOnly;
     } catch (error) {
       githubCommentPreview.value = null;
       previewError.value = getErrorMessage(error, "请求失败");
@@ -46,6 +68,8 @@ export const useReviewDetailGithubComments = () => {
 
   const clearGithubCommentPreviewAndHistory = () => {
     previewError.value = "";
+    previewPage.value = 1;
+    previewCommentableOnly.value = false;
     githubCommentPreview.value = null;
     historyError.value = "";
     githubCommentPublicationHistory.value = null;
@@ -85,6 +109,9 @@ export const useReviewDetailGithubComments = () => {
     historyError,
     historyLoading,
     previewError,
+    previewCommentableOnly,
+    previewPage,
+    previewPageSize,
     previewLoading,
     publicationHistoryBatches,
     publishedCommentCount,

@@ -51,11 +51,59 @@ class GithubCommentPreviewResponseAssemblerTest {
         assertThat(response.totalFindings()).isEqualTo(2);
         assertThat(response.commentableCount()).isEqualTo(1);
         assertThat(response.blockedCount()).isEqualTo(1);
+        assertThat(response.publishedCount()).isEqualTo(1);
+        assertThat(response.itemTotal()).isEqualTo(3);
+        assertThat(response.page()).isEqualTo(1);
+        assertThat(response.pageSize()).isEqualTo(3);
+        assertThat(response.commentableOnly()).isFalse();
         assertThat(response.items()).extracting("targetType").containsExactly("pull_request", "line", "line");
         assertThat(response.items().get(1).published()).isTrue();
         assertThat(response.items().get(2).commentable()).isFalse();
         assertThat(response.items().get(2).reason()).isEqualTo("Finding marked as false positive and will not be published");
         assertThat(response.writebackCheck().status()).isEqualTo("ready");
+    }
+
+    @Test
+    void assemblesPaginatedCommentablePreviewWithFullCounts() {
+        ReviewTask task = task();
+        ReviewFinding publishedFinding = finding(1001L, "README.md", 8, "VALID");
+        ReviewFinding skippedFinding = finding(1002L, "README.md", 9, "FALSE_POSITIVE");
+        ReviewFinding commentableFinding = finding(1003L, "src/App.java", 10, "UNREVIEWED");
+        ChangedFile readme = changedFile("README.md", "MODIFY");
+        ChangedFile app = changedFile("src/App.java", "MODIFY");
+        GithubCommentPreviewData previewData = new GithubCommentPreviewData(
+            Map.of("README.md", readme, "src/App.java", app),
+            List.of(publishedFinding, skippedFinding, commentableFinding),
+            List.of(findingDto(1001L), findingDto(1002L), findingDto(1003L)),
+            List.of(),
+            List.of(new ChangedFileDto("README.md", "MODIFY", 6, 1), new ChangedFileDto("src/App.java", "MODIFY", 3, 0))
+        );
+        GithubCommentPreviewPublicationData publicationData = new GithubCommentPreviewPublicationData(
+            Map.of(1001L, publication(1001L, "line", "finding")),
+            null
+        );
+
+        var response = assembler.assemble(
+            task,
+            settings("octocat", "Hello-World"),
+            previewData,
+            prSummary(),
+            publicationData,
+            2,
+            1,
+            true
+        );
+
+        assertThat(response.commentableCount()).isEqualTo(2);
+        assertThat(response.publishedCount()).isEqualTo(1);
+        assertThat(response.blockedCount()).isEqualTo(1);
+        assertThat(response.itemTotal()).isEqualTo(2);
+        assertThat(response.page()).isEqualTo(2);
+        assertThat(response.pageSize()).isEqualTo(1);
+        assertThat(response.commentableOnly()).isTrue();
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().getFirst().findingId()).isEqualTo(1003L);
+        assertThat(response.items().getFirst().commentBody()).contains("Use structured logging");
     }
 
     private ReviewTask task() {
