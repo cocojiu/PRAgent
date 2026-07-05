@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/message-queue")
 @ApiRuntimeEnabled
+@RequireRole("ADMIN")
 public class MessageQueueHealthController {
 
     private final MessageQueueHealthService messageQueueHealthService;
@@ -32,7 +33,6 @@ public class MessageQueueHealthController {
     }
 
     @PostMapping("/tasks/{taskId}/requeue")
-    @RequireRole("ADMIN")
     public ApiResponse<MessageQueueRequeueResponse> requeueTask(@PathVariable @Min(1) Long taskId) {
         return ApiResponse.ok(messageQueueHealthService.requeueTask(taskId));
     }

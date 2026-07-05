@@ -31,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @ApiRuntimeEnabled
+@RequireRole("ADMIN")
 public class NotificationIntegrationController {
 
     private final NotificationIntegrationService service;
@@ -57,13 +58,11 @@ public class NotificationIntegrationController {
     }
 
     @PostMapping("/api/v1/config/notification-bindings")
-    @RequireRole("ADMIN")
     public ApiResponse<NotificationBindingDto> createBinding(@Valid @RequestBody NotificationBindingRequest request) {
         return ApiResponse.ok(service.createBinding(request));
     }
 
     @PutMapping("/api/v1/config/notification-bindings/{id}")
-    @RequireRole("ADMIN")
     public ApiResponse<NotificationBindingDto> updateBinding(
         @PathVariable @Min(1) Long id,
         @Valid @RequestBody NotificationBindingRequest request
@@ -72,7 +71,6 @@ public class NotificationIntegrationController {
     }
 
     @PutMapping("/api/v1/config/notification-bindings/{id}/status")
-    @RequireRole("ADMIN")
     public ApiResponse<NotificationBindingDto> updateBindingStatus(
         @PathVariable @Min(1) Long id,
         @Valid @RequestBody NotificationBindingStatusRequest request
@@ -81,14 +79,12 @@ public class NotificationIntegrationController {
     }
 
     @DeleteMapping("/api/v1/config/notification-bindings/{id}")
-    @RequireRole("ADMIN")
     public ApiResponse<Void> deleteBinding(@PathVariable @Min(1) Long id) {
         service.deleteBinding(id);
         return ApiResponse.ok(null);
     }
 
     @PostMapping("/api/v1/config/notification-bindings/{id}/test")
-    @RequireRole("ADMIN")
     public ApiResponse<ConnectionTestResultDto> testBinding(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(service.testBinding(id));
     }
@@ -104,7 +100,6 @@ public class NotificationIntegrationController {
     }
 
     @PostMapping("/api/v1/notification-events/{id}/retry")
-    @RequireRole("ADMIN")
     public ApiResponse<NotificationEventDto> retryEvent(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(service.retryEvent(id));
     }

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/config/data-retention")
 @ApiRuntimeEnabled
+@RequireRole("ADMIN")
 public class DataRetentionController {
 
     private final DataRetentionService dataRetentionService;
@@ -24,7 +25,6 @@ public class DataRetentionController {
     }
 
     @PostMapping("/cleanup")
-    @RequireRole("ADMIN")
     public ApiResponse<DataRetentionCleanupResponse> cleanup(
         @Valid @RequestBody(required = false) DataRetentionCleanupRequest request
     ) {

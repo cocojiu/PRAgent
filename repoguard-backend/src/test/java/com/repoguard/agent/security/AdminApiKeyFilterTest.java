@@ -83,6 +83,18 @@ class AdminApiKeyFilterTest {
     }
 
     @Test
+    void protectedNotificationRetryEndpointRejectsMissingAdminKey() throws ServletException, IOException {
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/notification-events/42/retry");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
     void protectedReviewWriteEndpointAllowsValidAdminKey() throws ServletException, IOException {
         AdminApiKeyFilter filter = new AdminApiKeyFilter(properties("secret-admin-key"), objectMapper);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/reviews/manual");

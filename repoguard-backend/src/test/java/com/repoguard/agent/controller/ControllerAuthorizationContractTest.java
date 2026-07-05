@@ -34,6 +34,19 @@ class ControllerAuthorizationContractTest {
         "GithubWebhookController#receive"
     );
 
+    private static final Set<String> SENSITIVE_READ_ENDPOINTS = Set.of(
+        "SystemConfigController#getGithubIntegration",
+        "SystemConfigController#getMysqlIntegration",
+        "SystemConfigController#getRabbitMqIntegration",
+        "SystemConfigController#getReviewPolicy",
+        "SystemConfigController#getSystemSettings",
+        "SystemConfigController#getReviewRules",
+        "NotificationIntegrationController#listBindings",
+        "NotificationIntegrationController#listEvents",
+        "NotificationIntegrationController#listDeliveries",
+        "MessageQueueHealthController#getHealth"
+    );
+
     @Test
     void writeEndpointsRequireExplicitRoleUnlessPubliclyWhitelisted() throws ClassNotFoundException {
         List<String> unprotectedWriteEndpoints = new ArrayList<>();
@@ -70,6 +83,30 @@ class ControllerAuthorizationContractTest {
             .containsExactlyInAnyOrderElementsOf(PUBLIC_WRITE_ENDPOINTS);
     }
 
+    @Test
+    void sensitiveReadEndpointsRequireExplicitRole() throws ClassNotFoundException {
+        List<String> unprotectedSensitiveReadEndpoints = new ArrayList<>();
+        List<String> existingSensitiveReadEndpoints = new ArrayList<>();
+
+        for (Class<?> controller : discoverControllers()) {
+            for (Method method : controller.getDeclaredMethods()) {
+                if (!isReadHandler(method) || !isSensitiveReadEndpoint(controller, method)) {
+                    continue;
+                }
+                existingSensitiveReadEndpoints.add(endpointId(controller, method));
+                if (!hasRequireRole(controller, method)) {
+                    unprotectedSensitiveReadEndpoints.add(endpointId(controller, method) + " " + readMappings(method));
+                }
+            }
+        }
+
+        assertThat(existingSensitiveReadEndpoints)
+            .containsExactlyInAnyOrderElementsOf(SENSITIVE_READ_ENDPOINTS);
+        assertThat(unprotectedSensitiveReadEndpoints)
+            .as("Sensitive GET endpoints must declare @RequireRole on the method or controller")
+            .isEmpty();
+    }
+
     private List<Class<?>> discoverControllers() throws ClassNotFoundException {
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(RestController.class));
@@ -103,6 +140,10 @@ class ControllerAuthorizationContractTest {
         return PUBLIC_WRITE_ENDPOINTS.contains(endpointId(controller, method));
     }
 
+    private boolean isSensitiveReadEndpoint(Class<?> controller, Method method) {
+        return SENSITIVE_READ_ENDPOINTS.contains(endpointId(controller, method));
+    }
+
     private String endpointId(Class<?> controller, Method method) {
         return controller.getSimpleName() + "#" + method.getName();
     }
@@ -123,6 +164,17 @@ class ControllerAuthorizationContractTest {
         return List.of();
     }
 
+    private List<String> readMappings(Method method) {
+        if (method.isAnnotationPresent(GetMapping.class)) {
+            return mappingPaths(method.getAnnotation(GetMapping.class).path(), method.getAnnotation(GetMapping.class).value(), "GET");
+        }
+        if (method.isAnnotationPresent(RequestMapping.class)) {
+            RequestMapping mapping = method.getAnnotation(RequestMapping.class);
+            return mappingPaths(mapping.path(), mapping.value(), "REQUEST");
+        }
+        return List.of();
+    }
+
     private List<String> mappingPaths(String[] paths, String[] values, String httpMethod) {
         String[] selected = paths.length > 0 ? paths : values;
         if (selected.length == 0) {
@@ -133,7 +185,6 @@ class ControllerAuthorizationContractTest {
             .toList();
     }
 
-    @SuppressWarnings("unused")
     private boolean isReadHandler(Method method) {
         return method.isAnnotationPresent(GetMapping.class)
             || method.isAnnotationPresent(RequestMapping.class);

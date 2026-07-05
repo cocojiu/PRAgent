@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/config")
 @ApiRuntimeEnabled
+@RequireRole("ADMIN")
 public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;
@@ -52,7 +53,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/integrations/github")
-    @RequireRole("ADMIN")
     public ApiResponse<GithubIntegrationConfigDto> updateGithubIntegration(
         @Valid @RequestBody GithubIntegrationConfigRequest request
     ) {
@@ -60,7 +60,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/integrations/github/test")
-    @RequireRole("ADMIN")
     public ApiResponse<ConnectionTestResultDto> testGithubIntegration(
         @Valid @RequestBody(required = false) GithubIntegrationConfigRequest request
     ) {
@@ -73,7 +72,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/integrations/mysql")
-    @RequireRole("ADMIN")
     public ApiResponse<ServiceIntegrationConfigDto> updateMysqlIntegration(
         @Valid @RequestBody ServiceIntegrationConfigRequest request
     ) {
@@ -81,7 +79,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/integrations/mysql/test")
-    @RequireRole("ADMIN")
     public ApiResponse<ConnectionTestResultDto> testMysqlConnection(
         @Valid @RequestBody(required = false) ServiceIntegrationConfigRequest request
     ) {
@@ -94,7 +91,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/integrations/rabbitmq")
-    @RequireRole("ADMIN")
     public ApiResponse<ServiceIntegrationConfigDto> updateRabbitMqIntegration(
         @Valid @RequestBody ServiceIntegrationConfigRequest request
     ) {
@@ -102,7 +98,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/integrations/rabbitmq/test")
-    @RequireRole("ADMIN")
     public ApiResponse<ConnectionTestResultDto> testRabbitMqConnection(
         @Valid @RequestBody(required = false) ServiceIntegrationConfigRequest request
     ) {
@@ -115,7 +110,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/review-policy")
-    @RequireRole("ADMIN")
     public ApiResponse<ReviewPolicyConfigDto> updateReviewPolicy(
         @Valid @RequestBody ReviewPolicyConfigRequest request
     ) {
@@ -128,7 +122,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/system-settings")
-    @RequireRole("ADMIN")
     public ApiResponse<SystemSettingsDto> updateSystemSettings(
         @Valid @RequestBody SystemSettingsRequest request
     ) {
@@ -141,7 +134,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/review-rules")
-    @RequireRole("ADMIN")
     public ApiResponse<ReviewRuleConfigDto> createReviewRule(
         @Valid @RequestBody ReviewRuleConfigRequest request
     ) {
@@ -149,7 +141,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/review-rules/{id}")
-    @RequireRole("ADMIN")
     public ApiResponse<ReviewRuleConfigDto> updateReviewRule(
         @PathVariable @Size(max = 64) String id,
         @Valid @RequestBody ReviewRuleConfigRequest request
@@ -158,7 +149,6 @@ public class SystemConfigController {
     }
 
     @PutMapping("/review-rules/{id}/status")
-    @RequireRole("ADMIN")
     public ApiResponse<ReviewRuleConfigDto> updateReviewRuleStatus(
         @PathVariable @Size(max = 64) String id,
         @Valid @RequestBody ReviewRuleStatusRequest request
@@ -167,7 +157,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/review-policy/test")
-    @RequireRole("ADMIN")
     public ApiResponse<ConnectionTestResultDto> testReviewPolicy(
         @Valid @RequestBody(required = false) ReviewPolicyConfigRequest request
     ) {
@@ -175,7 +164,6 @@ public class SystemConfigController {
     }
 
     @PostMapping("/secrets/re-encryption")
-    @RequireRole("ADMIN")
     public ApiResponse<SecretReEncryptionResponse> reEncryptSecrets(
         @Valid @RequestBody SecretReEncryptionRequest request
     ) {

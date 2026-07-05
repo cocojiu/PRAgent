@@ -63,66 +63,7 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresAdminKey(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        String method = request.getMethod();
-        if (path.startsWith("/api/v1/config/") || "/api/v1/config".equals(path)) {
-            return true;
-        }
-        if (!"POST".equalsIgnoreCase(method)) {
-            return false;
-        }
-        return "/api/v1/reviews/manual".equals(path)
-            || reviewTaskActionPath(path, "retry")
-            || reviewTaskActionPath(path, "human-review")
-            || reviewTaskActionPath(path, "github-comments")
-            || reviewFindingFeedbackPath(path)
-            || messageQueueRequeuePath(path);
-    }
-
-    private boolean reviewTaskActionPath(String path, String action) {
-        String prefix = "/api/v1/reviews/";
-        String suffix = "/" + action;
-        if (!path.startsWith(prefix) || !path.endsWith(suffix)) {
-            return false;
-        }
-        return isPositiveNumeric(path, prefix.length(), path.length() - suffix.length());
-    }
-
-    private boolean reviewFindingFeedbackPath(String path) {
-        String prefix = "/api/v1/reviews/";
-        String marker = "/findings/";
-        String suffix = "/feedback";
-        if (!path.startsWith(prefix) || !path.endsWith(suffix)) {
-            return false;
-        }
-        int markerIndex = path.indexOf(marker, prefix.length());
-        if (markerIndex < 0) {
-            return false;
-        }
-        return isPositiveNumeric(path, prefix.length(), markerIndex)
-            && isPositiveNumeric(path, markerIndex + marker.length(), path.length() - suffix.length());
-    }
-
-    private boolean messageQueueRequeuePath(String path) {
-        String prefix = "/api/v1/message-queue/tasks/";
-        String suffix = "/requeue";
-        if (!path.startsWith(prefix) || !path.endsWith(suffix)) {
-            return false;
-        }
-        return isPositiveNumeric(path, prefix.length(), path.length() - suffix.length());
-    }
-
-    private boolean isPositiveNumeric(String value, int startInclusive, int endExclusive) {
-        if (startInclusive >= endExclusive) {
-            return false;
-        }
-        for (int index = startInclusive; index < endExclusive; index++) {
-            char character = value.charAt(index);
-            if (character < '0' || character > '9') {
-                return false;
-            }
-        }
-        return true;
+        return AdminApiKeyAccessPolicy.requiresAdminKey(request.getMethod(), request.getRequestURI());
     }
 
     private boolean secureEquals(String expected, String actual) {
