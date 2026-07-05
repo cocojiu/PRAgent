@@ -1,5 +1,6 @@
 package com.repoguard.agent.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AuthControllerTest {
@@ -102,6 +104,7 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
+            .andExpect(AuthControllerTest::expectReadableCsrfCookie)
             .andExpect(jsonPath("$.data.user.username").value("admin"));
     }
 
@@ -124,7 +127,8 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.data.refreshTokenExpiresInSeconds").value(7200))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("HttpOnly")))
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")));
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("SameSite=Lax")))
+            .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
 
     @Test
@@ -162,17 +166,20 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
+            .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
 
     @Test
     void refreshAcceptsHttpOnlyCookieToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
-                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
+            .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
 
     @Test
@@ -180,10 +187,30 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
-                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+    }
+
+    @Test
+    void refreshWithCookieTokenRequiresCsrfHeader() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(refreshCookie(), csrfCookie()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void refreshWithCookieTokenRejectsMismatchedCsrfHeader() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "different-token"))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
@@ -198,6 +225,17 @@ class AuthControllerTest {
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void refreshWithInvalidCookieTokenClearsAuthCookies() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "invalid-refresh-token"), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(result -> expectSetCookieContains(result, "repoguard_refresh_token="))
+            .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="))
+            .andExpect(result -> expectSetCookieContains(result, "Max-Age=0"));
     }
 
     @Test
@@ -238,7 +276,8 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
+            .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
 
     @Test
@@ -273,10 +312,12 @@ class AuthControllerTest {
     @Test
     void logoutClearsHttpOnlyCookieToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
+            .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="));
     }
 
     @Test
@@ -284,10 +325,20 @@ class AuthControllerTest {
         mockMvc.perform(post("/api/v1/auth/logout")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}")
-                .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value")))
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
+    }
+
+    @Test
+    void logoutWithCookieTokenRequiresCsrfHeader() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .cookie(refreshCookie(), csrfCookie()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
     }
 
     @Test
@@ -339,5 +390,27 @@ class AuthControllerTest {
             7200L,
             new AuthUserDto(1001L, username, email, "ADMIN")
         );
+    }
+
+    private static Cookie refreshCookie() {
+        return new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value");
+    }
+
+    private static Cookie csrfCookie() {
+        return new Cookie(AuthController.CSRF_TOKEN_COOKIE_NAME, "csrf-token-value");
+    }
+
+    private static void expectReadableCsrfCookie(MvcResult result) {
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+            .anySatisfy(cookie -> assertThat(cookie)
+                .contains("repoguard_csrf_token=")
+                .contains("Path=/")
+                .contains("SameSite=Lax")
+                .doesNotContain("HttpOnly"));
+    }
+
+    private static void expectSetCookieContains(MvcResult result, String expected) {
+        assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE))
+            .anySatisfy(cookie -> assertThat(cookie).contains(expected));
     }
 }

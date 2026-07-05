@@ -17,7 +17,11 @@ import com.repoguard.agent.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.Base64;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.util.StringUtils;
@@ -34,7 +38,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     static final String REFRESH_TOKEN_COOKIE_NAME = "repoguard_refresh_token";
+    static final String CSRF_TOKEN_COOKIE_NAME = "repoguard_csrf_token";
+    static final String CSRF_TOKEN_HEADER_NAME = "X-RepoGuard-CSRF";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
+    private static final String CSRF_TOKEN_COOKIE_PATH = "/";
+    private static final SecureRandom CSRF_TOKEN_RANDOM = new SecureRandom();
 
     private final AuthService authService;
 
@@ -75,14 +83,16 @@ public class AuthController {
     public ApiResponse<AuthResponse> refresh(
         @Valid @RequestBody(required = false) AuthRefreshRequest request,
         @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+        @CookieValue(name = CSRF_TOKEN_COOKIE_NAME, required = false) String csrfCookieToken,
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
         try {
             AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken(request, cookieRefreshToken)));
             return authResponse(response, httpRequest, httpResponse);
         } catch (RuntimeException ex) {
-            clearRefreshTokenCookie(httpRequest, httpResponse);
+            clearAuthCookies(httpRequest, httpResponse);
             throw ex;
         }
     }
@@ -101,11 +111,13 @@ public class AuthController {
     public ApiResponse<Void> logout(
         @Valid @RequestBody(required = false) AuthLogoutRequest request,
         @CookieValue(name = REFRESH_TOKEN_COOKIE_NAME, required = false) String cookieRefreshToken,
+        @CookieValue(name = CSRF_TOKEN_COOKIE_NAME, required = false) String csrfCookieToken,
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
         authService.logout(new AuthLogoutRequest(refreshToken(request, cookieRefreshToken)));
-        clearRefreshTokenCookie(httpRequest, httpResponse);
+        clearAuthCookies(httpRequest, httpResponse);
         return ApiResponse.ok(null);
     }
 
@@ -158,13 +170,21 @@ public class AuthController {
             .maxAge(Duration.ofSeconds(refreshTokenTtlSeconds))
             .build();
         response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        ResponseCookie csrfCookie = csrfTokenCookieBuilder(request, newCsrfToken())
+            .maxAge(Duration.ofSeconds(refreshTokenTtlSeconds))
+            .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, csrfCookie.toString());
     }
 
-    private void clearRefreshTokenCookie(HttpServletRequest request, HttpServletResponse response) {
-        ResponseCookie cookie = refreshTokenCookieBuilder(request, "")
+    private void clearAuthCookies(HttpServletRequest request, HttpServletResponse response) {
+        ResponseCookie refreshCookie = refreshTokenCookieBuilder(request, "")
             .maxAge(Duration.ZERO)
             .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
+        ResponseCookie csrfCookie = csrfTokenCookieBuilder(request, "")
+            .maxAge(Duration.ZERO)
+            .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, csrfCookie.toString());
     }
 
     private ResponseCookie.ResponseCookieBuilder refreshTokenCookieBuilder(HttpServletRequest request, String value) {
@@ -173,6 +193,64 @@ public class AuthController {
             .secure(isSecureRequest(request))
             .sameSite("Lax")
             .path(REFRESH_TOKEN_COOKIE_PATH);
+    }
+
+    private ResponseCookie.ResponseCookieBuilder csrfTokenCookieBuilder(HttpServletRequest request, String value) {
+        return ResponseCookie.from(CSRF_TOKEN_COOKIE_NAME, value)
+            .httpOnly(false)
+            .secure(isSecureRequest(request))
+            .sameSite("Lax")
+            .path(CSRF_TOKEN_COOKIE_PATH);
+    }
+
+    private void validateCookieTokenCsrf(
+        AuthRefreshRequest request,
+        String cookieRefreshToken,
+        String csrfCookieToken,
+        HttpServletRequest httpRequest
+    ) {
+        String requestRefreshToken = request == null ? null : request.refreshToken();
+        validateCookieTokenCsrf(requestRefreshToken, cookieRefreshToken, csrfCookieToken, httpRequest);
+    }
+
+    private void validateCookieTokenCsrf(
+        AuthLogoutRequest request,
+        String cookieRefreshToken,
+        String csrfCookieToken,
+        HttpServletRequest httpRequest
+    ) {
+        String requestRefreshToken = request == null ? null : request.refreshToken();
+        validateCookieTokenCsrf(requestRefreshToken, cookieRefreshToken, csrfCookieToken, httpRequest);
+    }
+
+    private void validateCookieTokenCsrf(
+        String requestRefreshToken,
+        String cookieRefreshToken,
+        String csrfCookieToken,
+        HttpServletRequest httpRequest
+    ) {
+        if (StringUtils.hasText(requestRefreshToken) || !StringUtils.hasText(cookieRefreshToken)) {
+            return;
+        }
+        String headerToken = httpRequest == null ? null : httpRequest.getHeader(CSRF_TOKEN_HEADER_NAME);
+        if (!StringUtils.hasText(csrfCookieToken)
+            || !StringUtils.hasText(headerToken)
+            || !secureEquals(csrfCookieToken, headerToken)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "CSRF token is required for cookie refresh token requests");
+        }
+    }
+
+    private String newCsrfToken() {
+        byte[] bytes = new byte[32];
+        CSRF_TOKEN_RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private boolean secureEquals(String expected, String actual) {
+        return MessageDigest.isEqual(
+            expected.getBytes(StandardCharsets.UTF_8),
+            actual.getBytes(StandardCharsets.UTF_8)
+        );
     }
 
     private boolean isSecureRequest(HttpServletRequest request) {

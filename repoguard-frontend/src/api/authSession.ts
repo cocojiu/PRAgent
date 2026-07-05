@@ -3,6 +3,7 @@ const REFRESH_TOKEN_STORAGE_KEY = "repoguard.refreshToken";
 const LEGACY_AUTH_TOKEN_STORAGE_KEY = "repoguard.authToken";
 const SESSION_MARKER_STORAGE_KEY = "repoguard.session";
 const SESSION_MARKER_VALUE = "active";
+const CSRF_TOKEN_COOKIE_KEY = "repoguard_csrf_token";
 
 let activeAccessToken = "";
 
@@ -32,6 +33,23 @@ export const hasAuthToken = () => Boolean(resolveAccessToken() || hasSessionMark
 
 export const resolveRefreshToken = () => {
   return "";
+};
+
+export const resolveCsrfToken = () => {
+  if (typeof document === "undefined") {
+    return "";
+  }
+  const encodedToken = document.cookie
+    .split(";")
+    .map(cookie => cookie.trim())
+    .find(cookie => cookie.startsWith(`${CSRF_TOKEN_COOKIE_KEY}=`))
+    ?.slice(CSRF_TOKEN_COOKIE_KEY.length + 1)
+    ?? "";
+  try {
+    return decodeURIComponent(encodedToken);
+  } catch {
+    return encodedToken;
+  }
 };
 
 export const resolveAccessToken = () => {

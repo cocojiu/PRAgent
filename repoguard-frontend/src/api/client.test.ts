@@ -18,6 +18,7 @@ describe("auth token client", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     clearAuthToken();
+    clearCsrfCookie();
     window.sessionStorage.clear();
     window.localStorage.clear();
   });
@@ -34,6 +35,7 @@ describe("auth token client", () => {
 
   it("refreshes a request by using the HttpOnly refresh cookie session marker", async () => {
     saveAuthTokens("expired-access", "refresh-token", true);
+    setCsrfCookie("refresh-csrf-token");
     window.localStorage.setItem("repoguard.refreshToken", "legacy-refresh-token");
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(apiResponse(null, 401))
@@ -47,6 +49,7 @@ describe("auth token client", () => {
     expect(refreshInit.credentials).toBe("include");
     expect(refreshInit.body).toBeUndefined();
     expect(new Headers(refreshInit.headers).has("Content-Type")).toBe(false);
+    expect(new Headers(refreshInit.headers).get("X-RepoGuard-CSRF")).toBe("refresh-csrf-token");
 
     const [, retryInit] = fetchMock.mock.calls[2] as [string, RequestInit];
     expect(new Headers(retryInit.headers).get("Authorization")).toBe("Bearer new-access");
@@ -54,6 +57,7 @@ describe("auth token client", () => {
 
   it("shares one refresh request across concurrent unauthorized responses", async () => {
     saveAuthTokens("expired-access", "refresh-token", true);
+    setCsrfCookie("shared-csrf-token");
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(apiResponse(null, 401))
       .mockResolvedValueOnce(apiResponse(null, 401))
@@ -71,6 +75,7 @@ describe("auth token client", () => {
     expect(second).toEqual({ second: true });
     const refreshCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes("/api/v1/auth/refresh"));
     expect(refreshCalls).toHaveLength(1);
+    expect(new Headers((refreshCalls[0][1] as RequestInit).headers).get("X-RepoGuard-CSRF")).toBe("shared-csrf-token");
     const retryAuthorizations = fetchMock.mock.calls.slice(3).map(([, init]) =>
       new Headers((init as RequestInit).headers).get("Authorization")
     );
@@ -105,3 +110,11 @@ describe("auth token client", () => {
     await expect(request("/api/v1/protected")).rejects.toBe(original);
   });
 });
+
+const setCsrfCookie = (token: string) => {
+  document.cookie = `repoguard_csrf_token=${encodeURIComponent(token)}; path=/`;
+};
+
+const clearCsrfCookie = () => {
+  document.cookie = "repoguard_csrf_token=; Max-Age=0; path=/";
+};

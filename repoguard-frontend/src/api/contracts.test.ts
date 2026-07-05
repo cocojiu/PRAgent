@@ -16,6 +16,7 @@ const okResponse = (data: unknown) =>
 describe("apiRequest", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    clearCsrfCookie();
     window.sessionStorage.clear();
     window.localStorage.clear();
   });
@@ -77,4 +78,26 @@ describe("apiRequest", () => {
       branch: "main"
     }));
   });
+
+  it("adds the CSRF header for cookie-backed logout", async () => {
+    setCsrfCookie("logout-csrf-token");
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(null));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("logout", undefined);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/auth/logout");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({}));
+    expect(new Headers(init.headers).get("X-RepoGuard-CSRF")).toBe("logout-csrf-token");
+  });
 });
+
+const setCsrfCookie = (token: string) => {
+  document.cookie = `repoguard_csrf_token=${encodeURIComponent(token)}; path=/`;
+};
+
+const clearCsrfCookie = () => {
+  document.cookie = "repoguard_csrf_token=; Max-Age=0; path=/";
+};

@@ -3,6 +3,7 @@ import { AuthSessionRefreshCoordinator } from "@/api/authRefreshCoordinator";
 import {
   clearAuthToken,
   hasAuthToken,
+  resolveCsrfToken,
   resolveAccessToken,
   resolveRefreshToken,
   saveAuthToken,
@@ -67,6 +68,11 @@ const doRequest = async (
   if (authToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${authToken}`);
   }
+  const method = options.method?.toUpperCase() ?? "GET";
+  const csrfToken = resolveCsrfToken();
+  if (csrfToken && requiresAuthCsrfHeader(path, method) && !headers.has("X-RepoGuard-CSRF")) {
+    headers.set("X-RepoGuard-CSRF", csrfToken);
+  }
 
   return fetch(buildUrl(path, params), {
     ...options,
@@ -105,3 +111,9 @@ const isRefreshExcludedAuthPath = (path: string) => {
   ];
   return excludedAuthPaths.includes(path);
 };
+
+const requiresAuthCsrfHeader = (path: string, method: string) =>
+  method === "POST" && [
+    "/api/v1/auth/refresh",
+    "/api/v1/auth/logout"
+  ].includes(path);

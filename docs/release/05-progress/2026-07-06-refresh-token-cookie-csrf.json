@@ -1,0 +1,31 @@
+{
+  "date": "2026-07-06",
+  "item": "OPT-ARCH-023",
+  "title": "Protect HttpOnly refresh-token cookie flows with CSRF binding",
+  "status": "completed",
+  "scope": [
+    "refresh token remains out of JavaScript-readable storage and is delivered through the HttpOnly repoguard_refresh_token cookie",
+    "auth responses now also issue a readable repoguard_csrf_token cookie with the same refresh-token lifetime",
+    "cookie-backed refresh and logout require a matching X-RepoGuard-CSRF header while legacy body refreshToken calls remain compatible",
+    "refresh failures and logout clear both auth cookies",
+    "frontend refresh and logout requests read the CSRF cookie and send the required header",
+    "frontend Nginx production config now emits baseline CSP and security response headers",
+    "Release Images now runs production dependency audit before building the frontend"
+  ],
+  "verification": [
+    "mvn -Dtest=AuthControllerTest test",
+    "mvn \"-Dtest=AuthControllerTest,AuthServiceImplTest,AuthTokenFilterTest,AuthTokenServiceTest,UserManagementServiceImplTest\" test",
+    "node node_modules/vitest/vitest.mjs run src/api/client.test.ts src/api/contracts.test.ts",
+    "node node_modules/vue-tsc/bin/vue-tsc.js -b",
+    "node node_modules/vite/bin/vite.js build",
+    "npm audit --audit-level=high --omit=dev --registry=https://registry.npmjs.org",
+    "npm run quality",
+    "mvn test",
+    "mvn -DskipTests package",
+    "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/production-readiness-check.ps1 -SkipBackendTests"
+  ],
+  "remaining": [
+    "consider adding short-lived operation confirmation tokens for the most sensitive admin actions",
+    "tighten CSP further after external API base-url deployment modes are finalized"
+  ]
+}

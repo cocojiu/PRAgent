@@ -2,6 +2,7 @@ import type { ApiResponse } from "@/api/apiEnvelope";
 import {
   hasSessionMarker,
   isSessionRemembered,
+  resolveCsrfToken,
   saveAuthTokens
 } from "@/api/authSession";
 
@@ -33,8 +34,14 @@ export class AuthSessionRefreshCoordinator {
       return false;
     }
     const remember = isSessionRemembered();
+    const headers = new Headers();
+    const csrfToken = resolveCsrfToken();
+    if (csrfToken) {
+      headers.set("X-RepoGuard-CSRF", csrfToken);
+    }
     const response = await fetch(this.buildUrl("/api/v1/auth/refresh"), {
       method: "POST",
+      headers,
       credentials: this.credentials
     });
     if (!response.ok) {
