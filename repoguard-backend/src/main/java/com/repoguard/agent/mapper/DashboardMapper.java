@@ -18,6 +18,12 @@ import org.apache.ibatis.annotations.Select;
 public interface DashboardMapper {
 
     @Select("""
+        select date(max(created_at))
+        from review_task
+        """)
+    LocalDate selectLatestReviewTaskDate();
+
+    @Select("""
         select
             count(*) as total,
             sum(case when risk_level in ('HIGH', 'CRITICAL') then 1 else 0 end) as highRisk,

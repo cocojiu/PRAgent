@@ -29,6 +29,14 @@ public class DashboardReviewTrendWindow {
         return LocalDate.now(clock).minusDays(DEFAULT_DAYS - 1L);
     }
 
+    public LocalDate startDate(LocalDate latestReviewDate) {
+        LocalDate currentStartDate = startDate();
+        if (latestReviewDate == null || !latestReviewDate.isBefore(currentStartDate)) {
+            return currentStartDate;
+        }
+        return latestReviewDate.minusDays(DEFAULT_DAYS - 1L);
+    }
+
     public int days() {
         return DEFAULT_DAYS;
     }

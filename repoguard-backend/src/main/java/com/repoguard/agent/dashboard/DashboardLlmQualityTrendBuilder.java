@@ -40,6 +40,15 @@ public class DashboardLlmQualityTrendBuilder {
         return new Window(normalizedDays, today().minusDays(normalizedDays - 1L));
     }
 
+    public Window window(Integer days, LocalDate latestReviewDate) {
+        int normalizedDays = DashboardLlmTrendDays.normalize(days);
+        LocalDate currentStartDate = today().minusDays(normalizedDays - 1L);
+        if (latestReviewDate == null || !latestReviewDate.isBefore(currentStartDate)) {
+            return new Window(normalizedDays, currentStartDate);
+        }
+        return new Window(normalizedDays, latestReviewDate.minusDays(normalizedDays - 1L));
+    }
+
     public List<LlmQualityTrendPointDto> build(List<DashboardLlmQualityTrendCount> trendCounts, Window window) {
         Map<String, DashboardLlmQualityTrendCount> countsByDay = nullToEmpty(trendCounts).stream()
             .filter(count -> StringUtils.hasText(count.getDayKey()))

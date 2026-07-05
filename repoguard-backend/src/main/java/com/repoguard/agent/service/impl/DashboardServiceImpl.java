@@ -81,8 +81,9 @@ public class DashboardServiceImpl implements DashboardService {
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays);
-        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate();
+        LocalDate latestReviewDate = dashboardMapper.selectLatestReviewTaskDate();
+        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate);
+        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate(latestReviewDate);
         DashboardMetricStats metricStats = loadMetricStats(reviewTrendStartDate);
         List<DashboardReviewTrendCount> reviewTrendCounts = dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate);
         List<DashboardHighRiskReview> highRiskReviews = dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate);
