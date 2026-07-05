@@ -33,7 +33,7 @@ class ReviewTaskDetailDataLoaderTest {
             page(List.of(finding())),
             page(List.of(missingTest()))
         );
-        when(timelineQueryService.loadItemsByTaskId(521L)).thenReturn(List.of(
+        when(timelineQueryService.loadLatestItemsByTaskId(521L, 20)).thenReturn(List.of(
             new ReviewTimelineItem("Review completed", "10:21:00", "done"),
             new ReviewTimelineItem("Review running", "10:20:00", "current")
         ));

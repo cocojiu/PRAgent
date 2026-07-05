@@ -212,6 +212,14 @@ class ReviewControllerTest {
         }
 
         @Override
+        public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
+            return List.of(
+                new ReviewTimelineItem("Review running", "10:20:00", "current"),
+                new ReviewTimelineItem("Review completed", "10:21:00", "done")
+            ).stream().limit(limit).toList();
+        }
+
+        @Override
         public ReviewTaskStatusResponse getReviewStatus(Long id) {
             return new ReviewTaskStatusResponse(
                 id,
@@ -608,6 +616,17 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.humanReviewNote").value("Need owner confirmation"))
             .andExpect(jsonPath("$.data.humanReviewBy").value("review-lead"))
             .andExpect(jsonPath("$.data.humanReviewedAt").value("2026-06-12 11:00:00"));
+    }
+
+    @Test
+    void listReviewTimelineReturnsLimitedItems() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/512/timeline").param("limit", "1"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data", hasSize(1)))
+            .andExpect(jsonPath("$.data[0].label").value("Review running"))
+            .andExpect(jsonPath("$.data[0].time").value("10:20:00"))
+            .andExpect(jsonPath("$.data[0].status").value("current"));
     }
 
     @Test

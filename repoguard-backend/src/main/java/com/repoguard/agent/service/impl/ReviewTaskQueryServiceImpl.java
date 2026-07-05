@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -149,6 +150,12 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
         queryItemLoader.loadRequired(id);
         return detailDataLoader.loadMissingTestsPage(id, page, pageSize);
+    }
+
+    @Override
+    public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
+        queryItemLoader.loadRequired(id);
+        return detailDataLoader.loadTimelineItems(id, limit);
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import java.util.List;
 
 public interface ReviewTaskQueryService {
@@ -30,6 +31,8 @@ public interface ReviewTaskQueryService {
     PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding);
 
     PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize);
+
+    List<ReviewTimelineItem> listReviewTimeline(Long id, int limit);
 
     ReviewTaskStatusResponse getReviewStatus(Long id);
 }

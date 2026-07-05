@@ -53,6 +53,19 @@ class ReviewTimelineQueryServiceTest {
     }
 
     @Test
+    void loadsLatestTimelineItemsInDisplayOrder() {
+        when(reviewTimelineMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+            timeline(101L, "Waiting", "PENDING", 4),
+            timeline(101L, "Failed", "FAILED", 3)
+        ));
+
+        var result = service.loadLatestItemsByTaskId(101L, 2);
+
+        assertThat(result).extracting("label").containsExactly("Failed", "Waiting");
+        assertThat(result).extracting("status").containsExactly("done", "pending");
+    }
+
+    @Test
     void returnsEmptyCollectionsForEmptyInput() {
         assertThat(service.loadByTaskId(List.of())).isEmpty();
         assertThat(service.labels(List.of())).isEmpty();

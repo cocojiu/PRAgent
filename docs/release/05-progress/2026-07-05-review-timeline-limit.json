@@ -1,0 +1,20 @@
+{
+  "date": "2026-07-05",
+  "item": "OPT-ARCH-028",
+  "title": "Review timeline limited loading",
+  "status": "completed",
+  "scope": [
+    "review detail initial payload only includes the latest 20 timeline items",
+    "GET /api/v1/reviews/{id}/timeline exposes an explicit limit parameter",
+    "frontend API contract can call the timeline endpoint",
+    "existing status and list timeline semantics remain unchanged"
+  ],
+  "verification": [
+    "mvn \"-Dtest=ReviewControllerTest,ReviewTimelineQueryServiceTest,ReviewTaskDetailDataLoaderTest,ReviewServiceImplTest\" test",
+    "mvn test",
+    "node node_modules/vue-tsc/bin/vue-tsc.js -b",
+    "node node_modules/eslint/bin/eslint.js \"src/**/*.{ts,vue}\"",
+    "node node_modules/vite/bin/vite.js build",
+    "node node_modules/vitest/vitest.mjs run"
+  ]
+}

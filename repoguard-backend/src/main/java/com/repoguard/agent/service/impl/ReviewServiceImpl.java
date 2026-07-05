@@ -21,6 +21,7 @@ import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
@@ -253,6 +254,11 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
         return reviewTaskQueryService.listMissingTests(id, page, pageSize);
+    }
+
+    @Override
+    public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
+        return reviewTaskQueryService.listReviewTimeline(id, limit);
     }
 
     @Override

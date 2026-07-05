@@ -21,6 +21,7 @@ import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.security.AuthTokenFilter;
@@ -132,6 +133,14 @@ public class ReviewController {
         @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize
     ) {
         return ApiResponse.ok(reviewService.listMissingTests(id, page, pageSize));
+    }
+
+    @GetMapping("/{id}/timeline")
+    public ApiResponse<List<ReviewTimelineItem>> listReviewTimeline(
+        @PathVariable @Min(1) Long id,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int limit
+    ) {
+        return ApiResponse.ok(reviewService.listReviewTimeline(id, limit));
     }
 
     @GetMapping("/{id}/status")

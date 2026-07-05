@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationHistoryResponse;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
@@ -47,6 +48,8 @@ public interface ReviewService {
     PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding);
 
     PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize);
+
+    List<ReviewTimelineItem> listReviewTimeline(Long id, int limit);
 
     ReviewTaskStatusResponse getReviewStatus(Long id);
 

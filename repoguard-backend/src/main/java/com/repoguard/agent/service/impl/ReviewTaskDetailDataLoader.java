@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 public class ReviewTaskDetailDataLoader {
 
     private static final int DETAIL_INITIAL_PAGE_SIZE = 20;
+    private static final int DETAIL_INITIAL_TIMELINE_LIMIT = 20;
     private static final String CATEGORY_FINDING = "FINDING";
     private static final String CATEGORY_MISSING_TEST = "MISSING_TEST";
 
@@ -54,7 +55,7 @@ public class ReviewTaskDetailDataLoader {
         PageResponse<ChangedFileDto> changedFiles = loadChangedFilesPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE, null);
         PageResponse<ReviewFindingDto> findings = loadFindingsPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE, null, null, null);
         PageResponse<MissingTestDto> missingTests = loadMissingTestsPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE);
-        List<ReviewTimelineItem> timeline = timelineQueryService.loadItemsByTaskId(taskId);
+        List<ReviewTimelineItem> timeline = loadTimelineItems(taskId, DETAIL_INITIAL_TIMELINE_LIMIT);
 
         return new ReviewTaskDetailData(
             changedFiles.items(),
@@ -65,6 +66,10 @@ public class ReviewTaskDetailDataLoader {
             findings.total(),
             missingTests.total()
         );
+    }
+
+    public List<ReviewTimelineItem> loadTimelineItems(Long taskId, int limit) {
+        return timelineQueryService.loadLatestItemsByTaskId(taskId, limit);
     }
 
     public PageResponse<ChangedFileDto> loadChangedFilesPage(Long taskId, int page, int pageSize, Boolean hasFinding) {

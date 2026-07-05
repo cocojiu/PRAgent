@@ -49,7 +49,8 @@ import type {
   ServiceIntegrationConfigRequest,
   SystemHealthItem,
   SystemSettings,
-  SystemSettingsRequest
+  SystemSettingsRequest,
+  TimelineItem
 } from "@/types";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
@@ -122,6 +123,7 @@ export type ApiContract = {
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
   fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
   fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;
+  fetchReviewTimeline: ApiOperation<{ id: number; limit?: number }, TimelineItem[]>;
   fetchReviewRepositories: ApiOperation<undefined, string[]>;
   fetchReviewStatus: ApiOperation<{ id: number }, ReviewTaskStatus>;
   fetchGithubCommentPreview: ApiOperation<GithubCommentPreviewInput, GithubCommentPreview>;
@@ -273,6 +275,10 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewMissingTests: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/missing-tests`,
     query: input => ({ page: input.page, pageSize: input.pageSize })
+  },
+  fetchReviewTimeline: {
+    path: input => `/api/v1/reviews/${idSegment(input.id)}/timeline`,
+    query: input => ({ limit: input.limit })
   },
   fetchReviewRepositories: {
     path: () => "/api/v1/reviews/repositories"

@@ -32,6 +32,11 @@ export const fetchReviewMissingTests = (
   params?: { page?: number; pageSize?: number }
 ) => apiRequest("fetchReviewMissingTests", { id, ...params });
 
+export const fetchReviewTimeline = (
+  id: number,
+  params?: { limit?: number }
+) => apiRequest("fetchReviewTimeline", { id, ...params });
+
 export const fetchReviewRepositories = () =>
   apiRequest("fetchReviewRepositories", undefined);
 

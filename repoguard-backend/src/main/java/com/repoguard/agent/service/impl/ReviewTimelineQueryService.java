@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,27 @@ public class ReviewTimelineQueryService {
 
     public List<ReviewTimelineItem> loadItemsByTaskId(Long taskId) {
         return loadByTaskId(taskId).stream().map(this::toTimelineItem).toList();
+    }
+
+    public List<ReviewTimeline> loadLatestByTaskId(Long taskId, int limit) {
+        int safeLimit = Math.min(100, Math.max(1, limit));
+        List<ReviewTimeline> timelines = reviewTimelineMapper.selectList(
+            new LambdaQueryWrapper<ReviewTimeline>()
+                .eq(ReviewTimeline::getTaskId, taskId)
+                .orderByDesc(ReviewTimeline::getSortOrder)
+                .orderByDesc(ReviewTimeline::getId)
+                .last("limit " + safeLimit)
+        );
+        if (timelines == null || timelines.isEmpty()) {
+            return List.of();
+        }
+        List<ReviewTimeline> orderedTimelines = new ArrayList<>(timelines);
+        Collections.reverse(orderedTimelines);
+        return orderedTimelines;
+    }
+
+    public List<ReviewTimelineItem> loadLatestItemsByTaskId(Long taskId, int limit) {
+        return loadLatestByTaskId(taskId, limit).stream().map(this::toTimelineItem).toList();
     }
 
     public ReviewTimelineItem latestItem(List<ReviewTimeline> timelines) {
