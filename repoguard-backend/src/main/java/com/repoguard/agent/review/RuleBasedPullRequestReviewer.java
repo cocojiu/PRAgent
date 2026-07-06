@@ -17,16 +17,27 @@ public class RuleBasedPullRequestReviewer {
     private final ReviewRuleProvider reviewRuleProvider;
     private final ReviewFindingFactory findingFactory;
     private final List<ReviewRule> lineRules;
+    private final ControllerApiTestCoverageRule apiTestCoverageRule;
 
     @Autowired
     public RuleBasedPullRequestReviewer(
         ReviewRuleProvider reviewRuleProvider,
         ReviewFindingFactory findingFactory,
-        List<ReviewRule> lineRules
+        List<ReviewRule> lineRules,
+        ControllerApiTestCoverageRule apiTestCoverageRule
     ) {
         this.reviewRuleProvider = reviewRuleProvider;
         this.findingFactory = findingFactory;
         this.lineRules = sortedRules(lineRules);
+        this.apiTestCoverageRule = apiTestCoverageRule;
+    }
+
+    RuleBasedPullRequestReviewer(
+        ReviewRuleProvider reviewRuleProvider,
+        ReviewFindingFactory findingFactory,
+        List<ReviewRule> lineRules
+    ) {
+        this(reviewRuleProvider, findingFactory, lineRules, new ControllerApiTestCoverageRule(findingFactory));
     }
 
     private static List<ReviewRule> sortedRules(List<ReviewRule> rules) {
@@ -61,21 +72,7 @@ public class RuleBasedPullRequestReviewer {
         Map<String, ReviewRuleSettings> configuredRules,
         List<ReviewFindingResult> findings
     ) {
-        if (diff.files() == null || diff.files().isEmpty() || hasTestChange(diff.files())) {
-            return;
-        }
-        diff.files().stream()
-            .filter(file -> isControllerApiChange(file)
-                && ReviewRuleApplicability.isApplicable("RG-API-001", file.filename(), configuredRules))
-            .findFirst()
-            .ifPresent(file -> findings.add(finding(
-                "MEDIUM",
-                "RG-API-001",
-                file.filename(),
-                firstAddedLine(file.patch()),
-                "Controller/API change is missing tests in the same PR",
-                "Add ControllerTest, ApiContractTest, or related src/test coverage for request validation, permissions, status codes, and key response fields."
-            )));
+        apiTestCoverageRule.evaluate(diff, configuredRules).ifPresent(findings::add);
     }
 
     private void scanPatch(
@@ -142,22 +139,6 @@ public class RuleBasedPullRequestReviewer {
             || trimmed.contains("@DeleteMapping");
     }
 
-    private boolean isControllerApiChange(GithubChangedFile file) {
-        if (file == null || !ReviewRuleApplicability.normalizePath(file.filename()).endsWith("controller.java")) {
-            return false;
-        }
-        String patch = file.patch();
-        if (patch == null || patch.isBlank()) {
-            return false;
-        }
-        for (String line : patch.split("\\R")) {
-            if (line.startsWith("+") && !line.startsWith("+++") && isControllerMapping(line.substring(1).trim())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private boolean patchHasAuthorizationGuard(String[] lines) {
         for (String line : lines) {
             if (!line.startsWith("-") && hasAuthorizationGuard(line.replaceFirst("^[+ ]", "").trim())) {
@@ -174,43 +155,6 @@ public class RuleBasedPullRequestReviewer {
             || trimmed.contains("@Secured")
             || trimmed.contains("@RolesAllowed");
     }
-
-    private boolean isControllerMapping(String trimmed) {
-        return trimmed.contains("@GetMapping") || trimmed.contains("@PostMapping") || trimmed.contains("@PutMapping")
-            || trimmed.contains("@PatchMapping") || trimmed.contains("@DeleteMapping")
-            || trimmed.contains("@RequestMapping");
-    }
-
-    private boolean hasTestChange(List<GithubChangedFile> files) {
-        return files.stream()
-            .map(GithubChangedFile::filename)
-            .map(ReviewRuleApplicability::normalizePath)
-            .anyMatch(path -> path.contains("/src/test/")
-                || path.endsWith("controllertest.java")
-                || path.endsWith("apicontracttest.java")
-                || path.endsWith("integrationtest.java"));
-    }
-
-    private Integer firstAddedLine(String patch) {
-        if (patch == null || patch.isBlank()) {
-            return null;
-        }
-        int currentLine = 0;
-        for (String line : patch.split("\\R")) {
-            if (line.startsWith("@@")) {
-                currentLine = parseNewFileStart(line);
-                continue;
-            }
-            if (line.startsWith("+") && !line.startsWith("+++")) {
-                return currentLine;
-            }
-            if (!line.startsWith("-")) {
-                currentLine++;
-            }
-        }
-        return null;
-    }
-
 
     private ReviewFindingResult finding(String severity, String ruleId, String filePath, Integer lineNumber, String message, String recommendation) {
         return findingFactory.finding(severity, ruleId, filePath, lineNumber, message, recommendation);

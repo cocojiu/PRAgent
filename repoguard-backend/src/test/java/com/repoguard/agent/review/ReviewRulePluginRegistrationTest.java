@@ -34,6 +34,7 @@ class ReviewRulePluginRegistrationTest {
                 DestructiveMigrationRule.class,
                 RequiredColumnWithoutDefaultRule.class,
                 GithubCommentDirectPublishRule.class,
+                ControllerApiTestCoverageRule.class,
                 RuleBasedPullRequestReviewer.class
             );
             context.refresh();
