@@ -1,19 +1,11 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
-import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.review.PullRequestReviewer;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 
 @Service
 public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
@@ -23,84 +15,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
 
     @Autowired
     public ReviewTaskExecutorImpl(ReviewTaskMapper reviewTaskMapper, ReviewExecutionWorkflow workflow) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.workflow = workflow;
-    }
-
-    public ReviewTaskExecutorImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ChangedFileMapper changedFileMapper,
-        GithubPullRequestClient githubPullRequestClient,
-        PullRequestReviewer pullRequestReviewer,
-        PlatformTransactionManager transactionManager,
-        RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService,
-        ReviewTaskStateMachine reviewTaskStateMachine
-    ) {
-        this(
-            reviewTaskMapper,
-            new ReviewExecutionWorkflowFactory(reviewTaskStateMachine).create(
-                reviewTaskMapper,
-                reviewTimelineMapper,
-                reviewFindingMapper,
-                changedFileMapper,
-                githubPullRequestClient,
-                pullRequestReviewer,
-                transactionManager,
-                metrics,
-                notificationDispatchService
-            )
-        );
-    }
-
-    ReviewTaskExecutorImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ChangedFileMapper changedFileMapper,
-        GithubPullRequestClient githubPullRequestClient,
-        PullRequestReviewer pullRequestReviewer,
-        PlatformTransactionManager transactionManager,
-        RepoGuardMetrics metrics,
-        ReviewTaskStateMachine reviewTaskStateMachine
-    ) {
-        this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewFindingMapper,
-            changedFileMapper,
-            githubPullRequestClient,
-            pullRequestReviewer,
-            transactionManager,
-            metrics,
-            null,
-            reviewTaskStateMachine
-        );
-    }
-
-    ReviewTaskExecutorImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ChangedFileMapper changedFileMapper,
-        GithubPullRequestClient githubPullRequestClient,
-        PullRequestReviewer pullRequestReviewer,
-        ReviewTaskStateMachine reviewTaskStateMachine
-    ) {
-        this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewFindingMapper,
-            changedFileMapper,
-            githubPullRequestClient,
-            pullRequestReviewer,
-            null,
-            null,
-            null,
-            reviewTaskStateMachine
-        );
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
+        this.workflow = Objects.requireNonNull(workflow, "workflow");
     }
 
     @Override

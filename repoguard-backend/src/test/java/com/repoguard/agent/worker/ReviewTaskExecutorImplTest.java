@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -24,6 +25,8 @@ import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.RiskLevelRanker;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -44,13 +47,15 @@ class ReviewTaskExecutorImplTest {
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTaskExecutorImpl executor = new ReviewTaskExecutorImpl(
         reviewTaskMapper,
-        reviewTimelineMapper,
-        reviewFindingMapper,
-        changedFileMapper,
-        githubPullRequestClient,
-        pullRequestReviewer,
-        reviewTaskStateMachine
+        createWorkflow(null)
     );
+
+    @Test
+    void constructorRejectsMissingWorkflow() {
+        assertThatThrownBy(() -> new ReviewTaskExecutorImpl(reviewTaskMapper, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("workflow");
+    }
 
     @Test
     void executeMovesQueuedTaskToCompletedAndWritesTimeline() {
@@ -335,14 +340,7 @@ class ReviewTaskExecutorImplTest {
         when(transactionManager.getTransaction(any(TransactionDefinition.class))).thenReturn(transactionStatus);
         ReviewTaskExecutorImpl transactionalExecutor = new ReviewTaskExecutorImpl(
             reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewFindingMapper,
-            changedFileMapper,
-            githubPullRequestClient,
-            pullRequestReviewer,
-            transactionManager,
-            null,
-            reviewTaskStateMachine
+            createWorkflow(transactionManager)
         );
         ReviewTask task = new ReviewTask();
         task.setId(42L);
@@ -383,6 +381,81 @@ class ReviewTaskExecutorImplTest {
             512,
             "a1b2c3d",
             LocalDateTime.parse("2026-06-05T18:00:00")
+        );
+    }
+
+    private ReviewExecutionWorkflow createWorkflow(PlatformTransactionManager transactionManager) {
+        ReviewExecutionClock clock = new ReviewExecutionClock();
+        ReviewLogContextFormatter logContextFormatter = new ReviewLogContextFormatter();
+        RiskLevelRanker riskLevelRanker = new RiskLevelRanker();
+        ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator(
+            new ReviewFindingDeduplicationKeyResolver(),
+            new ReviewFindingMergeService(riskLevelRanker)
+        );
+        ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(
+            new ReviewTimelineAppender(reviewTimelineMapper)
+        );
+        ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
+            changedFileMapper,
+            new ChangedFileEntityMapper()
+        );
+        ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
+            reviewFindingMapper,
+            findingDeduplicator,
+            new ReviewFindingEntityMapper()
+        );
+        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
+            reviewTaskStateMachine,
+            new ReviewHumanReviewDecisionPolicy(riskLevelRanker),
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
+        );
+        ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
+        ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
+            reviewTaskMapper,
+            claimService,
+            completionApplier,
+            clock
+        );
+        ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(null);
+        ReviewExecutionFailureClassifier failureClassifier = new ReviewExecutionFailureClassifier();
+        ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
+            new ReviewExecutionNoopCacheEvictionService()
+        );
+        ReviewExecutionFailureHandler failureHandler = new ReviewExecutionFailureHandler(
+            taskTerminalWriter,
+            timelineRecorder,
+            metricsRecorder,
+            cacheInvalidator,
+            failureClassifier
+        );
+        ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
+            taskTerminalWriter,
+            changedFileReplacementService,
+            findingReplacementService,
+            timelineRecorder,
+            metricsRecorder,
+            cacheInvalidator
+        );
+        return new ReviewExecutionWorkflow(
+            pullRequestReviewer,
+            new ReviewExecutionTransactionRunner(transactionManager, 3),
+            new GithubPullRequestDiffFetcher(
+                githubPullRequestClient,
+                metricsRecorder,
+                clock,
+                logContextFormatter,
+                failureClassifier
+            ),
+            reviewTaskStateMachine,
+            timelineRecorder,
+            claimService,
+            failureHandler,
+            resultWriter,
+            new ReviewExecutionNotifier(new ReviewExecutionNoopNotificationDispatchService()),
+            new ReviewExecutionDiffStats(),
+            new ReviewExecutionLog(clock, logContextFormatter),
+            clock
         );
     }
 }
