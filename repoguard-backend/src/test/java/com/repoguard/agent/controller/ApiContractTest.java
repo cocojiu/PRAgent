@@ -10,21 +10,15 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.common.GlobalExceptionHandler;
+import com.repoguard.agent.testsupport.ControllerEndpointCatalog;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
@@ -126,7 +120,7 @@ class ApiContractTest {
         CONTROLLERS.forEach(controller -> {
             RequestMapping mapping = controller.getAnnotation(RequestMapping.class);
             if (mapping != null) {
-                assertThat(mappingPaths(mapping))
+                assertThat(ControllerEndpointCatalog.classMappingPaths(controller))
                     .as(controller.getSimpleName() + " base path must be versioned")
                     .isNotEmpty()
                     .allSatisfy(path -> assertThat(path).startsWith("/api/v1/"));
@@ -144,7 +138,7 @@ class ApiContractTest {
     void handlerMethodsReturnStableApiResponseEnvelope() {
         CONTROLLERS.forEach(controller ->
             List.of(controller.getDeclaredMethods()).stream()
-                .filter(this::isHandlerMethod)
+                .filter(ControllerEndpointCatalog::isHandlerMethod)
                 .forEach(method -> assertThat(method.getReturnType())
                     .as(controller.getSimpleName() + "#" + method.getName() + " must return ApiResponse")
                     .isEqualTo(ApiResponse.class))
@@ -155,7 +149,7 @@ class ApiContractTest {
     void pagedControllerParamsKeepBoundedContract() {
         CONTROLLERS.forEach(controller ->
             List.of(controller.getDeclaredMethods()).stream()
-                .filter(this::isHandlerMethod)
+                .filter(ControllerEndpointCatalog::isHandlerMethod)
                 .forEach(method -> List.of(method.getParameters()).forEach(parameter -> {
                     String requestParamName = requestParamName(parameter);
                     if ("page".equals(requestParamName)) {
@@ -238,55 +232,10 @@ class ApiContractTest {
             .andExpect(jsonPath("$.timestamp", notNullValue()));
     }
 
-    private List<String> mappingPaths(RequestMapping mapping) {
-        if (mapping.path().length > 0) {
-            return List.of(mapping.path());
-        }
-        return List.of(mapping.value());
-    }
-
     private List<String> handlerMappingPaths(Class<?> controller) {
-        return List.of(controller.getDeclaredMethods()).stream()
-            .filter(this::isHandlerMethod)
-            .flatMap(method -> methodMappingPaths(method).stream())
+        return ControllerEndpointCatalog.endpoints(controller).stream()
+            .map(ControllerEndpointCatalog.Endpoint::path)
             .toList();
-    }
-
-    private List<String> methodMappingPaths(Method method) {
-        if (method.isAnnotationPresent(RequestMapping.class)) {
-            RequestMapping mapping = method.getAnnotation(RequestMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        if (method.isAnnotationPresent(GetMapping.class)) {
-            GetMapping mapping = method.getAnnotation(GetMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        if (method.isAnnotationPresent(PostMapping.class)) {
-            PostMapping mapping = method.getAnnotation(PostMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        if (method.isAnnotationPresent(PutMapping.class)) {
-            PutMapping mapping = method.getAnnotation(PutMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        if (method.isAnnotationPresent(DeleteMapping.class)) {
-            DeleteMapping mapping = method.getAnnotation(DeleteMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        if (method.isAnnotationPresent(PatchMapping.class)) {
-            PatchMapping mapping = method.getAnnotation(PatchMapping.class);
-            return mapping.path().length > 0 ? List.of(mapping.path()) : List.of(mapping.value());
-        }
-        return List.of();
-    }
-
-    private boolean isHandlerMethod(Method method) {
-        return method.isAnnotationPresent(RequestMapping.class)
-            || method.isAnnotationPresent(GetMapping.class)
-            || method.isAnnotationPresent(PostMapping.class)
-            || method.isAnnotationPresent(PutMapping.class)
-            || method.isAnnotationPresent(DeleteMapping.class)
-            || method.isAnnotationPresent(PatchMapping.class);
     }
 
     private String requestParamName(Parameter parameter) {
@@ -304,116 +253,13 @@ class ApiContractTest {
     }
 
     private List<String> apiSurface() {
-        List<String> contracts = new ArrayList<>();
-        CONTROLLERS.forEach(controller -> List.of(controller.getDeclaredMethods()).stream()
-            .filter(this::isHandlerMethod)
-            .forEach(method -> contracts.addAll(endpointContracts(controller, method))));
-        return contracts.stream()
+        return CONTROLLERS.stream()
+            .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
+            .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path()
+                + " query=" + ControllerEndpointCatalog.requestParamNames(endpoint.method())
+                + " body=" + ControllerEndpointCatalog.requestBodyType(endpoint.method()))
             .sorted()
             .toList();
-    }
-
-    private List<String> endpointContracts(Class<?> controller, Method method) {
-        List<String> basePaths = classMappingPaths(controller);
-        List<MappingDefinition> methodMappings = methodMappings(method);
-        List<String> contracts = new ArrayList<>();
-        for (String basePath : basePaths) {
-            for (MappingDefinition mapping : methodMappings) {
-                contracts.add(mapping.httpMethod() + " " + joinPaths(basePath, mapping.path())
-                    + " query=" + requestParamNames(method)
-                    + " body=" + requestBodyType(method));
-            }
-        }
-        return contracts;
-    }
-
-    private List<String> classMappingPaths(Class<?> controller) {
-        RequestMapping mapping = controller.getAnnotation(RequestMapping.class);
-        if (mapping == null) {
-            return List.of("");
-        }
-        List<String> paths = mappingPaths(mapping);
-        return paths.isEmpty() ? List.of("") : paths;
-    }
-
-    private List<MappingDefinition> methodMappings(Method method) {
-        if (method.isAnnotationPresent(GetMapping.class)) {
-            GetMapping mapping = method.getAnnotation(GetMapping.class);
-            return mappingDefinitions("GET", mapping.path(), mapping.value());
-        }
-        if (method.isAnnotationPresent(PostMapping.class)) {
-            PostMapping mapping = method.getAnnotation(PostMapping.class);
-            return mappingDefinitions("POST", mapping.path(), mapping.value());
-        }
-        if (method.isAnnotationPresent(PutMapping.class)) {
-            PutMapping mapping = method.getAnnotation(PutMapping.class);
-            return mappingDefinitions("PUT", mapping.path(), mapping.value());
-        }
-        if (method.isAnnotationPresent(DeleteMapping.class)) {
-            DeleteMapping mapping = method.getAnnotation(DeleteMapping.class);
-            return mappingDefinitions("DELETE", mapping.path(), mapping.value());
-        }
-        if (method.isAnnotationPresent(PatchMapping.class)) {
-            PatchMapping mapping = method.getAnnotation(PatchMapping.class);
-            return mappingDefinitions("PATCH", mapping.path(), mapping.value());
-        }
-        if (method.isAnnotationPresent(RequestMapping.class)) {
-            RequestMapping mapping = method.getAnnotation(RequestMapping.class);
-            String httpMethod = mapping.method().length == 1 ? mapping.method()[0].name() : "REQUEST";
-            return mappingDefinitions(httpMethod, mapping.path(), mapping.value());
-        }
-        return List.of();
-    }
-
-    private List<MappingDefinition> mappingDefinitions(String httpMethod, String[] paths, String[] values) {
-        String[] selectedPaths = paths.length > 0 ? paths : values;
-        if (selectedPaths.length == 0) {
-            return List.of(new MappingDefinition(httpMethod, ""));
-        }
-        return List.of(selectedPaths).stream()
-            .map(path -> new MappingDefinition(httpMethod, path))
-            .toList();
-    }
-
-    private String joinPaths(String basePath, String methodPath) {
-        if (basePath.isBlank()) {
-            return methodPath.isBlank() ? "/" : methodPath;
-        }
-        if (methodPath.isBlank()) {
-            return basePath;
-        }
-        return basePath.endsWith("/")
-            ? basePath.substring(0, basePath.length() - 1) + ensureLeadingSlash(methodPath)
-            : basePath + ensureLeadingSlash(methodPath);
-    }
-
-    private String ensureLeadingSlash(String path) {
-        return path.startsWith("/") ? path : "/" + path;
-    }
-
-    private List<String> requestParamNames(Method method) {
-        return List.of(method.getParameters()).stream()
-            .filter(parameter -> parameter.isAnnotationPresent(RequestParam.class))
-            .map(this::requestParamName)
-            .toList();
-    }
-
-    private String requestBodyType(Method method) {
-        return List.of(method.getParameters()).stream()
-            .filter(parameter -> parameter.isAnnotationPresent(RequestBody.class))
-            .map(parameter -> simpleTypeName(parameter.getType()))
-            .findFirst()
-            .orElse("-");
-    }
-
-    private String simpleTypeName(Class<?> type) {
-        if (type.isArray()) {
-            return simpleTypeName(type.getComponentType()) + "[]";
-        }
-        return type.getSimpleName();
-    }
-
-    private record MappingDefinition(String httpMethod, String path) {
     }
 
     @RestController
