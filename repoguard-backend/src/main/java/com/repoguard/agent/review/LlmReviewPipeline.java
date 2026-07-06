@@ -19,6 +19,7 @@ class LlmReviewPipeline {
     private final LlmRuleReviewMerger reviewMerger;
     private final LlmReviewQualityScorer qualityScorer;
     private final LlmReviewCostEstimator costEstimator;
+    private final LlmChunkReviewAggregator chunkReviewAggregator;
     private final RepoGuardMetrics metrics;
     private final ObjectMapper objectMapper;
 
@@ -81,6 +82,14 @@ class LlmReviewPipeline {
         this.costEstimator = costEstimator == null ? new LlmReviewCostEstimator() : costEstimator;
         this.metrics = metrics;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
+        this.chunkReviewAggregator = new LlmChunkReviewAggregator(
+            this.ruleBasedReviewer,
+            this.promptBuilder,
+            this.reviewMerger,
+            this.qualityScorer,
+            this.costEstimator,
+            metrics
+        );
         this.stages = List.of(
             new LlmReadinessStage(),
             new LlmExecutionStage(diffChunker == null ? new PullRequestDiffChunker() : diffChunker),
@@ -154,48 +163,7 @@ class LlmReviewPipeline {
                 );
             }
 
-            List<ReviewFindingResult> findings = new java.util.ArrayList<>();
-            String riskLevel = "INFO";
-            int promptTokens = 0;
-            int completionTokens = 0;
-            int totalTokens = 0;
-            int failedChunks = 0;
-            for (PullRequestDiffChunk chunk : chunks) {
-                try {
-                    LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
-                    ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
-                    riskLevel = reviewMerger.maxRisk(riskLevel, parsed.riskLevel());
-                    promptTokens += safeInt(callResult.promptTokens());
-                    completionTokens += safeInt(callResult.completionTokens());
-                    totalTokens += safeInt(callResult.totalTokens());
-                    if (parsed.findings() != null) {
-                        findings.addAll(parsed.findings());
-                    }
-                } catch (RuntimeException ex) {
-                    failedChunks++;
-                    if (metrics != null) {
-                        metrics.llmFallback("chunk_partial_failure");
-                    }
-                    ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
-                    riskLevel = reviewMerger.maxRisk(riskLevel, ruleReview.riskLevel());
-                    if (ruleReview.findings() != null) {
-                        findings.addAll(ruleReview.findings());
-                    }
-                }
-            }
-            return ReviewResult.completed(
-                riskLevel,
-                findings,
-                null,
-                null,
-                null,
-                failedChunks > 0 ? "partial_fallback" : null,
-                promptBuilder.chunkedPromptSummary(diff, chunks, findings.size(), riskLevel, failedChunks),
-                zeroToNull(promptTokens),
-                zeroToNull(completionTokens),
-                zeroToNull(totalTokens),
-                costEstimator.estimate(settings, zeroToNull(promptTokens), zeroToNull(completionTokens))
-            );
+            return chunkReviewAggregator.aggregate(context, diff, chunks, reviewResultParser);
         }
     }
 
@@ -273,10 +241,6 @@ class LlmReviewPipeline {
     private Integer elapsedMillis(long startedAt) {
         long elapsed = Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
         return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
-    }
-
-    private int safeInt(Integer value) {
-        return value == null ? 0 : value;
     }
 
     private Integer zeroToNull(int value) {
