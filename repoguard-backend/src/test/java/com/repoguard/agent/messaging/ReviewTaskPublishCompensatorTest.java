@@ -118,6 +118,24 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void compensatorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "test-instance",
+            null,
+            outboxStore,
+            reviewTaskStateMachine,
+            failureClassifier,
+            compensationPolicy
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
+
+    @Test
     void compensatorRejectsMissingFailureClassifier() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskMapper,

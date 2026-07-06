@@ -75,7 +75,7 @@ public class ReviewTaskPublishCompensator {
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
         this.properties = properties;
         this.instanceId = instanceId;
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
         this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
@@ -134,9 +134,7 @@ public class ReviewTaskPublishCompensator {
                 reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
                 outboxStore.clearPublishClaim(task, claimedAt, instanceId);
                 outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
-                if (metrics != null) {
-                    metrics.rabbitPublishCompensationSucceeded("publish");
-                }
+                metrics.rabbitPublishCompensationSucceeded("publish");
                 LOGGER.info(
                     "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",
                     task.getId(),
@@ -154,9 +152,7 @@ public class ReviewTaskPublishCompensator {
                         LocalDateTime.now(),
                         "FAILED"
                     );
-                    if (metrics != null) {
-                        metrics.rabbitPublishCompensationFailed(failureClassifier.classify(ex));
-                    }
+                    metrics.rabbitPublishCompensationFailed(failureClassifier.classify(ex));
                     LOGGER.warn(
                         "Review task publish compensation failed taskId={} repository={} prNumber={} operation=review_publish_compensation result=publish_failed recoverySource={} attempts={} nextRetryAt={} error={}",
                         task.getId(),

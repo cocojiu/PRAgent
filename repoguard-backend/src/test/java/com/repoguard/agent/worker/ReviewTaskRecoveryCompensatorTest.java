@@ -58,6 +58,22 @@ class ReviewTaskRecoveryCompensatorTest {
     }
 
     @Test
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new ReviewTaskRecoveryCompensator(
+            recoveryStore,
+            timelineRecorder,
+            new ReviewExecutionClock(),
+            new ReviewLogContextFormatter(),
+            new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties()),
+            reviewTaskPublisher,
+            null,
+            new RabbitPublishFailureClassifier()
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
+
+    @Test
     void recoverDirectlyPublishesOwnedStuckTask() {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-06-20T12:00:00");

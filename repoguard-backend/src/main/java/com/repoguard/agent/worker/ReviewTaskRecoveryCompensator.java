@@ -49,7 +49,7 @@ public class ReviewTaskRecoveryCompensator {
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
@@ -96,9 +96,7 @@ public class ReviewTaskRecoveryCompensator {
                 LocalDateTime nextRetryAt = recoveredAt.plusNanos(recoveryPolicy.publishRetryDelayMs() * 1_000_000);
                 if (recoveryStore.markRecoveryPublishFailed(task, recoveredAt, nextRetryAt, error)) {
                     timelineRecorder.recoveryPublishFailed(task, recoveredAt, error);
-                    if (metrics != null) {
-                        metrics.rabbitPublishFailed("execute", failureClassifier.classify(ex));
-                    }
+                    metrics.rabbitPublishFailed("execute", failureClassifier.classify(ex));
                     LOGGER.warn(
                         "Review task recovery publish failed taskId={} repository={} prNumber={} operation=review_recovery result=publish_failed attempts={} nextRetryAt={} error={}",
                         task.getId(),
