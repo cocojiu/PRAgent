@@ -90,6 +90,18 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void githubWebhookDoesNotRequireToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/github/webhooks");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
     void protectedApiAllowsExistingAuthenticatedUserAttribute() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
         request.setAttribute(

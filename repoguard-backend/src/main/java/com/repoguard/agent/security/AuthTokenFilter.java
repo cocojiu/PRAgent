@@ -85,15 +85,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresAuth(HttpServletRequest request) {
-        String path = request.getRequestURI();
-        if (path.equals("/api/v1/auth/me")) {
-            return true;
-        }
-        if (path.equals("/api/v1/github/webhooks")) {
-            return false;
-        }
-        return path.startsWith("/api/v1/")
-            && !path.startsWith("/api/v1/auth/");
+        return AuthTokenAccessPolicy.requiresAuth(request.getMethod(), request.getRequestURI());
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
