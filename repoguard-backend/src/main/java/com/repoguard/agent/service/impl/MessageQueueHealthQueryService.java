@@ -3,11 +3,8 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.config.RabbitMqIntegrationProvider;
 import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
-import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
-import com.repoguard.agent.dto.RabbitMqTopologyDto;
-import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
@@ -24,12 +21,10 @@ import org.springframework.stereotype.Component;
 class MessageQueueHealthQueryService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final DateTimeFormatter VERSION_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider;
-    private final RabbitReviewQueueProperties properties;
-    private final RabbitRuntimeHealthProbe runtimeHealthProbe;
+    private final MessageQueueRuntimeConfigAssembler runtimeConfigAssembler;
     private final MessageQueueExceptionTaskAssembler exceptionTaskAssembler;
     private final MessageQueueMetricAssembler metricAssembler;
 
@@ -62,11 +57,10 @@ class MessageQueueHealthQueryService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
-        this.properties = properties;
-        this.runtimeHealthProbe = runtimeHealthProbe;
         ReviewTaskStateMachine stateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
+        this.runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(properties, runtimeHealthProbe);
         this.exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(stateMachine);
         this.metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
     }
@@ -81,68 +75,14 @@ class MessageQueueHealthQueryService {
         }
 
         return new MessageQueueHealthResponse(
-            activeConfig(settings),
-            topology(),
+            runtimeConfigAssembler.activeConfig(settings),
+            runtimeConfigAssembler.topology(),
             metricAssembler.assemble(summary),
-            retryCompensation(summary, latestFailureReason),
-            exceptionTaskAssembler.assemble(exceptionTasks, maxAttempts()),
+            runtimeConfigAssembler.retryCompensation(summary, latestFailureReason),
+            exceptionTaskAssembler.assemble(exceptionTasks, runtimeConfigAssembler.maxAttempts()),
             format(LocalDateTime.now()),
             "DATABASE_TASK_STATE"
         );
-    }
-
-    private ActiveRabbitMqConfigDto activeConfig(RabbitMqIntegrationSettings settings) {
-        return new ActiveRabbitMqConfigDto(
-            settings.provider(),
-            settings.status(),
-            runtimeHealthProbe.connectionStatus(),
-            settings.baseUrl(),
-            settings.username(),
-            settings.virtualHost(),
-            format(settings.lastCheckedAt()),
-            settings.lastError(),
-            format(settings.updatedAt()),
-            configVersion(settings),
-            "Testing a connection does not switch the active configuration; save integration settings to take effect."
-        );
-    }
-
-    private String configVersion(RabbitMqIntegrationSettings settings) {
-        if (settings == null || settings.updatedAt() == null) {
-            return "runtime-default";
-        }
-        return "cfg-" + settings.updatedAt().format(VERSION_FORMATTER);
-    }
-
-    private RabbitMqTopologyDto topology() {
-        return new RabbitMqTopologyDto(
-            properties.getExchange(),
-            properties.getQueue(),
-            properties.getRoutingKey(),
-            properties.getDeadLetterExchange(),
-            properties.getDeadLetterQueue(),
-            properties.getDeadLetterRoutingKey()
-        );
-    }
-
-    private RetryCompensationStatusDto retryCompensation(MessageQueueHealthSummary summary, String latestFailureReason) {
-        return new RetryCompensationStatusDto(
-            maxAttempts(),
-            Math.max(1000, properties.getPublishCompensationIntervalMs()),
-            Math.max(1, properties.getPublishCompensationBatchSize()),
-            Math.max(1000, properties.getPublishCompensationLeaseMs()),
-            safeCount(summary == null ? null : summary.getClaimed()),
-            null,
-            latestFailureReason
-        );
-    }
-
-    private long safeCount(Long value) {
-        return value == null ? 0L : value;
-    }
-
-    private int maxAttempts() {
-        return Math.max(1, properties.getPublishCompensationMaxAttempts());
     }
 
     private String format(LocalDateTime value) {
