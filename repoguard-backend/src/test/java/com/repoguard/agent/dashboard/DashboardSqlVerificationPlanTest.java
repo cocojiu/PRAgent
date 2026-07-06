@@ -22,7 +22,7 @@ class DashboardSqlVerificationPlanTest {
     @Test
     void everyDashboardQueryAssumptionReferencesExistingMapperMethodAndSqlAnnotation() throws Exception {
         for (DashboardSqlVerificationPlan.QueryAssumption assumption : plan.queryAssumptions()) {
-            Method method = DashboardMapper.class.getMethod(assumption.mapperMethod(), LocalDate.class);
+            Method method = mapperMethod(assumption.mapperMethod());
 
             assertThat(method.getAnnotation(Select.class))
                 .as(assumption.mapperMethod() + " must keep @Select SQL contract")
@@ -68,6 +68,7 @@ class DashboardSqlVerificationPlanTest {
         assertThat(plan.queryAssumptions())
             .extracting(DashboardSqlVerificationPlan.QueryAssumption::mapperMethod)
             .containsExactlyInAnyOrder(
+                "selectLatestReviewTaskDate",
                 "selectMetricStat",
                 "selectRiskLevelCounts",
                 "selectReviewTrendCounts",
@@ -77,6 +78,13 @@ class DashboardSqlVerificationPlanTest {
                 "selectLlmQualityByModelStats",
                 "selectLlmQualityByRepositoryStats"
             );
+    }
+
+    private Method mapperMethod(String methodName) throws NoSuchMethodException {
+        if ("selectLatestReviewTaskDate".equals(methodName)) {
+            return DashboardMapper.class.getMethod(methodName);
+        }
+        return DashboardMapper.class.getMethod(methodName, LocalDate.class);
     }
 
     @Test

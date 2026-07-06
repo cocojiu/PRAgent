@@ -14,6 +14,15 @@ import org.junit.jupiter.api.Test;
 class DashboardMapperSqlContractTest {
 
     @Test
+    void latestReviewTaskDateQueryKeepsCreatedAtMaxContract() throws Exception {
+        String sql = sql("selectLatestReviewTaskDate");
+
+        assertThat(sql)
+            .contains("select date(max(created_at))")
+            .contains("from review_task");
+    }
+
+    @Test
     void metricQueryKeepsBoundedAggregateContract() throws Exception {
         String sql = sql("selectMetricStat", LocalDate.class);
 

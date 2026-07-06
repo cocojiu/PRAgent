@@ -9,6 +9,11 @@ public class DashboardSqlVerificationPlan {
     public List<QueryAssumption> queryAssumptions() {
         return List.of(
             new QueryAssumption(
+                "selectLatestReviewTaskDate",
+                "latest dashboard review fallback date resolved from review_task.created_at",
+                List.of("idx_review_task_created_at")
+            ),
+            new QueryAssumption(
                 "selectMetricStat",
                 "7-day review task metric aggregate bounded by review_task.created_at",
                 List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk")
@@ -54,6 +59,11 @@ public class DashboardSqlVerificationPlan {
     public List<IndexAlignment> indexAlignments() {
         return List.of(
             new IndexAlignment(
+                "idx_review_task_created_at",
+                List.of("created_at"),
+                "Latest review fallback and dashboard windows depend on a direct created_at access path."
+            ),
+            new IndexAlignment(
                 "idx_review_task_dashboard_created_risk",
                 List.of("created_at", "risk_level"),
                 "Dashboard review task aggregates first constrain the time window, then derive or group by risk level."
@@ -78,6 +88,13 @@ public class DashboardSqlVerificationPlan {
 
     public List<ExplainObservation> explainObservations() {
         return List.of(
+            new ExplainObservation(
+                "selectLatestReviewTaskDate",
+                List.of("idx_review_task_created_at"),
+                List.of("range", "ref", "const"),
+                "rows should stay bounded by the created_at index when resolving the latest review date.",
+                List.of("key should not be null", "type should not degrade to ALL on large review_task tables")
+            ),
             new ExplainObservation(
                 "selectMetricStat",
                 List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk"),
