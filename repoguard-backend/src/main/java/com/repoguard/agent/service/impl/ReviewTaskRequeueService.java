@@ -6,7 +6,6 @@ import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -34,7 +33,6 @@ class ReviewTaskRequeueService {
 
     ReviewTaskRequeueService(
         ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
         RabbitReviewQueueProperties properties,
         ReviewTaskPublisher reviewTaskPublisher,
         PlatformTransactionManager transactionManager,
@@ -47,13 +45,7 @@ class ReviewTaskRequeueService {
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.auditRecorder = auditRecorder;
-        this.outboxStore = outboxStore == null
-            ? new ReviewTaskPublishOutboxStore(
-                reviewTaskMapper,
-                reviewTimelineMapper,
-                this.reviewTaskStateMachine
-            )
-            : outboxStore;
+        this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
         this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
     }
 

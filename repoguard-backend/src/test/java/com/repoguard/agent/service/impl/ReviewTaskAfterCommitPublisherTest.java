@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,6 +12,7 @@ import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
@@ -36,6 +38,17 @@ class ReviewTaskAfterCommitPublisherTest {
     }
 
     @Test
+    void constructorRejectsMissingOutboxStore() {
+        assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
+            reviewTaskPublisher,
+            null,
+            Runnable::run
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("outboxStore");
+    }
+
+    @Test
     void marksPublishFailedWhenExecutorRejectsAfterTransactionCommit() {
         ReviewTask task = task();
         LocalDateTime queuedAt = LocalDateTime.of(2026, 7, 4, 9, 30);
@@ -43,10 +56,12 @@ class ReviewTaskAfterCommitPublisherTest {
         latest.setSortOrder(3);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
         ReviewTaskAfterCommitPublisher publisher = new ReviewTaskAfterCommitPublisher(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            new ReviewTaskStateMachine(),
+            new ReviewTaskPublishOutboxStore(
+                reviewTaskMapper,
+                reviewTimelineMapper,
+                new ReviewTaskStateMachine()
+            ),
             command -> {
                 throw new RejectedExecutionException(
                     "executor shutting down token=raw-token password=raw-password"

@@ -1,14 +1,12 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,52 +23,24 @@ public class ReviewTaskAfterCommitPublisher {
 
     @Autowired
     public ReviewTaskAfterCommitPublisher(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
-        ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskAfterCommitPublisherExecutor reviewPublishExecutor
     ) {
         this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            reviewTaskStateMachine,
             outboxStore,
             (Executor) reviewPublishExecutor
         );
     }
 
     ReviewTaskAfterCommitPublisher(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
-        ReviewTaskStateMachine reviewTaskStateMachine,
-        Executor reviewPublishExecutor
-    ) {
-        this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            reviewTaskStateMachine,
-            null,
-            reviewPublishExecutor
-        );
-    }
-
-    ReviewTaskAfterCommitPublisher(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTaskPublishOutboxStore outboxStore,
         Executor reviewPublishExecutor
     ) {
         this.reviewTaskPublisher = reviewTaskPublisher;
-        this.outboxStore = outboxStore == null
-            ? new ReviewTaskPublishOutboxStore(reviewTaskMapper, reviewTimelineMapper, reviewTaskStateMachine)
-            : outboxStore;
+        this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
         this.reviewPublishExecutor = reviewPublishExecutor == null ? Runnable::run : reviewPublishExecutor;
     }
 

@@ -89,7 +89,6 @@ class MessageQueueHealthServiceImplTest {
     void requeueServiceRejectsMissingStateMachine() {
         assertThatThrownBy(() -> new ReviewTaskRequeueService(
             reviewTaskMapper,
-            reviewTimelineMapper,
             properties,
             reviewTaskPublisher,
             null,
@@ -99,6 +98,21 @@ class MessageQueueHealthServiceImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void requeueServiceRejectsMissingOutboxStore() {
+        assertThatThrownBy(() -> new ReviewTaskRequeueService(
+            reviewTaskMapper,
+            properties,
+            reviewTaskPublisher,
+            null,
+            reviewTaskStateMachine,
+            org.mockito.Mockito.mock(MessageQueueAuditRecorder.class),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("outboxStore");
     }
 
     @Test
@@ -333,7 +347,6 @@ class MessageQueueHealthServiceImplTest {
         );
         ReviewTaskRequeueService requeueService = new ReviewTaskRequeueService(
             reviewTaskMapper,
-            reviewTimelineMapper,
             properties,
             reviewTaskPublisher,
             transactionManager,

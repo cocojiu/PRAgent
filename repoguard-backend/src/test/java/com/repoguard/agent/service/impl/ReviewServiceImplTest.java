@@ -40,6 +40,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
@@ -217,10 +218,12 @@ class ReviewServiceImplTest {
 
     private ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher() {
         return new ReviewTaskAfterCommitPublisher(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            reviewTaskStateMachine,
+            new ReviewTaskPublishOutboxStore(
+                reviewTaskMapper,
+                reviewTimelineMapper,
+                reviewTaskStateMachine
+            ),
             Runnable::run
         );
     }
