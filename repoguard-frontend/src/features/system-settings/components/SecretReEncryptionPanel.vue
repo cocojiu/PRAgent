@@ -75,11 +75,18 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
+import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { reEncryptSecrets } from "@/api/config";
 import {
   secretReEncryptionSummaryText,
   toSecretReEncryptionDisplayItems
 } from "@/features/system-settings/secretReEncryptionDisplayMappers";
+import {
+  buildSecretReEncryptionRequest,
+  canSubmitSecretReEncryption,
+  SECRET_RE_ENCRYPTION_CONFIRM_TEXT,
+  secretReEncryptionExecutionConfirmMessage
+} from "@/features/system-settings/secretReEncryptionRequestBuilders";
 import { getErrorMessage } from "@/utils/errors";
 import type { SecretReEncryptionRequest, SecretReEncryptionResponse } from "@/types";
 
@@ -103,9 +110,7 @@ const isRunning = computed(() => runningMode.value !== null);
 const canRun = computed(() =>
   props.canManage
   && !isRunning.value
-  && form.sourceEncryptionKey.trim().length > 0
-  && form.targetEncryptionKey.trim().length > 0
-  && form.targetKeyId.trim().length > 0
+  && canSubmitSecretReEncryption(form)
 );
 const displayItems = computed(() => result.value ? toSecretReEncryptionDisplayItems(result.value.items) : []);
 const summaryText = computed(() => result.value ? secretReEncryptionSummaryText(result.value) : "");
@@ -114,25 +119,38 @@ const runReEncryption = async (execute: boolean) => {
   if (!canRun.value) {
     return;
   }
-  if (execute && form.confirmText !== "RE-ENCRYPT") {
+  if (execute && form.confirmText !== SECRET_RE_ENCRYPTION_CONFIRM_TEXT) {
     ElMessage.warning("执行重加密前需要填写确认文本 RE-ENCRYPT");
+    return;
+  }
+  if (execute && !await confirmExecution()) {
     return;
   }
   runningMode.value = execute ? "execute" : "dryRun";
   try {
-    result.value = await reEncryptSecrets({
-      sourceEncryptionKey: form.sourceEncryptionKey,
-      sourceKeyId: form.sourceKeyId?.trim() || undefined,
-      targetEncryptionKey: form.targetEncryptionKey,
-      targetKeyId: form.targetKeyId.trim(),
-      execute,
-      confirmText: execute ? form.confirmText : undefined
-    });
+    result.value = await reEncryptSecrets(buildSecretReEncryptionRequest(form, execute));
     ElMessage.success(execute ? "密钥重加密已完成" : "密钥重加密预检已完成");
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "密钥重加密操作失败"));
   } finally {
     runningMode.value = null;
+  }
+};
+
+const confirmExecution = async () => {
+  try {
+    await ElMessageBox.confirm(
+      secretReEncryptionExecutionConfirmMessage(form),
+      "确认执行密钥重加密",
+      {
+        type: "warning",
+        confirmButtonText: "执行重加密",
+        cancelButtonText: "取消"
+      }
+    );
+    return true;
+  } catch {
+    return false;
   }
 };
 </script>
