@@ -22,6 +22,8 @@ class NotificationPublishEventStateUpdater {
                 .ne("status", NotificationEventStatus.DELIVERED.code())
                 .set("status", NotificationEventStatus.PUBLISHED.code())
                 .set("last_error", null)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
     }
@@ -35,6 +37,8 @@ class NotificationPublishEventStateUpdater {
                 .set("retry_count", decision.retryCount())
                 .set("next_retry_at", decision.nextRetryAt())
                 .set("last_error", decision.lastError())
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
     }

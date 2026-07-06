@@ -1,34 +1,83 @@
 package com.repoguard.agent.notification;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class NotificationEventPublishCompensatorTest {
 
     private final NotificationEventMapper eventMapper = org.mockito.Mockito.mock(NotificationEventMapper.class);
-    private final NotificationDispatchService dispatchService = org.mockito.Mockito.mock(NotificationDispatchService.class);
+    private final NotificationEventPublisher eventPublisher = org.mockito.Mockito.mock(NotificationEventPublisher.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
-    private final NotificationPublishCompensationQuery compensationQuery =
-        new NotificationPublishCompensationQuery(eventMapper, properties, new RabbitPublishCompensationPolicy());
+    private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
+    private final NotificationOutboxEventStore outboxEventStore = new NotificationOutboxEventStore(eventMapper);
+    private final NotificationPublishCompensationQuery compensationQuery = new NotificationPublishCompensationQuery(
+        outboxEventStore,
+        properties,
+        compensationPolicy
+    );
+    private final NotificationEventPublishCoordinator publishCoordinator = new NotificationEventPublishCoordinator(
+        eventPublisher,
+        properties,
+        new NotificationPublishFailurePolicy(
+            new NotificationRetrySchedule(),
+            new NotificationTextLimiter(),
+            compensationPolicy
+        ),
+        new NotificationPublishEventStateUpdater(eventMapper)
+    );
 
     @Test
-    void compensatesDeliveryFailedEventsForThirdPartyRetry() {
+    void compensatesDeliveryFailedEventsAfterClaimingPublishLease() {
+        NotificationEvent event = event();
+        when(eventMapper.selectList(any())).thenReturn(List.of(event));
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+
+        compensator().compensate();
+
+        verify(eventPublisher).publish(any(NotificationEventMessage.class));
+        verify(eventMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+    }
+
+    @Test
+    void skipsPublishWhenClaimFenceIsLost() {
+        NotificationEvent event = event();
+        when(eventMapper.selectList(any())).thenReturn(List.of(event));
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        compensator().compensate();
+
+        verify(eventPublisher, never()).publish(any(NotificationEventMessage.class));
+    }
+
+    private NotificationEventPublishCompensator compensator() {
+        return new NotificationEventPublishCompensator(
+            outboxEventStore,
+            compensationQuery,
+            publishCoordinator,
+            "test-node"
+        );
+    }
+
+    private NotificationEvent event() {
         NotificationEvent event = new NotificationEvent();
         event.setId(7L);
-        event.setStatus("DELIVERY_FAILED");
+        event.setEventKey("REVIEW_FAILED:7");
+        event.setEventType(NotificationEventType.REVIEW_FAILED.code());
+        event.setTaskId(7L);
+        event.setStatus(NotificationEventStatus.DELIVERY_FAILED.code());
         event.setRetryCount(1);
-        when(eventMapper.selectList(any())).thenReturn(List.of(event));
-
-        new NotificationEventPublishCompensator(compensationQuery, dispatchService).compensate();
-
-        verify(dispatchService).publishExistingEvent(7L);
+        event.setNextRetryAt(LocalDateTime.now().minusMinutes(1));
+        return event;
     }
 }

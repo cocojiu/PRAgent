@@ -18,6 +18,8 @@ public class NotificationEvent {
     private Integer retryCount;
     private LocalDateTime nextRetryAt;
     private String lastError;
+    private LocalDateTime publishClaimedAt;
+    private String publishClaimedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -41,6 +43,10 @@ public class NotificationEvent {
     public void setNextRetryAt(LocalDateTime nextRetryAt) { this.nextRetryAt = nextRetryAt; }
     public String getLastError() { return lastError; }
     public void setLastError(String lastError) { this.lastError = lastError; }
+    public LocalDateTime getPublishClaimedAt() { return publishClaimedAt; }
+    public void setPublishClaimedAt(LocalDateTime publishClaimedAt) { this.publishClaimedAt = publishClaimedAt; }
+    public String getPublishClaimedBy() { return publishClaimedBy; }
+    public void setPublishClaimedBy(String publishClaimedBy) { this.publishClaimedBy = publishClaimedBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

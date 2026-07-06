@@ -3,39 +3,49 @@ package com.repoguard.agent.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class NotificationPublishCompensationQueryTest {
 
-    private final NotificationEventMapper eventMapper =
-        org.mockito.Mockito.mock(NotificationEventMapper.class);
+    private final NotificationOutboxEventStore outboxEventStore =
+        org.mockito.Mockito.mock(NotificationOutboxEventStore.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
     private final NotificationPublishCompensationQuery query =
-        new NotificationPublishCompensationQuery(eventMapper, properties, new RabbitPublishCompensationPolicy());
+        new NotificationPublishCompensationQuery(outboxEventStore, properties, new RabbitPublishCompensationPolicy());
 
     @Test
     void constructorRejectsMissingCompensationPolicy() {
-        assertThatThrownBy(() -> new NotificationPublishCompensationQuery(eventMapper, properties, null))
+        assertThatThrownBy(() -> new NotificationPublishCompensationQuery(outboxEventStore, properties, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("compensationPolicy");
     }
 
     @Test
-    void loadsDueEventsWithCompensationQueryRules() {
-        NotificationEvent event = event(7L);
-        when(eventMapper.selectList(any())).thenReturn(List.of(event));
+    void loadsDueEventsThroughClaimAwareOutboxStore() {
+        NotificationEvent event = new NotificationEvent();
+        event.setId(7L);
+        when(outboxEventStore.loadDuePublishEvents(any(), any(), anyInt(), anyInt()))
+            .thenReturn(List.of(event));
 
-        List<NotificationEvent> result = query.loadDueEvents();
+        LocalDateTime now = LocalDateTime.now();
+        List<NotificationEvent> result = query.loadDueEvents(now);
 
         assertThat(result).containsExactly(event);
-        org.mockito.Mockito.verify(eventMapper).selectList(any());
+        verify(outboxEventStore).loadDuePublishEvents(
+            org.mockito.Mockito.eq(now),
+            any(LocalDateTime.class),
+            org.mockito.Mockito.eq(5),
+            org.mockito.Mockito.eq(20)
+        );
     }
 
     @Test
@@ -45,11 +55,5 @@ class NotificationPublishCompensationQueryTest {
 
         assertThat(query.maxAttempts()).isOne();
         assertThat(query.batchSize()).isOne();
-    }
-
-    private NotificationEvent event(Long id) {
-        NotificationEvent event = new NotificationEvent();
-        event.setId(id);
-        return event;
     }
 }

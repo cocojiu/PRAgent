@@ -20,6 +20,7 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     private int publishCompensationMaxAttempts = 5;
     private int publishCompensationBatchSize = 20;
     private long publishCompensationIntervalMs = 60000;
+    private long publishCompensationLeaseMs = 120000;
     private int workerConcurrency = 1;
 
     public String getExchange() { return exchange; }
@@ -48,6 +49,8 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     public void setPublishCompensationBatchSize(int publishCompensationBatchSize) { this.publishCompensationBatchSize = publishCompensationBatchSize; }
     public long getPublishCompensationIntervalMs() { return publishCompensationIntervalMs; }
     public void setPublishCompensationIntervalMs(long publishCompensationIntervalMs) { this.publishCompensationIntervalMs = publishCompensationIntervalMs; }
+    public long getPublishCompensationLeaseMs() { return publishCompensationLeaseMs; }
+    public void setPublishCompensationLeaseMs(long publishCompensationLeaseMs) { this.publishCompensationLeaseMs = publishCompensationLeaseMs; }
     public int getWorkerConcurrency() { return workerConcurrency; }
     public void setWorkerConcurrency(int workerConcurrency) { this.workerConcurrency = workerConcurrency; }
 }

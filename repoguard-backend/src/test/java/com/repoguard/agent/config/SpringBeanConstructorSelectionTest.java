@@ -7,6 +7,7 @@ import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.github.GithubPullRequestClientImpl;
 import com.repoguard.agent.messaging.RabbitReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
+import com.repoguard.agent.notification.NotificationEventPublishCompensator;
 import com.repoguard.agent.review.LlmPullRequestReviewer;
 import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
@@ -41,6 +42,7 @@ class SpringBeanConstructorSelectionTest {
     void springManagedBeansWithMultipleConstructorsDeclareSingleAutowiredConstructor() throws ClassNotFoundException {
         List<Class<?>> springManagedTypes = List.of(
             GithubPullRequestClientImpl.class,
+            NotificationEventPublishCompensator.class,
             RabbitReviewTaskPublisher.class,
             ReviewTaskPublishCompensator.class,
             LlmPullRequestReviewer.class,

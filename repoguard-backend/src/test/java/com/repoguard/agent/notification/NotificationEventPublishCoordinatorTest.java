@@ -85,7 +85,8 @@ class NotificationEventPublishCoordinatorTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(eventMapper).update(wrapperCaptor.capture());
-        assertThat(wrapperCaptor.getValue().getSqlSet()).contains("status", "retry_count", "next_retry_at", "last_error");
+        assertThat(wrapperCaptor.getValue().getSqlSet())
+            .contains("status", "retry_count", "next_retry_at", "last_error", "publish_claimed_at", "publish_claimed_by");
     }
 
     private NotificationEvent event() {
