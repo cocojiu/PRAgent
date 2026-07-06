@@ -4,7 +4,9 @@ import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
+@Component
 public class ReviewRuleMetricAssembler {
 
     public List<ReviewRuleMetricDto> buildRuleMetrics(List<ReviewRuleConfig> rules, ReviewRuleFeedbackStat feedbackStat) {

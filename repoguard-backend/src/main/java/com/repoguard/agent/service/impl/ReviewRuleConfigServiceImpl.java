@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -39,13 +40,20 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     public ReviewRuleConfigServiceImpl(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
         ReviewFindingMapper reviewFindingMapper,
-        CacheEvictionService cacheEvictionService
+        CacheEvictionService cacheEvictionService,
+        ReviewRuleConfigPolicy reviewRuleConfigPolicy,
+        ReviewRuleMetricAssembler reviewRuleMetricAssembler
     ) {
-        this.reviewRuleConfigMapper = reviewRuleConfigMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
+        this.reviewRuleConfigMapper = Objects.requireNonNull(
+            reviewRuleConfigMapper,
+            "reviewRuleConfigMapper must not be null"
+        );
+        this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper must not be null");
         this.cacheEvictionService = cacheEvictionService;
-        this.reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
-        this.reviewRuleMetricAssembler = new ReviewRuleMetricAssembler();
+        this.reviewRuleConfigPolicy =
+            Objects.requireNonNull(reviewRuleConfigPolicy, "reviewRuleConfigPolicy must not be null");
+        this.reviewRuleMetricAssembler =
+            Objects.requireNonNull(reviewRuleMetricAssembler, "reviewRuleMetricAssembler must not be null");
     }
 
     @Override

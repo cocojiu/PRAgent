@@ -95,7 +95,9 @@ public class SystemConfigServiceImpl implements SystemConfigService {
             new ReviewRuleConfigServiceImpl(
                 reviewRuleConfigMapper,
                 reviewFindingMapper,
-                null
+                null,
+                new ReviewRuleConfigPolicy(),
+                new ReviewRuleMetricAssembler()
             ),
             new SystemSettingsApplicationServiceImpl(
                 systemSettingsConfigMapper,

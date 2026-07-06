@@ -27,7 +27,9 @@ class ReviewRuleConfigServiceImplTest {
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         reviewRuleConfigMapper,
         reviewFindingMapper,
-        cacheEvictionService
+        cacheEvictionService,
+        new ReviewRuleConfigPolicy(),
+        new ReviewRuleMetricAssembler()
     );
 
     @Test
@@ -109,6 +111,19 @@ class ReviewRuleConfigServiceImplTest {
         assertThatThrownBy(() -> service.updateReviewRule("rg-java-001", request("rg-java-002", "New Rule", "LOW", "ENABLED")))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Review rule id in path and body must match");
+    }
+
+    @Test
+    void constructorRejectsMissingRuleMetricAssembler() {
+        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            cacheEvictionService,
+            new ReviewRuleConfigPolicy(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("reviewRuleMetricAssembler");
     }
 
     private ReviewRuleConfigRequest request(String id, String name, String severity, String status) {

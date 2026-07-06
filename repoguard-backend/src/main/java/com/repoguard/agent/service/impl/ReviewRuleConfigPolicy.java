@@ -3,7 +3,9 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import java.util.List;
 import java.util.Locale;
+import org.springframework.stereotype.Component;
 
+@Component
 public class ReviewRuleConfigPolicy {
 
     public String normalizeRuleId(String value) {
