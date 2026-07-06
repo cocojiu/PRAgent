@@ -6,6 +6,7 @@ import com.repoguard.agent.external.ExternalCallException;
 import java.time.Duration;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.CannotAcquireLockException;
 
 class RepoGuardMetricsTest {
 
@@ -26,7 +27,18 @@ class RepoGuardMetricsTest {
         )).isEqualTo(1.0);
         assertThat(counter(
             "repoguard.review.task.failed",
-            "category", "illegalstateexception",
+            "category", "review_execution_failed",
+            "retryable", "unknown"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
+    void recordsReviewTaskFailureWithSharedReviewFailureCategory() {
+        metrics.reviewTaskFailed(new CannotAcquireLockException("deadlock"));
+
+        assertThat(counter(
+            "repoguard.review.task.failed",
+            "category", "review_state_conflict",
             "retryable", "unknown"
         )).isEqualTo(1.0);
     }

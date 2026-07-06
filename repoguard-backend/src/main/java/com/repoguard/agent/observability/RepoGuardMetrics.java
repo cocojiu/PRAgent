@@ -1,6 +1,7 @@
 package com.repoguard.agent.observability;
 
 import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -19,6 +20,7 @@ public class RepoGuardMetrics {
     private static final String UNKNOWN = "unknown";
 
     private final MeterRegistry meterRegistry;
+    private final ReviewExecutionFailureClassifier reviewFailureClassifier = new ReviewExecutionFailureClassifier();
     private final ConcurrentMap<String, AtomicLong> gauges = new ConcurrentHashMap<>();
 
     public RepoGuardMetrics(MeterRegistry meterRegistry) {
@@ -295,10 +297,7 @@ public class RepoGuardMetrics {
     }
 
     private String failureCategory(RuntimeException ex) {
-        if (ex instanceof ExternalCallException externalCallException) {
-            return normalize(externalCallException.getCategory());
-        }
-        return normalize(ex.getClass().getSimpleName());
+        return normalize(reviewFailureClassifier.failureCategory(ex));
     }
 
     private String retryable(RuntimeException ex) {

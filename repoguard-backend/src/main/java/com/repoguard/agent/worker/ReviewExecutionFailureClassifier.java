@@ -16,9 +16,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-class ReviewExecutionFailureClassifier {
+public class ReviewExecutionFailureClassifier {
 
-    String failureCategory(RuntimeException ex) {
+    public String failureCategory(RuntimeException ex) {
         if (ex instanceof ExternalCallException externalCallException) {
             return externalCallException.getCategory();
         }
