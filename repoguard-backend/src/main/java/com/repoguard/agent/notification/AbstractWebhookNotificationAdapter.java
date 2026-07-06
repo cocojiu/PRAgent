@@ -1,12 +1,16 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
+import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 abstract class AbstractWebhookNotificationAdapter implements NotificationChannelAdapter {
+
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(8);
 
     private final RestClient restClient;
     private final WebhookNotificationContentBuilder contentBuilder;
@@ -19,10 +23,10 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
         WebhookNotificationResponseEvaluator responseEvaluator,
         WebhookNotificationRequestFactory requestFactory
     ) {
-        SimpleClientHttpRequestFactory httpRequestFactory = new SimpleClientHttpRequestFactory();
-        httpRequestFactory.setConnectTimeout(5000);
-        httpRequestFactory.setReadTimeout(8000);
-        this.restClient = restClientBuilder.clone().requestFactory(httpRequestFactory).build();
+        this.restClient = restClientBuilder
+            .clone()
+            .requestFactory(ExternalHttpRequestFactory.simple(CONNECT_TIMEOUT, READ_TIMEOUT))
+            .build();
         this.contentBuilder = contentBuilder;
         this.responseEvaluator = responseEvaluator;
         this.requestFactory = requestFactory;

@@ -7,6 +7,7 @@ import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +17,6 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -92,7 +92,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         RestClient restClient = restClientBuilder
             .clone()
             .baseUrl(settings.baseUrl().trim())
-            .requestFactory(requestFactory(settings.timeoutSeconds()))
+            .requestFactory(ExternalHttpRequestFactory.sameTimeoutSeconds(settings.timeoutSeconds(), 60))
             .build();
         String apiKey = settings.apiKey();
 
@@ -147,14 +147,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     private Integer intValue(JsonNode node) {
         return node == null || node.isMissingNode() || node.isNull() || !node.canConvertToInt() ? null : node.asInt();
-    }
-
-    private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds == null ? 60 : timeoutSeconds));
-        requestFactory.setConnectTimeout(timeout);
-        requestFactory.setReadTimeout(timeout);
-        return requestFactory;
     }
 
     private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {

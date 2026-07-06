@@ -2,16 +2,15 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
+import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -61,7 +60,7 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
             byte[] responseBytes = restClientBuilder
                 .clone()
                 .baseUrl(config.getBaseUrl().trim())
-                .requestFactory(requestFactory(config.getTimeoutSeconds()))
+                .requestFactory(ExternalHttpRequestFactory.sameTimeoutSeconds(config.getTimeoutSeconds(), 60))
                 .build()
                 .post()
                 .uri("/chat/completions")
@@ -97,14 +96,6 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         } catch (Exception ex) {
             return new ConnectionProbeResult(false, "failed", conciseError(ex));
         }
-    }
-
-    private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        Duration timeout = Duration.ofSeconds(Math.max(1, timeoutSeconds == null ? 60 : timeoutSeconds));
-        requestFactory.setConnectTimeout(timeout);
-        requestFactory.setReadTimeout(timeout);
-        return requestFactory;
     }
 
     private BigDecimal connectionTestTemperature(BigDecimal configuredTemperature) {

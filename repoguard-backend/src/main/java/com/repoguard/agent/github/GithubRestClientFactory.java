@@ -1,5 +1,6 @@
 package com.repoguard.agent.github;
 
+import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import java.time.Duration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -20,9 +21,6 @@ public final class GithubRestClientFactory {
     }
 
     static SimpleClientHttpRequestFactory requestFactory() {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
-        requestFactory.setReadTimeout(READ_TIMEOUT);
-        return requestFactory;
+        return ExternalHttpRequestFactory.simple(CONNECT_TIMEOUT, READ_TIMEOUT);
     }
 }
