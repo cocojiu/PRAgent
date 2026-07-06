@@ -1,5 +1,6 @@
 package com.repoguard.agent.external;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 
 public final class ExternalRetryAfterHint {
@@ -18,6 +19,13 @@ public final class ExternalRetryAfterHint {
         return "建议等待 " + retryAfter + " 后再重试。";
     }
 
+    public static String fromHeaders(HttpHeaders headers) {
+        if (headers == null) {
+            return "";
+        }
+        return clean(headers.getFirst(HttpHeaders.RETRY_AFTER));
+    }
+
     static String retryAfter(String detail) {
         if (!StringUtils.hasText(detail)) {
             return "";
@@ -31,10 +39,17 @@ public final class ExternalRetryAfterHint {
         if (valueEnd < 0) {
             valueEnd = detail.length();
         }
-        String value = detail.substring(valueStart, valueEnd)
+        return clean(detail.substring(valueStart, valueEnd));
+    }
+
+    private static String clean(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String safe = value
             .replaceAll("[^A-Za-z0-9,: GMT+-]", "")
             .replaceAll("\\s+", " ")
             .trim();
-        return value.length() > 64 ? value.substring(0, 64) : value;
+        return safe.length() > 64 ? safe.substring(0, 64) : safe;
     }
 }

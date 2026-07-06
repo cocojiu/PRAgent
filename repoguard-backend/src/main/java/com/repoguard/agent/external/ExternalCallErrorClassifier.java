@@ -2,7 +2,6 @@ package com.repoguard.agent.external;
 
 import java.net.SocketTimeoutException;
 import java.util.Locale;
-import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
@@ -109,7 +108,7 @@ public final class ExternalCallErrorClassifier {
         }
         String normalized = message.replaceAll("\\s+", " ").trim();
         if (ex instanceof RestClientResponseException responseException) {
-            String retryAfter = retryAfter(responseException.getResponseHeaders());
+            String retryAfter = ExternalRetryAfterHint.fromHeaders(responseException.getResponseHeaders());
             String responseBody = sanitizeResponseBody(responseException.getResponseBodyAsString());
             if (StringUtils.hasText(retryAfter) && StringUtils.hasText(responseBody)) {
                 return normalized + " retryAfter=" + retryAfter + " responseBody=" + responseBody;
@@ -144,21 +143,5 @@ public final class ExternalCallErrorClassifier {
             .replaceAll("(?i)(secret\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
             .replaceAll("sk-[A-Za-z0-9_-]{8,}", "sk-***")
             .trim();
-    }
-
-    private static String retryAfter(HttpHeaders headers) {
-        if (headers == null) {
-            return null;
-        }
-        String value = headers.getFirst(HttpHeaders.RETRY_AFTER);
-        if (!StringUtils.hasText(value)) {
-            return null;
-        }
-        String normalized = value.replaceAll("\\s+", " ").trim();
-        String safe = normalized.replaceAll("[^A-Za-z0-9,: GMT+-]", "");
-        if (!StringUtils.hasText(safe)) {
-            return null;
-        }
-        return safe.length() > 64 ? safe.substring(0, 64) : safe;
     }
 }

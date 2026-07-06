@@ -2,8 +2,11 @@ package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
+import org.springframework.web.client.RestClientResponseException;
 
 class WebhookNotificationResponseEvaluatorTest {
 
@@ -87,6 +90,30 @@ class WebhookNotificationResponseEvaluatorTest {
         assertThat(result.message()).contains("https://user:****@example.com/webhook");
         assertThat(result.message()).contains("password=****", "Bearer ****");
         assertThat(result.message()).doesNotContain("raw-pass", "raw-password", "raw-token");
+    }
+
+    @Test
+    void httpExceptionIncludesStatusRetryAfterAndSanitizedResponseBody() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.RETRY_AFTER, "30");
+        RestClientResponseException exception = new RestClientResponseException(
+            "Too Many Requests",
+            429,
+            "Too Many Requests",
+            headers,
+            "{\"errmsg\":\"rate limited\",\"access_token\":\"raw-token-value\"}".getBytes(StandardCharsets.UTF_8),
+            StandardCharsets.UTF_8
+        );
+
+        NotificationSendResult result = evaluator.failure(exception);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.message()).contains(
+            "Webhook HTTP request failed status=429",
+            "retryAfter=30",
+            "responseBody={\"errmsg\":\"rate limited\",\"access_token\":\"****\"}"
+        );
+        assertThat(result.message()).doesNotContain("raw-token-value");
     }
 
     @Test
