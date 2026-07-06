@@ -75,22 +75,44 @@ class GithubPaginatorTest {
         }
     }
 
+    @Test
+    void followsNextUrlFromLinkHeader() throws Exception {
+        try (PagedGithubServer server = startServer(150, true)) {
+            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+
+            List<GithubChangedFile> result = paginator.fetchPages(
+                "fetch_pull_request_diff",
+                page -> server.baseUrl() + "/items?per_page=100&page=" + page,
+                settings(),
+                GithubChangedFile[].class,
+                null
+            );
+
+            assertThat(result).hasSize(150);
+            assertThat(server.pageRequests()).containsExactly(1, 2);
+            assertThat(server.markerRequests()).containsExactly("", "from-link");
+        }
+    }
+
     private PagedGithubServer startServer(int total) throws IOException {
         return startServer(total, false);
     }
 
     private PagedGithubServer startServer(int total, boolean includeLinkHeader) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
         List<Integer> pageRequests = new ArrayList<>();
+        List<String> markerRequests = new ArrayList<>();
         server.createContext("/items", exchange -> {
             URI uri = exchange.getRequestURI();
             int page = queryInt(uri, "page", 1);
             int perPage = queryInt(uri, "per_page", 30);
             pageRequests.add(page);
+            markerRequests.add(queryParam(uri, "marker"));
             byte[] bytes = changedFilesJson(total, page, perPage).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             if (includeLinkHeader) {
-                String linkHeader = linkHeader(total, page, perPage);
+                String linkHeader = linkHeader(baseUrl, total, page, perPage);
                 if (!linkHeader.isBlank()) {
                     exchange.getResponseHeaders().set("Link", linkHeader);
                 }
@@ -102,8 +124,9 @@ class GithubPaginatorTest {
         server.start();
         return new PagedGithubServer(
             server,
-            "http://127.0.0.1:" + server.getAddress().getPort(),
-            pageRequests
+            baseUrl,
+            pageRequests,
+            markerRequests
         );
     }
 
@@ -134,6 +157,20 @@ class GithubPaginatorTest {
         return defaultValue;
     }
 
+    private String queryParam(URI uri, String name) {
+        String query = uri.getRawQuery();
+        if (query == null || query.isBlank()) {
+            return "";
+        }
+        for (String pair : query.split("&")) {
+            String[] parts = pair.split("=", 2);
+            if (parts.length == 2 && name.equals(parts[0])) {
+                return parts[1];
+            }
+        }
+        return "";
+    }
+
     private String changedFilesJson(int total, int page, int perPage) {
         int start = (page - 1) * perPage + 1;
         int end = Math.min(total, page * perPage);
@@ -146,13 +183,15 @@ class GithubPaginatorTest {
         return "[" + String.join(",", items) + "]";
     }
 
-    private String linkHeader(int total, int page, int perPage) {
+    private String linkHeader(String baseUrl, int total, int page, int perPage) {
         List<String> links = new ArrayList<>();
         if (page > 1) {
-            links.add("<http://127.0.0.1/items?per_page=%d&page=%d>; rel=\"prev\"".formatted(perPage, page - 1));
+            links.add("<%s/items?per_page=%d&page=%d&marker=from-link>; rel=\"prev\""
+                .formatted(baseUrl, perPage, page - 1));
         }
         if (page * perPage < total) {
-            links.add("<http://127.0.0.1/items?per_page=%d&page=%d>; rel=\"next\"".formatted(perPage, page + 1));
+            links.add("<%s/items?per_page=%d&page=%d&marker=from-link>; rel=\"next\""
+                .formatted(baseUrl, perPage, page + 1));
         }
         return String.join(", ", links);
     }
@@ -160,7 +199,8 @@ class GithubPaginatorTest {
     private record PagedGithubServer(
         HttpServer server,
         String baseUrl,
-        List<Integer> pageRequests
+        List<Integer> pageRequests,
+        List<String> markerRequests
     ) implements AutoCloseable {
 
         @Override

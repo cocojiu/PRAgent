@@ -42,8 +42,9 @@ public class GithubPaginator {
         ExternalCallResilience resilience
     ) {
         List<T> items = new ArrayList<>();
+        String nextUrl = pageUrlBuilder.apply(1);
         for (int page = 1; page <= maxPages; page++) {
-            String url = pageUrlBuilder.apply(page);
+            String url = nextUrl;
             ResponseEntity<T[]> response = executeGithub(operation, resilience, () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, settings))
@@ -54,9 +55,16 @@ public class GithubPaginator {
                 break;
             }
             items.addAll(Arrays.asList(pageItems));
-            Boolean hasNextPage = hasNextPage(response.getHeaders());
-            if (Boolean.FALSE.equals(hasNextPage) || (hasNextPage == null && pageItems.length < PAGE_SIZE)) {
+            NextPageLink nextPageLink = nextPageLink(response.getHeaders());
+            if (nextPageLink.headerPresent()) {
+                if (!StringUtils.hasText(nextPageLink.url())) {
+                    break;
+                }
+                nextUrl = nextPageLink.url();
+            } else if (pageItems.length < PAGE_SIZE) {
                 break;
+            } else {
+                nextUrl = pageUrlBuilder.apply(page + 1);
             }
             if (page == maxPages) {
                 throw new IllegalStateException(
@@ -69,14 +77,35 @@ public class GithubPaginator {
         return items;
     }
 
-    private Boolean hasNextPage(HttpHeaders headers) {
+    private NextPageLink nextPageLink(HttpHeaders headers) {
         if (headers == null || headers.get(HttpHeaders.LINK) == null) {
+            return NextPageLink.missing();
+        }
+        String nextUrl = headers.getOrEmpty(HttpHeaders.LINK).stream()
+            .flatMap(value -> Arrays.stream(value.split(",")))
+            .filter(this::isNextLink)
+            .map(this::linkUrl)
+            .filter(StringUtils::hasText)
+            .findFirst()
+            .orElse(null);
+        return new NextPageLink(true, nextUrl);
+    }
+
+    private boolean isNextLink(String value) {
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT);
+        return normalized.contains("rel=\"next\"") || normalized.contains("rel=next");
+    }
+
+    private String linkUrl(String value) {
+        if (!StringUtils.hasText(value)) {
             return null;
         }
-        return headers.getOrEmpty(HttpHeaders.LINK).stream()
-            .flatMap(value -> Arrays.stream(value.split(",")))
-            .map(value -> value.toLowerCase(Locale.ROOT))
-            .anyMatch(value -> value.contains("rel=\"next\"") || value.contains("rel=next"));
+        int start = value.indexOf('<');
+        int end = value.indexOf('>', start + 1);
+        if (start < 0 || end <= start) {
+            return null;
+        }
+        return value.substring(start + 1, end).trim();
     }
 
     private <T> T executeGithub(
@@ -92,6 +121,13 @@ public class GithubPaginator {
         headers.set("X-GitHub-Api-Version", "2022-11-28");
         if (StringUtils.hasText(settings.token())) {
             headers.setBearerAuth(settings.token().trim());
+        }
+    }
+
+    private record NextPageLink(boolean headerPresent, String url) {
+
+        private static NextPageLink missing() {
+            return new NextPageLink(false, null);
         }
     }
 }
