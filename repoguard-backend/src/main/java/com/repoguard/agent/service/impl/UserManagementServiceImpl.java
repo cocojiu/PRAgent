@@ -11,7 +11,6 @@ import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
-import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
 import com.repoguard.agent.user.UserAccountSessionInvalidator;
@@ -19,8 +18,9 @@ import com.repoguard.agent.user.UserManagementDisplayMapper;
 import com.repoguard.agent.user.UserOperationAuditRecorder;
 import com.repoguard.agent.user.UserRoleStatusPolicy;
 import java.time.LocalDateTime;
-import java.util.Locale;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,17 +43,21 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
-        UserRefreshTokenMapper userRefreshTokenMapper,
         UserOperationAuditMapper userOperationAuditMapper,
-        PasswordHashService passwordHashService
+        PasswordHashService passwordHashService,
+        UserManagementDisplayMapper displayMapper,
+        UserOperationAuditRecorder auditRecorder,
+        UserAccountSessionInvalidator sessionInvalidator,
+        UserRoleStatusPolicy roleStatusPolicy
     ) {
-        this.userAccountMapper = userAccountMapper;
-        this.userOperationAuditMapper = userOperationAuditMapper;
-        this.passwordHashService = passwordHashService;
-        this.displayMapper = new UserManagementDisplayMapper();
-        this.auditRecorder = new UserOperationAuditRecorder(userAccountMapper, userOperationAuditMapper);
-        this.sessionInvalidator = new UserAccountSessionInvalidator(userRefreshTokenMapper);
-        this.roleStatusPolicy = new UserRoleStatusPolicy();
+        this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
+        this.userOperationAuditMapper =
+            Objects.requireNonNull(userOperationAuditMapper, "userOperationAuditMapper must not be null");
+        this.passwordHashService = Objects.requireNonNull(passwordHashService, "passwordHashService must not be null");
+        this.displayMapper = Objects.requireNonNull(displayMapper, "displayMapper must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
+        this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
+        this.roleStatusPolicy = Objects.requireNonNull(roleStatusPolicy, "roleStatusPolicy must not be null");
     }
 
     @Override

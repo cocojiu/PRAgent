@@ -19,6 +19,10 @@ import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.user.UserAccountSessionInvalidator;
+import com.repoguard.agent.user.UserManagementDisplayMapper;
+import com.repoguard.agent.user.UserOperationAuditRecorder;
+import com.repoguard.agent.user.UserRoleStatusPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,11 +36,22 @@ class UserManagementServiceImplTest {
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserOperationAuditMapper userOperationAuditMapper = Mockito.mock(UserOperationAuditMapper.class);
     private final PasswordHashService passwordHashService = new PasswordHashService();
+    private final UserManagementDisplayMapper displayMapper = new UserManagementDisplayMapper();
+    private final UserOperationAuditRecorder auditRecorder = new UserOperationAuditRecorder(
+        userAccountMapper,
+        userOperationAuditMapper
+    );
+    private final UserAccountSessionInvalidator sessionInvalidator =
+        new UserAccountSessionInvalidator(userRefreshTokenMapper);
+    private final UserRoleStatusPolicy roleStatusPolicy = new UserRoleStatusPolicy();
     private final UserManagementServiceImpl userManagementService = new UserManagementServiceImpl(
         userAccountMapper,
-        userRefreshTokenMapper,
         userOperationAuditMapper,
-        passwordHashService
+        passwordHashService,
+        displayMapper,
+        auditRecorder,
+        sessionInvalidator,
+        roleStatusPolicy
     );
 
     @BeforeEach
@@ -209,6 +224,21 @@ class UserManagementServiceImplTest {
         assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).update(isNull(), any(Wrapper.class));
+    }
+
+    @Test
+    void constructorRejectsMissingSessionInvalidator() {
+        assertThatThrownBy(() -> new UserManagementServiceImpl(
+            userAccountMapper,
+            userOperationAuditMapper,
+            passwordHashService,
+            displayMapper,
+            auditRecorder,
+            null,
+            roleStatusPolicy
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("sessionInvalidator");
     }
 
     private UserOperationAuditContext auditContext() {

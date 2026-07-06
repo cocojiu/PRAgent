@@ -3,7 +3,9 @@ package com.repoguard.agent.user;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
+import org.springframework.stereotype.Component;
 
+@Component
 public class UserRoleStatusPolicy {
 
     private static final String ROLE_ADMIN = "ADMIN";

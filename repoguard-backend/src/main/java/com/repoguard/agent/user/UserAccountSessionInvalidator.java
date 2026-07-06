@@ -5,7 +5,10 @@ import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import java.time.LocalDateTime;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class UserAccountSessionInvalidator {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
@@ -14,7 +17,8 @@ public class UserAccountSessionInvalidator {
     private final UserRefreshTokenMapper userRefreshTokenMapper;
 
     public UserAccountSessionInvalidator(UserRefreshTokenMapper userRefreshTokenMapper) {
-        this.userRefreshTokenMapper = userRefreshTokenMapper;
+        this.userRefreshTokenMapper =
+            Objects.requireNonNull(userRefreshTokenMapper, "userRefreshTokenMapper must not be null");
     }
 
     public void rotateSessionVersion(UserAccount user, LocalDateTime now) {

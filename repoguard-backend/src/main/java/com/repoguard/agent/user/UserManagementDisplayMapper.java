@@ -4,7 +4,9 @@ import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
+import org.springframework.stereotype.Component;
 
+@Component
 public class UserManagementDisplayMapper {
 
     public UserManagementItemDto toUserItem(UserAccount user) {

@@ -6,7 +6,10 @@ import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import java.time.LocalDateTime;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class UserOperationAuditRecorder {
 
     private static final int CLIENT_IP_MAX_LENGTH = 64;
@@ -19,8 +22,9 @@ public class UserOperationAuditRecorder {
         UserAccountMapper userAccountMapper,
         UserOperationAuditMapper userOperationAuditMapper
     ) {
-        this.userAccountMapper = userAccountMapper;
-        this.userOperationAuditMapper = userOperationAuditMapper;
+        this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
+        this.userOperationAuditMapper =
+            Objects.requireNonNull(userOperationAuditMapper, "userOperationAuditMapper must not be null");
     }
 
     public void record(
