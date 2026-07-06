@@ -22,21 +22,15 @@ import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
-import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRulesResponse;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
-import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.time.LocalDate;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
@@ -44,9 +38,6 @@ import org.springframework.stereotype.Service;
 public class DashboardServiceImpl implements DashboardService {
 
     private final DashboardMapper dashboardMapper;
-    private final DashboardStatusMapper statusMapper;
-    private final DashboardRuleDisplayMapper ruleDisplayMapper;
-    private final DashboardOverviewDisplayMapper overviewDisplayMapper;
     private final DashboardMetricAssembler dashboardMetricAssembler;
     private final DashboardReviewTrendAssembler reviewTrendAssembler;
     private final DashboardRiskDistributionAssembler riskDistributionAssembler;
@@ -68,9 +59,6 @@ public class DashboardServiceImpl implements DashboardService {
         DashboardSystemHealthProbe systemHealthProbe
     ) {
         this.dashboardMapper = dashboardMapper;
-        this.statusMapper = statusMapper;
-        this.ruleDisplayMapper = ruleDisplayMapper;
-        this.overviewDisplayMapper = overviewDisplayMapper;
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
         this.reviewTrendAssembler = new DashboardReviewTrendAssembler();
         this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
@@ -170,36 +158,8 @@ public class DashboardServiceImpl implements DashboardService {
         return riskDistributionAssembler.assemble(dashboardMapper.selectRiskLevelCounts(startDate));
     }
 
-    private List<ChartSliceDto> buildRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
-        long total = totalRuleHits(ruleHitCounts);
-        // 没有确定规则编号的问题统一归类为 LLM 审查结果。
-        return nullToEmpty(ruleHitCounts).stream()
-            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
-            .map(count -> new ChartSliceDto(
-                ruleDisplayMapper.ruleName(count.getRuleId()),
-                safeRuleTotal(count),
-                ruleDisplayMapper.ruleColor(count.getRuleId()),
-                percent(safeRuleTotal(count), total)
-            ))
-            .toList();
-    }
-
     private List<HighRiskReviewDto> buildHighRiskReviews(List<DashboardHighRiskReview> highRiskReviews) {
         return highRiskReviewAssembler.assemble(highRiskReviews);
-    }
-
-    private List<FailedRuleStatDto> buildFailedRules(List<DashboardRuleHitCount> ruleHitCounts) {
-        long total = totalRuleHits(ruleHitCounts);
-        return nullToEmpty(ruleHitCounts).stream()
-            .sorted(Comparator.comparingLong(this::safeRuleTotal).reversed())
-            .map(count -> new FailedRuleStatDto(
-                ruleDisplayMapper.ruleName(count.getRuleId()),
-                safeRuleTotal(count),
-                "0.0%",
-                "down",
-                percent(safeRuleTotal(count), total)
-            ))
-            .toList();
     }
 
     private DashboardRulesResponse buildRules(List<DashboardRuleHitCount> ruleHitCounts) {
@@ -218,37 +178,5 @@ public class DashboardServiceImpl implements DashboardService {
             llmQualityStatsAssembler.assembleByRepository(repositoryStats),
             llmQualityTrendBuilder.build(trendCounts, llmTrendWindow)
         );
-    }
-
-    private String percent(long value, long total) {
-        if (total == 0) {
-            return "0.0%";
-        }
-        return String.format(Locale.ROOT, "%.1f%%", value * 100.0 / total);
-    }
-
-    private long safeCount(Long value) {
-        return value == null ? 0L : value;
-    }
-
-    private long safeRuleTotal(DashboardRuleHitCount count) {
-        return count.getTotal() == null ? 0L : count.getTotal();
-    }
-
-    private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
-        return nullToEmpty(ruleHitCounts).stream().mapToLong(this::safeRuleTotal).sum();
-    }
-
-    private <T> List<T> nullToEmpty(List<T> values) {
-        return values == null ? List.of() : values;
-    }
-
-    private String formatDuration(int durationSeconds) {
-        int minutes = durationSeconds / 60;
-        int seconds = durationSeconds % 60;
-        return minutes + "分 " + seconds + "秒";
-    }
-
-    private record DashboardMetricStats(long total, long highRisk, long failed, int averageDurationSeconds) {
     }
 }
