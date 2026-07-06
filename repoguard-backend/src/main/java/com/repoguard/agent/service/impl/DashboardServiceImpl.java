@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
@@ -15,7 +16,6 @@ import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
-import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
@@ -29,8 +29,6 @@ import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +49,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardStatusMapper statusMapper;
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
+    private final DashboardMetricAssembler dashboardMetricAssembler;
     private final DashboardLlmQualityFormatter llmQualityFormatter;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
@@ -70,6 +69,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.statusMapper = statusMapper;
         this.ruleDisplayMapper = ruleDisplayMapper;
         this.overviewDisplayMapper = overviewDisplayMapper;
+        this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
         this.llmQualityFormatter = llmQualityFormatter;
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
@@ -90,7 +90,7 @@ public class DashboardServiceImpl implements DashboardService {
         DashboardLlmQualityResponse llmQuality = buildLlmQuality(reviewTrendStartDate, llmTrendWindow);
 
         return new DashboardOverviewResponse(
-            buildMetrics(loadMetricStats(reviewTrendStartDate)),
+            dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate)),
             buildTrend(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate)),
             buildRiskDistribution(reviewTrendStartDate),
             rules.ruleHits(),
@@ -106,7 +106,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_SUMMARY, key = "'summary'", sync = true)
     public List<DashboardMetricDto> getSummary() {
-        return buildMetrics(loadMetricStats(reviewTrendStartDate()));
+        return dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate()));
     }
 
     @Override
@@ -158,28 +158,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private LocalDate latestReviewDate() {
         return dashboardMapper.selectLatestReviewTaskDate();
-    }
-
-    private DashboardMetricStats loadMetricStats(LocalDate startDate) {
-        DashboardMetricStat metricStat = dashboardMapper.selectMetricStat(startDate);
-        long total = metricStat == null ? 0L : safeCount(metricStat.getTotal());
-        long highRisk = metricStat == null ? 0L : safeCount(metricStat.getHighRisk());
-        long failed = metricStat == null ? 0L : safeCount(metricStat.getFailed());
-        int averageDurationSeconds = metricStat == null ? 0 : safeAverageDuration(metricStat.getAverageDurationSeconds());
-        return new DashboardMetricStats(total, highRisk, failed, averageDurationSeconds);
-    }
-
-    private List<DashboardMetricDto> buildMetrics(DashboardMetricStats stats) {
-        DashboardOverviewDisplayMapper.MetricDisplay totalReviews = overviewDisplayMapper.totalReviewsMetric();
-        DashboardOverviewDisplayMapper.MetricDisplay highRiskPullRequests = overviewDisplayMapper.highRiskPullRequestsMetric();
-        DashboardOverviewDisplayMapper.MetricDisplay failedTasks = overviewDisplayMapper.failedTasksMetric();
-        DashboardOverviewDisplayMapper.MetricDisplay averageReviewDuration = overviewDisplayMapper.averageReviewDurationMetric();
-        return List.of(
-            metric(totalReviews, String.valueOf(stats.total()), "0.0%"),
-            metric(highRiskPullRequests, String.valueOf(stats.highRisk()), percent(stats.highRisk(), stats.total())),
-            metric(failedTasks, String.valueOf(stats.failed()), percent(stats.failed(), stats.total())),
-            metric(averageReviewDuration, formatDuration(stats.averageDurationSeconds()), "0.0%")
-        );
     }
 
     private List<ReviewTrendPointDto> buildTrend(List<DashboardReviewTrendCount> reviewTrendCounts) {
@@ -295,10 +273,6 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private DashboardMetricDto metric(DashboardOverviewDisplayMapper.MetricDisplay display, String value, String trend) {
-        return new DashboardMetricDto(display.label(), value, trend, display.trendType(), display.color());
-    }
-
     private ChartSliceDto riskSlice(String riskLevel, long value, long total) {
         DashboardOverviewDisplayMapper.RiskLevelDisplay display = overviewDisplayMapper.riskLevel(riskLevel);
         return new ChartSliceDto(display.name(), value, display.color(), percent(value, total));
@@ -317,10 +291,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeCount(Long value) {
         return value == null ? 0L : value;
-    }
-
-    private int safeAverageDuration(BigDecimal value) {
-        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
     private long safeTotal(DashboardRiskLevelCount count) {
