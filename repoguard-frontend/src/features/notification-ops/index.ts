@@ -12,6 +12,7 @@ export {
   eventTypeText,
   isFailedNotificationEvent,
   isRetryPendingNotificationEvent,
+  notificationBindingSecretDisplay,
   notificationStatusClass,
   notificationStatusText,
   providerText

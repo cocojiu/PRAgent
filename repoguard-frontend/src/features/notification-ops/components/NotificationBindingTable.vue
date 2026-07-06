@@ -17,6 +17,13 @@
         </span>
       </template>
     </el-table-column>
+    <el-table-column label="密钥状态" min-width="190">
+      <template #default="{ row }">
+        <el-tag :type="notificationBindingSecretDisplay(row).type" :title="notificationBindingSecretDisplay(row).detail">
+          {{ notificationBindingSecretDisplay(row).text }}
+        </el-tag>
+      </template>
+    </el-table-column>
     <el-table-column prop="lastCheckedAt" label="最近检测" min-width="160" />
     <el-table-column prop="lastError" label="最近错误" min-width="220" show-overflow-tooltip />
     <el-table-column label="操作" :width="actionWidth" fixed="right">
@@ -36,7 +43,7 @@
 
 <script setup lang="ts">
 import type { NotificationBinding } from "@/types";
-import { providerText } from "../notificationOpsDisplayMappers";
+import { notificationBindingSecretDisplay, providerText } from "../notificationOpsDisplayMappers";
 
 withDefaults(
   defineProps<{

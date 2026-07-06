@@ -4,6 +4,7 @@ import type { NotificationBinding, NotificationEvent } from "@/types";
 const FAILED_EVENT_STATUSES = ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"];
 const RETRYABLE_EVENT_STATUSES = ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD", "PENDING"];
 const RETRY_PENDING_EVENT_STATUSES = ["PENDING", "PUBLISH_FAILED", "DELIVERY_FAILED"];
+type SecretTagType = "success" | "warning" | "danger" | "info";
 
 const normalizeStatus = (status?: string) => status?.toUpperCase() ?? "";
 
@@ -81,12 +82,73 @@ export const providerText = (provider: string) => {
   return provider || "-";
 };
 
+export const notificationBindingSecretDisplay = (binding: NotificationBinding) => {
+  const webhook = secretStatusLabel("Webhook", binding.webhookUrlStatus, true);
+  const signingSecret = secretStatusLabel("签名 Secret", binding.secretStatus, false);
+  const fields = [webhook, signingSecret];
+  const issueFields = fields.filter((item) => item.visible);
+  const issue = fields.find((item) => item.status === "danger") ?? fields.find((item) => item.status === "warning");
+  if (issue) {
+    return {
+      text: issue.text,
+      type: issue.status,
+      detail: issueFields.map((item) => item.detail).join("；")
+    };
+  }
+  return {
+    text: signingSecret.configured ? "Webhook/签名已配置" : "Webhook 已配置",
+    type: "success" as SecretTagType,
+    detail: fields.map((item) => item.detail).join("；")
+  };
+};
+
 export const channelText = (event: NotificationEvent) => {
   const providers = event.deliverySummary?.providers ?? [];
   if (!providers.length) {
     return "-";
   }
   return providers.map(providerText).join(" / ");
+};
+
+const secretStatusLabel = (
+  label: string,
+  status: NotificationBinding["webhookUrlStatus"],
+  required: boolean
+) => {
+  if (status === "key_mismatch") {
+    return {
+      text: `${label} 密钥不匹配`,
+      detail: `${label} 的 key id 与当前加密密钥不匹配`,
+      status: "danger" as SecretTagType,
+      configured: false,
+      visible: true
+    };
+  }
+  if (status === "decrypt_failed") {
+    return {
+      text: `${label} 密文异常`,
+      detail: `${label} 密文不可解密`,
+      status: "danger" as SecretTagType,
+      configured: false,
+      visible: true
+    };
+  }
+  if (status === "configured") {
+    return {
+      text: `${label} 已配置`,
+      detail: `${label} 已配置`,
+      status: "success" as SecretTagType,
+      configured: true,
+      visible: true
+    };
+  }
+  return {
+    text: required ? `${label} 未配置` : `${label} 未配置`,
+    detail: required ? `${label} 未配置` : `${label} 未配置，可按渠道要求补充`,
+    status: required ? "warning" as SecretTagType : "info" as SecretTagType,
+    configured: false,
+    visible: required
+  };
 };
 
 export const channelIcon = (event: NotificationEvent) => {
