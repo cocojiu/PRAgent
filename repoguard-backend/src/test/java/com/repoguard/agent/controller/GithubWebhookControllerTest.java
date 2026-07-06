@@ -157,6 +157,31 @@ class GithubWebhookControllerTest {
     }
 
     @Test
+    void ignoredPullRequestActionKeepsSkippedResponseContract() throws Exception {
+        byte[] payload = pullRequestPayload("closed", false, "abc123").getBytes(StandardCharsets.UTF_8);
+
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-GitHub-Event", "pull_request")
+                .header("X-GitHub-Delivery", "delivery-closed")
+                .header("X-Hub-Signature-256", signature(payload))
+                .content(payload))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
+            .andExpect(jsonPath("$.data.status").value("skipped"))
+            .andExpect(jsonPath("$.data.message").value("GitHub pull_request action is ignored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-closed"))
+            .andExpect(jsonPath("$.data.action").value("closed"));
+
+        verify(reviewService, never()).triggerManualReview(any());
+    }
+
+    @Test
     void unmonitoredRepositoryIsSkippedWhenAllowListIsConfigured() throws Exception {
         properties.setAllowedRepositories(java.util.List.of("repo-guard-demo/test-repo"));
         byte[] payload = pullRequestPayload("opened", false, "abc123").getBytes(StandardCharsets.UTF_8);
