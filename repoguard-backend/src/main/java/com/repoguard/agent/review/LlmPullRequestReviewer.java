@@ -56,70 +56,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         );
     }
 
-    public LlmPullRequestReviewer(
-        ReviewPolicyProvider reviewPolicyProvider,
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        RepoGuardMetrics metrics,
-        ExternalCallResilience resilience
-    ) {
-        this(
-            reviewPolicyProvider,
-            restClientBuilder,
-            objectMapper,
-            metrics,
-            resilience,
-            null,
-            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, new PullRequestDiffChunker()),
-            new LlmHttpResponseReader()
-        );
-    }
-
-    LlmPullRequestReviewer(
-        ReviewPolicyProvider reviewPolicyProvider,
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        RepoGuardMetrics metrics,
-        ExternalCallResilience resilience,
-        PullRequestDiffChunker diffChunker
-    ) {
-        this(
-            reviewPolicyProvider,
-            restClientBuilder,
-            objectMapper,
-            metrics,
-            resilience,
-            null,
-            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, diffChunker),
-            new LlmHttpResponseReader()
-        );
-    }
-
-    LlmPullRequestReviewer(
-        ReviewPolicyProvider reviewPolicyProvider,
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        RepoGuardMetrics metrics,
-        ExternalCallResilience resilience,
-        PullRequestDiffChunker diffChunker,
-        LlmReviewPromptBuilder promptBuilder,
-        LlmRuleReviewMerger reviewMerger
-    ) {
-        this(
-            reviewPolicyProvider,
-            restClientBuilder,
-            objectMapper,
-            metrics,
-            resilience,
-            promptBuilder,
-            new LlmReviewPipeline(ruleBasedReviewer, promptBuilder, reviewMerger, objectMapper, metrics, diffChunker),
-            new LlmHttpResponseReader()
-        );
-    }
-
     LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
         RestClient.Builder restClientBuilder,
@@ -130,14 +66,14 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmReviewPipeline reviewPipeline,
         LlmHttpResponseReader responseReader
     ) {
-        this.reviewPolicyProvider = reviewPolicyProvider;
-        this.restClientBuilder = restClientBuilder;
+        this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
+        this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.metrics = metrics;
         this.resilience = resilience;
-        this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
-        this.reviewPipeline = reviewPipeline;
-        this.responseReader = responseReader;
+        this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
+        this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -27,6 +28,22 @@ import org.springframework.web.client.RestClient;
 class LlmPullRequestReviewerTest {
 
     @Test
+    void constructorRejectsMissingPromptBuilder() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            new ObjectMapper(),
+            null,
+            null,
+            null,
+            org.mockito.Mockito.mock(LlmReviewPipeline.class),
+            new LlmHttpResponseReader()
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("promptBuilder");
+    }
+
+    @Test
     void reviewFallsBackToRulesWhenLlmCircuitIsOpen() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
@@ -46,11 +63,9 @@ class LlmPullRequestReviewerTest {
         ));
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
 
-        ReviewResult result = new LlmPullRequestReviewer(
+        ReviewResult result = reviewer(
             reviewPolicyProvider,
             ruleBasedReviewer,
-            RestClient.builder(),
-            new ObjectMapper(),
             metrics,
             resilience
         ).review(new ReviewTask(), diff);
@@ -184,11 +199,9 @@ class LlmPullRequestReviewerTest {
             when(reviewPolicyProvider.getSettings()).thenReturn(settings);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
 
-            ReviewResult result = new LlmPullRequestReviewer(
+            ReviewResult result = reviewer(
                 reviewPolicyProvider,
                 ruleBasedReviewer,
-                RestClient.builder(),
-                new ObjectMapper(),
                 null,
                 null
             ).review(new ReviewTask(), diff);
@@ -229,11 +242,9 @@ class LlmPullRequestReviewerTest {
             when(reviewPolicyProvider.getSettings()).thenReturn(settings);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
 
-            ReviewResult result = new LlmPullRequestReviewer(
+            ReviewResult result = reviewer(
                 reviewPolicyProvider,
                 ruleBasedReviewer,
-                RestClient.builder(),
-                new ObjectMapper(),
                 null,
                 null
             ).review(new ReviewTask(), diff);
@@ -383,6 +394,46 @@ class LlmPullRequestReviewerTest {
         return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
     }
 
+    private LlmPullRequestReviewer reviewer(
+        ReviewPolicyProvider reviewPolicyProvider,
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience
+    ) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        LlmReviewPromptBuilder promptBuilder = new LlmReviewPromptBuilder();
+        return new LlmPullRequestReviewer(
+            reviewPolicyProvider,
+            RestClient.builder(),
+            objectMapper,
+            metrics,
+            resilience,
+            promptBuilder,
+            pipeline(ruleBasedReviewer, objectMapper, metrics, new PullRequestDiffChunker(), promptBuilder),
+            new LlmHttpResponseReader()
+        );
+    }
+
+    private static LlmReviewPipeline pipeline(
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        ObjectMapper objectMapper,
+        RepoGuardMetrics metrics,
+        PullRequestDiffChunker diffChunker,
+        LlmReviewPromptBuilder promptBuilder
+    ) {
+        return new LlmReviewPipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            objectMapper,
+            metrics,
+            new LlmFallbackReasonClassifier(),
+            diffChunker
+        );
+    }
+
     private ReviewResult reviewAgainstHttpStatus(int statusCode, String contentType, String responseBody) throws Exception {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
@@ -408,11 +459,9 @@ class LlmPullRequestReviewerTest {
             when(reviewPolicyProvider.getSettings()).thenReturn(settings);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
 
-            return new LlmPullRequestReviewer(
+            return reviewer(
                 reviewPolicyProvider,
                 ruleBasedReviewer,
-                RestClient.builder(),
-                new ObjectMapper(),
                 null,
                 null
             ).review(new ReviewTask(), diff);
@@ -442,14 +491,19 @@ class LlmPullRequestReviewerTest {
         ) {
             super(
                 reviewPolicyProvider,
-                ruleBasedReviewer,
                 RestClient.builder(),
                 new ObjectMapper(),
                 null,
                 null,
-                new PullRequestDiffChunker(),
-                null,
-                null
+                new LlmReviewPromptBuilder(),
+                pipeline(
+                    ruleBasedReviewer,
+                    new ObjectMapper(),
+                    null,
+                    new PullRequestDiffChunker(),
+                    new LlmReviewPromptBuilder()
+                ),
+                new LlmHttpResponseReader()
             );
             this.reviewedChunks = reviewedChunks;
             this.failingFilePart = failingFilePart;

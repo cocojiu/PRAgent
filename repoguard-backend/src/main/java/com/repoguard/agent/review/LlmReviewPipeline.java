@@ -32,56 +32,16 @@ class LlmReviewPipeline {
         LlmReviewQualityScorer qualityScorer,
         LlmReviewCostEstimator costEstimator,
         ObjectMapper objectMapper,
-        RepoGuardMetrics metrics
-    ) {
-        this(
-            ruleBasedReviewer,
-            promptBuilder,
-            reviewMerger,
-            qualityScorer,
-            costEstimator,
-            objectMapper,
-            metrics,
-            new PullRequestDiffChunker()
-        );
-    }
-
-    LlmReviewPipeline(
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        LlmReviewPromptBuilder promptBuilder,
-        LlmRuleReviewMerger reviewMerger,
-        ObjectMapper objectMapper,
         RepoGuardMetrics metrics,
+        LlmFallbackReasonClassifier fallbackReasonClassifier,
         PullRequestDiffChunker diffChunker
     ) {
-        this(
-            ruleBasedReviewer,
-            promptBuilder,
-            reviewMerger,
-            new LlmReviewQualityScorer(),
-            new LlmReviewCostEstimator(),
-            objectMapper,
-            metrics,
-            diffChunker
-        );
-    }
-
-    LlmReviewPipeline(
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        LlmReviewPromptBuilder promptBuilder,
-        LlmRuleReviewMerger reviewMerger,
-        LlmReviewQualityScorer qualityScorer,
-        LlmReviewCostEstimator costEstimator,
-        ObjectMapper objectMapper,
-        RepoGuardMetrics metrics,
-        PullRequestDiffChunker diffChunker
-    ) {
-        this.ruleBasedReviewer = ruleBasedReviewer;
-        this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
-        this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger(new RiskLevelRanker()) : reviewMerger;
-        this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
-        this.costEstimator = costEstimator == null ? new LlmReviewCostEstimator() : costEstimator;
-        this.fallbackReasonClassifier = new LlmFallbackReasonClassifier();
+        this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
+        this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
+        this.reviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
+        this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
+        this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
+        this.fallbackReasonClassifier = Objects.requireNonNull(fallbackReasonClassifier, "fallbackReasonClassifier");
         this.metrics = metrics;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
@@ -94,7 +54,7 @@ class LlmReviewPipeline {
         );
         this.stages = List.of(
             new LlmReadinessStage(),
-            new LlmExecutionStage(diffChunker == null ? new PullRequestDiffChunker() : diffChunker),
+            new LlmExecutionStage(Objects.requireNonNull(diffChunker, "diffChunker")),
             new RuleMergeStage()
         );
     }
