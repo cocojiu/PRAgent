@@ -1,0 +1,29 @@
+name: Repository Governance
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - PRAgent-test
+  push:
+    branches:
+      - main
+      - master
+      - PRAgent-test
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Tracked file governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run repository governance checks
+        shell: pwsh
+        run: ./scripts/production-readiness-check.ps1 -SkipBackendTests
