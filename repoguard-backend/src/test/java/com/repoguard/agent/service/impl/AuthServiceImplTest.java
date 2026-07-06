@@ -322,14 +322,37 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void logoutRevokesRefreshToken() {
+    void logoutRotatesSessionVersionAndRevokesRefreshTokens() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        UserAccount user = existingUser();
         when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         authService.logout(new AuthLogoutRequest(refreshToken));
 
+        assertThat(user.getSessionVersion()).isEqualTo(1);
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
+        verify(userAccountMapper).updateById(user);
+        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void logoutOnlyRevokesRefreshTokenWhenSessionVersionAlreadyChanged() {
+        String refreshToken = "refresh-token";
+        UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        storedToken.setSessionVersion(1);
+        UserAccount user = existingUser();
+        user.setSessionVersion(2);
+        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        authService.logout(new AuthLogoutRequest(refreshToken));
+
+        assertThat(user.getSessionVersion()).isEqualTo(2);
+        assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
+        verify(userAccountMapper, never()).updateById(any(UserAccount.class));
         verify(userRefreshTokenMapper).updateById(storedToken);
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }

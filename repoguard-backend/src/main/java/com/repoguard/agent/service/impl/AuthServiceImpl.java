@@ -189,7 +189,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void logout(AuthLogoutRequest request) {
         UserRefreshToken storedToken = findActiveRefreshToken(request.refreshToken());
-        revokeIfPresent(storedToken, LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        invalidateLogoutSession(storedToken, now);
         recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "LOGOUT", AUDIT_SUCCESS, null);
     }
 
@@ -253,6 +254,31 @@ public class AuthServiceImpl implements AuthService {
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
         userRefreshTokenMapper.updateById(storedToken);
+    }
+
+    private void invalidateLogoutSession(UserRefreshToken storedToken, LocalDateTime now) {
+        if (storedToken == null) {
+            return;
+        }
+        UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
+        if (user == null || safeSessionVersion(storedToken) != safeSessionVersion(user)) {
+            revokeIfPresent(storedToken, now);
+            return;
+        }
+        rotateSessionVersion(user, now);
+        revokeActiveRefreshTokens(user.getId(), now);
+        storedToken.setStatus(STATUS_REVOKED);
+        storedToken.setRevokedAt(now);
+        storedToken.setUpdatedAt(now);
+    }
+
+    private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {
+        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("user_id", userId)
+            .eq("status", STATUS_ACTIVE)
+            .set("status", STATUS_REVOKED)
+            .set("revoked_at", now)
+            .set("updated_at", now));
     }
 
     private boolean revokeActiveRefreshToken(UserRefreshToken storedToken, LocalDateTime now) {
