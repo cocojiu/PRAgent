@@ -18,7 +18,6 @@ import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.springframework.cache.annotation.CacheEvict;
@@ -35,6 +34,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final ReviewRuleConfigMapper reviewRuleConfigMapper;
     private final ReviewFindingMapper reviewFindingMapper;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewRuleConfigPolicy reviewRuleConfigPolicy;
 
     public ReviewRuleConfigServiceImpl(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
@@ -44,6 +44,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.reviewRuleConfigMapper = reviewRuleConfigMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.cacheEvictionService = cacheEvictionService;
+        this.reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
     }
 
     @Override
@@ -66,7 +67,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     @Transactional
     @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
-        String id = normalizeRuleId(request.id());
+        String id = reviewRuleConfigPolicy.normalizeRuleId(request.id());
         if (reviewRuleConfigMapper.selectById(id) != null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review rule already exists: " + id);
         }
@@ -85,8 +86,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     @Transactional
     @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
-        String normalizedId = normalizeRuleId(id);
-        if (!normalizedId.equals(normalizeRuleId(request.id()))) {
+        String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
+        if (!normalizedId.equals(reviewRuleConfigPolicy.normalizeRuleId(request.id()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review rule id in path and body must match");
         }
         ReviewRuleConfig rule = loadReviewRule(normalizedId);
@@ -101,8 +102,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     @Transactional
     @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
-        ReviewRuleConfig rule = loadReviewRule(normalizeRuleId(id));
-        rule.setStatus(normalizeStatus(status));
+        ReviewRuleConfig rule = loadReviewRule(reviewRuleConfigPolicy.normalizeRuleId(id));
+        rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(status));
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
         evictDashboardOverview();
@@ -129,8 +130,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         rule.setScope(request.scope().trim());
         rule.setApplicableLanguages(cleanOptional(request.applicableLanguages()));
         rule.setFilePatterns(cleanOptional(request.filePatterns()));
-        rule.setSeverity(normalizeSeverity(request.severity()));
-        rule.setStatus(normalizeStatus(request.status()));
+        rule.setSeverity(reviewRuleConfigPolicy.normalizeSeverity(request.severity()));
+        rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(request.status()));
         rule.setConfidence(request.confidence() == null ? 90 : request.confidence());
         rule.setDescription(request.description().trim());
         rule.setPositiveExample(cleanOptional(request.positiveExample()));
@@ -141,9 +142,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         List<ReviewRuleConfig> rules = reviewRuleConfigMapper.selectList(
             new LambdaQueryWrapper<ReviewRuleConfig>().orderByDesc(ReviewRuleConfig::getSortOrder)
         );
-        return rules == null || rules.isEmpty() || rules.getFirst().getSortOrder() == null
-            ? 10
-            : rules.getFirst().getSortOrder() + 10;
+        return reviewRuleConfigPolicy.nextSortOrder(rules);
     }
 
     private Map<String, Long> loadRuleHitCounts() {
@@ -223,18 +222,6 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     private String defaultString(String value) {
         return value == null ? "" : value;
-    }
-
-    private String normalizeRuleId(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizeSeverity(String value) {
-        return value == null ? "INFO" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String normalizeStatus(String value) {
-        return value == null ? "DISABLED" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     private String lower(String value) {
