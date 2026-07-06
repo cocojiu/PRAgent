@@ -6,7 +6,6 @@ import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
-import com.repoguard.agent.dto.MessageQueueMetricDto;
 import com.repoguard.agent.dto.RabbitMqTopologyDto;
 import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.entity.ReviewTask;
@@ -31,9 +30,8 @@ class MessageQueueHealthQueryService {
     private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider;
     private final RabbitReviewQueueProperties properties;
     private final RabbitRuntimeHealthProbe runtimeHealthProbe;
-    private final RepoGuardMetrics metrics;
-    private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final MessageQueueExceptionTaskAssembler exceptionTaskAssembler;
+    private final MessageQueueMetricAssembler metricAssembler;
 
     @Autowired
     MessageQueueHealthQueryService(
@@ -66,11 +64,11 @@ class MessageQueueHealthQueryService {
         this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
         this.properties = properties;
         this.runtimeHealthProbe = runtimeHealthProbe;
-        this.metrics = metrics;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
+        ReviewTaskStateMachine stateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
-        this.exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(this.reviewTaskStateMachine);
+        this.exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(stateMachine);
+        this.metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
     }
 
     MessageQueueHealthResponse getHealth() {
@@ -85,7 +83,7 @@ class MessageQueueHealthQueryService {
         return new MessageQueueHealthResponse(
             activeConfig(settings),
             topology(),
-            metrics(summary),
+            metricAssembler.assemble(summary),
             retryCompensation(summary, latestFailureReason),
             exceptionTaskAssembler.assemble(exceptionTasks, maxAttempts()),
             format(LocalDateTime.now()),
@@ -125,37 +123,6 @@ class MessageQueueHealthQueryService {
             properties.getDeadLetterQueue(),
             properties.getDeadLetterRoutingKey()
         );
-    }
-
-    private List<MessageQueueMetricDto> metrics(MessageQueueHealthSummary summary) {
-        long total = safeCount(summary == null ? null : summary.getTotal());
-        long publishFailed = safeCount(summary == null ? null : summary.getPublishFailed());
-        long executionTimeout = safeCount(summary == null ? null : summary.getExecutionTimeout());
-        long requeuePending = safeCount(summary == null ? null : summary.getRequeuePending());
-        long claimed = safeCount(summary == null ? null : summary.getClaimed());
-        long dlqBacklog = safeCount(summary == null ? null : summary.getDlqBacklog());
-        long publishSucceeded = Math.max(0, total - publishFailed - executionTimeout - requeuePending - dlqBacklog);
-        recordQueueDepth(publishFailed, executionTimeout, requeuePending, claimed, dlqBacklog);
-
-        return List.of(
-            new MessageQueueMetricDto("Publish succeeded", String.valueOf(publishSucceeded), "Current active config", "trend", "blue"),
-            new MessageQueueMetricDto("Publish failed", String.valueOf(publishFailed), "Waiting for compensation", publishFailed > 0 ? "trend danger" : "trend", "red"),
-            new MessageQueueMetricDto("Execution timeout", String.valueOf(executionTimeout), "Review lease expired", executionTimeout > 0 ? "trend danger" : "trend", "orange"),
-            new MessageQueueMetricDto("Requeue pending", String.valueOf(requeuePending), "Execution recovery publishing", requeuePending > 0 ? "trend danger" : "trend", "orange"),
-            new MessageQueueMetricDto("Compensating", String.valueOf(claimed), "Claimed by workers", claimed > 0 ? "trend danger" : "trend", "orange"),
-            new MessageQueueMetricDto("DLQ backlog", String.valueOf(dlqBacklog), "Database observed status", dlqBacklog > 0 ? "trend danger" : "trend", "red")
-        );
-    }
-
-    private void recordQueueDepth(long publishFailed, long executionTimeout, long requeuePending, long claimed, long dlqBacklog) {
-        if (metrics == null) {
-            return;
-        }
-        metrics.rabbitQueueDepth(properties.getQueue(), "publish_failed", publishFailed);
-        metrics.rabbitQueueDepth(properties.getQueue(), "execution_timeout", executionTimeout);
-        metrics.rabbitQueueDepth(properties.getQueue(), "requeue_pending", requeuePending);
-        metrics.rabbitQueueDepth(properties.getQueue(), "claimed", claimed);
-        metrics.rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", dlqBacklog);
     }
 
     private RetryCompensationStatusDto retryCompensation(MessageQueueHealthSummary summary, String latestFailureReason) {
