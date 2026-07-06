@@ -19,14 +19,16 @@ public class LlmReviewResultParser {
     private static final String DEFAULT_RECOMMENDATION = "Review the surrounding context and apply a targeted fix.";
 
     private final ObjectMapper objectMapper;
+    private final LlmReviewJsonExtractor jsonExtractor;
 
     public LlmReviewResultParser(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+        this.jsonExtractor = new LlmReviewJsonExtractor();
     }
 
     public ReviewResult parse(String content) {
         try {
-            JsonNode root = objectMapper.readTree(extractJsonObject(content));
+            JsonNode root = objectMapper.readTree(jsonExtractor.extractJsonObject(content));
             ObjectNode repairedRoot = repairAndValidateRoot(root);
             String riskLevel = repairedRoot.path("riskLevel").asText();
             List<ReviewFindingResult> findings = new ArrayList<>();
@@ -165,53 +167,6 @@ public class LlmReviewResultParser {
 
     private boolean defaultBlocking(String severity) {
         return "CRITICAL".equals(severity) || "HIGH".equals(severity);
-    }
-
-    private String extractJsonObject(String content) {
-        String trimmed = stripJsonFence(content);
-        int start = trimmed.indexOf('{');
-        if (start < 0) {
-            throw new IllegalArgumentException("LLM result does not contain a JSON object");
-        }
-
-        int depth = 0;
-        boolean inString = false;
-        boolean escaped = false;
-        for (int i = start; i < trimmed.length(); i++) {
-            char current = trimmed.charAt(i);
-            if (escaped) {
-                escaped = false;
-                continue;
-            }
-            if (current == '\\' && inString) {
-                escaped = true;
-                continue;
-            }
-            if (current == '"') {
-                inString = !inString;
-                continue;
-            }
-            if (inString) {
-                continue;
-            }
-            if (current == '{') {
-                depth++;
-            } else if (current == '}') {
-                depth--;
-                if (depth == 0) {
-                    return trimmed.substring(start, i + 1);
-                }
-            }
-        }
-        throw new IllegalArgumentException("LLM result contains an incomplete JSON object");
-    }
-
-    private String stripJsonFence(String content) {
-        String trimmed = content == null ? "" : content.trim();
-        if (trimmed.startsWith("```")) {
-            trimmed = trimmed.replaceFirst("^```\\s*(?:json)?\\s*", "").replaceFirst("\\s*```$", "").trim();
-        }
-        return trimmed;
     }
 
     private String readText(JsonNode node, String... fields) {
