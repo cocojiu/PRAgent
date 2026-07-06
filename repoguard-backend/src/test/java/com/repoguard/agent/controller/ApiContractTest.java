@@ -10,7 +10,10 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.common.GlobalExceptionHandler;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -68,6 +72,36 @@ class ApiContractTest {
                 .forEach(method -> assertThat(method.getReturnType())
                     .as(controller.getSimpleName() + "#" + method.getName() + " must return ApiResponse")
                     .isEqualTo(ApiResponse.class))
+        );
+    }
+
+    @Test
+    void pagedControllerParamsKeepBoundedContract() {
+        CONTROLLERS.forEach(controller ->
+            List.of(controller.getDeclaredMethods()).stream()
+                .filter(this::isHandlerMethod)
+                .forEach(method -> List.of(method.getParameters()).forEach(parameter -> {
+                    String requestParamName = requestParamName(parameter);
+                    if ("page".equals(requestParamName)) {
+                        assertThat(parameter.getAnnotation(Min.class))
+                            .as(controller.getSimpleName() + "#" + method.getName() + " page must be >= 1")
+                            .isNotNull()
+                            .extracting(Min::value)
+                            .isEqualTo(1L);
+                    }
+                    if ("pageSize".equals(requestParamName)) {
+                        assertThat(parameter.getAnnotation(Min.class))
+                            .as(controller.getSimpleName() + "#" + method.getName() + " pageSize must be >= 1")
+                            .isNotNull()
+                            .extracting(Min::value)
+                            .isEqualTo(1L);
+                        assertThat(parameter.getAnnotation(Max.class))
+                            .as(controller.getSimpleName() + "#" + method.getName() + " pageSize must be <= 100")
+                            .isNotNull()
+                            .extracting(Max::value)
+                            .isEqualTo(100L);
+                    }
+                }))
         );
     }
 
@@ -149,6 +183,20 @@ class ApiContractTest {
             || method.isAnnotationPresent(PutMapping.class)
             || method.isAnnotationPresent(DeleteMapping.class)
             || method.isAnnotationPresent(PatchMapping.class);
+    }
+
+    private String requestParamName(Parameter parameter) {
+        RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
+        if (requestParam == null) {
+            return parameter.getName();
+        }
+        if (!requestParam.name().isBlank()) {
+            return requestParam.name();
+        }
+        if (!requestParam.value().isBlank()) {
+            return requestParam.value();
+        }
+        return parameter.getName();
     }
 
     @RestController
