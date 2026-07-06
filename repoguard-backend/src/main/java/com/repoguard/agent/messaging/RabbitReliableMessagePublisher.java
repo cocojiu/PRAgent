@@ -4,6 +4,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.Objects;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
@@ -16,13 +17,9 @@ public class RabbitReliableMessagePublisher {
     private final RabbitTemplate rabbitTemplate;
     private final RabbitPublishFailureClassifier failureClassifier;
 
-    public RabbitReliableMessagePublisher(RabbitTemplate rabbitTemplate) {
-        this(rabbitTemplate, new RabbitPublishFailureClassifier());
-    }
-
-    RabbitReliableMessagePublisher(RabbitTemplate rabbitTemplate, RabbitPublishFailureClassifier failureClassifier) {
-        this.rabbitTemplate = rabbitTemplate;
-        this.failureClassifier = failureClassifier;
+    public RabbitReliableMessagePublisher(RabbitTemplate rabbitTemplate, RabbitPublishFailureClassifier failureClassifier) {
+        this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     public RabbitPublishResult publish(Object message, RabbitPublishSpec spec) {

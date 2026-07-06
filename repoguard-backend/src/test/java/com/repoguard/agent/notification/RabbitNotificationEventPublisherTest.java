@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -41,7 +42,7 @@ class RabbitNotificationEventPublisherTest {
             any(CorrelationData.class)
         );
 
-        new RabbitNotificationEventPublisher(rabbitTemplate, properties).publish(message);
+        publisher(rabbitTemplate, properties).publish(message);
 
         ArgumentCaptor<CorrelationData> correlationCaptor = ArgumentCaptor.forClass(CorrelationData.class);
         verify(rabbitTemplate).convertAndSend(
@@ -64,7 +65,7 @@ class RabbitNotificationEventPublisherTest {
             return null;
         }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(rabbitTemplate, properties);
+        RabbitNotificationEventPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -87,7 +88,7 @@ class RabbitNotificationEventPublisherTest {
         }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
         RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(
-            new RabbitReliableMessagePublisher(rabbitTemplate),
+            reliablePublisher(rabbitTemplate),
             properties,
             metrics
         );
@@ -120,7 +121,7 @@ class RabbitNotificationEventPublisherTest {
             return null;
         }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(rabbitTemplate, properties);
+        RabbitNotificationEventPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -138,7 +139,7 @@ class RabbitNotificationEventPublisherTest {
             .when(rabbitTemplate)
             .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(rabbitTemplate, properties);
+        RabbitNotificationEventPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -155,6 +156,17 @@ class RabbitNotificationEventPublisherTest {
         properties.setPublishInitialIntervalMs(0);
         properties.setPublishConfirmTimeoutMs(100);
         return properties;
+    }
+
+    private RabbitNotificationEventPublisher publisher(
+        RabbitTemplate rabbitTemplate,
+        RabbitNotificationQueueProperties properties
+    ) {
+        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, null);
+    }
+
+    private RabbitReliableMessagePublisher reliablePublisher(RabbitTemplate rabbitTemplate) {
+        return new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier());
     }
 
     private NotificationEventMessage message() {

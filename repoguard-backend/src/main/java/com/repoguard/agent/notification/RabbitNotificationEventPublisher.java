@@ -6,7 +6,6 @@ import com.repoguard.agent.messaging.RabbitPublishResult;
 import com.repoguard.agent.messaging.RabbitPublishSpec;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +19,6 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitNotificationQueueProperties properties;
     private final RepoGuardMetrics metrics;
-
-    RabbitNotificationEventPublisher(RabbitTemplate rabbitTemplate, RabbitNotificationQueueProperties properties) {
-        this(new RabbitReliableMessagePublisher(rabbitTemplate), properties, null);
-    }
 
     @Autowired
     public RabbitNotificationEventPublisher(

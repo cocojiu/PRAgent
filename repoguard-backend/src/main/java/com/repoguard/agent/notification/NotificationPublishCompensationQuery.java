@@ -7,6 +7,7 @@ import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -17,22 +18,15 @@ class NotificationPublishCompensationQuery {
     private final RabbitNotificationQueueProperties properties;
     private final RabbitPublishCompensationPolicy compensationPolicy;
 
-    NotificationPublishCompensationQuery(
-        NotificationEventMapper eventMapper,
-        RabbitNotificationQueueProperties properties
-    ) {
-        this(eventMapper, properties, new RabbitPublishCompensationPolicy());
-    }
-
     @Autowired
     NotificationPublishCompensationQuery(
         NotificationEventMapper eventMapper,
         RabbitNotificationQueueProperties properties,
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
-        this.eventMapper = eventMapper;
-        this.properties = properties;
-        this.compensationPolicy = compensationPolicy;
+        this.eventMapper = Objects.requireNonNull(eventMapper, "eventMapper");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
     }
 
     List<NotificationEvent> loadDueEvents() {

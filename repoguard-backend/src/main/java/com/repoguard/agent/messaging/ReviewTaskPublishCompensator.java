@@ -42,6 +42,7 @@ public class ReviewTaskPublishCompensator {
         RepoGuardMetrics metrics,
         ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskStateMachine reviewTaskStateMachine,
+        RabbitPublishFailureClassifier failureClassifier,
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this(
@@ -53,6 +54,7 @@ public class ReviewTaskPublishCompensator {
             metrics,
             outboxStore,
             reviewTaskStateMachine,
+            failureClassifier,
             compensationPolicy
         );
     }
@@ -66,6 +68,7 @@ public class ReviewTaskPublishCompensator {
         RepoGuardMetrics metrics,
         ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskStateMachine reviewTaskStateMachine,
+        RabbitPublishFailureClassifier failureClassifier,
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this.reviewTaskPublisher = reviewTaskPublisher;
@@ -74,10 +77,8 @@ public class ReviewTaskPublishCompensator {
         this.instanceId = instanceId;
         this.metrics = metrics;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
-        this.failureClassifier = new RabbitPublishFailureClassifier();
-        this.compensationPolicy = compensationPolicy == null
-            ? new RabbitPublishCompensationPolicy()
-            : compensationPolicy;
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
+        this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")

@@ -1,7 +1,9 @@
 package com.repoguard.agent.messaging;
 
 import java.util.Locale;
+import org.springframework.stereotype.Component;
 
+@Component
 public class RabbitPublishFailureClassifier {
 
     public String classify(MessagePublishException ex) {

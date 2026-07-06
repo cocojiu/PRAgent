@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +17,7 @@ class NotificationEventPublishCompensatorTest {
     private final NotificationDispatchService dispatchService = org.mockito.Mockito.mock(NotificationDispatchService.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
     private final NotificationPublishCompensationQuery compensationQuery =
-        new NotificationPublishCompensationQuery(eventMapper, properties);
+        new NotificationPublishCompensationQuery(eventMapper, properties, new RabbitPublishCompensationPolicy());
 
     @Test
     void compensatesDeliveryFailedEventsForThirdPartyRetry() {

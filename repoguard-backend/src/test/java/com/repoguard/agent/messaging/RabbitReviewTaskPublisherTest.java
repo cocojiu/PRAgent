@@ -23,6 +23,15 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 class RabbitReviewTaskPublisherTest {
 
     @Test
+    void reliablePublisherRejectsMissingFailureClassifier() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+
+        assertThatThrownBy(() -> new RabbitReliableMessagePublisher(rabbitTemplate, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureClassifier");
+    }
+
+    @Test
     void publishSendsMessageToConfiguredExchangeAndRoutingKeyAndWaitsForAck() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitReviewQueueProperties properties = properties();
@@ -38,7 +47,7 @@ class RabbitReviewTaskPublisherTest {
             any(CorrelationData.class)
         );
 
-        new RabbitReviewTaskPublisher(rabbitTemplate, properties).publish(message);
+        publisher(rabbitTemplate, properties).publish(message);
 
         ArgumentCaptor<CorrelationData> correlationCaptor = ArgumentCaptor.forClass(CorrelationData.class);
         verify(rabbitTemplate).convertAndSend(
@@ -61,7 +70,7 @@ class RabbitReviewTaskPublisherTest {
             return null;
         }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitReviewTaskPublisher publisher = new RabbitReviewTaskPublisher(rabbitTemplate, properties);
+        RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -88,7 +97,7 @@ class RabbitReviewTaskPublisherTest {
             return null;
         }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitReviewTaskPublisher publisher = new RabbitReviewTaskPublisher(rabbitTemplate, properties);
+        RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -106,7 +115,7 @@ class RabbitReviewTaskPublisherTest {
             .when(rabbitTemplate)
             .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
 
-        RabbitReviewTaskPublisher publisher = new RabbitReviewTaskPublisher(rabbitTemplate, properties);
+        RabbitReviewTaskPublisher publisher = publisher(rabbitTemplate, properties);
 
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
@@ -123,6 +132,14 @@ class RabbitReviewTaskPublisherTest {
         properties.setPublishInitialIntervalMs(0);
         properties.setPublishConfirmTimeoutMs(100);
         return properties;
+    }
+
+    private RabbitReviewTaskPublisher publisher(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
+        return new RabbitReviewTaskPublisher(
+            new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
+            properties,
+            null
+        );
     }
 
     private ReviewTaskMessage message() {

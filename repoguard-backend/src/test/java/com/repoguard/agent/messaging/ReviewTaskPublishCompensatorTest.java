@@ -37,6 +37,8 @@ class ReviewTaskPublishCompensatorTest {
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final RabbitPublishFailureClassifier failureClassifier = new RabbitPublishFailureClassifier();
+    private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
     private final ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
         reviewTaskMapper,
         reviewTimelineMapper,
@@ -51,7 +53,8 @@ class ReviewTaskPublishCompensatorTest {
         metrics,
         outboxStore,
         reviewTaskStateMachine,
-        null
+        failureClassifier,
+        compensationPolicy
     );
 
     @Test
@@ -76,7 +79,8 @@ class ReviewTaskPublishCompensatorTest {
             metrics,
             null,
             reviewTaskStateMachine,
-            null
+            failureClassifier,
+            compensationPolicy
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("outboxStore");
@@ -93,10 +97,47 @@ class ReviewTaskPublishCompensatorTest {
             metrics,
             outboxStore,
             null,
-            null
+            failureClassifier,
+            compensationPolicy
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void compensatorRejectsMissingFailureClassifier() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "test-instance",
+            metrics,
+            outboxStore,
+            reviewTaskStateMachine,
+            null,
+            compensationPolicy
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failureClassifier");
+    }
+
+    @Test
+    void compensatorRejectsMissingCompensationPolicy() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "test-instance",
+            metrics,
+            outboxStore,
+            reviewTaskStateMachine,
+            failureClassifier,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("compensationPolicy");
     }
 
     @Test

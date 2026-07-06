@@ -3,7 +3,6 @@ package com.repoguard.agent.messaging;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,10 +16,6 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitReviewQueueProperties properties;
     private final RepoGuardMetrics metrics;
-
-    RabbitReviewTaskPublisher(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
-        this(new RabbitReliableMessagePublisher(rabbitTemplate), properties, null);
-    }
 
     @Autowired
     public RabbitReviewTaskPublisher(

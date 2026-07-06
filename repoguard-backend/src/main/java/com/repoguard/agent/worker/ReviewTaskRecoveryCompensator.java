@@ -40,7 +40,8 @@ public class ReviewTaskRecoveryCompensator {
         ReviewLogContextFormatter logContextFormatter,
         ReviewTaskRecoveryPolicy recoveryPolicy,
         ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        RabbitPublishFailureClassifier failureClassifier
     ) {
         this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
         this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
@@ -49,7 +50,7 @@ public class ReviewTaskRecoveryCompensator {
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.metrics = metrics;
-        this.failureClassifier = new RabbitPublishFailureClassifier();
+        this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")

@@ -1,12 +1,14 @@
 package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +18,14 @@ class NotificationPublishCompensationQueryTest {
         org.mockito.Mockito.mock(NotificationEventMapper.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
     private final NotificationPublishCompensationQuery query =
-        new NotificationPublishCompensationQuery(eventMapper, properties);
+        new NotificationPublishCompensationQuery(eventMapper, properties, new RabbitPublishCompensationPolicy());
+
+    @Test
+    void constructorRejectsMissingCompensationPolicy() {
+        assertThatThrownBy(() -> new NotificationPublishCompensationQuery(eventMapper, properties, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("compensationPolicy");
+    }
 
     @Test
     void loadsDueEventsWithCompensationQueryRules() {
