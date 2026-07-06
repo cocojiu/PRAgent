@@ -5,12 +5,17 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
+import com.repoguard.agent.observability.RepoGuardMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
+import org.springframework.amqp.AmqpConnectException;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
@@ -69,6 +74,35 @@ class RabbitNotificationEventPublisherTest {
     }
 
     @Test
+    void publishRecordsNotificationFailureMetricWhenPublisherConfirmIsNacked() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+        RabbitNotificationQueueProperties properties = properties();
+        NotificationEventMessage message = message();
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+        doAnswer(invocation -> {
+            CorrelationData correlationData = invocation.getArgument(3);
+            correlationData.getFuture().complete(new CorrelationData.Confirm(false, "broker refused"));
+            return null;
+        }).when(rabbitTemplate).convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+
+        RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(
+            new RabbitReliableMessagePublisher(rabbitTemplate),
+            properties,
+            metrics
+        );
+
+        assertThatThrownBy(() -> publisher.publish(message))
+            .isInstanceOf(MessagePublishException.class)
+            .hasMessageContaining("nacked");
+        assertThat(meterRegistry.find("repoguard.rabbit.publish.failed")
+            .tag("failure_phase", "notification")
+            .tag("reason", "nacked")
+            .counter()
+            .count()).isEqualTo(1.0);
+    }
+
+    @Test
     void publishRetriesAndFailsWhenMessageIsReturned() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitNotificationQueueProperties properties = properties();
@@ -91,6 +125,24 @@ class RabbitNotificationEventPublisherTest {
         assertThatThrownBy(() -> publisher.publish(message))
             .isInstanceOf(MessagePublishException.class)
             .hasMessageContaining("unroutable");
+        verify(rabbitTemplate, times(3))
+            .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
+    }
+
+    @Test
+    void publishRetriesAndFailsWhenSendThrowsAmqpException() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+        RabbitNotificationQueueProperties properties = properties();
+        NotificationEventMessage message = message();
+        doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
+            .when(rabbitTemplate)
+            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+
+        RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(rabbitTemplate, properties);
+
+        assertThatThrownBy(() -> publisher.publish(message))
+            .isInstanceOf(MessagePublishException.class)
+            .hasMessageContaining("publish attempt failed");
         verify(rabbitTemplate, times(3))
             .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
     }
