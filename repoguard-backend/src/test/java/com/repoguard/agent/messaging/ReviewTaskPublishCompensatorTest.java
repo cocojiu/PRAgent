@@ -18,6 +18,7 @@ import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,13 +32,15 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
         reviewTaskMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
         properties,
-        "test-instance"
+        "test-instance",
+        metrics
     );
 
     @Test
@@ -74,6 +77,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(timelineCaptor.getValue().getSortOrder()).isEqualTo(4);
     }
 
+    @Test
     void compensateKeepsTaskPublishFailedWhenPublishStillFails() {
         ReviewTask task = task();
         task.setPublishAttempts(1);
@@ -108,6 +112,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(timelineCaptor.getValue().getLabel()).contains("password=****", "token=****");
         assertThat(timelineCaptor.getValue().getLabel()).doesNotContain("raw-password", "raw-token");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("FAILED");
+        verify(metrics).rabbitPublishCompensationFailed("confirm_timeout");
     }
 
     @Test

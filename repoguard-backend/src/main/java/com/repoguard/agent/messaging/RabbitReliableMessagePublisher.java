@@ -14,9 +14,15 @@ import org.springframework.stereotype.Component;
 public class RabbitReliableMessagePublisher {
 
     private final RabbitTemplate rabbitTemplate;
+    private final RabbitPublishFailureClassifier failureClassifier;
 
     public RabbitReliableMessagePublisher(RabbitTemplate rabbitTemplate) {
+        this(rabbitTemplate, new RabbitPublishFailureClassifier());
+    }
+
+    RabbitReliableMessagePublisher(RabbitTemplate rabbitTemplate, RabbitPublishFailureClassifier failureClassifier) {
         this.rabbitTemplate = rabbitTemplate;
+        this.failureClassifier = failureClassifier;
     }
 
     public RabbitPublishResult publish(Object message, RabbitPublishSpec spec) {
@@ -40,23 +46,7 @@ public class RabbitReliableMessagePublisher {
     }
 
     public String failureReason(MessagePublishException ex) {
-        if (ex == null || ex.getMessage() == null || ex.getMessage().isBlank()) {
-            return "publish_failed";
-        }
-        String message = ex.getMessage().toLowerCase();
-        if (message.contains("unroutable")) {
-            return "unroutable";
-        }
-        if (message.contains("nacked")) {
-            return "nacked";
-        }
-        if (message.contains("timed out")) {
-            return "confirm_timeout";
-        }
-        if (message.contains("interrupted")) {
-            return "interrupted";
-        }
-        return "publish_failed";
+        return failureClassifier.classify(ex);
     }
 
     private void publishOnce(Object message, RabbitPublishSpec spec, int attempt) {

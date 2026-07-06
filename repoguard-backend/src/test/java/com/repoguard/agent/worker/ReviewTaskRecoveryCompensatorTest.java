@@ -89,7 +89,7 @@ class ReviewTaskRecoveryCompensatorTest {
         );
         assertThat(errorCaptor.getValue()).contains("password=****").doesNotContain("raw-password");
         verify(timelineRecorder).recoveryPublishFailed(task, recoveredAt, errorCaptor.getValue());
-        verify(metrics).rabbitPublishFailed("execute", errorCaptor.getValue());
+        verify(metrics).rabbitPublishFailed("execute", "confirm_timeout");
         assertLogContextCleared();
     }
 

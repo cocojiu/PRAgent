@@ -29,6 +29,7 @@ public class ReviewTaskPublishCompensator {
     private final String instanceId;
     private final RepoGuardMetrics metrics;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final RabbitPublishFailureClassifier failureClassifier;
 
     @Autowired
     public ReviewTaskPublishCompensator(
@@ -93,6 +94,7 @@ public class ReviewTaskPublishCompensator {
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
+        this.failureClassifier = new RabbitPublishFailureClassifier();
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
@@ -169,7 +171,7 @@ public class ReviewTaskPublishCompensator {
                         "FAILED"
                     );
                     if (metrics != null) {
-                        metrics.rabbitPublishCompensationFailed(errorMessage);
+                        metrics.rabbitPublishCompensationFailed(failureClassifier.classify(ex));
                     }
                     LOGGER.warn(
                         "Review task publish compensation failed taskId={} repository={} prNumber={} operation=review_publish_compensation result=publish_failed recoverySource={} attempts={} nextRetryAt={} error={}",

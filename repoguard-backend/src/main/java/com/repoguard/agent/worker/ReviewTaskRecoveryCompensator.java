@@ -4,6 +4,7 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
+import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
@@ -30,6 +31,7 @@ public class ReviewTaskRecoveryCompensator {
     private final ReviewTaskRecoveryPolicy recoveryPolicy;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RepoGuardMetrics metrics;
+    private final RabbitPublishFailureClassifier failureClassifier;
 
     public ReviewTaskRecoveryCompensator(
         ReviewTaskRecoveryStore recoveryStore,
@@ -47,6 +49,7 @@ public class ReviewTaskRecoveryCompensator {
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.metrics = metrics;
+        this.failureClassifier = new RabbitPublishFailureClassifier();
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
@@ -93,7 +96,7 @@ public class ReviewTaskRecoveryCompensator {
                 if (recoveryStore.markRecoveryPublishFailed(task, recoveredAt, nextRetryAt, error)) {
                     timelineRecorder.recoveryPublishFailed(task, recoveredAt, error);
                     if (metrics != null) {
-                        metrics.rabbitPublishFailed("execute", error);
+                        metrics.rabbitPublishFailed("execute", failureClassifier.classify(ex));
                     }
                     LOGGER.warn(
                         "Review task recovery publish failed taskId={} repository={} prNumber={} operation=review_recovery result=publish_failed attempts={} nextRetryAt={} error={}",
