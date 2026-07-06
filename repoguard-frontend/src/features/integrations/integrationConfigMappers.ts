@@ -20,6 +20,7 @@ export const buildGithubIntegrationPatch = (config: GithubIntegrationConfig): In
   metaLabel: "更新时间",
   metaValue: config.updatedAt ?? "未更新",
   message: config.lastError ?? secretIntegrationMessage(config.secretStatus, "GitHub Token", "GitHub 配置已保存", config.status),
+  diagnostics: secretDiagnostics(config.secretStatus, config.status),
   fields: [
     { label: "API Base URL", value: config.baseUrl, type: "text" },
     { label: "Token", value: config.token ?? "", type: "password", placeholder: "GitHub token" },
@@ -44,6 +45,7 @@ export const buildServiceIntegrationPatch = (id: "mysql" | "rabbitmq", config: S
       ? `${serviceName} 检测配置已保存，不会切换当前运行连接`
       : `请配置用于检测的 ${serviceName} 连接信息`),
     diagnostics: [
+      ...secretDiagnostics(config.secretStatus, config.status),
       {
         label: "保存配置",
         value: serviceConfigStatusText(config.status),
@@ -82,6 +84,7 @@ export const buildReviewPolicyIntegrationPatch = (config: ReviewPolicyConfig): I
     "LLM 配置已保存",
     config.apiKey ? "configured" : "not_configured"
   ),
+  diagnostics: secretDiagnostics(config.secretStatus, config.apiKey ? "configured" : "not_configured"),
   fields: [
     {
       label: "Provider",
@@ -169,6 +172,35 @@ const serviceConfigStatusText = (status: ServiceIntegrationConfig["status"]) => 
     default:
       return "未配置";
   }
+};
+
+const secretDiagnostics = (secretStatus: SecretStatus | undefined, configStatus: string): IntegrationDiagnosticItem[] => {
+  const normalizedStatus = normalizedSecretStatus(secretStatus, configStatus);
+  return [{
+    label: "密钥状态",
+    value: secretDiagnosticText(normalizedStatus),
+    status: secretDiagnosticStatus(normalizedStatus)
+  }];
+};
+
+const secretDiagnosticText = (status: SecretStatus) => {
+  switch (status) {
+    case "configured":
+      return "已配置";
+    case "key_mismatch":
+      return "密钥不匹配";
+    case "decrypt_failed":
+      return "密文不可解密";
+    default:
+      return "未配置";
+  }
+};
+
+const secretDiagnosticStatus = (status: SecretStatus): IntegrationDiagnosticItem["status"] => {
+  if (status === "configured") {
+    return "success";
+  }
+  return isSecretBroken(status) ? "danger" : "warning";
 };
 
 const isSecretBroken = (status?: SecretStatus) => status === "key_mismatch" || status === "decrypt_failed";
