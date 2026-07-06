@@ -183,6 +183,53 @@ describe("apiRequest", () => {
     expect(urls[4]).toContain("pageSize=10");
     expect(urls[4]).toContain("status=failed");
   });
+
+  it("keeps notification ops, message queue, and notification center endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchNotificationBindings", undefined);
+    await apiRequest("fetchNotificationEvents", {
+      page: 3,
+      pageSize: 5,
+      status: "failed",
+      taskId: 512
+    });
+    await apiRequest("retryNotificationEvent", { id: 2001 });
+    await apiRequest("fetchNotificationDeliveries", {
+      page: 4,
+      pageSize: 15,
+      status: "failed",
+      taskId: 512
+    });
+    await apiRequest("fetchMessageQueueHealth", undefined);
+    await apiRequest("requeueMessageQueueTask", { taskId: 42 });
+    await apiRequest("fetchNotifications", undefined);
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/notification-bindings");
+    expect(calls[0][0]).toContain("page=1");
+    expect(calls[0][0]).toContain("pageSize=100");
+    expect(calls[0][1].method).toBeUndefined();
+    expect(calls[1][0]).toContain("/api/v1/notification-events");
+    expect(calls[1][0]).toContain("page=3");
+    expect(calls[1][0]).toContain("pageSize=5");
+    expect(calls[1][0]).toContain("status=failed");
+    expect(calls[1][0]).toContain("taskId=512");
+    expect(calls[2][0]).toContain("/api/v1/notification-events/2001/retry");
+    expect(calls[2][1].method).toBe("POST");
+    expect(calls[3][0]).toContain("/api/v1/notification-deliveries");
+    expect(calls[3][0]).toContain("page=4");
+    expect(calls[3][0]).toContain("pageSize=15");
+    expect(calls[3][0]).toContain("status=failed");
+    expect(calls[3][0]).toContain("taskId=512");
+    expect(calls[4][0]).toContain("/api/v1/message-queue/health");
+    expect(calls[4][1].method).toBeUndefined();
+    expect(calls[5][0]).toContain("/api/v1/message-queue/tasks/42/requeue");
+    expect(calls[5][1].method).toBe("POST");
+    expect(calls[6][0]).toContain("/api/v1/notifications");
+    expect(calls[6][1].method).toBeUndefined();
+  });
 });
 
 const setCsrfCookie = (token: string) => {
