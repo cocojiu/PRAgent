@@ -21,7 +21,18 @@ class ReviewTaskWorkerMetricsRecorderTest {
         recorder.recordConsumed(startedAt, "success");
 
         assertThat(startedAt).isEqualTo(1_000L);
-        verify(metrics).rabbitMessageConsumed(Duration.ofNanos(5_999_000L), "success");
+        verify(metrics).rabbitMessageConsumed(Duration.ofNanos(5_999_000L), "success", "unknown");
+    }
+
+    @Test
+    void recordsConsumedDurationWithFailureCategory() {
+        clock.setTimes(1_000L, 6_000_000L);
+
+        long startedAt = recorder.startedAt();
+        recorder.recordConsumed(startedAt, "rejected", "review_execution_failed");
+
+        assertThat(startedAt).isEqualTo(1_000L);
+        verify(metrics).rabbitMessageConsumed(Duration.ofNanos(5_999_000L), "rejected", "review_execution_failed");
     }
 
     @Test

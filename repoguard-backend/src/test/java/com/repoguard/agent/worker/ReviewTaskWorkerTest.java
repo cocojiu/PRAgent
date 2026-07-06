@@ -50,7 +50,7 @@ class ReviewTaskWorkerTest {
         ).handle(message, channel, 100L);
 
         verify(channel).basicReject(100L, false);
-        verify(metricsRecorder).recordConsumed(200L, "rejected");
+        verify(metricsRecorder).recordConsumed(200L, "rejected", "review_execution_failed");
     }
 
     private ReviewTaskMessage message() {

@@ -65,7 +65,8 @@ public class ReviewTaskWorker {
             );
         } catch (RuntimeException ex) {
             channel.basicReject(deliveryTag, false);
-            metricsRecorder.recordConsumed(startedAt, "rejected");
+            String failureCategory = failureClassifier.failureCategory(ex);
+            metricsRecorder.recordConsumed(startedAt, "rejected", failureCategory);
             LOGGER.warn(
                 "Rabbit review message rejected taskId={} repository={} prNumber={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.taskId(),
@@ -74,7 +75,7 @@ public class ReviewTaskWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
-                failureClassifier.failureCategory(ex)
+                failureCategory
             );
         }
     }
