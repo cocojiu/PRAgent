@@ -3,7 +3,9 @@ package com.repoguard.agent.dashboard;
 import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardReviewTrendAssembler {
 
     public List<ReviewTrendPointDto> assemble(List<DashboardReviewTrendCount> reviewTrendCounts) {

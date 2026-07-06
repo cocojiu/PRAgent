@@ -7,13 +7,16 @@ import com.repoguard.agent.dto.FailedRuleStatDto;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardRuleAssembler {
 
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
 
     public DashboardRuleAssembler(DashboardRuleDisplayMapper ruleDisplayMapper) {
-        this.ruleDisplayMapper = ruleDisplayMapper;
+        this.ruleDisplayMapper = Objects.requireNonNull(ruleDisplayMapper, "ruleDisplayMapper must not be null");
     }
 
     public DashboardRulesResponse assemble(List<DashboardRuleHitCount> ruleHitCounts) {

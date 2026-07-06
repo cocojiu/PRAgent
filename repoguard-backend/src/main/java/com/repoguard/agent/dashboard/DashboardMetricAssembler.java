@@ -6,13 +6,17 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardMetricAssembler {
 
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
 
     public DashboardMetricAssembler(DashboardOverviewDisplayMapper overviewDisplayMapper) {
-        this.overviewDisplayMapper = overviewDisplayMapper;
+        this.overviewDisplayMapper =
+            Objects.requireNonNull(overviewDisplayMapper, "overviewDisplayMapper must not be null");
     }
 
     public List<DashboardMetricDto> assemble(DashboardMetricStat stat) {

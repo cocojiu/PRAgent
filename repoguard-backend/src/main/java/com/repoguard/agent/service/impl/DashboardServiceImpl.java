@@ -3,18 +3,14 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmTrendDays;
-import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
-import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardReviewTrendAssembler;
 import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardRuleAssembler;
-import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
-import com.repoguard.agent.dashboard.DashboardStatusMapper;
 import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
 import com.repoguard.agent.dto.ChartSliceDto;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
@@ -33,8 +29,8 @@ import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -54,50 +50,35 @@ public class DashboardServiceImpl implements DashboardService {
 
     public DashboardServiceImpl(
         DashboardMapper dashboardMapper,
-        DashboardStatusMapper statusMapper,
-        DashboardRuleDisplayMapper ruleDisplayMapper,
-        DashboardOverviewDisplayMapper overviewDisplayMapper,
-        DashboardLlmQualityFormatter llmQualityFormatter,
-        DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
-        DashboardReviewTrendWindow reviewTrendWindow,
-        DashboardSystemHealthProbe systemHealthProbe
-    ) {
-        this(
-            dashboardMapper,
-            statusMapper,
-            ruleDisplayMapper,
-            overviewDisplayMapper,
-            llmQualityFormatter,
-            llmQualityTrendBuilder,
-            reviewTrendWindow,
-            systemHealthProbe,
-            new DashboardSnapshotStore(Runnable::run)
-        );
-    }
-
-    @Autowired
-    public DashboardServiceImpl(
-        DashboardMapper dashboardMapper,
-        DashboardStatusMapper statusMapper,
-        DashboardRuleDisplayMapper ruleDisplayMapper,
-        DashboardOverviewDisplayMapper overviewDisplayMapper,
-        DashboardLlmQualityFormatter llmQualityFormatter,
+        DashboardMetricAssembler dashboardMetricAssembler,
+        DashboardReviewTrendAssembler reviewTrendAssembler,
+        DashboardRiskDistributionAssembler riskDistributionAssembler,
+        DashboardRuleAssembler dashboardRuleAssembler,
+        DashboardHighRiskReviewAssembler highRiskReviewAssembler,
+        DashboardLlmQualityStatsAssembler llmQualityStatsAssembler,
         DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
         DashboardReviewTrendWindow reviewTrendWindow,
         DashboardSystemHealthProbe systemHealthProbe,
         DashboardSnapshotStore snapshotStore
     ) {
-        this.dashboardMapper = dashboardMapper;
-        this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
-        this.reviewTrendAssembler = new DashboardReviewTrendAssembler();
-        this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
-        this.dashboardRuleAssembler = new DashboardRuleAssembler(ruleDisplayMapper);
-        this.highRiskReviewAssembler = new DashboardHighRiskReviewAssembler(statusMapper);
-        this.llmQualityStatsAssembler = new DashboardLlmQualityStatsAssembler(llmQualityFormatter);
-        this.llmQualityTrendBuilder = llmQualityTrendBuilder;
-        this.reviewTrendWindow = reviewTrendWindow;
-        this.systemHealthProbe = systemHealthProbe;
-        this.snapshotStore = snapshotStore;
+        this.dashboardMapper = Objects.requireNonNull(dashboardMapper, "dashboardMapper must not be null");
+        this.dashboardMetricAssembler =
+            Objects.requireNonNull(dashboardMetricAssembler, "dashboardMetricAssembler must not be null");
+        this.reviewTrendAssembler =
+            Objects.requireNonNull(reviewTrendAssembler, "reviewTrendAssembler must not be null");
+        this.riskDistributionAssembler =
+            Objects.requireNonNull(riskDistributionAssembler, "riskDistributionAssembler must not be null");
+        this.dashboardRuleAssembler =
+            Objects.requireNonNull(dashboardRuleAssembler, "dashboardRuleAssembler must not be null");
+        this.highRiskReviewAssembler =
+            Objects.requireNonNull(highRiskReviewAssembler, "highRiskReviewAssembler must not be null");
+        this.llmQualityStatsAssembler =
+            Objects.requireNonNull(llmQualityStatsAssembler, "llmQualityStatsAssembler must not be null");
+        this.llmQualityTrendBuilder =
+            Objects.requireNonNull(llmQualityTrendBuilder, "llmQualityTrendBuilder must not be null");
+        this.reviewTrendWindow = Objects.requireNonNull(reviewTrendWindow, "reviewTrendWindow must not be null");
+        this.systemHealthProbe = Objects.requireNonNull(systemHealthProbe, "systemHealthProbe must not be null");
+        this.snapshotStore = Objects.requireNonNull(snapshotStore, "snapshotStore must not be null");
     }
 
     @Override

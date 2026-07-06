@@ -5,14 +5,18 @@ import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardRiskDistributionAssembler {
 
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
 
     public DashboardRiskDistributionAssembler(DashboardOverviewDisplayMapper overviewDisplayMapper) {
-        this.overviewDisplayMapper = overviewDisplayMapper;
+        this.overviewDisplayMapper =
+            Objects.requireNonNull(overviewDisplayMapper, "overviewDisplayMapper must not be null");
     }
 
     public List<ChartSliceDto> assemble(List<DashboardRiskLevelCount> riskLevelCounts) {

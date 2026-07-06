@@ -5,13 +5,16 @@ import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.LlmQualityByModelDto;
 import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardLlmQualityStatsAssembler {
 
     private final DashboardLlmQualityFormatter formatter;
 
     public DashboardLlmQualityStatsAssembler(DashboardLlmQualityFormatter formatter) {
-        this.formatter = formatter;
+        this.formatter = Objects.requireNonNull(formatter, "formatter must not be null");
     }
 
     public List<LlmQualityByModelDto> assembleByModel(List<DashboardLlmQualityModelStat> stats) {

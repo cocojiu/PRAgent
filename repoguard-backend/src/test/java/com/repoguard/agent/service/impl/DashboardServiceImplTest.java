@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,11 +12,18 @@ import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
+import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
+import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
+import com.repoguard.agent.dashboard.DashboardReviewTrendAssembler;
+import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
+import com.repoguard.agent.dashboard.DashboardRuleAssembler;
 import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.dashboard.DashboardStatusMapper;
 import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
 import com.repoguard.agent.dto.DashboardHighRiskReview;
@@ -60,20 +68,25 @@ class DashboardServiceImplTest {
         FIXED_CLOCK
     );
     private final DashboardReviewTrendWindow reviewTrendWindow = DashboardReviewTrendWindow.forTest(FIXED_CLOCK);
+    private final DashboardSystemHealthProbe systemHealthProbe = new DashboardSystemHealthProbe(
+        githubIntegrationProvider,
+        reviewPolicyProvider,
+        rabbitTemplate,
+        statusMapper
+    );
+    private final DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
     private final DashboardServiceImpl service = new DashboardServiceImpl(
         dashboardMapper,
-        statusMapper,
-        ruleDisplayMapper,
-        overviewDisplayMapper,
-        llmQualityFormatter,
+        new DashboardMetricAssembler(overviewDisplayMapper),
+        new DashboardReviewTrendAssembler(),
+        new DashboardRiskDistributionAssembler(overviewDisplayMapper),
+        new DashboardRuleAssembler(ruleDisplayMapper),
+        new DashboardHighRiskReviewAssembler(statusMapper),
+        new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
         llmQualityTrendBuilder,
         reviewTrendWindow,
-        new DashboardSystemHealthProbe(
-            githubIntegrationProvider,
-            reviewPolicyProvider,
-            rabbitTemplate,
-            statusMapper
-        )
+        systemHealthProbe,
+        snapshotStore
     );
 
     @BeforeEach
@@ -109,6 +122,25 @@ class DashboardServiceImplTest {
         assertThat(llmQualityCache.sync()).isTrue();
         assertThat(llmQualityCache.key())
             .isEqualTo("T(com.repoguard.agent.dashboard.DashboardLlmTrendDays).normalize(#llmTrendDays)");
+    }
+
+    @Test
+    void constructorRejectsMissingDashboardMetricAssembler() {
+        assertThatThrownBy(() -> new DashboardServiceImpl(
+            dashboardMapper,
+            null,
+            new DashboardReviewTrendAssembler(),
+            new DashboardRiskDistributionAssembler(overviewDisplayMapper),
+            new DashboardRuleAssembler(ruleDisplayMapper),
+            new DashboardHighRiskReviewAssembler(statusMapper),
+            new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
+            llmQualityTrendBuilder,
+            reviewTrendWindow,
+            systemHealthProbe,
+            snapshotStore
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("dashboardMetricAssembler");
     }
 
     @Test

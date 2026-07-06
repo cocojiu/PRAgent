@@ -6,7 +6,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class DashboardHighRiskReviewAssembler {
 
     private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -14,7 +17,7 @@ public class DashboardHighRiskReviewAssembler {
     private final DashboardStatusMapper statusMapper;
 
     public DashboardHighRiskReviewAssembler(DashboardStatusMapper statusMapper) {
-        this.statusMapper = statusMapper;
+        this.statusMapper = Objects.requireNonNull(statusMapper, "statusMapper must not be null");
     }
 
     public List<HighRiskReviewDto> assemble(List<DashboardHighRiskReview> highRiskReviews) {
