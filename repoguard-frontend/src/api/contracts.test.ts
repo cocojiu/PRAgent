@@ -92,6 +92,66 @@ describe("apiRequest", () => {
     expect(init.body).toBe(JSON.stringify({}));
     expect(new Headers(init.headers).get("X-RepoGuard-CSRF")).toBe("logout-csrf-token");
   });
+
+  it("keeps review detail heavy sections on explicit paged endpoint queries", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewFindings", {
+      id: 42,
+      page: 3,
+      pageSize: 20,
+      severity: "high",
+      category: "security",
+      feedbackStatus: "pending"
+    });
+    await apiRequest("fetchReviewChangedFiles", {
+      id: 42,
+      page: 2,
+      pageSize: 20,
+      hasFinding: false
+    });
+    await apiRequest("fetchReviewMissingTests", {
+      id: 42,
+      page: 4,
+      pageSize: 20
+    });
+    await apiRequest("fetchGithubCommentPreview", {
+      id: 42,
+      page: 5,
+      pageSize: 10,
+      commentableOnly: true
+    });
+    await apiRequest("fetchGithubCommentPublicationHistory", {
+      id: 42,
+      page: 2,
+      pageSize: 10,
+      status: "failed"
+    });
+
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls[0]).toContain("/api/v1/reviews/42/findings");
+    expect(urls[0]).toContain("page=3");
+    expect(urls[0]).toContain("pageSize=20");
+    expect(urls[0]).toContain("severity=high");
+    expect(urls[0]).toContain("category=security");
+    expect(urls[0]).toContain("feedbackStatus=pending");
+    expect(urls[1]).toContain("/api/v1/reviews/42/changed-files");
+    expect(urls[1]).toContain("page=2");
+    expect(urls[1]).toContain("pageSize=20");
+    expect(urls[1]).toContain("hasFinding=false");
+    expect(urls[2]).toContain("/api/v1/reviews/42/missing-tests");
+    expect(urls[2]).toContain("page=4");
+    expect(urls[2]).toContain("pageSize=20");
+    expect(urls[3]).toContain("/api/v1/reviews/42/github-comments/preview");
+    expect(urls[3]).toContain("page=5");
+    expect(urls[3]).toContain("pageSize=10");
+    expect(urls[3]).toContain("commentableOnly=true");
+    expect(urls[4]).toContain("/api/v1/reviews/42/github-comments/publications");
+    expect(urls[4]).toContain("page=2");
+    expect(urls[4]).toContain("pageSize=10");
+    expect(urls[4]).toContain("status=failed");
+  });
 });
 
 const setCsrfCookie = (token: string) => {
