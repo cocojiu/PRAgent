@@ -1,7 +1,9 @@
 package com.repoguard.agent.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -19,6 +21,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class MessageQueueHealthControllerTest {
+
+    private Long lastRequeueTaskId;
 
     private final MessageQueueHealthService service = new MessageQueueHealthService() {
         @Override
@@ -66,6 +70,7 @@ class MessageQueueHealthControllerTest {
 
         @Override
         public MessageQueueRequeueResponse requeueTask(Long taskId) {
+            lastRequeueTaskId = taskId;
             return new MessageQueueRequeueResponse(taskId, "queued", "Message task requeued", 0);
         }
     };
@@ -79,21 +84,48 @@ class MessageQueueHealthControllerTest {
         mockMvc.perform(get("/api/v1/message-queue/health"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp").exists())
             .andExpect(jsonPath("$.data.activeConfig.provider").value("RABBITMQ"))
+            .andExpect(jsonPath("$.data.activeConfig.status").value("CONNECTED"))
             .andExpect(jsonPath("$.data.activeConfig.runtimeConnectionStatus").value("CONNECTED"))
+            .andExpect(jsonPath("$.data.activeConfig.baseUrl").value("amqp://localhost:5672"))
+            .andExpect(jsonPath("$.data.activeConfig.virtualHost").value("/"))
             .andExpect(jsonPath("$.data.activeConfig.configVersion").value("cfg-20260610-205800"))
+            .andExpect(jsonPath("$.data.activeConfig.switchNotice").value("Testing a connection does not switch the active configuration; save integration settings to take effect."))
+            .andExpect(jsonPath("$.data.topology.exchange").value("repoguard.review.exchange.v2"))
             .andExpect(jsonPath("$.data.topology.queue").value("repoguard.review.queue.v2"))
+            .andExpect(jsonPath("$.data.topology.routingKey").value("repoguard.review.created.v2"))
+            .andExpect(jsonPath("$.data.topology.deadLetterQueue").value("repoguard.review.dlq"))
             .andExpect(jsonPath("$.data.metrics", hasSize(1)))
+            .andExpect(jsonPath("$.data.metrics[0].label").value("Publish failed"))
+            .andExpect(jsonPath("$.data.metrics[0].value").value("1"))
+            .andExpect(jsonPath("$.data.retryCompensation.maxAttempts").value(10))
+            .andExpect(jsonPath("$.data.retryCompensation.batchSize").value(20))
             .andExpect(jsonPath("$.data.retryCompensation.claimedTaskCount").value(1))
-            .andExpect(jsonPath("$.data.exceptionTasks[0].status").value("PUBLISH_FAILED"));
+            .andExpect(jsonPath("$.data.retryCompensation.latestFailureReason").value("publisher confirm timed out"))
+            .andExpect(jsonPath("$.data.exceptionTasks[0].taskId").value(42))
+            .andExpect(jsonPath("$.data.exceptionTasks[0].organization").value("cocojiu"))
+            .andExpect(jsonPath("$.data.exceptionTasks[0].repository").value("PRAgent"))
+            .andExpect(jsonPath("$.data.exceptionTasks[0].prNumber").value(128))
+            .andExpect(jsonPath("$.data.exceptionTasks[0].status").value("PUBLISH_FAILED"))
+            .andExpect(jsonPath("$.data.generatedAt").value("2026-06-10 21:03:00"))
+            .andExpect(jsonPath("$.data.dataSource").value("DATABASE_TASK_STATE"));
     }
 
     @Test
     void requeueTaskReturnsRequeueResult() throws Exception {
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/v1/message-queue/tasks/42/requeue"))
+        mockMvc.perform(post("/api/v1/message-queue/tasks/42/requeue"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp").exists())
             .andExpect(jsonPath("$.data.taskId").value(42))
-            .andExpect(jsonPath("$.data.status").value("queued"));
+            .andExpect(jsonPath("$.data.status").value("queued"))
+            .andExpect(jsonPath("$.data.message").value("Message task requeued"))
+            .andExpect(jsonPath("$.data.publishAttempts").value(0));
+        assertThat(lastRequeueTaskId).isEqualTo(42L);
     }
 }
