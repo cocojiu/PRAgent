@@ -4,11 +4,13 @@ import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.entity.ReviewTask;
 import java.util.List;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Builds GitHub writeback preflight diagnostics for preview and publish flows.
  */
+@Component
 public class GithubCommentWritebackCheckBuilder {
 
     public GithubCommentWritebackCheck build(ReviewTask task, GithubIntegrationSettings settings) {

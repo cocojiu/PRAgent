@@ -9,11 +9,13 @@ import com.repoguard.agent.github.GithubCommentTargetType;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Builds preview items for GitHub comment drafts.
  */
+@Component
 public class GithubCommentPreviewItemBuilder {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

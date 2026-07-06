@@ -144,7 +144,10 @@ class ReviewServiceImplTest {
         new ReviewTaskListItemAssembler(),
         new GithubCommentPreviewDataLoader(changedFileMapper, reviewFindingMapper),
         new GithubCommentPreviewPublicationLoader(githubCommentPublicationMapper),
-        new GithubCommentPreviewResponseAssembler()
+        new GithubCommentPreviewResponseAssembler(
+            new GithubCommentWritebackCheckBuilder(),
+            new GithubCommentPreviewItemBuilder()
+        )
     );
     private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,

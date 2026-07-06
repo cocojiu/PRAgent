@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.dto.ChangedFileDto;
@@ -19,7 +20,17 @@ import org.junit.jupiter.api.Test;
 
 class GithubCommentPreviewResponseAssemblerTest {
 
-    private final GithubCommentPreviewResponseAssembler assembler = new GithubCommentPreviewResponseAssembler();
+    private final GithubCommentPreviewResponseAssembler assembler = responseAssembler();
+
+    @Test
+    void constructorRejectsMissingPreviewItemBuilder() {
+        assertThatThrownBy(() -> new GithubCommentPreviewResponseAssembler(
+            new GithubCommentWritebackCheckBuilder(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("previewItemBuilder");
+    }
 
     @Test
     void assemblesPreviewResponseAndCountsCommentablePublishedAndBlockedItems() {
@@ -192,6 +203,13 @@ class GithubCommentPreviewResponseAssemblerTest {
             owner,
             repository,
             1L
+        );
+    }
+
+    private GithubCommentPreviewResponseAssembler responseAssembler() {
+        return new GithubCommentPreviewResponseAssembler(
+            new GithubCommentWritebackCheckBuilder(),
+            new GithubCommentPreviewItemBuilder()
         );
     }
 }

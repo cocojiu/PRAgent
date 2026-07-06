@@ -46,7 +46,10 @@ class GithubCommentPreviewServiceImplTest {
         new ReviewTaskListItemAssembler(),
         new GithubCommentPreviewDataLoader(changedFileMapper, reviewFindingMapper),
         new GithubCommentPreviewPublicationLoader(publicationMapper),
-        new GithubCommentPreviewResponseAssembler()
+        new GithubCommentPreviewResponseAssembler(
+            new GithubCommentWritebackCheckBuilder(),
+            new GithubCommentPreviewItemBuilder()
+        )
     );
 
     @Test

@@ -13,7 +13,7 @@ import com.repoguard.agent.service.impl.GithubCommentPreviewPublicationLoader.Gi
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -25,17 +25,13 @@ public class GithubCommentPreviewResponseAssembler {
     private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
     private static final String FEEDBACK_VALID = "VALID";
 
-    @Autowired
-    public GithubCommentPreviewResponseAssembler() {
-        this(new GithubCommentWritebackCheckBuilder(), new GithubCommentPreviewItemBuilder());
-    }
-
-    GithubCommentPreviewResponseAssembler(
+    public GithubCommentPreviewResponseAssembler(
         GithubCommentWritebackCheckBuilder writebackCheckBuilder,
         GithubCommentPreviewItemBuilder previewItemBuilder
     ) {
-        this.writebackCheckBuilder = writebackCheckBuilder;
-        this.previewItemBuilder = previewItemBuilder;
+        this.writebackCheckBuilder =
+            Objects.requireNonNull(writebackCheckBuilder, "writebackCheckBuilder must not be null");
+        this.previewItemBuilder = Objects.requireNonNull(previewItemBuilder, "previewItemBuilder must not be null");
     }
 
     public GithubCommentPreviewResponse assemble(
