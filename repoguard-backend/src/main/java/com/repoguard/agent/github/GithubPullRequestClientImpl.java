@@ -8,11 +8,11 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestClient;
 
 @Service
 public class GithubPullRequestClientImpl implements GithubPullRequestClient {
@@ -26,40 +26,21 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private final GithubCommentWriter commentWriter;
     private final GithubIntegrationHealthReporter healthReporter;
 
-    GithubPullRequestClientImpl(
-        GithubIntegrationProvider githubIntegrationProvider,
-        RestClient.Builder restClientBuilder
-    ) {
-        this(
-            githubIntegrationProvider,
-            restClientBuilder,
-            null,
-            new GithubPullRequestReader(new GithubPaginator(restClientBuilder)),
-            new GithubChangedFileReader(new GithubPaginator(restClientBuilder)),
-            new GithubCommentWriter(
-                restClientBuilder,
-                new GithubIntegrationHealthReporter(githubIntegrationProvider, null)
-            ),
-            new GithubIntegrationHealthReporter(githubIntegrationProvider, null)
-        );
-    }
-
     @Autowired
     public GithubPullRequestClientImpl(
         GithubIntegrationProvider githubIntegrationProvider,
-        RestClient.Builder restClientBuilder,
         ExternalCallResilience resilience,
         GithubPullRequestReader pullRequestReader,
         GithubChangedFileReader changedFileReader,
         GithubCommentWriter commentWriter,
         GithubIntegrationHealthReporter healthReporter
     ) {
-        this.githubIntegrationProvider = githubIntegrationProvider;
+        this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
         this.resilience = resilience;
-        this.pullRequestReader = pullRequestReader;
-        this.changedFileReader = changedFileReader;
-        this.commentWriter = commentWriter;
-        this.healthReporter = healthReporter;
+        this.pullRequestReader = Objects.requireNonNull(pullRequestReader, "pullRequestReader");
+        this.changedFileReader = Objects.requireNonNull(changedFileReader, "changedFileReader");
+        this.commentWriter = Objects.requireNonNull(commentWriter, "commentWriter");
+        this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
     }
 
     @Override

@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -27,7 +28,7 @@ public class GithubCommentWriter {
         GithubIntegrationHealthReporter healthReporter
     ) {
         this.restClient = GithubRestClientFactory.build(restClientBuilder);
-        this.healthReporter = healthReporter;
+        this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
     }
 
     public List<GithubReviewCommentResult> publishPullRequestComments(

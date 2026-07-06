@@ -6,6 +6,7 @@ import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -19,8 +20,8 @@ public class GithubIntegrationHealthReporter {
         GithubIntegrationProvider githubIntegrationProvider,
         RepoGuardMetrics metrics
     ) {
-        this.githubIntegrationProvider = githubIntegrationProvider;
-        this.metrics = metrics;
+        this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     public void markChecked(GithubIntegrationSettings settings, String error) {
@@ -28,7 +29,7 @@ public class GithubIntegrationHealthReporter {
     }
 
     public void recordExternalFailure(RuntimeException ex) {
-        if (metrics != null && ex instanceof ExternalCallException externalCallException) {
+        if (ex instanceof ExternalCallException externalCallException) {
             metrics.externalCallFailed(externalCallException);
         }
     }
@@ -59,9 +60,7 @@ public class GithubIntegrationHealthReporter {
         String category,
         String status
     ) {
-        if (metrics != null) {
-            metrics.githubApiRequest(Duration.between(startedAt, LocalDateTime.now()), operation, result, category, status);
-        }
+        metrics.githubApiRequest(Duration.between(startedAt, LocalDateTime.now()), operation, result, category, status);
     }
 
     public String conciseError(RuntimeException ex) {

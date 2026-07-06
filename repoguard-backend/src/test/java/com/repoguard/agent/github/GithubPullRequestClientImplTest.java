@@ -1,12 +1,16 @@
 package com.repoguard.agent.github;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -20,10 +24,19 @@ import org.springframework.web.client.RestClient;
 class GithubPullRequestClientImplTest {
 
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
-    private final GithubPullRequestClientImpl client = new GithubPullRequestClientImpl(
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final GithubIntegrationHealthReporter healthReporter = new GithubIntegrationHealthReporter(
         githubIntegrationProvider,
-        RestClient.builder()
+        new RepoGuardMetrics(meterRegistry, new ReviewExecutionFailureClassifier())
     );
+    private final GithubPullRequestClientImpl client = client(RestClient.builder(), healthReporter);
+
+    @Test
+    void constructorRejectsMissingHealthReporterMetrics() {
+        assertThatThrownBy(() -> new GithubIntegrationHealthReporter(githubIntegrationProvider, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
 
     @Test
     void getConfiguredRepositoryReturnsTrimmedProviderRepository() {
@@ -54,6 +67,14 @@ class GithubPullRequestClientImplTest {
             assertThat(diff.files()).hasSize(30);
             assertThat(diff.files().get(0).filename()).isEqualTo("src/File001.java");
             assertThat(server.filesPageRequests()).containsExactly(1);
+            var counter = meterRegistry.find("repoguard.github.api.request")
+                .tag("operation", "fetch_pull_request_diff")
+                .tag("result", "success")
+                .tag("category", "unknown")
+                .tag("status", "unknown")
+                .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
         }
     }
 
@@ -157,6 +178,21 @@ class GithubPullRequestClientImplTest {
             "octocat",
             "api",
             7L
+        );
+    }
+
+    private GithubPullRequestClientImpl client(
+        RestClient.Builder restClientBuilder,
+        GithubIntegrationHealthReporter healthReporter
+    ) {
+        GithubPaginator paginator = new GithubPaginator(restClientBuilder);
+        return new GithubPullRequestClientImpl(
+            githubIntegrationProvider,
+            null,
+            new GithubPullRequestReader(paginator),
+            new GithubChangedFileReader(paginator),
+            new GithubCommentWriter(restClientBuilder, healthReporter),
+            healthReporter
         );
     }
 
