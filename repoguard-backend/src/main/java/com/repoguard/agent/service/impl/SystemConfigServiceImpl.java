@@ -1,6 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
@@ -13,26 +12,16 @@ import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
-import com.repoguard.agent.mapper.IntegrationConfigMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
-import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
-import com.repoguard.agent.mapper.SystemSettingLogMapper;
-import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
-import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.ConnectionTestService;
 import com.repoguard.agent.service.ReviewPolicyConfigService;
 import com.repoguard.agent.service.ReviewRuleConfigService;
 import com.repoguard.agent.service.SystemConfigService;
 import com.repoguard.agent.service.SystemIntegrationConfigService;
 import com.repoguard.agent.service.SystemSettingsApplicationService;
-import javax.sql.DataSource;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 
 @Service
 public class SystemConfigServiceImpl implements SystemConfigService {
@@ -51,59 +40,19 @@ public class SystemConfigServiceImpl implements SystemConfigService {
         ReviewRuleConfigService reviewRuleConfigService,
         SystemSettingsApplicationService systemSettingsApplicationService
     ) {
-        this.connectionTestService = connectionTestService;
-        this.systemIntegrationConfigService = systemIntegrationConfigService;
-        this.reviewPolicyConfigService = reviewPolicyConfigService;
-        this.reviewRuleConfigService = reviewRuleConfigService;
-        this.systemSettingsApplicationService = systemSettingsApplicationService;
-    }
-
-    public SystemConfigServiceImpl(
-        IntegrationConfigMapper integrationConfigMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        ReviewRuleConfigMapper reviewRuleConfigMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        SystemSettingsConfigMapper systemSettingsConfigMapper,
-        SystemSettingLogMapper systemSettingLogMapper,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        DataSource dataSource,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService,
-        Environment environment
-    ) {
-        this(
-            new ConnectionTestServiceImpl(
-                integrationConfigMapper,
-                reviewPolicyConfigMapper,
-                restClientBuilder,
-                objectMapper,
-                dataSource,
-                rabbitTemplate,
-                secretCryptoService
-            ),
-            new SystemIntegrationConfigServiceImpl(
-                integrationConfigMapper,
-                secretCryptoService,
-                environment,
-                null
-            ),
-            new ReviewPolicyConfigServiceImpl(
-                reviewPolicyConfigMapper,
-                secretCryptoService
-            ),
-            new ReviewRuleConfigServiceImpl(
-                reviewRuleConfigMapper,
-                reviewFindingMapper,
-                null,
-                new ReviewRuleConfigPolicy(),
-                new ReviewRuleMetricAssembler()
-            ),
-            new SystemSettingsApplicationServiceImpl(
-                systemSettingsConfigMapper,
-                systemSettingLogMapper,
-                reviewPolicyConfigMapper
-            )
+        this.connectionTestService = Objects.requireNonNull(connectionTestService, "connectionTestService");
+        this.systemIntegrationConfigService = Objects.requireNonNull(
+            systemIntegrationConfigService,
+            "systemIntegrationConfigService"
+        );
+        this.reviewPolicyConfigService = Objects.requireNonNull(
+            reviewPolicyConfigService,
+            "reviewPolicyConfigService"
+        );
+        this.reviewRuleConfigService = Objects.requireNonNull(reviewRuleConfigService, "reviewRuleConfigService");
+        this.systemSettingsApplicationService = Objects.requireNonNull(
+            systemSettingsApplicationService,
+            "systemSettingsApplicationService"
         );
     }
 

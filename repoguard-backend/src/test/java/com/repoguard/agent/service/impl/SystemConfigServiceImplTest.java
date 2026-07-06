@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,20 +52,59 @@ class SystemConfigServiceImplTest {
     private final SystemSettingsConfigMapper systemSettingsConfigMapper = org.mockito.Mockito.mock(SystemSettingsConfigMapper.class);
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
-    private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
+    private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
-        reviewRuleConfigMapper,
-        reviewFindingMapper,
-        systemSettingsConfigMapper,
-        systemSettingLogMapper,
         RestClient.builder(),
         new ObjectMapper(),
         null,
         null,
-        secretCryptoService,
-        null
+        secretCryptoService
     );
+    private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
+        new SystemIntegrationConfigServiceImpl(
+            integrationConfigMapper,
+            secretCryptoService,
+            null,
+            null
+        );
+    private final ReviewPolicyConfigServiceImpl reviewPolicyConfigService = new ReviewPolicyConfigServiceImpl(
+        reviewPolicyConfigMapper,
+        secretCryptoService
+    );
+    private final ReviewRuleConfigServiceImpl reviewRuleConfigService = new ReviewRuleConfigServiceImpl(
+        reviewRuleConfigMapper,
+        reviewFindingMapper,
+        null,
+        new ReviewRuleConfigPolicy(),
+        new ReviewRuleMetricAssembler()
+    );
+    private final SystemSettingsApplicationServiceImpl systemSettingsApplicationService =
+        new SystemSettingsApplicationServiceImpl(
+            systemSettingsConfigMapper,
+            systemSettingLogMapper,
+            reviewPolicyConfigMapper
+        );
+    private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
+        connectionTestService,
+        systemIntegrationConfigService,
+        reviewPolicyConfigService,
+        reviewRuleConfigService,
+        systemSettingsApplicationService
+    );
+
+    @Test
+    void constructorRejectsMissingReviewRuleConfigService() {
+        assertThatThrownBy(() -> new SystemConfigServiceImpl(
+            connectionTestService,
+            systemIntegrationConfigService,
+            reviewPolicyConfigService,
+            null,
+            systemSettingsApplicationService
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewRuleConfigService");
+    }
 
     @Test
     void updateGithubIntegrationMasksTokenAndStoresNewSecret() {
