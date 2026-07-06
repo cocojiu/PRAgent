@@ -29,7 +29,14 @@ class LlmChunkReviewAggregatorTest {
         new LlmReviewCostEstimator(),
         metrics
     );
-    private final LlmReviewResultParser parser = new LlmReviewResultParser(new ObjectMapper());
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final LlmReviewResultParser parser = new LlmReviewResultParser(
+        objectMapper,
+        new LlmReviewJsonExtractor(),
+        new LlmReviewSchemaRepairer(objectMapper),
+        new LlmReviewFindingMapper(),
+        new LlmReviewParseFailureSummarizer()
+    );
 
     @Test
     void aggregatesSuccessfulChunksAndFallsBackOnlyFailedChunksToRules() {

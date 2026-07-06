@@ -14,19 +14,20 @@ class LlmReviewPipelineTest {
     private final LlmReviewQualityScorer qualityScorer = new LlmReviewQualityScorer();
     private final LlmReviewCostEstimator costEstimator = new LlmReviewCostEstimator();
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final LlmReviewResultParser reviewResultParser = parser();
     private final LlmFallbackReasonClassifier fallbackReasonClassifier = new LlmFallbackReasonClassifier();
     private final PullRequestDiffChunker diffChunker = DiffChunkingTestFixtures.chunker();
 
     @Test
     void constructorRejectsMissingExplicitDependencies() {
-        assertMissing("ruleBasedReviewer", () -> pipeline(null, promptBuilder, reviewMerger, qualityScorer, costEstimator, objectMapper, fallbackReasonClassifier, diffChunker));
-        assertMissing("promptBuilder", () -> pipeline(ruleBasedReviewer, null, reviewMerger, qualityScorer, costEstimator, objectMapper, fallbackReasonClassifier, diffChunker));
-        assertMissing("reviewMerger", () -> pipeline(ruleBasedReviewer, promptBuilder, null, qualityScorer, costEstimator, objectMapper, fallbackReasonClassifier, diffChunker));
-        assertMissing("qualityScorer", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, null, costEstimator, objectMapper, fallbackReasonClassifier, diffChunker));
-        assertMissing("costEstimator", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, null, objectMapper, fallbackReasonClassifier, diffChunker));
-        assertMissing("objectMapper", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, null, fallbackReasonClassifier, diffChunker));
-        assertMissing("fallbackReasonClassifier", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, objectMapper, null, diffChunker));
-        assertMissing("diffChunker", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, objectMapper, fallbackReasonClassifier, null));
+        assertMissing("ruleBasedReviewer", () -> pipeline(null, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
+        assertMissing("promptBuilder", () -> pipeline(ruleBasedReviewer, null, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
+        assertMissing("reviewMerger", () -> pipeline(ruleBasedReviewer, promptBuilder, null, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
+        assertMissing("qualityScorer", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, null, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
+        assertMissing("costEstimator", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, null, reviewResultParser, fallbackReasonClassifier, diffChunker));
+        assertMissing("reviewResultParser", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, null, fallbackReasonClassifier, diffChunker));
+        assertMissing("fallbackReasonClassifier", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, null, diffChunker));
+        assertMissing("diffChunker", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, null));
     }
 
     private void assertMissing(String dependencyName, ThrowingCallable callable) {
@@ -41,7 +42,7 @@ class LlmReviewPipelineTest {
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
         LlmReviewCostEstimator costEstimator,
-        ObjectMapper objectMapper,
+        LlmReviewResultParser reviewResultParser,
         LlmFallbackReasonClassifier fallbackReasonClassifier,
         PullRequestDiffChunker diffChunker
     ) {
@@ -51,10 +52,20 @@ class LlmReviewPipelineTest {
             reviewMerger,
             qualityScorer,
             costEstimator,
-            objectMapper,
+            reviewResultParser,
             null,
             fallbackReasonClassifier,
             diffChunker
+        );
+    }
+
+    private LlmReviewResultParser parser() {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
         );
     }
 }

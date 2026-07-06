@@ -30,6 +30,12 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
+import com.repoguard.agent.review.LlmReviewFindingMapper;
+import com.repoguard.agent.review.LlmReviewJsonExtractor;
+import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
+import com.repoguard.agent.review.LlmReviewResultParser;
+import com.repoguard.agent.review.LlmReviewSchemaRepairer;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -51,15 +57,17 @@ class SystemConfigServiceImplTest {
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final SystemSettingsConfigMapper systemSettingsConfigMapper = org.mockito.Mockito.mock(SystemSettingsConfigMapper.class);
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
         RestClient.builder(),
-        new ObjectMapper(),
+        objectMapper,
         null,
         null,
-        secretCryptoService
+        secretCryptoService,
+        responseParser()
     );
     private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
         new SystemIntegrationConfigServiceImpl(
@@ -613,6 +621,20 @@ class SystemConfigServiceImplTest {
             "http://127.0.0.1:" + server.getAddress().getPort(),
             requestBody,
             authorization
+        );
+    }
+
+    private LlmConnectionProbeResponseParser responseParser() {
+        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+    }
+
+    private LlmReviewResultParser reviewResultParser() {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
         );
     }
 

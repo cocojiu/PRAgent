@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -21,8 +20,8 @@ class LlmReviewPipeline {
     private final LlmReviewCostEstimator costEstimator;
     private final LlmChunkReviewAggregator chunkReviewAggregator;
     private final LlmFallbackReasonClassifier fallbackReasonClassifier;
+    private final LlmReviewResultParser reviewResultParser;
     private final RepoGuardMetrics metrics;
-    private final ObjectMapper objectMapper;
 
     @Autowired
     LlmReviewPipeline(
@@ -31,7 +30,7 @@ class LlmReviewPipeline {
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
         LlmReviewCostEstimator costEstimator,
-        ObjectMapper objectMapper,
+        LlmReviewResultParser reviewResultParser,
         RepoGuardMetrics metrics,
         LlmFallbackReasonClassifier fallbackReasonClassifier,
         PullRequestDiffChunker diffChunker
@@ -42,8 +41,8 @@ class LlmReviewPipeline {
         this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
         this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
         this.fallbackReasonClassifier = Objects.requireNonNull(fallbackReasonClassifier, "fallbackReasonClassifier");
+        this.reviewResultParser = Objects.requireNonNull(reviewResultParser, "reviewResultParser");
         this.metrics = metrics;
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
             this.ruleBasedReviewer,
             this.promptBuilder,
@@ -91,11 +90,9 @@ class LlmReviewPipeline {
     private class LlmExecutionStage implements ReviewPipelineStage {
 
         private final PullRequestDiffChunker diffChunker;
-        private final LlmReviewResultParser reviewResultParser;
 
         LlmExecutionStage(PullRequestDiffChunker diffChunker) {
             this.diffChunker = diffChunker;
-            this.reviewResultParser = new LlmReviewResultParser(objectMapper);
         }
 
         @Override

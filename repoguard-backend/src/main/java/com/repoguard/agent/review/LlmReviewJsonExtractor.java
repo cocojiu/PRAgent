@@ -1,6 +1,9 @@
 package com.repoguard.agent.review;
 
-class LlmReviewJsonExtractor {
+import org.springframework.stereotype.Component;
+
+@Component
+public class LlmReviewJsonExtractor {
 
     String extractJsonObject(String content) {
         String trimmed = stripJsonFence(content);

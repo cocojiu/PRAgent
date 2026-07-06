@@ -3,8 +3,10 @@ package com.repoguard.agent.review;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
-class LlmReviewFindingMapper {
+@Component
+public class LlmReviewFindingMapper {
 
     List<ReviewFindingResult> mapFindings(JsonNode findingsNode) {
         List<ReviewFindingResult> findings = new ArrayList<>();

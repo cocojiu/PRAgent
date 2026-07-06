@@ -3,7 +3,10 @@ package com.repoguard.agent.review;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 public class LlmReviewResultParser {
 
     private final ObjectMapper objectMapper;
@@ -12,12 +15,18 @@ public class LlmReviewResultParser {
     private final LlmReviewFindingMapper findingMapper;
     private final LlmReviewParseFailureSummarizer failureSummarizer;
 
-    public LlmReviewResultParser(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        this.jsonExtractor = new LlmReviewJsonExtractor();
-        this.schemaRepairer = new LlmReviewSchemaRepairer(objectMapper);
-        this.findingMapper = new LlmReviewFindingMapper();
-        this.failureSummarizer = new LlmReviewParseFailureSummarizer();
+    public LlmReviewResultParser(
+        ObjectMapper objectMapper,
+        LlmReviewJsonExtractor jsonExtractor,
+        LlmReviewSchemaRepairer schemaRepairer,
+        LlmReviewFindingMapper findingMapper,
+        LlmReviewParseFailureSummarizer failureSummarizer
+    ) {
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.jsonExtractor = Objects.requireNonNull(jsonExtractor, "jsonExtractor");
+        this.schemaRepairer = Objects.requireNonNull(schemaRepairer, "schemaRepairer");
+        this.findingMapper = Objects.requireNonNull(findingMapper, "findingMapper");
+        this.failureSummarizer = Objects.requireNonNull(failureSummarizer, "failureSummarizer");
     }
 
     public ReviewResult parse(String content) {

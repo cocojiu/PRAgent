@@ -8,7 +8,11 @@ import org.junit.jupiter.api.Test;
 
 class LlmConnectionProbeResponseParserTest {
 
-    private final LlmConnectionProbeResponseParser parser = new LlmConnectionProbeResponseParser(new ObjectMapper());
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final LlmConnectionProbeResponseParser parser = new LlmConnectionProbeResponseParser(
+        objectMapper,
+        parser()
+    );
 
     @Test
     void extractReviewContentReadsChatCompletionMessageContent() throws Exception {
@@ -38,5 +42,15 @@ class LlmConnectionProbeResponseParserTest {
     void validateReviewJsonRejectsMalformedReviewPayload() {
         assertThatThrownBy(() -> parser.validateReviewJson("OK"))
             .isInstanceOf(RuntimeException.class);
+    }
+
+    private LlmReviewResultParser parser() {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
+        );
     }
 }

@@ -15,6 +15,12 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
+import com.repoguard.agent.review.LlmReviewFindingMapper;
+import com.repoguard.agent.review.LlmReviewJsonExtractor;
+import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
+import com.repoguard.agent.review.LlmReviewResultParser;
+import com.repoguard.agent.review.LlmReviewSchemaRepairer;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -41,7 +47,8 @@ class ConnectionTestServiceImplTest {
         objectMapper,
         null,
         null,
-        secretCryptoService
+        secretCryptoService,
+        responseParser()
     );
 
     @Test
@@ -320,6 +327,20 @@ class ConnectionTestServiceImplTest {
             "http://127.0.0.1:" + server.getAddress().getPort(),
             requestBody,
             authorization
+        );
+    }
+
+    private LlmConnectionProbeResponseParser responseParser() {
+        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+    }
+
+    private LlmReviewResultParser reviewResultParser() {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
         );
     }
 

@@ -3,19 +3,25 @@ package com.repoguard.agent.review;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Extracts and validates the review payload returned by an LLM connection probe.
  */
+@Component
 public class LlmConnectionProbeResponseParser {
 
     private final ObjectMapper objectMapper;
     private final LlmReviewResultParser llmReviewResultParser;
 
-    public LlmConnectionProbeResponseParser(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        this.llmReviewResultParser = new LlmReviewResultParser(objectMapper);
+    public LlmConnectionProbeResponseParser(
+        ObjectMapper objectMapper,
+        LlmReviewResultParser llmReviewResultParser
+    ) {
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.llmReviewResultParser = Objects.requireNonNull(llmReviewResultParser, "llmReviewResultParser");
     }
 
     public String extractReviewContent(String response) throws Exception {

@@ -6,6 +6,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
+import com.repoguard.agent.review.LlmReviewFindingMapper;
+import com.repoguard.agent.review.LlmReviewJsonExtractor;
+import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
+import com.repoguard.agent.review.LlmReviewResultParser;
+import com.repoguard.agent.review.LlmReviewSchemaRepairer;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -23,7 +28,7 @@ class LlmConnectionProbeTest {
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final LlmConnectionProbe probe = new LlmConnectionProbe(
         RestClient.builder(),
-        new LlmConnectionProbeResponseParser(objectMapper),
+        responseParser(),
         secretCryptoService
     );
 
@@ -181,6 +186,20 @@ class LlmConnectionProbeTest {
             "http://127.0.0.1:" + server.getAddress().getPort(),
             requestBody,
             authorization
+        );
+    }
+
+    private LlmConnectionProbeResponseParser responseParser() {
+        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+    }
+
+    private LlmReviewResultParser reviewResultParser() {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
         );
     }
 

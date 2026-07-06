@@ -1,8 +1,10 @@
 package com.repoguard.agent.review;
 
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-class LlmReviewParseFailureSummarizer {
+@Component
+public class LlmReviewParseFailureSummarizer {
 
     String summarize(String content, Exception ex) {
         int length = content == null ? 0 : content.length();

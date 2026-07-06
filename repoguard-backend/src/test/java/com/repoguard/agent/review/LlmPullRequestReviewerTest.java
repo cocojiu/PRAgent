@@ -427,10 +427,20 @@ class LlmPullRequestReviewerTest {
             new LlmRuleReviewMerger(new RiskLevelRanker()),
             new LlmReviewQualityScorer(),
             new LlmReviewCostEstimator(),
-            objectMapper,
+            parser(objectMapper),
             metrics,
             new LlmFallbackReasonClassifier(),
             diffChunker
+        );
+    }
+
+    private static LlmReviewResultParser parser(ObjectMapper objectMapper) {
+        return new LlmReviewResultParser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
         );
     }
 

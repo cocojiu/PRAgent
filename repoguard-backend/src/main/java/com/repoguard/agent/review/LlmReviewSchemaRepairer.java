@@ -6,10 +6,13 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-class LlmReviewSchemaRepairer {
+@Component
+public class LlmReviewSchemaRepairer {
 
     private static final Set<String> RISK_LEVELS = Set.of("INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL");
     private static final Set<String> SEVERITY_LEVELS = Set.of("LOW", "MEDIUM", "HIGH", "CRITICAL");
@@ -19,8 +22,8 @@ class LlmReviewSchemaRepairer {
 
     private final ObjectMapper objectMapper;
 
-    LlmReviewSchemaRepairer(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    public LlmReviewSchemaRepairer(ObjectMapper objectMapper) {
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
     ObjectNode repairAndValidateRoot(JsonNode root) {

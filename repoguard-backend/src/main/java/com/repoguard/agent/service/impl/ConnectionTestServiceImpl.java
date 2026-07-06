@@ -10,9 +10,9 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
-import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.ConnectionTestService;
+import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -44,7 +44,8 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         ObjectMapper objectMapper,
         DataSource dataSource,
         RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService
+        SecretCryptoService secretCryptoService,
+        LlmConnectionProbeResponseParser llmResponseParser
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
@@ -52,7 +53,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         this.githubConnectionTestRunner = new GithubIntegrationConnectionTestRunner(this.githubConnectionProbe);
         this.llmConnectionProbe = new LlmConnectionProbe(
             restClientBuilder.clone(),
-            new LlmConnectionProbeResponseParser(objectMapper),
+            llmResponseParser,
             secretCryptoService
         );
         this.llmConnectionTestRunner = new LlmReviewPolicyConnectionTestRunner(this.llmConnectionProbe);
