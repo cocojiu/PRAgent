@@ -73,6 +73,7 @@ jobs:
         run: |
           npm ci
           npm audit --audit-level=high --omit=dev --registry=https://registry.npmjs.org
+          npm run quality
           npm run build
 
       - name: Set up Docker Buildx
