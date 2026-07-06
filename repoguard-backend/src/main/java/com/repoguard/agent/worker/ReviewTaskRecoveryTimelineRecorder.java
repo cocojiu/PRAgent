@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;

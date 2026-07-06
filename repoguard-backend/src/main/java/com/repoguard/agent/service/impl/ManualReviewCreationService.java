@@ -16,6 +16,7 @@ import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;

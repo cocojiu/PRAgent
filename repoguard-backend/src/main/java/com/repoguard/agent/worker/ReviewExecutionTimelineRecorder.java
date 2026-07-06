@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 

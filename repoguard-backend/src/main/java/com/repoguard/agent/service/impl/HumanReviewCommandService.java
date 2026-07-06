@@ -10,6 +10,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;

@@ -12,6 +12,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.ReviewTaskCommandService;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;

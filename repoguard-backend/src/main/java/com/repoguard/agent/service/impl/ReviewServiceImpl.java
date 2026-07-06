@@ -40,6 +40,7 @@ import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;

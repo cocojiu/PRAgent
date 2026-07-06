@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 

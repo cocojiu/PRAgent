@@ -3,11 +3,11 @@ package com.repoguard.agent.messaging;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.stereotype.Component;
@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
 public class ReviewTaskPublishOutboxStore {
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final ReviewTimelineAppender reviewTimelineAppender;
 
     public ReviewTaskPublishOutboxStore(
         ReviewTaskMapper reviewTaskMapper,
@@ -25,10 +25,10 @@ public class ReviewTaskPublishOutboxStore {
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
+        this.reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
     }
 
     public List<ReviewTask> loadDuePublishEvents(
@@ -218,32 +218,11 @@ public class ReviewTaskPublishOutboxStore {
     }
 
     public void markCurrentTimelinesDone(Long taskId) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
+        reviewTimelineAppender.completeCurrentTimelines(taskId);
     }
 
     public void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(truncate(label));
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
+        reviewTimelineAppender.append(taskId, truncate(label), eventTime, status);
     }
 
     private void clearLlmQuality(ReviewTask task) {

@@ -1,4 +1,4 @@
-package com.repoguard.agent.worker;
+package com.repoguard.agent.timeline;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -8,28 +8,48 @@ import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
 @Component
-class ReviewTimelineAppender {
+public class ReviewTimelineAppender {
 
     private final ReviewTimelineMapper reviewTimelineMapper;
 
-    ReviewTimelineAppender(ReviewTimelineMapper reviewTimelineMapper) {
+    public ReviewTimelineAppender(ReviewTimelineMapper reviewTimelineMapper) {
         this.reviewTimelineMapper = reviewTimelineMapper;
     }
 
-    void append(Long taskId, String label, LocalDateTime eventTime, String status, int sortOrder) {
+    public void appendInitial(Long taskId, String label, LocalDateTime eventTime) {
+        insertTimeline(taskId, label, eventTime, "CURRENT", 1);
+    }
+
+    public void append(Long taskId, String label, LocalDateTime eventTime, String status) {
+        insertTimeline(taskId, label, eventTime, status, nextSortOrder(taskId));
+    }
+
+    public void completeCurrentAndAppend(Long taskId, String label, LocalDateTime eventTime, String status) {
+        completeCurrentTimelines(taskId);
+        insertTimeline(taskId, label, eventTime, status, nextSortOrder(taskId));
+    }
+
+    public void append(Long taskId, String label, LocalDateTime eventTime, String status, int minimumSortOrder) {
+        completeCurrentTimelines(taskId);
+        insertTimeline(taskId, label, eventTime, status, Math.max(minimumSortOrder, nextSortOrder(taskId)));
+    }
+
+    public void completeCurrentTimelines(Long taskId) {
         reviewTimelineMapper.update(
             new UpdateWrapper<ReviewTimeline>()
                 .eq("task_id", taskId)
                 .eq("status", "CURRENT")
                 .set("status", "DONE")
         );
+    }
 
+    private void insertTimeline(Long taskId, String label, LocalDateTime eventTime, String status, int sortOrder) {
         ReviewTimeline timeline = new ReviewTimeline();
         timeline.setTaskId(taskId);
         timeline.setLabel(label);
         timeline.setEventTime(eventTime);
         timeline.setStatus(status);
-        timeline.setSortOrder(Math.max(sortOrder, nextSortOrder(taskId)));
+        timeline.setSortOrder(sortOrder);
         reviewTimelineMapper.insert(timeline);
     }
 

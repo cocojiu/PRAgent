@@ -10,6 +10,7 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.RiskLevelRanker;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import org.springframework.transaction.PlatformTransactionManager;
 
 class ReviewExecutionWorkflowFactory {

@@ -13,6 +13,7 @@ import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

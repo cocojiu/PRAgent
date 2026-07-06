@@ -4,6 +4,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
