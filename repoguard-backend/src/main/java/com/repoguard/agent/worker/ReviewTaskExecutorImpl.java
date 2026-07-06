@@ -10,6 +10,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -35,11 +36,12 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         PullRequestReviewer pullRequestReviewer,
         PlatformTransactionManager transactionManager,
         RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService
+        NotificationDispatchService notificationDispatchService,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
             reviewTaskMapper,
-            new ReviewExecutionWorkflowFactory().create(
+            new ReviewExecutionWorkflowFactory(reviewTaskStateMachine).create(
                 reviewTaskMapper,
                 reviewTimelineMapper,
                 reviewFindingMapper,
@@ -61,7 +63,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         GithubPullRequestClient githubPullRequestClient,
         PullRequestReviewer pullRequestReviewer,
         PlatformTransactionManager transactionManager,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
             reviewTaskMapper,
@@ -72,7 +75,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             pullRequestReviewer,
             transactionManager,
             metrics,
-            null
+            null,
+            reviewTaskStateMachine
         );
     }
 
@@ -82,7 +86,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
         ReviewFindingMapper reviewFindingMapper,
         ChangedFileMapper changedFileMapper,
         GithubPullRequestClient githubPullRequestClient,
-        PullRequestReviewer pullRequestReviewer
+        PullRequestReviewer pullRequestReviewer,
+        ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this(
             reviewTaskMapper,
@@ -93,7 +98,8 @@ public class ReviewTaskExecutorImpl implements ReviewTaskExecutor {
             pullRequestReviewer,
             null,
             null,
-            null
+            null,
+            reviewTaskStateMachine
         );
     }
 

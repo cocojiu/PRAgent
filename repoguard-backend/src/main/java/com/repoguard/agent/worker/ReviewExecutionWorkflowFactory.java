@@ -11,9 +11,16 @@ import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import java.util.Objects;
 import org.springframework.transaction.PlatformTransactionManager;
 
 class ReviewExecutionWorkflowFactory {
+
+    private final ReviewTaskStateMachine reviewTaskStateMachine;
+
+    ReviewExecutionWorkflowFactory(ReviewTaskStateMachine reviewTaskStateMachine) {
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+    }
 
     ReviewExecutionWorkflow create(
         ReviewTaskMapper reviewTaskMapper,
@@ -29,7 +36,6 @@ class ReviewExecutionWorkflowFactory {
         ReviewExecutionClock clock = new ReviewExecutionClock();
         ReviewLogContextFormatter logContextFormatter = new ReviewLogContextFormatter();
         RiskLevelRanker riskLevelRanker = new RiskLevelRanker();
-        ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
         ReviewFindingDeduplicator findingDeduplicator = new ReviewFindingDeduplicator(
             new ReviewFindingDeduplicationKeyResolver(),
             new ReviewFindingMergeService(riskLevelRanker)

@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,10 +31,18 @@ class ReviewExecutionWorkflowFactoryTest {
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final PullRequestReviewer pullRequestReviewer = org.mockito.Mockito.mock(PullRequestReviewer.class);
+    private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+
+    @Test
+    void constructorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new ReviewExecutionWorkflowFactory(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
 
     @Test
     void createsDefaultWorkflowWithNoopOptionalServices() {
-        ReviewExecutionWorkflow workflow = new ReviewExecutionWorkflowFactory().create(
+        ReviewExecutionWorkflow workflow = new ReviewExecutionWorkflowFactory(reviewTaskStateMachine).create(
             reviewTaskMapper,
             reviewTimelineMapper,
             reviewFindingMapper,

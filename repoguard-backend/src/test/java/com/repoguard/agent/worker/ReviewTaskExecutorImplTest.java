@@ -23,6 +23,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -40,13 +41,15 @@ class ReviewTaskExecutorImplTest {
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final PullRequestReviewer pullRequestReviewer = org.mockito.Mockito.mock(PullRequestReviewer.class);
+    private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTaskExecutorImpl executor = new ReviewTaskExecutorImpl(
         reviewTaskMapper,
         reviewTimelineMapper,
         reviewFindingMapper,
         changedFileMapper,
         githubPullRequestClient,
-        pullRequestReviewer
+        pullRequestReviewer,
+        reviewTaskStateMachine
     );
 
     @Test
@@ -338,7 +341,8 @@ class ReviewTaskExecutorImplTest {
             githubPullRequestClient,
             pullRequestReviewer,
             transactionManager,
-            null
+            null,
+            reviewTaskStateMachine
         );
         ReviewTask task = new ReviewTask();
         task.setId(42L);
