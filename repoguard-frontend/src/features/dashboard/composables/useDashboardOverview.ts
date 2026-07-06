@@ -33,6 +33,11 @@ export const llmTrendWindowOptions = [
 ];
 
 export const useDashboardOverview = () => {
+  let overviewRequestSeq = 0;
+  let moduleRequestSeq = 0;
+  let llmQualityRequestSeq = 0;
+  let healthRequestSeq = 0;
+
   const loading = ref(false);
   const moduleLoading = ref(false);
   const llmQualityLoading = ref(false);
@@ -66,24 +71,35 @@ export const useDashboardOverview = () => {
   const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => total + item.value, 0));
 
   const loadOverview = async () => {
+    const requestSeq = ++overviewRequestSeq;
     loading.value = true;
     errorMessage.value = "";
     try {
+      const overviewMetrics = await fetchDashboardSummary();
+      if (requestSeq !== overviewRequestSeq) {
+        return;
+      }
       overview.value = {
         ...overview.value,
-        overviewMetrics: await fetchDashboardSummary()
+        overviewMetrics
       };
-      void loadDashboardModules();
-      void loadSystemHealth();
+      void loadDashboardModules(requestSeq);
+      void loadSystemHealth(requestSeq);
     } catch (error) {
+      if (requestSeq !== overviewRequestSeq) {
+        return;
+      }
       errorMessage.value = getErrorMessage(error, "仪表盘数据加载失败");
       ElMessage.error(errorMessage.value);
     } finally {
-      loading.value = false;
+      if (requestSeq === overviewRequestSeq) {
+        loading.value = false;
+      }
     }
   };
 
-  const loadDashboardModules = async () => {
+  const loadDashboardModules = async (overviewSeq = overviewRequestSeq) => {
+    const requestSeq = ++moduleRequestSeq;
     moduleLoading.value = true;
     const requestedLlmTrendDays = llmTrendDays.value;
     try {
@@ -102,6 +118,9 @@ export const useDashboardOverview = () => {
         failedRules: rules.failedRules,
         highRiskReviews
       };
+      if (requestSeq !== moduleRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
       if (llmTrendDays.value !== requestedLlmTrendDays) {
         overview.value = nextOverview;
         return;
@@ -113,17 +132,27 @@ export const useDashboardOverview = () => {
         llmQualityTrend: llmQuality.trend
       };
     } catch (error) {
+      if (requestSeq !== moduleRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
       errorMessage.value = getErrorMessage(error, "仪表盘模块数据加载失败");
       ElMessage.error(errorMessage.value);
     } finally {
-      moduleLoading.value = false;
+      if (requestSeq === moduleRequestSeq) {
+        moduleLoading.value = false;
+      }
     }
   };
 
   const loadLlmQuality = async () => {
+    const requestSeq = ++llmQualityRequestSeq;
     llmQualityLoading.value = true;
+    const requestedLlmTrendDays = llmTrendDays.value;
     try {
-      const llmQuality = await fetchDashboardLlmQuality(llmTrendDays.value);
+      const llmQuality = await fetchDashboardLlmQuality(requestedLlmTrendDays);
+      if (requestSeq !== llmQualityRequestSeq || llmTrendDays.value !== requestedLlmTrendDays) {
+        return;
+      }
       overview.value = {
         ...overview.value,
         llmQualityByModel: llmQuality.byModel,
@@ -131,25 +160,39 @@ export const useDashboardOverview = () => {
         llmQualityTrend: llmQuality.trend
       };
     } catch (error) {
+      if (requestSeq !== llmQualityRequestSeq) {
+        return;
+      }
       ElMessage.error(getErrorMessage(error, "LLM 质量数据加载失败"));
     } finally {
-      llmQualityLoading.value = false;
+      if (requestSeq === llmQualityRequestSeq) {
+        llmQualityLoading.value = false;
+      }
     }
   };
 
-  const loadSystemHealth = async () => {
+  const loadSystemHealth = async (overviewSeq = overviewRequestSeq) => {
+    const requestSeq = ++healthRequestSeq;
     healthLoading.value = true;
     try {
       const systemHealth = await fetchSystemHealthSummary();
+      if (requestSeq !== healthRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
       overview.value = {
         ...overview.value,
         systemHealth
       };
       lastHealthCheckAt.value = new Date().toLocaleString("zh-CN", { hour12: false });
     } catch (error) {
+      if (requestSeq !== healthRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
       ElMessage.warning(getErrorMessage(error, "系统健康检查加载失败"));
     } finally {
-      healthLoading.value = false;
+      if (requestSeq === healthRequestSeq) {
+        healthLoading.value = false;
+      }
     }
   };
 

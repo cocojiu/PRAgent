@@ -87,6 +87,38 @@ describe("useDashboardOverview", () => {
     expect(dashboard.healthLoading.value).toBe(false);
     expect(messages.error).toHaveBeenCalledWith("trend unavailable");
   });
+
+  it("ignores stale dashboard module responses after a newer refresh", async () => {
+    const staleReviewTrend = deferred<ReviewTrendPoint[]>();
+    const freshReviewTrend: ReviewTrendPoint[] = [
+      {
+        date: "07-07",
+        value: 28
+      }
+    ];
+    dashboardApi.fetchDashboardSummary.mockResolvedValue(summaryMetrics);
+    dashboardApi.fetchDashboardReviewTrend
+      .mockReturnValueOnce(staleReviewTrend.promise)
+      .mockResolvedValueOnce(freshReviewTrend);
+    dashboardApi.fetchDashboardRiskDistribution.mockResolvedValue(riskDistribution);
+    dashboardApi.fetchDashboardRules.mockResolvedValue(rules);
+    dashboardApi.fetchDashboardHighRiskReviews.mockResolvedValue(highRiskReviews);
+    dashboardApi.fetchDashboardLlmQuality.mockResolvedValue(llmQuality);
+    dashboardApi.fetchSystemHealthSummary.mockResolvedValue(systemHealth);
+
+    const dashboard = useDashboardOverview();
+    await dashboard.loadOverview();
+    await dashboard.loadOverview();
+    await flushAsync();
+
+    expect(dashboard.reviewTrend.value).toEqual(freshReviewTrend);
+
+    staleReviewTrend.resolve(reviewTrend);
+    await flushAsync();
+
+    expect(dashboard.reviewTrend.value).toEqual(freshReviewTrend);
+    expect(dashboard.moduleLoading.value).toBe(false);
+  });
 });
 
 const summaryMetrics: DashboardMetric[] = [
@@ -178,3 +210,13 @@ const mockSuccessfulDashboardApis = () => {
 };
 
 const flushAsync = () => new Promise(resolve => window.setTimeout(resolve, 0));
+
+const deferred = <T>() => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+};
