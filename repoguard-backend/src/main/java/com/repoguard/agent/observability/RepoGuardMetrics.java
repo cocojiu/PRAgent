@@ -266,7 +266,16 @@ public class RepoGuardMetrics {
     }
 
     public void rabbitPublishCompensationSucceeded() {
-        counter("repoguard.rabbit.publish.compensation", "result", "success").increment();
+        rabbitPublishCompensationSucceeded("publish");
+    }
+
+    public void rabbitPublishCompensationSucceeded(String failurePhase) {
+        counter(
+            "repoguard.rabbit.publish.compensation",
+            "result", "success",
+            "failure_phase", normalize(failurePhase),
+            "reason", "none"
+        ).increment();
     }
 
     public void rabbitPublishCompensationFailed(String reason) {

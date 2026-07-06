@@ -158,7 +158,7 @@ public class ReviewTaskPublishCompensator {
                 outboxStore.clearPublishClaim(task, claimedAt, instanceId);
                 outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
                 if (metrics != null) {
-                    metrics.rabbitPublishCompensationSucceeded();
+                    metrics.rabbitPublishCompensationSucceeded("publish");
                 }
                 LOGGER.info(
                     "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",

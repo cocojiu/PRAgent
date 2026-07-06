@@ -75,6 +75,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(timelineCaptor.getValue().getLabel()).isEqualTo("Message publish recovered");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("CURRENT");
         assertThat(timelineCaptor.getValue().getSortOrder()).isEqualTo(4);
+        verify(metrics).rabbitPublishCompensationSucceeded("publish");
     }
 
     @Test

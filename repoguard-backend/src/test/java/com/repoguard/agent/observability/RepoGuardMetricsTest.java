@@ -103,7 +103,9 @@ class RepoGuardMetricsTest {
         )).isEqualTo(1.0);
         assertThat(counter(
             "repoguard.rabbit.publish.compensation",
-            "result", "success"
+            "result", "success",
+            "failure_phase", "publish",
+            "reason", "none"
         )).isEqualTo(1.0);
         assertThat(counter(
             "repoguard.rabbit.publish.compensation",
