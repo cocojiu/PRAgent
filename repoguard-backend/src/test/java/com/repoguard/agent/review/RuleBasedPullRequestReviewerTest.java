@@ -46,6 +46,35 @@ class RuleBasedPullRequestReviewerTest {
     }
 
     @Test
+    void usesInjectedPullRequestRulePluginsInStableOrder() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
+            reviewRuleProvider,
+            findingFactory,
+            ReviewRuleTestFixtures.defaultLineRules(findingFactory),
+            List.of(
+                customPullRequestRule(findingFactory, "RG-PR-002", 20),
+                customPullRequestRule(findingFactory, "RG-PR-001", 10)
+            )
+        );
+
+        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file("docs/README.md", """
+                @@ -1,1 +1,2 @@
+                 # Demo
+                +New details.
+                """))
+        ));
+
+        assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
+            .containsExactly("RG-PR-001", "RG-PR-002");
+    }
+
+    @Test
     void skipsDisabledRulesWhenReviewingPatch() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-JAVA-002", disabledRule("RG-JAVA-002")));
 
@@ -430,6 +459,35 @@ class RuleBasedPullRequestReviewerTest {
                     context.lineNumber(),
                     "Custom rule plugin detected a dangerous call",
                     "Replace the dangerous call with a governed abstraction."
+                ));
+            }
+        };
+    }
+
+    private PullRequestReviewRule customPullRequestRule(ReviewFindingFactory findingFactory, String ruleId, int order) {
+        return new PullRequestReviewRule() {
+            @Override
+            public String id() {
+                return ruleId;
+            }
+
+            @Override
+            public int order() {
+                return order;
+            }
+
+            @Override
+            public List<ReviewFindingResult> evaluate(
+                GithubPullRequestDiff diff,
+                Map<String, ReviewRuleSettings> configuredRules
+            ) {
+                return List.of(findingFactory.finding(
+                    "LOW",
+                    ruleId,
+                    "docs/README.md",
+                    null,
+                    "Custom PR level rule",
+                    "Handle the custom PR level rule."
                 ));
             }
         };

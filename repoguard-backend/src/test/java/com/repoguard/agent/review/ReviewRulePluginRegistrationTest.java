@@ -40,6 +40,7 @@ class ReviewRulePluginRegistrationTest {
             context.refresh();
 
             assertThat(context.getBeansOfType(ReviewRule.class)).hasSize(12);
+            assertThat(context.getBeansOfType(PullRequestReviewRule.class)).hasSize(1);
             RuleBasedPullRequestReviewer reviewer = context.getBean(RuleBasedPullRequestReviewer.class);
 
             ReviewResult result = reviewer.review(new GithubPullRequestDiff(

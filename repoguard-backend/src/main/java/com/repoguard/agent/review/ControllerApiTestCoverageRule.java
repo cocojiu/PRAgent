@@ -5,11 +5,10 @@ import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 @Component
-class ControllerApiTestCoverageRule {
+class ControllerApiTestCoverageRule implements PullRequestReviewRule {
 
     static final String RULE_ID = "RG-API-001";
 
@@ -19,12 +18,18 @@ class ControllerApiTestCoverageRule {
         this.findingFactory = findingFactory;
     }
 
-    Optional<ReviewFindingResult> evaluate(
+    @Override
+    public String id() {
+        return RULE_ID;
+    }
+
+    @Override
+    public List<ReviewFindingResult> evaluate(
         GithubPullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     ) {
         if (diff.files() == null || diff.files().isEmpty() || hasTestChange(diff.files())) {
-            return Optional.empty();
+            return List.of();
         }
         return diff.files().stream()
             .filter(file -> isControllerApiChange(file)
@@ -37,7 +42,9 @@ class ControllerApiTestCoverageRule {
                 firstAddedLine(file.patch()),
                 "Controller/API change is missing tests in the same PR",
                 "Add ControllerTest, ApiContractTest, or related src/test coverage for request validation, permissions, status codes, and key response fields."
-            ));
+            ))
+            .map(List::of)
+            .orElseGet(List::of);
     }
 
     private boolean hasTestChange(List<GithubChangedFile> files) {

@@ -25,7 +25,8 @@ class ControllerApiTestCoverageRuleTest {
         )));
 
         assertThat(rule.evaluate(diff, Map.of()))
-            .hasValueSatisfying(finding -> {
+            .singleElement()
+            .satisfies(finding -> {
                 assertThat(finding.ruleId()).isEqualTo(ControllerApiTestCoverageRule.RULE_ID);
                 assertThat(finding.lineNumber()).isEqualTo(19);
                 assertThat(finding.severity()).isEqualTo("MEDIUM");

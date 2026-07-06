@@ -17,19 +17,19 @@ public class RuleBasedPullRequestReviewer {
     private final ReviewRuleProvider reviewRuleProvider;
     private final ReviewFindingFactory findingFactory;
     private final List<ReviewRule> lineRules;
-    private final ControllerApiTestCoverageRule apiTestCoverageRule;
+    private final List<PullRequestReviewRule> pullRequestRules;
 
     @Autowired
     public RuleBasedPullRequestReviewer(
         ReviewRuleProvider reviewRuleProvider,
         ReviewFindingFactory findingFactory,
         List<ReviewRule> lineRules,
-        ControllerApiTestCoverageRule apiTestCoverageRule
+        List<PullRequestReviewRule> pullRequestRules
     ) {
         this.reviewRuleProvider = reviewRuleProvider;
         this.findingFactory = findingFactory;
         this.lineRules = sortedRules(lineRules);
-        this.apiTestCoverageRule = apiTestCoverageRule;
+        this.pullRequestRules = sortedPullRequestRules(pullRequestRules);
     }
 
     RuleBasedPullRequestReviewer(
@@ -37,7 +37,7 @@ public class RuleBasedPullRequestReviewer {
         ReviewFindingFactory findingFactory,
         List<ReviewRule> lineRules
     ) {
-        this(reviewRuleProvider, findingFactory, lineRules, new ControllerApiTestCoverageRule(findingFactory));
+        this(reviewRuleProvider, findingFactory, lineRules, List.of(new ControllerApiTestCoverageRule(findingFactory)));
     }
 
     private static List<ReviewRule> sortedRules(List<ReviewRule> rules) {
@@ -46,6 +46,15 @@ public class RuleBasedPullRequestReviewer {
         }
         return rules.stream()
             .sorted(Comparator.comparingInt(ReviewRule::order).thenComparing(ReviewRule::id))
+            .toList();
+    }
+
+    private static List<PullRequestReviewRule> sortedPullRequestRules(List<PullRequestReviewRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return List.of();
+        }
+        return rules.stream()
+            .sorted(Comparator.comparingInt(PullRequestReviewRule::order).thenComparing(PullRequestReviewRule::id))
             .toList();
     }
 
@@ -72,7 +81,9 @@ public class RuleBasedPullRequestReviewer {
         Map<String, ReviewRuleSettings> configuredRules,
         List<ReviewFindingResult> findings
     ) {
-        apiTestCoverageRule.evaluate(diff, configuredRules).ifPresent(findings::add);
+        for (PullRequestReviewRule rule : pullRequestRules) {
+            findings.addAll(rule.evaluate(diff, configuredRules));
+        }
     }
 
     private void scanPatch(
