@@ -3,19 +3,17 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
+import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.security.SecretCryptoService;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Executes a lightweight LLM chat-completions probe for review policy connectivity checks.
@@ -30,6 +28,7 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
     private final RestClient.Builder restClientBuilder;
     private final LlmConnectionProbeResponseParser responseParser;
     private final SecretCryptoService secretCryptoService;
+    private final LlmHttpResponseReader responseReader;
 
     public LlmConnectionProbe(
         RestClient.Builder restClientBuilder,
@@ -39,6 +38,7 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         this.restClientBuilder = restClientBuilder;
         this.responseParser = responseParser;
         this.secretCryptoService = secretCryptoService;
+        this.responseReader = new LlmHttpResponseReader();
     }
 
     @Override
@@ -75,7 +75,10 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
                         Map.of("role", "user", "content", "Return exactly this JSON object and no markdown: {\"riskLevel\":\"INFO\",\"findings\":[]}")
                     )
                 ))
-                .exchange((request, response) -> readSuccessfulBody(response));
+                .exchange((request, response) -> responseReader.readSuccessfulBody(
+                    response,
+                    "LLM connection test failed"
+                ));
             String response = responseBytes == null ? "" : new String(responseBytes, StandardCharsets.UTF_8);
             String content = responseParser.extractReviewContent(response);
             if (!StringUtils.hasText(content)) {
@@ -92,21 +95,6 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         } catch (Exception ex) {
             return new ConnectionProbeResult(false, "failed", conciseError(ex));
         }
-    }
-
-    private byte[] readSuccessfulBody(ClientHttpResponse response) throws IOException {
-        byte[] body = response.getBody().readAllBytes();
-        if (!response.getStatusCode().isError()) {
-            return body;
-        }
-        throw new RestClientResponseException(
-            "LLM connection test failed with HTTP status " + response.getStatusCode().value(),
-            response.getStatusCode().value(),
-            response.getStatusText(),
-            response.getHeaders(),
-            body,
-            StandardCharsets.UTF_8
-        );
     }
 
     private SimpleClientHttpRequestFactory requestFactory(Integer timeoutSeconds) {

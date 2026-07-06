@@ -9,7 +9,6 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -17,11 +16,9 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientResponseException;
 
 @Service
 public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCaller {
@@ -33,6 +30,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final ExternalCallResilience resilience;
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmReviewPipeline reviewPipeline;
+    private final LlmHttpResponseReader responseReader;
 
     @Autowired
     public LlmPullRequestReviewer(
@@ -53,7 +51,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             metrics,
             resilience,
             promptBuilder,
-            reviewPipeline
+            reviewPipeline,
+            new LlmHttpResponseReader()
         );
     }
 
@@ -72,7 +71,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             metrics,
             resilience,
             null,
-            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, new PullRequestDiffChunker())
+            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, new PullRequestDiffChunker()),
+            new LlmHttpResponseReader()
         );
     }
 
@@ -92,7 +92,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             metrics,
             resilience,
             null,
-            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, diffChunker)
+            new LlmReviewPipeline(ruleBasedReviewer, null, null, objectMapper, metrics, diffChunker),
+            new LlmHttpResponseReader()
         );
     }
 
@@ -114,7 +115,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             metrics,
             resilience,
             promptBuilder,
-            new LlmReviewPipeline(ruleBasedReviewer, promptBuilder, reviewMerger, objectMapper, metrics, diffChunker)
+            new LlmReviewPipeline(ruleBasedReviewer, promptBuilder, reviewMerger, objectMapper, metrics, diffChunker),
+            new LlmHttpResponseReader()
         );
     }
 
@@ -125,7 +127,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         RepoGuardMetrics metrics,
         ExternalCallResilience resilience,
         LlmReviewPromptBuilder promptBuilder,
-        LlmReviewPipeline reviewPipeline
+        LlmReviewPipeline reviewPipeline,
+        LlmHttpResponseReader responseReader
     ) {
         this.reviewPolicyProvider = reviewPolicyProvider;
         this.restClientBuilder = restClientBuilder;
@@ -134,6 +137,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.resilience = resilience;
         this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
         this.reviewPipeline = reviewPipeline;
+        this.responseReader = responseReader;
     }
 
     @Override
@@ -173,7 +177,10 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .exchange((request, clientResponse) -> readSuccessfulBody(clientResponse)));
+                .exchange((request, clientResponse) -> responseReader.readSuccessfulBody(
+                    clientResponse,
+                    "LLM request failed"
+                )));
             if (metrics != null) {
                 metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             }
@@ -186,21 +193,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
             }
             throw classified;
         }
-    }
-
-    private byte[] readSuccessfulBody(ClientHttpResponse response) throws IOException {
-        byte[] body = response.getBody().readAllBytes();
-        if (!response.getStatusCode().isError()) {
-            return body;
-        }
-        throw new RestClientResponseException(
-            "LLM request failed with HTTP status " + response.getStatusCode().value(),
-            response.getStatusCode().value(),
-            response.getStatusText(),
-            response.getHeaders(),
-            body,
-            StandardCharsets.UTF_8
-        );
     }
 
     private LlmCallResult extractLlmCallResult(String response) {
