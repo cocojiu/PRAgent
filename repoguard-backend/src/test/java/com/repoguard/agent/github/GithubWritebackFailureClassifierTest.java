@@ -38,6 +38,19 @@ class GithubWritebackFailureClassifierTest {
         assertThat(result.suggestion()).isNotBlank();
     }
 
+    @Test
+    void includesRetryAfterHintForStructuredRateLimitFailure() {
+        var result = classifier.classify(
+            "failed",
+            false,
+            "GitHub external call failed: category=github_rate_limited retryable=true status=429 detail=API rate limit exceeded retryAfter=60 responseBody={}"
+        );
+
+        assertThat(result.category()).isEqualTo("github_rate_limited");
+        assertThat(result.reason()).isEqualTo("GitHub API 访问受限");
+        assertThat(result.suggestion()).contains("建议等待 60 后再重试", "更换剩余额度充足的 GitHub Token");
+    }
+
     @ParameterizedTest
     @CsvSource({
         "401 Bad credentials, github_token_invalid",

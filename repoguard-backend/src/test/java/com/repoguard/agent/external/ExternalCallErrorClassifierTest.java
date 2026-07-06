@@ -34,6 +34,28 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void includesSafeRetryAfterHeaderForGithubRateLimit() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.RETRY_AFTER, "60");
+
+        ExternalCallException rateLimited = ExternalCallErrorClassifier.github(responseException(
+            429,
+            "API rate limit exceeded",
+            "{\"message\":\"API rate limit exceeded\",\"token\":\"raw-token-value\"}",
+            headers
+        ));
+
+        assertThat(rateLimited.getCategory()).isEqualTo("github_rate_limited");
+        assertThat(rateLimited.isRetryable()).isTrue();
+        assertThat(rateLimited.getMessage()).contains(
+            "status=429",
+            "retryAfter=60",
+            "responseBody={\"message\":\"API rate limit exceeded\",\"token\":\"***\"}"
+        );
+        assertThat(rateLimited.getMessage()).doesNotContain("raw-token-value");
+    }
+
+    @Test
     void classifiesLlmHttpStatusFailuresWithRetrySemantics() {
         ExternalCallException unauthorized = ExternalCallErrorClassifier.llm(responseException(401, "Unauthorized"));
         ExternalCallException forbidden = ExternalCallErrorClassifier.llm(responseException(403, "Forbidden"));

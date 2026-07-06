@@ -1,5 +1,6 @@
 package com.repoguard.agent.service.impl;
 
+import com.repoguard.agent.external.ExternalRetryAfterHint;
 import com.repoguard.agent.entity.ReviewTask;
 import java.util.List;
 import java.util.Locale;
@@ -61,7 +62,7 @@ public class ReviewFailureSummaryResolver {
             return new ReviewFailureSummary(
                 "github_rate_limited",
                 "GitHub API 访问受限",
-                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+                rateLimitSuggestion(detail, "请稍后重试，或更换剩余额度充足的 GitHub Token。")
             );
         }
         if (lowerDetail.contains("category=github_service_unavailable")) {
@@ -89,7 +90,7 @@ public class ReviewFailureSummaryResolver {
             return new ReviewFailureSummary(
                 "llm_rate_limited",
                 "LLM 调用受限",
-                "请稍后重试，或调整供应商额度、并发与限流配置。"
+                rateLimitSuggestion(detail, "请稍后重试，或调整供应商额度、并发与限流配置。")
             );
         }
         if (lowerDetail.contains("category=llm_service_unavailable")) {
@@ -145,7 +146,7 @@ public class ReviewFailureSummaryResolver {
             return new ReviewFailureSummary(
                 "github_rate_limited",
                 "GitHub API 访问受限",
-                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+                rateLimitSuggestion(detail, "请稍后重试，或更换剩余额度充足的 GitHub Token。")
             );
         }
         if (lowerDetail.contains("timeout") || lowerDetail.contains("timed out")) {
@@ -177,5 +178,9 @@ public class ReviewFailureSummaryResolver {
     }
 
     public record ReviewFailureSummary(String category, String reason, String suggestion) {
+    }
+
+    private String rateLimitSuggestion(String detail, String fallback) {
+        return ExternalRetryAfterHint.suggestionSuffix(detail) + fallback;
     }
 }

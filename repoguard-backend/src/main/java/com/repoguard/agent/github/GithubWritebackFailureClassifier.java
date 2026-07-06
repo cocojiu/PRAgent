@@ -1,5 +1,6 @@
 package com.repoguard.agent.github;
 
+import com.repoguard.agent.external.ExternalRetryAfterHint;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -42,7 +43,7 @@ public class GithubWritebackFailureClassifier {
             return failure(
                 GithubWritebackFailureCategory.RATE_LIMITED.code(),
                 "GitHub API 访问受限",
-                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+                rateLimitSuggestion(normalized)
             );
         }
         if (lowerMessage.contains("category=github_timeout")) {
@@ -100,7 +101,7 @@ public class GithubWritebackFailureClassifier {
             return failure(
                 GithubWritebackFailureCategory.RATE_LIMITED.code(),
                 "GitHub API 访问受限",
-                "请稍后重试，或更换剩余额度充足的 GitHub Token。"
+                rateLimitSuggestion(normalized)
             );
         }
         if (lowerMessage.contains("timeout") || lowerMessage.contains("timed out")) {
@@ -126,6 +127,10 @@ public class GithubWritebackFailureClassifier {
 
     private FailureSummary failure(String category, String reason, String suggestion) {
         return new FailureSummary(category, reason, suggestion);
+    }
+
+    private String rateLimitSuggestion(String message) {
+        return ExternalRetryAfterHint.suggestionSuffix(message) + "请稍后重试，或更换剩余额度充足的 GitHub Token。";
     }
 
     private boolean isCommentPositionFailure(String lowerMessage) {

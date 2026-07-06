@@ -36,6 +36,32 @@ class ReviewFailureSummaryResolverTest {
     }
 
     @Test
+    void includesRetryAfterHintForStructuredRateLimitFailure() {
+        ReviewTask task = task("FAILED");
+
+        var result = resolver.resolve(task, List.of(
+            "Review failed: GitHub external call failed: category=github_rate_limited retryable=true status=429 detail=API rate limit exceeded retryAfter=60 responseBody={}"
+        ));
+
+        assertThat(result.category()).isEqualTo("github_rate_limited");
+        assertThat(result.reason()).isEqualTo("GitHub API 访问受限");
+        assertThat(result.suggestion()).contains("建议等待 60 后再重试", "更换剩余额度充足的 GitHub Token");
+    }
+
+    @Test
+    void includesRetryAfterHintForLlmRateLimitFailure() {
+        ReviewTask task = task("FAILED");
+
+        var result = resolver.resolve(task, List.of(
+            "Review failed: LLM external call failed: category=llm_rate_limited retryable=true status=429 detail=Too Many Requests retryAfter=120 responseBody={}"
+        ));
+
+        assertThat(result.category()).isEqualTo("llm_rate_limited");
+        assertThat(result.reason()).isEqualTo("LLM 调用受限");
+        assertThat(result.suggestion()).contains("建议等待 120 后再重试", "供应商额度");
+    }
+
+    @Test
     void resolvesLegacyGithubPermissionFailureText() {
         ReviewTask task = task("FAILED");
 
