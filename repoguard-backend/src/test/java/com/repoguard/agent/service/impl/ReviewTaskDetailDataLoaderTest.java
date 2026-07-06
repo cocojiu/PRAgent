@@ -13,6 +13,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 
 class ReviewTaskDetailDataLoaderTest {
@@ -59,6 +60,16 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.changedFileTotal()).isEqualTo(1);
         assertThat(result.findingTotal()).isEqualTo(1);
         assertThat(result.missingTestTotal()).isEqualTo(1);
+
+        ArgumentCaptor<Page> changedFilePageCaptor = ArgumentCaptor.forClass(Page.class);
+        Mockito.verify(changedFileMapper).selectPage(changedFilePageCaptor.capture(), any());
+        assertInitialDetailPage(changedFilePageCaptor.getValue());
+
+        ArgumentCaptor<Page> findingPageCaptor = ArgumentCaptor.forClass(Page.class);
+        Mockito.verify(reviewFindingMapper, Mockito.times(2)).selectPage(findingPageCaptor.capture(), any());
+        assertThat(findingPageCaptor.getAllValues()).hasSize(2);
+        findingPageCaptor.getAllValues().forEach(this::assertInitialDetailPage);
+        Mockito.verify(timelineQueryService).loadLatestItemsByTaskId(521L, 20);
     }
 
     private <T> Page<T> page(List<T> records) {
@@ -66,6 +77,11 @@ class ReviewTaskDetailDataLoaderTest {
         page.setRecords(records);
         page.setTotal(records.size());
         return page;
+    }
+
+    private void assertInitialDetailPage(Page<?> page) {
+        assertThat(page.getCurrent()).isEqualTo(1);
+        assertThat(page.getSize()).isEqualTo(20);
     }
 
     private ChangedFile changedFile() {
