@@ -1,7 +1,6 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.UserCreateRequest;
@@ -10,12 +9,12 @@ import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
-import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
+import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import com.repoguard.agent.user.UserManagementDisplayMapper;
 import com.repoguard.agent.user.UserOperationAuditRecorder;
 import java.time.LocalDateTime;
@@ -32,18 +31,17 @@ public class UserManagementServiceImpl implements UserManagementService {
     private static final String ROLE_VIEWER = "VIEWER";
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_DISABLED = "DISABLED";
-    private static final String STATUS_REVOKED = "REVOKED";
     private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
     private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
     private static final int AUDIT_LIMIT = 50;
 
     private final UserAccountMapper userAccountMapper;
-    private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
     private final PasswordHashService passwordHashService;
     private final UserManagementDisplayMapper displayMapper;
     private final UserOperationAuditRecorder auditRecorder;
+    private final UserAccountSessionInvalidator sessionInvalidator;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -52,11 +50,11 @@ public class UserManagementServiceImpl implements UserManagementService {
         PasswordHashService passwordHashService
     ) {
         this.userAccountMapper = userAccountMapper;
-        this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.userOperationAuditMapper = userOperationAuditMapper;
         this.passwordHashService = passwordHashService;
         this.displayMapper = new UserManagementDisplayMapper();
         this.auditRecorder = new UserOperationAuditRecorder(userAccountMapper, userOperationAuditMapper);
+        this.sessionInvalidator = new UserAccountSessionInvalidator(userRefreshTokenMapper);
     }
 
     @Override
@@ -128,9 +126,10 @@ public class UserManagementServiceImpl implements UserManagementService {
             ensureAnotherActiveAdmin(userId);
         }
         user.setRole(normalizedRole);
-        rotateSessionVersion(user, LocalDateTime.now());
+        LocalDateTime now = LocalDateTime.now();
+        sessionInvalidator.rotateSessionVersion(user, now);
         userAccountMapper.updateById(user);
-        revokeActiveRefreshTokens(user.getId());
+        sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
         auditRecorder.record(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
         return displayMapper.toUserItem(user);
     }
@@ -150,14 +149,14 @@ public class UserManagementServiceImpl implements UserManagementService {
         }
         user.setStatus(normalizedStatus);
         LocalDateTime now = LocalDateTime.now();
-        rotateSessionVersion(user, now);
+        sessionInvalidator.rotateSessionVersion(user, now);
         if (STATUS_ACTIVE.equals(normalizedStatus)) {
             user.setFailedLoginCount(0);
             user.setLockedUntil(null);
         }
         userAccountMapper.updateById(user);
         if (STATUS_DISABLED.equals(normalizedStatus)) {
-            revokeActiveRefreshTokens(user.getId());
+            sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
         }
         auditRecorder.record(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
         return displayMapper.toUserItem(user);
@@ -179,21 +178,6 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one active administrator is required");
         }
-    }
-
-    private void revokeActiveRefreshTokens(Long userId) {
-        LocalDateTime now = LocalDateTime.now();
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("user_id", userId)
-            .eq("status", STATUS_ACTIVE)
-            .set("status", STATUS_REVOKED)
-            .set("revoked_at", now)
-            .set("updated_at", now));
-    }
-
-    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
-        user.setSessionVersion((user.getSessionVersion() == null ? 0 : user.getSessionVersion()) + 1);
-        user.setUpdatedAt(now);
     }
 
     private UserAccount findByUsername(String username) {
