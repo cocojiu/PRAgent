@@ -106,35 +106,64 @@ class FrontendPerformanceObservationServiceImplTest {
         ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
         properties.setFrontendApiDurationMs(2000);
         properties.setFrontendLongTaskMs(200);
-        properties.setFrontendApiDurationMsByRoute(Map.of("overview", 1200L));
-        properties.setFrontendLongTaskMsByRoute(Map.of("overview", 120L));
+        properties.setFrontendApiDurationMsByRoute(Map.of(
+            "overview", 1200L,
+            "task-detail", 1500L,
+            "message-queue", 1200L,
+            "notification-ops", 1200L
+        ));
+        properties.setFrontendLongTaskMsByRoute(Map.of(
+            "overview", 120L,
+            "task-detail", 150L,
+            "message-queue", 150L,
+            "notification-ops", 150L
+        ));
         FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
             metrics,
             new ObservabilityThresholdMonitor(metrics, properties)
         );
 
+        recordSlowFrontendRoute(thresholdService, "overview", 1300L, 130L);
+        recordSlowFrontendRoute(thresholdService, "task-detail", 1600L, 160L);
+        recordSlowFrontendRoute(thresholdService, "message-queue", 1300L, 160L);
+        recordSlowFrontendRoute(thresholdService, "notification-ops", 1300L, 160L);
+
+        assertFrontendThresholdExceeded("overview");
+        assertFrontendThresholdExceeded("task-detail");
+        assertFrontendThresholdExceeded("message-queue");
+        assertFrontendThresholdExceeded("notification-ops");
+    }
+
+    private void recordSlowFrontendRoute(
+        FrontendPerformanceObservationServiceImpl thresholdService,
+        String route,
+        long apiDurationMs,
+        long longTaskMs
+    ) {
         thresholdService.record(new FrontendPerformanceReportRequest(
-            "overview",
+            route,
             List.of(new FrontendApiWaterfallItemDto(
-                "fetchDashboardSummary",
-                "/api/v1/dashboard/summary",
+                "fetchRouteData",
+                "/api/v1/" + route,
                 "GET",
                 200,
                 "success",
                 12L,
-                1300L
+                apiDurationMs
             )),
-            List.of(new FrontendLongTaskItemDto(90L, 130L))
+            List.of(new FrontendLongTaskItemDto(90L, longTaskMs))
         ));
+    }
 
+    private void assertFrontendThresholdExceeded(String route) {
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
             .tag("signal", "frontend_api_duration")
-            .tag("subject", "overview")
+            .tag("subject", route)
             .counter()
             .count()).isEqualTo(1.0);
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
             .tag("signal", "frontend_long_task")
-            .tag("subject", "overview")
+            .tag("subject", route)
             .counter()
             .count()).isEqualTo(1.0);
     }
