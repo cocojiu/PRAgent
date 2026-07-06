@@ -166,6 +166,10 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andExpect(header().string(
+                AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER,
+                "body-refresh-token"
+            ))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
             .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
@@ -178,6 +182,7 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
+            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
             .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
@@ -191,6 +196,7 @@ class AuthControllerTest {
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
+            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
@@ -337,7 +343,11 @@ class AuthControllerTest {
                     }
                     """))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true));
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(header().string(
+                AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER,
+                "body-refresh-token"
+            ));
     }
 
     @Test
@@ -346,6 +356,7 @@ class AuthControllerTest {
                 .cookie(refreshCookie(), csrfCookie())
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
+            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
             .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="));
@@ -359,6 +370,7 @@ class AuthControllerTest {
                 .cookie(refreshCookie(), csrfCookie())
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
+            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
     }

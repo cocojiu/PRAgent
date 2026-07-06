@@ -40,6 +40,8 @@ public class AuthController {
     static final String REFRESH_TOKEN_COOKIE_NAME = "repoguard_refresh_token";
     static final String CSRF_TOKEN_COOKIE_NAME = "repoguard_csrf_token";
     static final String CSRF_TOKEN_HEADER_NAME = "X-RepoGuard-CSRF";
+    static final String LEGACY_REFRESH_TOKEN_FALLBACK_HEADER = "X-RepoGuard-Legacy-Refresh-Token-Fallback";
+    private static final String LEGACY_REFRESH_TOKEN_FALLBACK_VALUE = "body-refresh-token";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
     private static final String CSRF_TOKEN_COOKIE_PATH = "/";
     private static final SecureRandom CSRF_TOKEN_RANDOM = new SecureRandom();
@@ -90,6 +92,7 @@ public class AuthController {
         validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
         try {
             AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken(request, cookieRefreshToken)));
+            markLegacyRefreshTokenFallbackIfNeeded(requestRefreshToken(request), cookieRefreshToken, httpResponse);
             return authResponse(response, httpRequest, httpResponse);
         } catch (RuntimeException ex) {
             clearAuthCookies(httpRequest, httpResponse);
@@ -117,6 +120,7 @@ public class AuthController {
     ) {
         validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
         authService.logout(new AuthLogoutRequest(refreshToken(request, cookieRefreshToken)));
+        markLegacyRefreshTokenFallbackIfNeeded(requestRefreshToken(request), cookieRefreshToken, httpResponse);
         clearAuthCookies(httpRequest, httpResponse);
         return ApiResponse.ok(null);
     }
@@ -133,6 +137,24 @@ public class AuthController {
             return request.refreshToken();
         }
         return cookieRefreshToken;
+    }
+
+    private String requestRefreshToken(AuthRefreshRequest request) {
+        return request == null ? null : request.refreshToken();
+    }
+
+    private String requestRefreshToken(AuthLogoutRequest request) {
+        return request == null ? null : request.refreshToken();
+    }
+
+    private void markLegacyRefreshTokenFallbackIfNeeded(
+        String requestRefreshToken,
+        String cookieRefreshToken,
+        HttpServletResponse response
+    ) {
+        if (StringUtils.hasText(requestRefreshToken) && !StringUtils.hasText(cookieRefreshToken)) {
+            response.addHeader(LEGACY_REFRESH_TOKEN_FALLBACK_HEADER, LEGACY_REFRESH_TOKEN_FALLBACK_VALUE);
+        }
     }
 
     private ApiResponse<AuthResponse> authResponse(
