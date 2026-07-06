@@ -79,6 +79,28 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void includesSafeRetryAfterHeaderForLlmRateLimit() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(HttpHeaders.RETRY_AFTER, "120");
+
+        ExternalCallException rateLimited = ExternalCallErrorClassifier.llm(responseException(
+            429,
+            "Too Many Requests",
+            "{\"error\":\"rate limited\",\"token\":\"raw-token-value\"}",
+            headers
+        ));
+
+        assertThat(rateLimited.getCategory()).isEqualTo("llm_rate_limited");
+        assertThat(rateLimited.isRetryable()).isTrue();
+        assertThat(rateLimited.getMessage()).contains(
+            "status=429",
+            "retryAfter=120",
+            "responseBody={\"error\":\"rate limited\",\"token\":\"***\"}"
+        );
+        assertThat(rateLimited.getMessage()).doesNotContain("raw-token-value");
+    }
+
+    @Test
     void truncatesLongHttpResponseBodyDetails() {
         ExternalCallException classified = ExternalCallErrorClassifier.llm(responseException(
             500,
@@ -123,11 +145,20 @@ class ExternalCallErrorClassifierTest {
     }
 
     private RestClientResponseException responseException(int statusCode, String statusText, String responseBody) {
+        return responseException(statusCode, statusText, responseBody, HttpHeaders.EMPTY);
+    }
+
+    private RestClientResponseException responseException(
+        int statusCode,
+        String statusText,
+        String responseBody,
+        HttpHeaders headers
+    ) {
         return new RestClientResponseException(
             statusText,
             statusCode,
             statusText,
-            HttpHeaders.EMPTY,
+            headers,
             responseBody.getBytes(java.nio.charset.StandardCharsets.UTF_8),
             null
         );

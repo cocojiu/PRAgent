@@ -89,7 +89,7 @@ class LlmConnectionProbeTest {
 
     @Test
     void probeClassifiesHttpErrorStatus() throws Exception {
-        try (ProbeServer server = startProbeServer("{\"error\":\"rate limited\"}", "application/json", 429)) {
+        try (ProbeServer server = startProbeServer("{\"error\":\"rate limited\"}", "application/json", 429, "120")) {
             ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
             config.setBaseUrl(server.baseUrl());
 
@@ -97,7 +97,7 @@ class LlmConnectionProbeTest {
 
             assertThat(result.healthy()).isFalse();
             assertThat(result.status()).isEqualTo("failed");
-            assertThat(result.message()).contains("llm_rate_limited", "status=429");
+            assertThat(result.message()).contains("llm_rate_limited", "status=429", "retryAfter=120");
         }
     }
 
@@ -151,6 +151,15 @@ class LlmConnectionProbeTest {
     }
 
     private ProbeServer startProbeServer(String responseBody, String contentType, int statusCode) throws IOException {
+        return startProbeServer(responseBody, contentType, statusCode, null);
+    }
+
+    private ProbeServer startProbeServer(
+        String responseBody,
+        String contentType,
+        int statusCode,
+        String retryAfter
+    ) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         AtomicReference<String> requestBody = new AtomicReference<>("");
         AtomicReference<String> authorization = new AtomicReference<>("");
@@ -159,6 +168,9 @@ class LlmConnectionProbeTest {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             byte[] bytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", contentType);
+            if (retryAfter != null) {
+                exchange.getResponseHeaders().set("Retry-After", retryAfter);
+            }
             exchange.sendResponseHeaders(statusCode, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
