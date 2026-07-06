@@ -1,5 +1,7 @@
 package com.repoguard.agent.observability;
 
+import java.util.HashMap;
+import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,8 @@ public class ObservabilityThresholdProperties {
     private long sqlRows = 1000;
     private long frontendApiDurationMs = 2000;
     private long frontendLongTaskMs = 200;
+    private Map<String, Long> apiDurationMsByPath = new HashMap<>();
+    private Map<String, Long> apiResponseBytesByPath = new HashMap<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -69,5 +73,23 @@ public class ObservabilityThresholdProperties {
 
     public void setFrontendLongTaskMs(long frontendLongTaskMs) {
         this.frontendLongTaskMs = frontendLongTaskMs;
+    }
+
+    public Map<String, Long> getApiDurationMsByPath() {
+        return apiDurationMsByPath;
+    }
+
+    public void setApiDurationMsByPath(Map<String, Long> apiDurationMsByPath) {
+        this.apiDurationMsByPath = apiDurationMsByPath == null ? new HashMap<>() : new HashMap<>(apiDurationMsByPath);
+    }
+
+    public Map<String, Long> getApiResponseBytesByPath() {
+        return apiResponseBytesByPath;
+    }
+
+    public void setApiResponseBytesByPath(Map<String, Long> apiResponseBytesByPath) {
+        this.apiResponseBytesByPath = apiResponseBytesByPath == null
+            ? new HashMap<>()
+            : new HashMap<>(apiResponseBytesByPath);
     }
 }

@@ -1,0 +1,65 @@
+package com.repoguard.agent.observability;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
+class ObservabilityThresholdMonitorTest {
+
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+
+    @Test
+    void apiRequestUsesPathSpecificDurationAndResponseByteThresholds() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setApiDurationMs(2000);
+        properties.setApiResponseBytes(524288);
+        properties.setApiDurationMsByPath(Map.of("/api/v1/dashboard/summary", 500L));
+        properties.setApiResponseBytesByPath(Map.of("/api/v1/dashboard/summary", 8192L));
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.apiRequest(Duration.ofMillis(700), "/api/v1/dashboard/summary", 9000);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_duration",
+            "subject", "_api_v1_dashboard_summary"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_response_bytes",
+            "subject", "_api_v1_dashboard_summary"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
+    void apiRequestKeepsGlobalThresholdsWhenPathOverrideIsMissingOrInvalid() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setApiDurationMs(1000);
+        properties.setApiResponseBytes(1000);
+        properties.setApiDurationMsByPath(Map.of("/api/v1/dashboard/rules", 0L));
+        properties.setApiResponseBytesByPath(Map.of("/api/v1/dashboard/rules", -1L));
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.apiRequest(Duration.ofMillis(700), "/api/v1/dashboard/rules", 700);
+        monitor.apiRequest(Duration.ofMillis(1000), "/api/v1/dashboard/rules", 1000);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_duration",
+            "subject", "_api_v1_dashboard_rules"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_response_bytes",
+            "subject", "_api_v1_dashboard_rules"
+        )).isEqualTo(1.0);
+    }
+
+    private double counter(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).counter().count();
+    }
+}

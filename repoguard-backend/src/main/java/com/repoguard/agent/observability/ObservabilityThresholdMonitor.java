@@ -1,8 +1,10 @@
 package com.repoguard.agent.observability;
 
 import java.time.Duration;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -23,11 +25,21 @@ public class ObservabilityThresholdMonitor {
             return;
         }
         long durationMs = millis(duration);
-        if (durationMs >= properties.getApiDurationMs()) {
-            thresholdExceeded("api_duration", path, durationMs, properties.getApiDurationMs(), "ms");
+        long durationThreshold = thresholdForPath(
+            path,
+            properties.getApiDurationMsByPath(),
+            properties.getApiDurationMs()
+        );
+        long responseBytesThreshold = thresholdForPath(
+            path,
+            properties.getApiResponseBytesByPath(),
+            properties.getApiResponseBytes()
+        );
+        if (durationMs >= durationThreshold) {
+            thresholdExceeded("api_duration", path, durationMs, durationThreshold, "ms");
         }
-        if (responseBytes >= properties.getApiResponseBytes()) {
-            thresholdExceeded("api_response_bytes", path, responseBytes, properties.getApiResponseBytes(), "bytes");
+        if (responseBytes >= responseBytesThreshold) {
+            thresholdExceeded("api_response_bytes", path, responseBytes, responseBytesThreshold, "bytes");
         }
     }
 
@@ -82,5 +94,16 @@ public class ObservabilityThresholdMonitor {
             return 0L;
         }
         return duration.toMillis();
+    }
+
+    private long thresholdForPath(String path, Map<String, Long> overrides, long defaultValue) {
+        if (!StringUtils.hasText(path) || overrides == null || overrides.isEmpty()) {
+            return defaultValue;
+        }
+        Long threshold = overrides.get(path.trim());
+        if (threshold == null || threshold <= 0) {
+            return defaultValue;
+        }
+        return threshold;
     }
 }
