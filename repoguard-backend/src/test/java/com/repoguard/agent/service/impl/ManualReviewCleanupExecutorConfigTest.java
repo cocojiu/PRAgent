@@ -10,11 +10,13 @@ class ManualReviewCleanupExecutorConfigTest {
 
     @Test
     void registersNamedManualReviewCleanupExecutor() {
-        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
-            context.register(ManualReviewCleanupExecutorConfig.class, ManualReviewIdempotencyCoordinator.class);
-            context.refresh();
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext();
+        context.register(ManualReviewCleanupExecutorConfig.class, ManualReviewIdempotencyCoordinator.class);
+        context.refresh();
 
-            ScheduledExecutorService executor = context.getBean(
+        ScheduledExecutorService executor = null;
+        try {
+            executor = context.getBean(
                 ManualReviewCleanupExecutorConfig.MANUAL_REVIEW_CLEANUP_EXECUTOR,
                 ScheduledExecutorService.class
             );
@@ -23,6 +25,10 @@ class ManualReviewCleanupExecutorConfigTest {
 
             assertThat(executor).isNotNull();
             assertThat(coordinator).isNotNull();
+        } finally {
+            context.close();
         }
+
+        assertThat(executor.isShutdown()).isTrue();
     }
 }

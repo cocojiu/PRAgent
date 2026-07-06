@@ -35,8 +35,4 @@ public class ManualReviewIdempotencyCoordinator {
     public void scheduleRemove(String idempotencyKey, CompletableFuture<ReviewTask> future, long delay, TimeUnit unit) {
         cleanupExecutor.schedule(() -> remove(idempotencyKey, future), delay, unit);
     }
-
-    public void shutdown() {
-        cleanupExecutor.shutdown();
-    }
 }
