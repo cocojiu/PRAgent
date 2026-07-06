@@ -3,13 +3,16 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class DiffHunkLineAllocator {
 
     private final DiffHunkSplitter hunkSplitter;
 
     DiffHunkLineAllocator(DiffHunkSplitter hunkSplitter) {
-        this.hunkSplitter = hunkSplitter == null ? new DiffHunkSplitter() : hunkSplitter;
+        this.hunkSplitter = Objects.requireNonNull(hunkSplitter, "hunkSplitter");
     }
 
     List<DiffHunkLineAllocation> allocate(GithubChangedFile file, List<String> hunks) {

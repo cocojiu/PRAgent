@@ -2,7 +2,9 @@ package com.repoguard.agent.review;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
+@Component
 class DiffHunkSplitter {
 
     List<String> split(String patch) {

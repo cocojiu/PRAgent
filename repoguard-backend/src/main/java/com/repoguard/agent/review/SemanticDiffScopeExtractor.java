@@ -2,10 +2,13 @@ package com.repoguard.agent.review;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.stereotype.Component;
 
+@Component
 class SemanticDiffScopeExtractor {
 
     private static final Pattern HUNK_HEADER = Pattern.compile("^@@\\s+[^@]*@@\\s*(.*)$");
@@ -23,7 +26,7 @@ class SemanticDiffScopeExtractor {
     );
 
     String scope(String path, String patch, SemanticDiffPathClassifier pathClassifier) {
-        SemanticDiffPathClassifier classifier = pathClassifier == null ? new SemanticDiffPathClassifier() : pathClassifier;
+        SemanticDiffPathClassifier classifier = Objects.requireNonNull(pathClassifier, "pathClassifier");
         return STRATEGIES.stream()
             .filter(strategy -> strategy.supports(path, classifier))
             .findFirst()

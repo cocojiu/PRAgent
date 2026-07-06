@@ -409,7 +409,7 @@ class LlmPullRequestReviewerTest {
             metrics,
             resilience,
             promptBuilder,
-            pipeline(ruleBasedReviewer, objectMapper, metrics, new PullRequestDiffChunker(), promptBuilder),
+            pipeline(ruleBasedReviewer, objectMapper, metrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
             new LlmHttpResponseReader()
         );
     }
@@ -500,7 +500,7 @@ class LlmPullRequestReviewerTest {
                     ruleBasedReviewer,
                     new ObjectMapper(),
                     null,
-                    new PullRequestDiffChunker(),
+                    DiffChunkingTestFixtures.chunker(),
                     new LlmReviewPromptBuilder()
                 ),
                 new LlmHttpResponseReader()

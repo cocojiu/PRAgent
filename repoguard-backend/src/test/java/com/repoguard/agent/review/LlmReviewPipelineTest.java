@@ -15,7 +15,7 @@ class LlmReviewPipelineTest {
     private final LlmReviewCostEstimator costEstimator = new LlmReviewCostEstimator();
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final LlmFallbackReasonClassifier fallbackReasonClassifier = new LlmFallbackReasonClassifier();
-    private final PullRequestDiffChunker diffChunker = new PullRequestDiffChunker();
+    private final PullRequestDiffChunker diffChunker = DiffChunkingTestFixtures.chunker();
 
     @Test
     void constructorRejectsMissingExplicitDependencies() {

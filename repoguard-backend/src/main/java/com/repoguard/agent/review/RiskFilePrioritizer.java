@@ -3,13 +3,16 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.github.GithubChangedFile;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class RiskFilePrioritizer {
 
     private final DiffRiskClassifier riskClassifier;
 
     RiskFilePrioritizer(DiffRiskClassifier riskClassifier) {
-        this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
+        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
     List<GithubChangedFile> prioritizeFiles(List<GithubChangedFile> files) {
@@ -27,11 +30,8 @@ class RiskFilePrioritizer {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
-        SemanticDiffSegmenter effectiveSegmenter = segmenter == null
-            ? new SemanticDiffSegmenter(riskClassifier)
-            : segmenter;
         List<SemanticDiffSegment> segments = prioritizeFiles(files).stream()
-            .flatMap(file -> effectiveSegmenter.segments(file).stream())
+            .flatMap(file -> Objects.requireNonNull(segmenter, "segmenter").segments(file).stream())
             .toList();
         return prioritizeSegments(segments);
     }

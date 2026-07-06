@@ -24,7 +24,7 @@ final class ReviewQualityEvaluationRunner {
         this.ruleReviewer = ruleReviewer;
         this.resultParser = new LlmReviewResultParser(objectMapper);
         this.resultMerger = new LlmRuleReviewMerger(new RiskLevelRanker());
-        this.diffChunker = new PullRequestDiffChunker();
+        this.diffChunker = DiffChunkingTestFixtures.chunker();
     }
 
     List<EvaluationCase> loadCases() {

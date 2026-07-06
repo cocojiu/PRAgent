@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class SemanticDiffSegmenterTest {
 
-    private final SemanticDiffSegmenter segmenter = new SemanticDiffSegmenter(new DiffRiskClassifier());
+    private final SemanticDiffSegmenter segmenter = DiffChunkingTestFixtures.segmenter();
 
     @Test
     void splitsJavaPatchByHunkAndAllocatesSourceLineCounts() {

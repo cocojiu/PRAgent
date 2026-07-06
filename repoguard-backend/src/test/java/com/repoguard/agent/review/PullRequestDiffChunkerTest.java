@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class PullRequestDiffChunkerTest {
 
-    private final PullRequestDiffChunker chunker = new PullRequestDiffChunker();
+    private final PullRequestDiffChunker chunker = DiffChunkingTestFixtures.chunker();
 
     @Test
     void chunkPrioritizesSensitiveFilesAndSplitsLargePullRequest() {

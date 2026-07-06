@@ -4,13 +4,16 @@ import com.repoguard.agent.github.GithubChangedFile;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class ChunkBudgetPolicy {
 
     private final DiffRiskClassifier riskClassifier;
 
     ChunkBudgetPolicy(DiffRiskClassifier riskClassifier) {
-        this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
+        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
     boolean requiresChunking(List<GithubChangedFile> files, DiffChunkingPolicy policy) {

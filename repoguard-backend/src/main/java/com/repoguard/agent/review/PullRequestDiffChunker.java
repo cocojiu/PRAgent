@@ -6,6 +6,7 @@ import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,21 +19,20 @@ public class PullRequestDiffChunker {
     private final ChunkBudgetPolicy budgetPolicy;
     private final PullRequestDiffChunkFactory chunkFactory;
 
-    public PullRequestDiffChunker() {
-        this(new DiffRiskClassifier());
-    }
-
-    PullRequestDiffChunker(DiffRiskClassifier riskClassifier) {
-        this(riskClassifier, null);
-    }
-
-    PullRequestDiffChunker(DiffRiskClassifier riskClassifier, SemanticDiffSegmenter segmenter) {
-        this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
-        this.segmenter = segmenter == null ? new SemanticDiffSegmenter(this.riskClassifier) : segmenter;
-        this.budgetPolicy = new ChunkBudgetPolicy(this.riskClassifier);
-        this.chunkPlanner = new SemanticDiffChunkPlanner(this.budgetPolicy);
-        this.riskFilePrioritizer = new RiskFilePrioritizer(this.riskClassifier);
-        this.chunkFactory = new PullRequestDiffChunkFactory(new DiffChunkReasonBuilder(this.riskClassifier));
+    PullRequestDiffChunker(
+        DiffRiskClassifier riskClassifier,
+        SemanticDiffSegmenter segmenter,
+        SemanticDiffChunkPlanner chunkPlanner,
+        RiskFilePrioritizer riskFilePrioritizer,
+        ChunkBudgetPolicy budgetPolicy,
+        PullRequestDiffChunkFactory chunkFactory
+    ) {
+        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
+        this.segmenter = Objects.requireNonNull(segmenter, "segmenter");
+        this.chunkPlanner = Objects.requireNonNull(chunkPlanner, "chunkPlanner");
+        this.riskFilePrioritizer = Objects.requireNonNull(riskFilePrioritizer, "riskFilePrioritizer");
+        this.budgetPolicy = Objects.requireNonNull(budgetPolicy, "budgetPolicy");
+        this.chunkFactory = Objects.requireNonNull(chunkFactory, "chunkFactory");
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {

@@ -4,14 +4,17 @@ import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
+@Component
 class DiffChunkReasonBuilder {
 
     private final DiffRiskClassifier riskClassifier;
 
     DiffChunkReasonBuilder(DiffRiskClassifier riskClassifier) {
-        this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
+        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
     List<String> fileReasons(List<GithubChangedFile> files, DiffChunkingPolicy policy) {

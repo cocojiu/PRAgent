@@ -3,17 +3,16 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class SemanticDiffChunkPlanner {
 
     private final ChunkBudgetPolicy budgetPolicy;
 
-    SemanticDiffChunkPlanner() {
-        this(new ChunkBudgetPolicy(null));
-    }
-
     SemanticDiffChunkPlanner(ChunkBudgetPolicy budgetPolicy) {
-        this.budgetPolicy = budgetPolicy == null ? new ChunkBudgetPolicy(null) : budgetPolicy;
+        this.budgetPolicy = Objects.requireNonNull(budgetPolicy, "budgetPolicy");
     }
 
     List<List<SemanticDiffSegment>> groupSegments(

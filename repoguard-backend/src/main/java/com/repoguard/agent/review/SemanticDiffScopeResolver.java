@@ -1,23 +1,18 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.github.GithubChangedFile;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class SemanticDiffScopeResolver {
 
     private final SemanticDiffPathClassifier pathClassifier;
     private final SemanticDiffScopeExtractor scopeExtractor;
 
-    SemanticDiffScopeResolver() {
-        this(new SemanticDiffPathClassifier(), new SemanticDiffScopeExtractor());
-    }
-
-    SemanticDiffScopeResolver(SemanticDiffPathClassifier pathClassifier) {
-        this(pathClassifier, new SemanticDiffScopeExtractor());
-    }
-
     SemanticDiffScopeResolver(SemanticDiffPathClassifier pathClassifier, SemanticDiffScopeExtractor scopeExtractor) {
-        this.pathClassifier = pathClassifier == null ? new SemanticDiffPathClassifier() : pathClassifier;
-        this.scopeExtractor = scopeExtractor == null ? new SemanticDiffScopeExtractor() : scopeExtractor;
+        this.pathClassifier = Objects.requireNonNull(pathClassifier, "pathClassifier");
+        this.scopeExtractor = Objects.requireNonNull(scopeExtractor, "scopeExtractor");
     }
 
     String semanticKey(GithubChangedFile file, String patch) {

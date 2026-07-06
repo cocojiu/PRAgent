@@ -3,7 +3,10 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class SemanticDiffSegmenter {
 
     private final DiffRiskClassifier riskClassifier;
@@ -11,19 +14,16 @@ class SemanticDiffSegmenter {
     private final DiffHunkSplitter hunkSplitter;
     private final DiffHunkLineAllocator lineAllocator;
 
-    SemanticDiffSegmenter(DiffRiskClassifier riskClassifier) {
-        this(riskClassifier, new SemanticDiffScopeResolver(), new DiffHunkSplitter());
-    }
-
     SemanticDiffSegmenter(
         DiffRiskClassifier riskClassifier,
         SemanticDiffScopeResolver scopeResolver,
-        DiffHunkSplitter hunkSplitter
+        DiffHunkSplitter hunkSplitter,
+        DiffHunkLineAllocator lineAllocator
     ) {
-        this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
-        this.scopeResolver = scopeResolver == null ? new SemanticDiffScopeResolver() : scopeResolver;
-        this.hunkSplitter = hunkSplitter == null ? new DiffHunkSplitter() : hunkSplitter;
-        this.lineAllocator = new DiffHunkLineAllocator(this.hunkSplitter);
+        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
+        this.scopeResolver = Objects.requireNonNull(scopeResolver, "scopeResolver");
+        this.hunkSplitter = Objects.requireNonNull(hunkSplitter, "hunkSplitter");
+        this.lineAllocator = Objects.requireNonNull(lineAllocator, "lineAllocator");
     }
 
     List<SemanticDiffSegment> segments(GithubChangedFile file) {

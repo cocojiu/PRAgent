@@ -4,16 +4,17 @@ import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
+@Component
 class PullRequestDiffChunkFactory {
 
     private final DiffChunkReasonBuilder reasonBuilder;
 
     PullRequestDiffChunkFactory(DiffChunkReasonBuilder reasonBuilder) {
-        this.reasonBuilder = reasonBuilder == null
-            ? new DiffChunkReasonBuilder(new DiffRiskClassifier())
-            : reasonBuilder;
+        this.reasonBuilder = Objects.requireNonNull(reasonBuilder, "reasonBuilder");
     }
 
     PullRequestDiffChunk fileChunk(
