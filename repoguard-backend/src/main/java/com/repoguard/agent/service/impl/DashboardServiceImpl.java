@@ -5,6 +5,7 @@ import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardStatusMapper;
@@ -50,6 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
     private final DashboardMetricAssembler dashboardMetricAssembler;
+    private final DashboardRiskDistributionAssembler riskDistributionAssembler;
     private final DashboardLlmQualityFormatter llmQualityFormatter;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
@@ -70,6 +72,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.ruleDisplayMapper = ruleDisplayMapper;
         this.overviewDisplayMapper = overviewDisplayMapper;
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
+        this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
         this.llmQualityFormatter = llmQualityFormatter;
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
@@ -168,17 +171,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private List<ChartSliceDto> buildRiskDistribution(LocalDate startDate) {
-        List<DashboardRiskLevelCount> riskLevelCounts = dashboardMapper.selectRiskLevelCounts(startDate);
-        Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
-            .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
-        long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();
-
-        return List.of(
-            riskSlice("HIGH", countByRisk.getOrDefault("HIGH", 0L), total),
-            riskSlice("MEDIUM", countByRisk.getOrDefault("MEDIUM", 0L), total),
-            riskSlice("LOW", countByRisk.getOrDefault("LOW", 0L), total),
-            riskSlice("INFO", countByRisk.getOrDefault("INFO", 0L), total)
-        );
+        return riskDistributionAssembler.assemble(dashboardMapper.selectRiskLevelCounts(startDate));
     }
 
     private List<ChartSliceDto> buildRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
@@ -273,11 +266,6 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private ChartSliceDto riskSlice(String riskLevel, long value, long total) {
-        DashboardOverviewDisplayMapper.RiskLevelDisplay display = overviewDisplayMapper.riskLevel(riskLevel);
-        return new ChartSliceDto(display.name(), value, display.color(), percent(value, total));
-    }
-
     private String lower(String value) {
         return value == null ? null : value.toLowerCase(Locale.ROOT);
     }
@@ -291,10 +279,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeCount(Long value) {
         return value == null ? 0L : value;
-    }
-
-    private long safeTotal(DashboardRiskLevelCount count) {
-        return count.getTotal() == null ? 0L : count.getTotal();
     }
 
     private long safeTrendTotal(DashboardReviewTrendCount count) {
