@@ -34,12 +34,13 @@ class ReviewRulePluginRegistrationTest {
                 DestructiveMigrationRule.class,
                 RequiredColumnWithoutDefaultRule.class,
                 GithubCommentDirectPublishRule.class,
+                ControllerAuthorizationGuardRule.class,
                 ControllerApiTestCoverageRule.class,
                 RuleBasedPullRequestReviewer.class
             );
             context.refresh();
 
-            assertThat(context.getBeansOfType(ReviewRule.class)).hasSize(12);
+            assertThat(context.getBeansOfType(ReviewRule.class)).hasSize(13);
             assertThat(context.getBeansOfType(PullRequestReviewRule.class)).hasSize(1);
             RuleBasedPullRequestReviewer reviewer = context.getBean(RuleBasedPullRequestReviewer.class);
 

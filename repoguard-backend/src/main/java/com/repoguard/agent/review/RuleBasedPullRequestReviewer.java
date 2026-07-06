@@ -15,7 +15,6 @@ import org.springframework.stereotype.Component;
 public class RuleBasedPullRequestReviewer {
 
     private final ReviewRuleProvider reviewRuleProvider;
-    private final ReviewFindingFactory findingFactory;
     private final List<ReviewRule> lineRules;
     private final List<PullRequestReviewRule> pullRequestRules;
 
@@ -27,7 +26,6 @@ public class RuleBasedPullRequestReviewer {
         List<PullRequestReviewRule> pullRequestRules
     ) {
         this.reviewRuleProvider = reviewRuleProvider;
-        this.findingFactory = findingFactory;
         this.lineRules = sortedRules(lineRules);
         this.pullRequestRules = sortedPullRequestRules(pullRequestRules);
     }
@@ -102,7 +100,7 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                addFindingIfMatches(filePath, currentLine, added, configuredRules, findings, hasAuthorizationGuard);
+                evaluateLineRules(filePath, currentLine, added, configuredRules, findings, hasAuthorizationGuard);
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -110,7 +108,7 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private void addFindingIfMatches(
+    private void evaluateLineRules(
         String filePath,
         int lineNumber,
         String line,
@@ -118,36 +116,17 @@ public class RuleBasedPullRequestReviewer {
         List<ReviewFindingResult> findings,
         boolean hasAuthorizationGuard
     ) {
-        String trimmed = line.trim();
-        evaluateLineRules(filePath, lineNumber, line, trimmed, configuredRules, findings);
-        if (ReviewRuleApplicability.isApplicable("RG-AUTH-001", filePath, configuredRules)
-            && isMutatingControllerMapping(filePath, trimmed)
-            && !hasAuthorizationGuard) {
-            findings.add(finding("HIGH", "RG-AUTH-001", filePath, lineNumber, "新增高危 Controller 写接口缺少显式权限门禁", "请为配置写入、评论回写、用户管理等写接口补充 @RequireRole 或等效网关权限控制。"));
-        }
-    }
-
-    private void evaluateLineRules(
-        String filePath,
-        int lineNumber,
-        String line,
-        String trimmed,
-        Map<String, ReviewRuleSettings> configuredRules,
-        List<ReviewFindingResult> findings
-    ) {
-        ReviewRuleLineContext context = new ReviewRuleLineContext(filePath, lineNumber, line, trimmed, configuredRules);
+        ReviewRuleLineContext context = new ReviewRuleLineContext(
+            filePath,
+            lineNumber,
+            line,
+            line.trim(),
+            configuredRules,
+            hasAuthorizationGuard
+        );
         for (ReviewRule rule : lineRules) {
             rule.evaluate(context).ifPresent(findings::add);
         }
-    }
-
-    private boolean isMutatingControllerMapping(String filePath, String trimmed) {
-        String normalizedPath = ReviewRuleApplicability.normalizePath(filePath);
-        if (!normalizedPath.endsWith("controller.java")) {
-            return false;
-        }
-        return trimmed.contains("@PostMapping") || trimmed.contains("@PutMapping") || trimmed.contains("@PatchMapping")
-            || trimmed.contains("@DeleteMapping");
     }
 
     private boolean patchHasAuthorizationGuard(String[] lines) {
@@ -165,10 +144,6 @@ public class RuleBasedPullRequestReviewer {
             || trimmed.contains("@PreAuthorize")
             || trimmed.contains("@Secured")
             || trimmed.contains("@RolesAllowed");
-    }
-
-    private ReviewFindingResult finding(String severity, String ruleId, String filePath, Integer lineNumber, String message, String recommendation) {
-        return findingFactory.finding(severity, ruleId, filePath, lineNumber, message, recommendation);
     }
 
     private int parseNewFileStart(String hunkHeader) {

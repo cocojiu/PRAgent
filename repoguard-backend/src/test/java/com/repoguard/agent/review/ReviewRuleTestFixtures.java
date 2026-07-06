@@ -30,7 +30,8 @@ final class ReviewRuleTestFixtures {
             new RawExternalCallRule(findingFactory),
             new DestructiveMigrationRule(findingFactory),
             new RequiredColumnWithoutDefaultRule(findingFactory),
-            new GithubCommentDirectPublishRule(findingFactory)
+            new GithubCommentDirectPublishRule(findingFactory),
+            new ControllerAuthorizationGuardRule(findingFactory)
         );
     }
 }
