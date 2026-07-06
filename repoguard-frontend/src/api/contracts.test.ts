@@ -257,6 +257,119 @@ describe("apiRequest", () => {
     expect(calls[7][0]).toContain("/api/v1/system/health/summary");
     expect(calls.every(([, init]) => init.method === undefined)).toBe(true);
   });
+
+  it("keeps system integration and review rule endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchGithubIntegrationConfig", undefined);
+    await apiRequest("updateGithubIntegrationConfig", {
+      baseUrl: "https://api.github.com",
+      token: "github-token",
+      defaultOwner: "repo-guard",
+      defaultRepo: "agent"
+    });
+    await apiRequest("fetchMysqlIntegrationConfig", undefined);
+    await apiRequest("updateMysqlIntegrationConfig", {
+      baseUrl: "jdbc:mysql://localhost:3306/repoguard",
+      username: "repoguard",
+      secret: "mysql-secret",
+      resource: "repoguard"
+    });
+    await apiRequest("fetchRabbitMqIntegrationConfig", undefined);
+    await apiRequest("updateRabbitMqIntegrationConfig", {
+      baseUrl: "amqp://localhost:5672",
+      username: "guest",
+      secret: "rabbit-secret",
+      resource: "/"
+    });
+    await apiRequest("fetchReviewPolicyConfig", undefined);
+    await apiRequest("updateReviewPolicyConfig", {
+      llmEnabled: true,
+      llmProvider: "openai",
+      modelName: "gpt-4.1",
+      apiKey: "llm-key",
+      baseUrl: "https://api.openai.com/v1",
+      timeoutSeconds: 120,
+      temperature: 0.2,
+      maxTokens: 4096,
+      fallbackToRules: true,
+      workerConcurrency: 2,
+      chunkFileThreshold: 20,
+      chunkLineThreshold: 800,
+      chunkMaxFiles: 10,
+      chunkMaxLines: 1200,
+      inputTokenPricePerMillion: 2,
+      outputTokenPricePerMillion: 8
+    });
+    await apiRequest("fetchReviewRules", undefined);
+    await apiRequest("createReviewRule", {
+      id: "RG-JAVA-001",
+      name: "Java rule",
+      scope: "backend",
+      applicableLanguages: "java",
+      filePatterns: "**/*.java",
+      severity: "high",
+      status: "enabled",
+      confidence: 0.8,
+      description: "Detect risky Java changes",
+      positiveExample: "Use parameterized SQL",
+      falsePositiveGuidance: "Ignore generated code"
+    });
+    await apiRequest("updateReviewRule", {
+      id: "RG-JAVA-001",
+      payload: {
+        id: "RG-JAVA-001",
+        name: "Java rule",
+        scope: "backend",
+        applicableLanguages: "java",
+        filePatterns: "**/*.java",
+        severity: "high",
+        status: "enabled",
+        confidence: 0.8,
+        description: "Detect risky Java changes",
+        positiveExample: "Use parameterized SQL",
+        falsePositiveGuidance: "Ignore generated code"
+      }
+    });
+    await apiRequest("updateReviewRuleStatus", {
+      id: "RG-JAVA-001",
+      payload: { status: "disabled" }
+    });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/integrations/github");
+    expect(calls[0][1].method).toBeUndefined();
+    expect(calls[1][0]).toContain("/api/v1/config/integrations/github");
+    expect(calls[1][1].method).toBe("PUT");
+    expect(calls[1][1].body).toBe(JSON.stringify({
+      baseUrl: "https://api.github.com",
+      token: "github-token",
+      defaultOwner: "repo-guard",
+      defaultRepo: "agent"
+    }));
+    expect(calls[2][0]).toContain("/api/v1/config/integrations/mysql");
+    expect(calls[2][1].method).toBeUndefined();
+    expect(calls[3][0]).toContain("/api/v1/config/integrations/mysql");
+    expect(calls[3][1].method).toBe("PUT");
+    expect(calls[4][0]).toContain("/api/v1/config/integrations/rabbitmq");
+    expect(calls[4][1].method).toBeUndefined();
+    expect(calls[5][0]).toContain("/api/v1/config/integrations/rabbitmq");
+    expect(calls[5][1].method).toBe("PUT");
+    expect(calls[6][0]).toContain("/api/v1/config/review-policy");
+    expect(calls[6][1].method).toBeUndefined();
+    expect(calls[7][0]).toContain("/api/v1/config/review-policy");
+    expect(calls[7][1].method).toBe("PUT");
+    expect(calls[8][0]).toContain("/api/v1/config/review-rules");
+    expect(calls[8][1].method).toBeUndefined();
+    expect(calls[9][0]).toContain("/api/v1/config/review-rules");
+    expect(calls[9][1].method).toBe("POST");
+    expect(calls[10][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001");
+    expect(calls[10][1].method).toBe("PUT");
+    expect(calls[11][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001/status");
+    expect(calls[11][1].method).toBe("PUT");
+    expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled" }));
+  });
 });
 
 const setCsrfCookie = (token: string) => {
