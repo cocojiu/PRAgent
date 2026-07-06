@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import java.time.LocalDateTime;
+import org.springframework.stereotype.Component;
 
+@Component
 class IntegrationConnectionCheckMarker {
 
     private final IntegrationConfigMapper integrationConfigMapper;

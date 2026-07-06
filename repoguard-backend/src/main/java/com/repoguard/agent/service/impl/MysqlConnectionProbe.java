@@ -6,11 +6,13 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
 import javax.sql.DataSource;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Probes runtime and saved MySQL connectivity.
  */
+@Component
 public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> {
 
     static final String PROVIDER = "MYSQL";

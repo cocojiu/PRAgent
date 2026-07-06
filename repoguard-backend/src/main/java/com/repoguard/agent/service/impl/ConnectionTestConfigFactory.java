@@ -6,8 +6,10 @@ import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.security.SecretCryptoService;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+@Component
 class ConnectionTestConfigFactory {
 
     private final SecretCryptoService secretCryptoService;

@@ -1,7 +1,6 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
@@ -10,13 +9,10 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
-import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.ConnectionTestService;
-import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
-import javax.sql.DataSource;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import java.util.Objects;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 @Service
 public class ConnectionTestServiceImpl implements ConnectionTestService {
@@ -26,12 +22,8 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     private static final String RABBITMQ_PROVIDER = RabbitMqConnectionProbe.PROVIDER;
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
-    private final GithubConnectionProbe githubConnectionProbe;
     private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner;
-    private final LlmConnectionProbe llmConnectionProbe;
     private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner;
-    private final MysqlConnectionProbe mysqlConnectionProbe;
-    private final RabbitMqConnectionProbe rabbitMqConnectionProbe;
     private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner;
     private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner;
     private final ConnectionTestConfigFactory configFactory;
@@ -40,39 +32,23 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     public ConnectionTestServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        DataSource dataSource,
-        RabbitTemplate rabbitTemplate,
-        SecretCryptoService secretCryptoService,
-        LlmConnectionProbeResponseParser llmResponseParser
+        GithubIntegrationConnectionTestRunner githubConnectionTestRunner,
+        LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner,
+        @Qualifier(ConnectionTestRunnerConfig.MYSQL_CONNECTION_TEST_RUNNER)
+        ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner,
+        @Qualifier(ConnectionTestRunnerConfig.RABBITMQ_CONNECTION_TEST_RUNNER)
+        ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner,
+        ConnectionTestConfigFactory configFactory,
+        IntegrationConnectionCheckMarker connectionCheckMarker
     ) {
-        this.integrationConfigMapper = integrationConfigMapper;
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.githubConnectionProbe = new GithubConnectionProbe(restClientBuilder.clone(), secretCryptoService);
-        this.githubConnectionTestRunner = new GithubIntegrationConnectionTestRunner(this.githubConnectionProbe);
-        this.llmConnectionProbe = new LlmConnectionProbe(
-            restClientBuilder.clone(),
-            llmResponseParser,
-            secretCryptoService
-        );
-        this.llmConnectionTestRunner = new LlmReviewPolicyConnectionTestRunner(this.llmConnectionProbe);
-        this.mysqlConnectionProbe = new MysqlConnectionProbe(dataSource, secretCryptoService);
-        this.rabbitMqConnectionProbe = new RabbitMqConnectionProbe(rabbitTemplate, secretCryptoService);
-        this.mysqlConnectionTestRunner = new ServiceIntegrationConnectionTestRunner(
-            "MySQL connection test succeeded",
-            "MySQL runtime connection test succeeded",
-            this.mysqlConnectionProbe::runtimeProbe,
-            this.mysqlConnectionProbe
-        );
-        this.rabbitMqConnectionTestRunner = new ServiceIntegrationConnectionTestRunner(
-            "RabbitMQ connection test succeeded",
-            "RabbitMQ runtime connection test succeeded",
-            this.rabbitMqConnectionProbe::runtimeProbe,
-            this.rabbitMqConnectionProbe
-        );
-        this.configFactory = new ConnectionTestConfigFactory(secretCryptoService);
-        this.connectionCheckMarker = new IntegrationConnectionCheckMarker(integrationConfigMapper);
+        this.integrationConfigMapper = Objects.requireNonNull(integrationConfigMapper, "integrationConfigMapper");
+        this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
+        this.githubConnectionTestRunner = Objects.requireNonNull(githubConnectionTestRunner, "githubConnectionTestRunner");
+        this.llmConnectionTestRunner = Objects.requireNonNull(llmConnectionTestRunner, "llmConnectionTestRunner");
+        this.mysqlConnectionTestRunner = Objects.requireNonNull(mysqlConnectionTestRunner, "mysqlConnectionTestRunner");
+        this.rabbitMqConnectionTestRunner = Objects.requireNonNull(rabbitMqConnectionTestRunner, "rabbitMqConnectionTestRunner");
+        this.configFactory = Objects.requireNonNull(configFactory, "configFactory");
+        this.connectionCheckMarker = Objects.requireNonNull(connectionCheckMarker, "connectionCheckMarker");
     }
 
     @Override

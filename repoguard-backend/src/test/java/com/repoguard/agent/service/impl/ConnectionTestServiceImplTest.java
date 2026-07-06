@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -40,16 +41,59 @@ class ConnectionTestServiceImplTest {
         org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final GithubConnectionProbe githubConnectionProbe =
+        new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
+    private final LlmConnectionProbe llmConnectionProbe =
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService);
+    private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
+    private final RabbitMqConnectionProbe rabbitMqConnectionProbe = new RabbitMqConnectionProbe(null, secretCryptoService);
+    private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner =
+        new GithubIntegrationConnectionTestRunner(githubConnectionProbe);
+    private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner =
+        new LlmReviewPolicyConnectionTestRunner(llmConnectionProbe);
+    private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner =
+        new ServiceIntegrationConnectionTestRunner(
+            "MySQL connection test succeeded",
+            "MySQL runtime connection test succeeded",
+            mysqlConnectionProbe::runtimeProbe,
+            mysqlConnectionProbe
+        );
+    private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner =
+        new ServiceIntegrationConnectionTestRunner(
+            "RabbitMQ connection test succeeded",
+            "RabbitMQ runtime connection test succeeded",
+            rabbitMqConnectionProbe::runtimeProbe,
+            rabbitMqConnectionProbe
+        );
+    private final ConnectionTestConfigFactory configFactory = new ConnectionTestConfigFactory(secretCryptoService);
+    private final IntegrationConnectionCheckMarker connectionCheckMarker =
+        new IntegrationConnectionCheckMarker(integrationConfigMapper);
     private final ConnectionTestServiceImpl service = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
-        RestClient.builder(),
-        objectMapper,
-        null,
-        null,
-        secretCryptoService,
-        responseParser()
+        githubConnectionTestRunner,
+        llmConnectionTestRunner,
+        mysqlConnectionTestRunner,
+        rabbitMqConnectionTestRunner,
+        configFactory,
+        connectionCheckMarker
     );
+
+    @Test
+    void constructorRejectsMissingConfigFactory() {
+        assertThatThrownBy(() -> new ConnectionTestServiceImpl(
+            integrationConfigMapper,
+            reviewPolicyConfigMapper,
+            githubConnectionTestRunner,
+            llmConnectionTestRunner,
+            mysqlConnectionTestRunner,
+            rabbitMqConnectionTestRunner,
+            null,
+            connectionCheckMarker
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("configFactory");
+    }
 
     @Test
     void testGithubIntegrationClearsStaleErrorOnSuccess() throws Exception {

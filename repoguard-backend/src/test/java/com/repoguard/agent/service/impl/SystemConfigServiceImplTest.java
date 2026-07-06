@@ -59,15 +59,43 @@ class SystemConfigServiceImplTest {
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final GithubConnectionProbe githubConnectionProbe =
+        new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
+    private final LlmConnectionProbe llmConnectionProbe =
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService);
+    private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
+    private final RabbitMqConnectionProbe rabbitMqConnectionProbe = new RabbitMqConnectionProbe(null, secretCryptoService);
+    private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner =
+        new GithubIntegrationConnectionTestRunner(githubConnectionProbe);
+    private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner =
+        new LlmReviewPolicyConnectionTestRunner(llmConnectionProbe);
+    private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner =
+        new ServiceIntegrationConnectionTestRunner(
+            "MySQL connection test succeeded",
+            "MySQL runtime connection test succeeded",
+            mysqlConnectionProbe::runtimeProbe,
+            mysqlConnectionProbe
+        );
+    private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner =
+        new ServiceIntegrationConnectionTestRunner(
+            "RabbitMQ connection test succeeded",
+            "RabbitMQ runtime connection test succeeded",
+            rabbitMqConnectionProbe::runtimeProbe,
+            rabbitMqConnectionProbe
+        );
+    private final ConnectionTestConfigFactory connectionTestConfigFactory =
+        new ConnectionTestConfigFactory(secretCryptoService);
+    private final IntegrationConnectionCheckMarker connectionCheckMarker =
+        new IntegrationConnectionCheckMarker(integrationConfigMapper);
     private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
-        RestClient.builder(),
-        objectMapper,
-        null,
-        null,
-        secretCryptoService,
-        responseParser()
+        githubConnectionTestRunner,
+        llmConnectionTestRunner,
+        mysqlConnectionTestRunner,
+        rabbitMqConnectionTestRunner,
+        connectionTestConfigFactory,
+        connectionCheckMarker
     );
     private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
         new SystemIntegrationConfigServiceImpl(

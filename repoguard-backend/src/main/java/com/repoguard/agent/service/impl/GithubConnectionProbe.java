@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.github.GithubRestClientFactory;
 import com.repoguard.agent.security.SecretCryptoService;
 import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -11,6 +12,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 /**
  * Executes a lightweight GitHub API probe for integration connectivity checks.
  */
+@Component
 public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig> {
 
     static final String PROVIDER = "GITHUB";

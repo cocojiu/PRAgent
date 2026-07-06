@@ -4,11 +4,13 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.net.URI;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
  * Probes runtime and saved RabbitMQ connectivity.
  */
+@Component
 public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfig> {
 
     static final String PROVIDER = "RABBITMQ";
