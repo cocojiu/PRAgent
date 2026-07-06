@@ -24,6 +24,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
+import com.repoguard.agent.github.GithubWritebackFailureClassifier;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -39,9 +40,14 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
+import com.repoguard.agent.service.GithubCommentHistoryQueryService;
+import com.repoguard.agent.service.GithubCommentPreviewService;
+import com.repoguard.agent.service.GithubCommentPublishService;
 import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
@@ -103,18 +109,40 @@ class ReviewServiceImplTest {
         reviewTimelineMapper,
         null
     );
-    private final GithubCommentApplicationService githubCommentApplicationService = new GithubCommentApplicationServiceImpl(
+    private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
         reviewFindingMapper,
         githubCommentPublicationMapper,
+        githubIntegrationProvider,
+        new ReviewRiskProfileBuilder(),
+        new PrReviewSummaryBuilder()
+    );
+    private final GithubWritebackFailureClassifier githubWritebackFailureClassifier =
+        new GithubWritebackFailureClassifier();
+    private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
+        reviewTaskMapper,
+        githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
-        githubIntegrationProvider,
         githubPullRequestClient,
         null,
         null,
-        reviewTaskStateMachine
+        reviewTaskStateMachine,
+        githubWritebackFailureClassifier,
+        githubCommentPreviewService
+    );
+    private final GithubCommentHistoryQueryService githubCommentHistoryQueryService =
+        new GithubCommentHistoryQueryServiceImpl(
+            reviewTaskMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            new GithubCommentPublicationHistoryAssembler(githubWritebackFailureClassifier)
+        );
+    private final GithubCommentApplicationService githubCommentApplicationService = new GithubCommentApplicationServiceImpl(
+        githubCommentPreviewService,
+        githubCommentPublishService,
+        githubCommentHistoryQueryService
     );
     private final GithubPullRequestOptionService githubPullRequestOptionService = new GithubPullRequestOptionServiceImpl(
         githubPullRequestClient,
