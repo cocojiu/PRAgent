@@ -27,6 +27,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -49,7 +50,8 @@ class DataRetentionServiceImplTest {
         githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
-        systemSettingsProvider
+        systemSettingsProvider,
+        new ReviewTaskStateMachine()
     );
 
     @Test
@@ -108,6 +110,23 @@ class DataRetentionServiceImplTest {
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(7, 50, true, null)))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("CLEANUP");
+    }
+
+    @Test
+    void constructorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
     }
 
     private ReviewTask task(Long id) {

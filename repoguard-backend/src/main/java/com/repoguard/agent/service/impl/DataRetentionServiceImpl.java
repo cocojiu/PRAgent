@@ -26,6 +26,7 @@ import com.repoguard.agent.service.DataRetentionService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,29 +49,6 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final SystemSettingsProvider systemSettingsProvider;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
 
-    public DataRetentionServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        SystemSettingsProvider systemSettingsProvider
-    ) {
-        this(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            systemSettingsProvider,
-            null
-        );
-    }
-
     @Autowired
     public DataRetentionServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -91,9 +69,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.systemSettingsProvider = systemSettingsProvider;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
     }
 
     @Override
