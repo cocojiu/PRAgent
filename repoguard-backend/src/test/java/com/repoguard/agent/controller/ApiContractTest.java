@@ -10,6 +10,7 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.common.GlobalExceptionHandler;
+import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.testsupport.ControllerEndpointCatalog;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -222,6 +223,13 @@ class ApiContractTest {
     }
 
     @Test
+    void githubWebhookResponseKeepsQueuedAndSkippedContractShape() {
+        assertThat(recordComponentTypes(GithubWebhookResponse.class))
+            .as("GitHub webhook queued/skipped response shape is part of the API contract")
+            .containsExactlyEntriesOf(expectedGithubWebhookResponseContract());
+    }
+
+    @Test
     void frontendTypedApiContractsStayWithinBackendApiSurface() throws Exception {
         Set<String> backendEndpoints = Set.copyOf(apiSurfaceEndpointKeys());
 
@@ -341,6 +349,25 @@ class ApiContractTest {
             extractFrontendPath(body).ifPresent(path -> contracts.put(operation, frontendHttpMethod(body) + " " + path));
         }
         return contracts;
+    }
+
+    private Map<String, Class<?>> recordComponentTypes(Class<?> recordType) {
+        Map<String, Class<?>> components = new LinkedHashMap<>();
+        for (var component : recordType.getRecordComponents()) {
+            components.put(component.getName(), component.getType());
+        }
+        return components;
+    }
+
+    private Map<String, Class<?>> expectedGithubWebhookResponseContract() {
+        Map<String, Class<?>> contract = new LinkedHashMap<>();
+        contract.put("status", String.class);
+        contract.put("message", String.class);
+        contract.put("taskId", Long.class);
+        contract.put("existing", Boolean.class);
+        contract.put("deliveryId", String.class);
+        contract.put("action", String.class);
+        return contract;
     }
 
     private Map<String, String> frontendDirectApiEntrypoints() throws Exception {
