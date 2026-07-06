@@ -66,7 +66,7 @@ public class ManualReviewCreationService {
             : reviewTaskStateMachine;
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
         this.manualReviewIdempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator()
+            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
             : manualReviewIdempotencyCoordinator;
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
     }
@@ -112,7 +112,7 @@ public class ManualReviewCreationService {
             : reviewTaskStateMachine;
         this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
         this.manualReviewIdempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator()
+            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
             : manualReviewIdempotencyCoordinator;
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
     }

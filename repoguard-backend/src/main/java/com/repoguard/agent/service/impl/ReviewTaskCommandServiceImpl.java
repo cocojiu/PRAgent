@@ -43,7 +43,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             null,
             null,
             Runnable::run,
-            new ManualReviewIdempotencyCoordinator(),
+            new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor()),
             null,
             null,
             null,
@@ -68,7 +68,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             reviewTaskStateMachine,
             null,
             Runnable::run,
-            new ManualReviewIdempotencyCoordinator(),
+            new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor()),
             null,
             null,
             null,
@@ -128,7 +128,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         ManualReviewIdempotencyCoordinator idempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator()
+            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
             : manualReviewIdempotencyCoordinator;
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher == null
             ? new ReviewTaskAfterCommitPublisher(

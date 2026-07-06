@@ -46,6 +46,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -1144,6 +1145,7 @@ class ReviewServiceImplTest {
         private final CountDownLatch duplicateRegistrations;
 
         CountingManualReviewIdempotencyCoordinator(int expectedDuplicates) {
+            super(org.mockito.Mockito.mock(ScheduledExecutorService.class));
             this.duplicateRegistrations = new CountDownLatch(expectedDuplicates);
         }
 
