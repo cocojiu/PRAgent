@@ -7,7 +7,6 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -38,7 +37,7 @@ public class ManualReviewCreationService {
     private static final long COMPLETED_MANUAL_CREATE_RETENTION_SECONDS = 5;
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
+    private final ReviewTimelineAppender reviewTimelineAppender;
     private final RepoGuardMetrics metrics;
     private final CacheEvictionService cacheEvictionService;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
@@ -49,7 +48,7 @@ public class ManualReviewCreationService {
     @Autowired
     public ManualReviewCreationService(
         ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
         RepoGuardMetrics metrics,
         CacheEvictionService cacheEvictionService,
         ReviewTaskStateMachine reviewTaskStateMachine,
@@ -58,7 +57,7 @@ public class ManualReviewCreationService {
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
+        this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
@@ -81,8 +80,30 @@ public class ManualReviewCreationService {
         ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator,
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
     ) {
+        this(
+            reviewTaskMapper,
+            new ReviewTimelineAppender(reviewTimelineMapper),
+            metrics,
+            cacheEvictionService,
+            reviewTaskStateMachine,
+            manualCreateTransactionTemplate,
+            manualReviewIdempotencyCoordinator,
+            reviewTaskAfterCommitPublisher
+        );
+    }
+
+    ManualReviewCreationService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        RepoGuardMetrics metrics,
+        CacheEvictionService cacheEvictionService,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        TransactionTemplate manualCreateTransactionTemplate,
+        ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator,
+        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
+        this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
@@ -192,7 +213,7 @@ public class ManualReviewCreationService {
             completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, concurrentTask);
             return reusedTaskResponse(concurrentTask);
         }
-        insertInitialTimeline(task.getId(), createdAt);
+        reviewTimelineAppender.appendInitial(task.getId(), "Task queued", createdAt);
         ownerFuture.complete(task);
         cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
         evictDashboardOverview();
@@ -348,16 +369,6 @@ public class ManualReviewCreationService {
                 .eq(ReviewTask::getCommitSha, commit)
                 .last("limit 1")
         );
-    }
-
-    private void insertInitialTimeline(Long taskId, LocalDateTime createdAt) {
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel("Task queued");
-        timeline.setEventTime(createdAt);
-        timeline.setStatus("CURRENT");
-        timeline.setSortOrder(1);
-        reviewTimelineMapper.insert(timeline);
     }
 
     private String resolveTitle(ManualReviewRequest request) {

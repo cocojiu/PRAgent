@@ -158,7 +158,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         this.manualReviewCreationService = manualReviewCreationService == null
             ? new ManualReviewCreationService(
                 reviewTaskMapper,
-                reviewTimelineMapper,
+                new ReviewTimelineAppender(reviewTimelineMapper),
                 metrics,
                 cacheEvictionService,
                 this.reviewTaskStateMachine,

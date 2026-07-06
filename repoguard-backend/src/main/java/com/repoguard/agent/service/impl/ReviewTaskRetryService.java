@@ -1,13 +1,10 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
@@ -17,26 +14,44 @@ import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ReviewTaskRetryService {
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
+    private final ReviewTimelineAppender reviewTimelineAppender;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher;
     private final CacheEvictionService cacheEvictionService;
 
-    public ReviewTaskRetryService(
+    ReviewTaskRetryService(
         ReviewTaskMapper reviewTaskMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
         CacheEvictionService cacheEvictionService
     ) {
+        this(
+            reviewTaskMapper,
+            new ReviewTimelineAppender(reviewTimelineMapper),
+            reviewTaskStateMachine,
+            reviewTaskAfterCommitPublisher,
+            cacheEvictionService
+        );
+    }
+
+    @Autowired
+    public ReviewTaskRetryService(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
+        CacheEvictionService cacheEvictionService
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
+        this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
@@ -57,7 +72,7 @@ public class ReviewTaskRetryService {
         reviewTaskMapper.updateById(task);
         evictDashboardOverview();
 
-        insertRetryTimeline(task.getId(), queuedAt);
+        reviewTimelineAppender.completeCurrentAndAppend(task.getId(), "Retry queued", queuedAt, "CURRENT");
         ReviewTaskMessage message = new ReviewTaskMessage(
             task.getId(),
             task.getOrganization(),
@@ -104,33 +119,6 @@ public class ReviewTaskRetryService {
         task.setHumanReviewBy(null);
         task.setHumanReviewedAt(null);
         task.setDurationSeconds(0);
-    }
-
-    private void insertRetryTimeline(Long taskId, LocalDateTime queuedAt) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel("Retry queued");
-        timeline.setEventTime(queuedAt);
-        timeline.setStatus("CURRENT");
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 
     private void clearLlmQuality(ReviewTask task) {
