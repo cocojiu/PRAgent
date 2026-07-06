@@ -36,8 +36,18 @@ class NotificationControllerTest {
         mockMvc.perform(get("/api/v1/notifications"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp").exists())
             .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.generatedAt").value("2026-06-09 21:30:00"))
             .andExpect(jsonPath("$.data.items", hasSize(1)))
-            .andExpect(jsonPath("$.data.items[0].targetPath").value("/repoguard/tasks/1"));
+            .andExpect(jsonPath("$.data.items[0].id").value("review-failed-1"))
+            .andExpect(jsonPath("$.data.items[0].level").value("danger"))
+            .andExpect(jsonPath("$.data.items[0].title").value("审查任务失败"))
+            .andExpect(jsonPath("$.data.items[0].description").value("PRAgent PR #5 执行失败，建议查看失败原因并重试。"))
+            .andExpect(jsonPath("$.data.items[0].time").value("刚刚"))
+            .andExpect(jsonPath("$.data.items[0].targetPath").value("/repoguard/tasks/1"))
+            .andExpect(jsonPath("$.data.items[0].createdAt").value("2026-06-09 21:30:00"));
     }
 }
