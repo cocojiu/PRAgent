@@ -1,8 +1,6 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.github.GithubChangedFile;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -18,39 +16,33 @@ class SemanticDiffScopeResolver {
     );
     private static final Pattern YAML_KEY = Pattern.compile("^[+-]?\\s*([A-Za-z0-9_.-]+)\\s*:");
 
+    private final SemanticDiffPathClassifier pathClassifier;
+
+    SemanticDiffScopeResolver() {
+        this(new SemanticDiffPathClassifier());
+    }
+
+    SemanticDiffScopeResolver(SemanticDiffPathClassifier pathClassifier) {
+        this.pathClassifier = pathClassifier == null ? new SemanticDiffPathClassifier() : pathClassifier;
+    }
+
     String semanticKey(GithubChangedFile file, String patch) {
-        String path = normalizedPath(file);
+        String path = pathClassifier.normalizedPath(file);
         String scope = semanticScope(path, patch);
-        return semanticDomain(path) + ":" + moduleKey(path) + ":" + scope;
+        return pathClassifier.semanticDomain(path) + ":" + pathClassifier.moduleKey(path) + ":" + scope;
     }
 
     String chunkGroupKey(GithubChangedFile file) {
-        String path = normalizedPath(file);
-        return semanticDomain(path) + ":" + moduleKey(path);
+        String path = pathClassifier.normalizedPath(file);
+        return pathClassifier.semanticDomain(path) + ":" + pathClassifier.moduleKey(path);
     }
 
     String semanticReason(GithubChangedFile file, String patch) {
-        String path = normalizedPath(file);
-        if (isTestPath(path)) {
-            return "test_scope";
-        }
-        if (isJavaLike(path)) {
-            return "code_scope";
-        }
-        if (path.endsWith(".sql")) {
-            return "sql_statement";
-        }
-        if (isConfigLike(path)) {
-            return "config_section";
-        }
-        if (path.endsWith(".md")) {
-            return "documentation_section";
-        }
-        return "path_scope";
+        return pathClassifier.semanticReason(pathClassifier.normalizedPath(file));
     }
 
     private String semanticScope(String path, String patch) {
-        if (isJavaLike(path)) {
+        if (pathClassifier.isJavaLike(path)) {
             return firstMatch(patch, JAVA_TYPE, 2)
                 .or(() -> firstMatch(patch, JAVA_METHOD, 1))
                 .orElse(hunkContext(patch));
@@ -58,7 +50,7 @@ class SemanticDiffScopeResolver {
         if (path.endsWith(".sql")) {
             return firstSqlVerb(patch);
         }
-        if (isConfigLike(path)) {
+        if (pathClassifier.isConfigLike(path)) {
             return firstConfigKey(patch).orElse(hunkContext(patch));
         }
         return hunkContext(patch);
@@ -135,74 +127,6 @@ class SemanticDiffScopeResolver {
             return line.substring(1);
         }
         return line;
-    }
-
-    private String semanticDomain(String path) {
-        if (path.contains("db/migration") || path.endsWith(".sql")) {
-            return "database";
-        }
-        if (isConfigLike(path)) {
-            return "config";
-        }
-        if (path.contains(".github/") || path.contains("docker") || path.endsWith("pom.xml") || path.endsWith("package.json")) {
-            return "delivery";
-        }
-        if (isTestPath(path)) {
-            return "test";
-        }
-        if (path.endsWith(".md")) {
-            return "docs";
-        }
-        return "source";
-    }
-
-    private String moduleKey(String path) {
-        if (path.contains("/src/main/java/")) {
-            return after(path, "/src/main/java/", 3);
-        }
-        if (path.contains("/src/test/java/")) {
-            return after(path, "/src/test/java/", 3);
-        }
-        if (path.contains("/src/main/resources/")) {
-            return after(path, "/src/main/resources/", 2);
-        }
-        int slash = path.lastIndexOf('/');
-        return slash < 0 ? path : path.substring(0, slash);
-    }
-
-    private String after(String path, String marker, int depth) {
-        String suffix = path.substring(path.indexOf(marker) + marker.length());
-        String[] parts = suffix.split("/");
-        List<String> selected = new ArrayList<>();
-        for (String part : parts) {
-            if (!part.isBlank()) {
-                selected.add(part);
-            }
-            if (selected.size() == depth) {
-                break;
-            }
-        }
-        return selected.isEmpty() ? "root" : String.join("/", selected);
-    }
-
-    private boolean isJavaLike(String path) {
-        return path.endsWith(".java") || path.endsWith(".kt") || path.endsWith(".groovy");
-    }
-
-    private boolean isConfigLike(String path) {
-        return path.endsWith(".yml")
-            || path.endsWith(".yaml")
-            || path.endsWith(".properties")
-            || path.endsWith(".json")
-            || path.contains("config");
-    }
-
-    private boolean isTestPath(String path) {
-        return path.contains("/src/test/") || path.endsWith("test.java") || path.endsWith("spec.ts");
-    }
-
-    private String normalizedPath(GithubChangedFile file) {
-        return file.filename() == null ? "" : file.filename().replace('\\', '/').toLowerCase(Locale.ROOT);
     }
 
     private String sanitizeKey(String value) {
