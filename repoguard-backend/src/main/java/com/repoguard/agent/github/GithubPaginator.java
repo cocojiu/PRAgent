@@ -5,8 +5,10 @@ import com.repoguard.agent.external.ExternalCallResilience;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -42,16 +44,18 @@ public class GithubPaginator {
         List<T> items = new ArrayList<>();
         for (int page = 1; page <= maxPages; page++) {
             String url = pageUrlBuilder.apply(page);
-            T[] pageItems = executeGithub(operation, resilience, () -> restClient.get()
+            ResponseEntity<T[]> response = executeGithub(operation, resilience, () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, settings))
                 .retrieve()
-                .body(responseType));
+                .toEntity(responseType));
+            T[] pageItems = response.getBody();
             if (pageItems == null || pageItems.length == 0) {
                 break;
             }
             items.addAll(Arrays.asList(pageItems));
-            if (pageItems.length < PAGE_SIZE) {
+            Boolean hasNextPage = hasNextPage(response.getHeaders());
+            if (Boolean.FALSE.equals(hasNextPage) || (hasNextPage == null && pageItems.length < PAGE_SIZE)) {
                 break;
             }
             if (page == maxPages) {
@@ -63,6 +67,16 @@ public class GithubPaginator {
             }
         }
         return items;
+    }
+
+    private Boolean hasNextPage(HttpHeaders headers) {
+        if (headers == null || headers.get(HttpHeaders.LINK) == null) {
+            return null;
+        }
+        return headers.getOrEmpty(HttpHeaders.LINK).stream()
+            .flatMap(value -> Arrays.stream(value.split(",")))
+            .map(value -> value.toLowerCase(Locale.ROOT))
+            .anyMatch(value -> value.contains("rel=\"next\"") || value.contains("rel=next"));
     }
 
     private <T> T executeGithub(

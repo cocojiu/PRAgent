@@ -56,7 +56,30 @@ class GithubPaginatorTest {
         }
     }
 
+    @Test
+    void stopsOnFullLastPageWhenLinkHeaderHasNoNextPage() throws Exception {
+        try (PagedGithubServer server = startServer(200, true)) {
+            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+
+            List<GithubChangedFile> result = paginator.fetchPages(
+                "fetch_pull_request_diff",
+                page -> server.baseUrl() + "/items?per_page=100&page=" + page,
+                settings(),
+                GithubChangedFile[].class,
+                null
+            );
+
+            assertThat(result).hasSize(200);
+            assertThat(result.get(199).filename()).isEqualTo("src/File200.java");
+            assertThat(server.pageRequests()).containsExactly(1, 2);
+        }
+    }
+
     private PagedGithubServer startServer(int total) throws IOException {
+        return startServer(total, false);
+    }
+
+    private PagedGithubServer startServer(int total, boolean includeLinkHeader) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         List<Integer> pageRequests = new ArrayList<>();
         server.createContext("/items", exchange -> {
@@ -66,6 +89,12 @@ class GithubPaginatorTest {
             pageRequests.add(page);
             byte[] bytes = changedFilesJson(total, page, perPage).getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
+            if (includeLinkHeader) {
+                String linkHeader = linkHeader(total, page, perPage);
+                if (!linkHeader.isBlank()) {
+                    exchange.getResponseHeaders().set("Link", linkHeader);
+                }
+            }
             exchange.sendResponseHeaders(200, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
@@ -115,6 +144,17 @@ class GithubPaginatorTest {
                 """.formatted(i, i).trim());
         }
         return "[" + String.join(",", items) + "]";
+    }
+
+    private String linkHeader(int total, int page, int perPage) {
+        List<String> links = new ArrayList<>();
+        if (page > 1) {
+            links.add("<http://127.0.0.1/items?per_page=%d&page=%d>; rel=\"prev\"".formatted(perPage, page - 1));
+        }
+        if (page * perPage < total) {
+            links.add("<http://127.0.0.1/items?per_page=%d&page=%d>; rel=\"next\"".formatted(perPage, page + 1));
+        }
+        return String.join(", ", links);
     }
 
     private record PagedGithubServer(
