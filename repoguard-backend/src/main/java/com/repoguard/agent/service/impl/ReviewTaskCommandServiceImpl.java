@@ -76,9 +76,7 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         ReviewTaskRetryService reviewTaskRetryService,
         ManualReviewCreationService manualReviewCreationService
     ) {
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher == null
             ? new ReviewTaskAfterCommitPublisher(
                 reviewTaskMapper,

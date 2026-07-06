@@ -967,7 +967,7 @@ class ReviewServiceImplTest {
             reviewTaskPublisher,
             null,
             null,
-            null,
+            reviewTaskStateMachine,
             null,
             Runnable::run,
             coordinator,
