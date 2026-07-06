@@ -5,10 +5,16 @@ import type { GithubCommentPreview, GithubCommentPublicationBatch, GithubComment
 import { getErrorMessage } from "@/utils/errors";
 
 const GITHUB_COMMENT_PREVIEW_PAGE_SIZE = 10;
+const GITHUB_COMMENT_HISTORY_PAGE_SIZE = 5;
 
 type GithubCommentPreviewLoadOptions = {
   page?: number;
   commentableOnly?: boolean;
+};
+
+type GithubCommentHistoryLoadOptions = {
+  page?: number;
+  status?: string;
 };
 
 export const useReviewDetailGithubComments = () => {
@@ -20,6 +26,9 @@ export const useReviewDetailGithubComments = () => {
   const previewPage = ref(1);
   const previewPageSize = GITHUB_COMMENT_PREVIEW_PAGE_SIZE;
   const previewCommentableOnly = ref(false);
+  const historyPage = ref(1);
+  const historyPageSize = GITHUB_COMMENT_HISTORY_PAGE_SIZE;
+  const historyStatus = ref("");
   const githubCommentPreview = ref<GithubCommentPreview | null>(null);
   const githubCommentPublicationHistory = ref<GithubCommentPublicationHistory | null>(null);
   const githubCommentPublishResult = ref<GithubCommentPublish | null>(null);
@@ -30,6 +39,7 @@ export const useReviewDetailGithubComments = () => {
       ?? 0
   );
   const publicationHistoryBatches = computed<GithubCommentPublicationBatch[]>(() => githubCommentPublicationHistory.value?.batches ?? []);
+  const publicationHistoryTotal = computed(() => githubCommentPublicationHistory.value?.total ?? 0);
   const writebackCheck = computed(() => githubCommentPreview.value?.writebackCheck);
 
   const loadGithubCommentPreview = async (id: number, options: GithubCommentPreviewLoadOptions = {}) => {
@@ -53,11 +63,19 @@ export const useReviewDetailGithubComments = () => {
     }
   };
 
-  const loadGithubCommentPublicationHistory = async (id: number) => {
+  const loadGithubCommentPublicationHistory = async (id: number, options: GithubCommentHistoryLoadOptions = {}) => {
     historyError.value = "";
     historyLoading.value = true;
+    const page = options.page ?? historyPage.value;
+    const status = options.status ?? historyStatus.value;
     try {
-      githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id);
+      githubCommentPublicationHistory.value = await fetchGithubCommentPublicationHistory(id, {
+        page,
+        pageSize: historyPageSize,
+        status: status || undefined
+      });
+      historyPage.value = githubCommentPublicationHistory.value.page;
+      historyStatus.value = githubCommentPublicationHistory.value.status ?? "";
     } catch (error) {
       githubCommentPublicationHistory.value = null;
       historyError.value = getErrorMessage(error, "请求失败");
@@ -72,6 +90,8 @@ export const useReviewDetailGithubComments = () => {
     previewCommentableOnly.value = false;
     githubCommentPreview.value = null;
     historyError.value = "";
+    historyPage.value = 1;
+    historyStatus.value = "";
     githubCommentPublicationHistory.value = null;
   };
 
@@ -107,7 +127,11 @@ export const useReviewDetailGithubComments = () => {
     githubCommentPublicationHistory,
     githubCommentPublishResult,
     historyError,
+    historyPage,
+    historyPageSize,
+    historyStatus,
     historyLoading,
+    publicationHistoryTotal,
     previewError,
     previewCommentableOnly,
     previewPage,

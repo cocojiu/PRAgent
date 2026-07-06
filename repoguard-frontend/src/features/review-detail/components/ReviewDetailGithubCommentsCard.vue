@@ -183,6 +183,15 @@
           </div>
         </section>
       </div>
+      <el-pagination
+        v-if="historyTotal > historyPageSize"
+        class="detail-pagination"
+        layout="prev, pager, next"
+        :current-page="historyPage"
+        :page-size="historyPageSize"
+        :total="historyTotal"
+        @current-change="$emit('historyPageChange', $event)"
+      />
       <el-empty v-else-if="!historyError" description="暂无回写历史" />
     </template>
     <el-empty v-else-if="!previewError" description="评论预览尚未加载">
@@ -222,6 +231,9 @@ defineProps<{
   humanReviewPublishBlockReason: string;
   previewError: string;
   historyError: string;
+  historyPage: number;
+  historyPageSize: number;
+  historyTotal: number;
   previewCommentableOnly: boolean;
   githubCommentPreview: GithubCommentPreview | null;
   githubCommentPublishResult: GithubCommentPublish | null;
@@ -246,6 +258,7 @@ defineProps<{
 
 defineEmits<{
   loadPreview: [];
+  historyPageChange: [page: number];
   previewCommentableOnlyChange: [value: boolean];
   previewPageChange: [page: number];
   publish: [];

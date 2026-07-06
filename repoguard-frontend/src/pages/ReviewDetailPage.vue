@@ -135,6 +135,9 @@
             :human-review-publish-block-reason="humanReviewPublishBlockReason"
             :preview-error="previewError"
             :history-error="historyError"
+            :history-page="historyPage"
+            :history-page-size="historyPageSize"
+            :history-total="publicationHistoryTotal"
             :preview-commentable-only="previewCommentableOnly"
             :github-comment-preview="githubCommentPreview"
             :github-comment-publish-result="githubCommentPublishResult"
@@ -156,6 +159,7 @@
             :publication-batch-status-class="publicationBatchStatusClass"
             :publication-batch-status-text="publicationBatchStatusText"
             @load-preview="loadGithubCommentData"
+            @history-page-change="loadGithubCommentPublicationHistoryPage"
             @preview-commentable-only-change="loadGithubCommentPreviewCommentableOnly"
             @preview-page-change="loadGithubCommentPreviewPage"
             @publish="confirmPublishGithubComments"
@@ -281,6 +285,8 @@ const {
   githubCommentPreview,
   githubCommentPublishResult,
   historyError,
+  historyPage,
+  historyPageSize,
   historyLoading,
   loadGithubCommentPreview,
   loadGithubCommentPublicationHistory,
@@ -288,6 +294,7 @@ const {
   previewCommentableOnly,
   previewLoading,
   publicationHistoryBatches,
+  publicationHistoryTotal,
   publishedCommentCount,
   publishingComments,
   writebackCheck,
@@ -476,6 +483,14 @@ const loadGithubCommentPreviewCommentableOnly = async (commentableOnly: boolean)
   await loadGithubCommentPreview(id, { page: 1, commentableOnly });
 };
 
+const loadGithubCommentPublicationHistoryPage = async (page: number) => {
+  const id = Number(route.params.id);
+  if (!Number.isFinite(id) || !isTerminalTask.value) {
+    return;
+  }
+  await loadGithubCommentPublicationHistory(id, { page });
+};
+
 const loadFindingsPage = async (page: number) => {
   if (!selectedTask.value || findingsLoading.value) {
     return;
@@ -628,7 +643,7 @@ const loadGithubCommentData = async () => {
   }
   await Promise.all([
     loadGithubCommentPreview(id, { page: 1 }),
-    loadGithubCommentPublicationHistory(id)
+    loadGithubCommentPublicationHistory(id, { page: 1 })
   ]);
 };
 
