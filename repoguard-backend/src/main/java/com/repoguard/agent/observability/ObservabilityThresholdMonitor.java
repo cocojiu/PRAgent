@@ -2,6 +2,7 @@ package com.repoguard.agent.observability;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
@@ -16,8 +17,8 @@ public class ObservabilityThresholdMonitor {
     private final ObservabilityThresholdProperties properties;
 
     public ObservabilityThresholdMonitor(RepoGuardMetrics metrics, ObservabilityThresholdProperties properties) {
-        this.metrics = metrics;
-        this.properties = properties == null ? new ObservabilityThresholdProperties() : properties;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.properties = Objects.requireNonNull(properties, "properties");
     }
 
     public void apiRequest(Duration duration, String path, long responseBytes) {

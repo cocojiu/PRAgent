@@ -23,7 +23,14 @@ class SqlQueryObservationInterceptorTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
-    private final SqlQueryObservationInterceptor interceptor = new SqlQueryObservationInterceptor(metrics);
+    private final SqlQueryObservationInterceptor interceptor = new SqlQueryObservationInterceptor(metrics, thresholdMonitor());
+
+    @Test
+    void constructorRejectsMissingThresholdMonitor() {
+        assertThatThrownBy(() -> new SqlQueryObservationInterceptor(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("thresholdMonitor");
+    }
 
     @Test
     void recordsSuccessfulFourArgumentQueryRowsAndStatement() throws Throwable {
@@ -187,5 +194,9 @@ class SqlQueryObservationInterceptorTest {
 
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
+    }
+
+    private ObservabilityThresholdMonitor thresholdMonitor() {
+        return new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties());
     }
 }

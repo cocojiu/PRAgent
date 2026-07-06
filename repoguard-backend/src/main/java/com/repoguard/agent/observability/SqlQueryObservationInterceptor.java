@@ -3,6 +3,7 @@ package com.repoguard.agent.observability;
 import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import org.apache.ibatis.cache.CacheKey;
 import org.apache.ibatis.executor.Executor;
@@ -48,14 +49,10 @@ public class SqlQueryObservationInterceptor implements Interceptor {
     private final RepoGuardMetrics metrics;
     private final ObservabilityThresholdMonitor thresholdMonitor;
 
-    public SqlQueryObservationInterceptor(RepoGuardMetrics metrics) {
-        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
-    }
-
     @Autowired
     public SqlQueryObservationInterceptor(RepoGuardMetrics metrics, ObservabilityThresholdMonitor thresholdMonitor) {
-        this.metrics = metrics;
-        this.thresholdMonitor = thresholdMonitor;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
     }
 
     @Override

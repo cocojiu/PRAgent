@@ -4,7 +4,6 @@ import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
 import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
-import com.repoguard.agent.observability.ObservabilityThresholdProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
 import java.time.Duration;
@@ -31,17 +30,13 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
     private final RepoGuardMetrics metrics;
     private final ObservabilityThresholdMonitor thresholdMonitor;
 
-    public FrontendPerformanceObservationServiceImpl(RepoGuardMetrics metrics) {
-        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
-    }
-
     @Autowired
     public FrontendPerformanceObservationServiceImpl(
         RepoGuardMetrics metrics,
         ObservabilityThresholdMonitor thresholdMonitor
     ) {
-        this.metrics = metrics;
-        this.thresholdMonitor = thresholdMonitor;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
     }
 
     @Override

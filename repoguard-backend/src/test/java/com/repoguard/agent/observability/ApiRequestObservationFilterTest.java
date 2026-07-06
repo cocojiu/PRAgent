@@ -18,7 +18,14 @@ class ApiRequestObservationFilterTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
-    private final ApiRequestObservationFilter filter = new ApiRequestObservationFilter(metrics);
+    private final ApiRequestObservationFilter filter = new ApiRequestObservationFilter(metrics, thresholdMonitor());
+
+    @Test
+    void constructorRejectsMissingThresholdMonitor() {
+        assertThatThrownBy(() -> new ApiRequestObservationFilter(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("thresholdMonitor");
+    }
 
     @Test
     void recordsApiDurationStatusRouteAndResponseBytes() throws Exception {
@@ -167,5 +174,9 @@ class ApiRequestObservationFilterTest {
 
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
+    }
+
+    private ObservabilityThresholdMonitor thresholdMonitor() {
+        return new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties());
     }
 }

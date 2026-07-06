@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
@@ -16,8 +17,16 @@ import org.junit.jupiter.api.Test;
 class FrontendPerformanceObservationServiceImplTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
     private final FrontendPerformanceObservationServiceImpl service =
-        new FrontendPerformanceObservationServiceImpl(new RepoGuardMetrics(meterRegistry));
+        new FrontendPerformanceObservationServiceImpl(metrics, thresholdMonitor(metrics));
+
+    @Test
+    void constructorRejectsMissingThresholdMonitor() {
+        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("thresholdMonitor");
+    }
 
     @Test
     void recordsFrontendApiWaterfallAndLongTaskMetrics() {
@@ -166,5 +175,9 @@ class FrontendPerformanceObservationServiceImplTest {
             .tag("subject", route)
             .counter()
             .count()).isEqualTo(1.0);
+    }
+
+    private ObservabilityThresholdMonitor thresholdMonitor(RepoGuardMetrics metrics) {
+        return new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties());
     }
 }

@@ -1,6 +1,7 @@
 package com.repoguard.agent.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
@@ -11,6 +12,13 @@ class ObservabilityThresholdMonitorTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+
+    @Test
+    void constructorRejectsMissingProperties() {
+        assertThatThrownBy(() -> new ObservabilityThresholdMonitor(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("properties");
+    }
 
     @Test
     void apiRequestUsesPathSpecificDurationAndResponseByteThresholds() {

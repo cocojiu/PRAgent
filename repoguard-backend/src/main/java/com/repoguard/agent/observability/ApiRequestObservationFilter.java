@@ -14,6 +14,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -27,13 +28,9 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
     private final RepoGuardMetrics metrics;
     private final ObservabilityThresholdMonitor thresholdMonitor;
 
-    public ApiRequestObservationFilter(RepoGuardMetrics metrics) {
-        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
-    }
-
     public ApiRequestObservationFilter(RepoGuardMetrics metrics, ObservabilityThresholdMonitor thresholdMonitor) {
-        this.metrics = metrics;
-        this.thresholdMonitor = thresholdMonitor;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
     }
 
     @Override
