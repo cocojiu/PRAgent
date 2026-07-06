@@ -101,10 +101,12 @@
       <div class="filter-bar mq-filter-bar">
         <el-select v-model="statusFilter" placeholder="全部状态" clearable>
           <el-option label="全部状态" value="" />
-          <el-option label="发布失败" value="PUBLISH_FAILED" />
-          <el-option label="补偿中" value="PUBLISH_CLAIMED" />
-          <el-option label="重试耗尽" value="RETRY_EXHAUSTED" />
-          <el-option label="DLQ" value="DLQ" />
+          <el-option
+            v-for="option in MESSAGE_QUEUE_STATUS_OPTIONS"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
         </el-select>
         <el-select v-model="repositoryFilter" placeholder="全部仓库" clearable>
           <el-option label="全部仓库" value="" />
@@ -162,7 +164,7 @@
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <div class="table-actions">
-              <el-tooltip content="将发布失败任务重新发送到 RabbitMQ">
+              <el-tooltip :content="messageQueueRequeueTooltip(row.status)">
                 <span>
                   <el-button
                     size="small"
@@ -217,6 +219,14 @@ import {
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { useMessageQueueHealth } from "@/features/message-queue/composables/useMessageQueueHealth";
+import {
+  MESSAGE_QUEUE_STATUS_OPTIONS,
+  messageQueueMetricLabel,
+  messageQueueMetricNote,
+  messageQueueRequeueTooltip,
+  messageQueueStatusClass,
+  messageQueueStatusText
+} from "@/features/message-queue/messageQueueDisplay";
 import { routeNames } from "@/router/names";
 import type { MessageQueueMetric } from "@/types";
 
@@ -252,9 +262,9 @@ const getMetricIcon = useMetricIcon(metricIconMap, Send);
 
 const metricItems = computed<MetricGridItem[]>(() =>
   (health.value?.metrics ?? []).map((metric: MessageQueueMetric) => ({
-    label: metricLabel(metric.label),
+    label: messageQueueMetricLabel(metric.label),
     value: metric.value,
-    note: metricNote(metric.note),
+    note: messageQueueMetricNote(metric.note),
     noteClass: metric.noteClass,
     color: metric.color
   }))
@@ -299,26 +309,6 @@ const goIntegrations = () => {
 
 const formatMs = (value: number) => `${Math.round(value / 1000)}秒`;
 
-const metricLabel = (label: string) => {
-  const labels: Record<string, string> = {
-    "Publish succeeded": "发布成功",
-    "Publish failed": "发布失败",
-    Compensating: "补偿中",
-    "DLQ backlog": "DLQ积压"
-  };
-  return labels[label] ?? label;
-};
-
-const metricNote = (note: string) => {
-  const notes: Record<string, string> = {
-    "Current active config": "当前生效配置",
-    "Waiting for compensation": "等待补偿",
-    "Claimed by workers": "Worker已抢占",
-    "Database observed status": "数据库观测状态"
-  };
-  return notes[note] ?? note;
-};
-
 const configStatusText = (status?: string) => {
   const labels: Record<string, string> = {
     CONNECTED: "已保存可用",
@@ -339,24 +329,7 @@ const configStatusClass = (status?: string) => {
   return "pending";
 };
 
-const queueStatusText = (status: string) => {
-  const labels: Record<string, string> = {
-    PUBLISH_FAILED: "发布失败",
-    PUBLISH_CLAIMED: "补偿中",
-    RETRY_EXHAUSTED: "重试耗尽",
-    DLQ: "DLQ"
-  };
-  return labels[status] ?? status;
-};
-
-const queueStatusClass = (status: string) => {
-  const classes: Record<string, string> = {
-    PUBLISH_FAILED: "warning",
-    PUBLISH_CLAIMED: "processing",
-    RETRY_EXHAUSTED: "danger",
-    DLQ: "danger"
-  };
-  return classes[status] ?? "pending";
-};
+const queueStatusText = messageQueueStatusText;
+const queueStatusClass = messageQueueStatusClass;
 
 </script>

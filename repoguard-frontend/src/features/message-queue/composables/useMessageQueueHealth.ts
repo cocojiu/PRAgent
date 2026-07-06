@@ -3,6 +3,7 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQueue";
 import { useFilterPagination } from "@/composables/useFilterPagination";
+import { canRequeueMessageQueueStatus } from "@/features/message-queue/messageQueueDisplay";
 import type { MessageQueueExceptionTask, MessageQueueHealth } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -57,8 +58,7 @@ export const useMessageQueueHealth = () => {
     }
   };
 
-  const canRequeue = (status: MessageQueueExceptionTask["status"]) =>
-    status === "PUBLISH_FAILED" || status === "RETRY_EXHAUSTED";
+  const canRequeue = (status: MessageQueueExceptionTask["status"]) => canRequeueMessageQueueStatus(status);
 
   const requeueTask = async (task: MessageQueueExceptionTask) => {
     if (!canRequeue(task.status) || requeueingTaskId.value) {

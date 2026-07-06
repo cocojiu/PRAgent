@@ -46,7 +46,7 @@ export interface MessageQueueExceptionTask {
   organization?: string;
   repository?: string;
   prNumber?: number;
-  status: "PUBLISH_FAILED" | "PUBLISH_CLAIMED" | "RETRY_EXHAUSTED" | "DLQ" | string;
+  status: "PUBLISH_FAILED" | "EXECUTION_TIMEOUT" | "REQUEUE_PENDING" | "PUBLISH_CLAIMED" | "RETRY_EXHAUSTED" | "DLQ" | string;
   publishAttempts?: number;
   nextRetryAt?: string;
   claimedBy?: string;
