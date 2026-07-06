@@ -7,12 +7,9 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 @Component
 public class RuleBasedPullRequestReviewer {
@@ -69,7 +66,7 @@ public class RuleBasedPullRequestReviewer {
         }
         diff.files().stream()
             .filter(file -> isControllerApiChange(file)
-                && isApplicable("RG-API-001", file.filename(), configuredRules))
+                && ReviewRuleApplicability.isApplicable("RG-API-001", file.filename(), configuredRules))
             .findFirst()
             .ifPresent(file -> findings.add(finding(
                 "MEDIUM",
@@ -115,7 +112,7 @@ public class RuleBasedPullRequestReviewer {
     ) {
         String trimmed = line.trim();
         evaluateLineRules(filePath, lineNumber, line, trimmed, configuredRules, findings);
-        if (isApplicable("RG-AUTH-001", filePath, configuredRules)
+        if (ReviewRuleApplicability.isApplicable("RG-AUTH-001", filePath, configuredRules)
             && isMutatingControllerMapping(filePath, trimmed)
             && !hasAuthorizationGuard) {
             findings.add(finding("HIGH", "RG-AUTH-001", filePath, lineNumber, "新增高危 Controller 写接口缺少显式权限门禁", "请为配置写入、评论回写、用户管理等写接口补充 @RequireRole 或等效网关权限控制。"));
@@ -137,7 +134,7 @@ public class RuleBasedPullRequestReviewer {
     }
 
     private boolean isMutatingControllerMapping(String filePath, String trimmed) {
-        String normalizedPath = normalizePath(filePath);
+        String normalizedPath = ReviewRuleApplicability.normalizePath(filePath);
         if (!normalizedPath.endsWith("controller.java")) {
             return false;
         }
@@ -146,7 +143,7 @@ public class RuleBasedPullRequestReviewer {
     }
 
     private boolean isControllerApiChange(GithubChangedFile file) {
-        if (file == null || !normalizePath(file.filename()).endsWith("controller.java")) {
+        if (file == null || !ReviewRuleApplicability.normalizePath(file.filename()).endsWith("controller.java")) {
             return false;
         }
         String patch = file.patch();
@@ -187,15 +184,11 @@ public class RuleBasedPullRequestReviewer {
     private boolean hasTestChange(List<GithubChangedFile> files) {
         return files.stream()
             .map(GithubChangedFile::filename)
-            .map(this::normalizePath)
+            .map(ReviewRuleApplicability::normalizePath)
             .anyMatch(path -> path.contains("/src/test/")
                 || path.endsWith("controllertest.java")
                 || path.endsWith("apicontracttest.java")
                 || path.endsWith("integrationtest.java"));
-    }
-
-    private boolean isSqlFile(String filePath) {
-        return normalizePath(filePath).endsWith(".sql");
     }
 
     private Integer firstAddedLine(String patch) {
@@ -218,60 +211,6 @@ public class RuleBasedPullRequestReviewer {
         return null;
     }
 
-    private boolean isApplicable(String ruleId, String filePath, Map<String, ReviewRuleSettings> configuredRules) {
-        ReviewRuleSettings rule = configuredRules.get(ruleId);
-        if (rule == null) {
-            return true;
-        }
-        if (rule.disabled()) {
-            return false;
-        }
-        if (!rule.hasFilePatterns()) {
-            return true;
-        }
-        return List.of(rule.filePatterns().split("[,\\n]")).stream()
-            .map(String::trim)
-            .filter(StringUtils::hasText)
-            .anyMatch(pattern -> matchesPattern(filePath, pattern));
-    }
-
-    private boolean matchesPattern(String filePath, String pattern) {
-        String normalizedFilePath = normalizePath(filePath);
-        String normalizedPattern = normalizePath(pattern);
-        if ("*".equals(normalizedPattern)) {
-            return true;
-        }
-        String regex = globToRegex(normalizedPattern);
-        return normalizedFilePath.matches(".*" + regex);
-    }
-
-    private String globToRegex(String pattern) {
-        StringBuilder regex = new StringBuilder();
-        StringBuilder literal = new StringBuilder();
-        for (int index = 0; index < pattern.length(); index++) {
-            char current = pattern.charAt(index);
-            if (current == '*' || current == '?') {
-                appendQuotedLiteral(regex, literal);
-                regex.append(current == '*' ? ".*" : ".");
-            } else {
-                literal.append(current);
-            }
-        }
-        appendQuotedLiteral(regex, literal);
-        return regex.toString();
-    }
-
-    private void appendQuotedLiteral(StringBuilder regex, StringBuilder literal) {
-        if (literal.isEmpty()) {
-            return;
-        }
-        regex.append(Pattern.quote(literal.toString()));
-        literal.setLength(0);
-    }
-
-    private String normalizePath(String value) {
-        return value == null ? "" : value.replace('\\', '/').toLowerCase(Locale.ROOT);
-    }
 
     private ReviewFindingResult finding(String severity, String ruleId, String filePath, Integer lineNumber, String message, String recommendation) {
         return findingFactory.finding(severity, ruleId, filePath, lineNumber, message, recommendation);
