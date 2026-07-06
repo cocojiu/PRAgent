@@ -108,19 +108,12 @@ class ReviewServiceImplTest {
         new ReviewTaskListQueryBuilder()
     );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
-        reviewTaskMapper,
-        reviewTimelineMapper,
-        reviewTaskPublisher,
-        null,
-        null,
-        reviewTaskStateMachine,
-        null,
-        Runnable::run,
-        new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
-        null,
-        null,
-        null,
-        null
+        humanReviewCommandService(),
+        reviewTaskRetryService(reviewTaskAfterCommitPublisher()),
+        manualReviewCreationService(
+            new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+            reviewTaskAfterCommitPublisher()
+        )
     );
     private final FindingFeedbackService findingFeedbackService = new FindingFeedbackServiceImpl(
         reviewTaskMapper,
@@ -186,6 +179,51 @@ class ReviewServiceImplTest {
         githubCommentApplicationService,
         githubPullRequestOptionService
     );
+
+    private HumanReviewCommandService humanReviewCommandService() {
+        return new HumanReviewCommandService(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskStateMachine,
+            null
+        );
+    }
+
+    private ReviewTaskRetryService reviewTaskRetryService(ReviewTaskAfterCommitPublisher afterCommitPublisher) {
+        return new ReviewTaskRetryService(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskStateMachine,
+            afterCommitPublisher,
+            null
+        );
+    }
+
+    private ManualReviewCreationService manualReviewCreationService(
+        ManualReviewIdempotencyCoordinator coordinator,
+        ReviewTaskAfterCommitPublisher afterCommitPublisher
+    ) {
+        return new ManualReviewCreationService(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            null,
+            null,
+            reviewTaskStateMachine,
+            null,
+            coordinator,
+            afterCommitPublisher
+        );
+    }
+
+    private ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher() {
+        return new ReviewTaskAfterCommitPublisher(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            reviewTaskStateMachine,
+            Runnable::run
+        );
+    }
 
     @Test
     void getGithubCommentPreviewBuildsCommentDraftsAndBlocksMissingLine() {
@@ -983,20 +1021,11 @@ class ReviewServiceImplTest {
     @ValueSource(ints = {20, 50, 100})
     void triggerManualReviewKeepsConcurrentIdempotencyForSamePrAndCommit(int concurrency) throws Exception {
         CountingManualReviewIdempotencyCoordinator coordinator = new CountingManualReviewIdempotencyCoordinator(concurrency - 1);
+        ReviewTaskAfterCommitPublisher afterCommitPublisher = reviewTaskAfterCommitPublisher();
         ReviewTaskCommandServiceImpl commandService = new ReviewTaskCommandServiceImpl(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            null,
-            null,
-            reviewTaskStateMachine,
-            null,
-            Runnable::run,
-            coordinator,
-            null,
-            null,
-            null,
-            null
+            humanReviewCommandService(),
+            reviewTaskRetryService(afterCommitPublisher),
+            manualReviewCreationService(coordinator, afterCommitPublisher)
         );
         when(reviewTaskMapper.selectOne(any())).thenReturn(null);
         org.mockito.Mockito.doAnswer(invocation -> {
