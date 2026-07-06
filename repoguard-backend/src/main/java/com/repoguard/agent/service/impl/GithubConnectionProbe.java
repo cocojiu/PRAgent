@@ -32,13 +32,14 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
     public ConnectionProbeResult probe(IntegrationConfig config) {
         String url = buildGithubTestUrl(config);
         String token = secretCryptoService.decrypt(config.getTokenValue());
+        if (!StringUtils.hasText(token)) {
+            return new ConnectionProbeResult(false, "failed", "GitHub token is missing or cannot be decrypted");
+        }
         RestClient.RequestHeadersSpec<?> request = GithubRestClientFactory.build(restClientBuilder)
             .get()
             .uri(url)
             .accept(MediaType.APPLICATION_JSON);
-        if (StringUtils.hasText(token)) {
-            request.header("Authorization", "Bearer " + token.trim());
-        }
+        request.header("Authorization", "Bearer " + token.trim());
         request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
         return new ConnectionProbeResult(true, "connected", "GitHub connection test succeeded");
     }

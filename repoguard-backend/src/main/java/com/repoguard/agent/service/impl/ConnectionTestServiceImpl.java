@@ -115,7 +115,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     private IntegrationConfig githubIntegrationForTest(GithubIntegrationConfigRequest request, IntegrationConfig savedConfig) {
         IntegrationConfig config = new IntegrationConfig();
         String token = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
+            savedConfig == null ? null : decryptSavedSecret(savedConfig.getTokenValue()),
             request.token()
         );
         config.setProvider(GITHUB_PROVIDER);
@@ -140,7 +140,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     ) {
         IntegrationConfig config = new IntegrationConfig();
         String secret = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getTokenValue()),
+            savedConfig == null ? null : decryptSavedSecret(savedConfig.getTokenValue()),
             request.secret()
         );
         config.setProvider(provider);
@@ -159,7 +159,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     private ReviewPolicyConfig reviewPolicyForTest(ReviewPolicyConfigRequest request, ReviewPolicyConfig savedConfig) {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         String apiKey = resolveSecretValue(
-            savedConfig == null ? null : secretCryptoService.decrypt(savedConfig.getApiKeyValue()),
+            savedConfig == null ? null : decryptSavedSecret(savedConfig.getApiKeyValue()),
             request.apiKey()
         );
         config.setLlmEnabled(request.llmEnabled());
@@ -226,6 +226,17 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
             return currentValue;
         }
         return StringUtils.hasText(trimmed) ? trimmed : null;
+    }
+
+    private String decryptSavedSecret(String encryptedValue) {
+        if (!StringUtils.hasText(encryptedValue)) {
+            return null;
+        }
+        try {
+            return secretCryptoService.decrypt(encryptedValue);
+        } catch (RuntimeException ex) {
+            return null;
+        }
     }
 
     private String trimToNull(String value) {

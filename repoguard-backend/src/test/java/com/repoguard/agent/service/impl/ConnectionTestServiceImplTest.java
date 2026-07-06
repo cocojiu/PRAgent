@@ -88,6 +88,29 @@ class ConnectionTestServiceImplTest {
     }
 
     @Test
+    void testGithubIntegrationWithMaskedBrokenSavedTokenReturnsFailure() throws Exception {
+        try (ProbeServer server = startProbeServer("/rate_limit", 200, "{}")) {
+            IntegrationConfig savedConfig = githubConfig("enc:v2:other:broken-payload");
+            savedConfig.setBaseUrl("https://api.github.com");
+            when(integrationConfigMapper.selectOne(any())).thenReturn(savedConfig);
+
+            var result = service.testGithubIntegration(new GithubIntegrationConfigRequest(
+                server.baseUrl(),
+                "****oken",
+                null,
+                null
+            ));
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.status()).isEqualTo("failed");
+            assertThat(result.message()).contains("GitHub token is missing or cannot be decrypted");
+            assertThat(server.authorization()).isEmpty();
+            verify(integrationConfigMapper, never()).updateById(any(IntegrationConfig.class));
+            verify(integrationConfigMapper, never()).update(any(UpdateWrapper.class));
+        }
+    }
+
+    @Test
     void testGithubIntegrationRecordsLatestErrorOnFailure() throws Exception {
         try (ProbeServer server = startProbeServer("/rate_limit", 500, "{\"message\":\"boom\"}")) {
             IntegrationConfig config = githubConfig("ghp_test_1234");
@@ -160,6 +183,19 @@ class ConnectionTestServiceImplTest {
             assertThat(result.status()).isEqualTo("failed");
             assertThat(result.message()).contains("could not be parsed as review JSON");
         }
+    }
+
+    @Test
+    void testReviewPolicyWithBrokenSavedApiKeyReturnsFailureInsteadOfThrowing() {
+        ReviewPolicyConfig config = reviewPolicyConfig("enc:v2:local:not-base64");
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+
+        var result = service.testReviewPolicy(null);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.status()).isEqualTo("failed");
+        assertThat(result.message()).contains("llm_request_failed");
+        assertThat(result.message()).doesNotContain("sk-test-1234");
     }
 
     @Test

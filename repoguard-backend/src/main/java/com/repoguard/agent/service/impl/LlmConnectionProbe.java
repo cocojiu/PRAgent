@@ -51,11 +51,11 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         if (!Boolean.TRUE.equals(config.getLlmEnabled())) {
             return new ConnectionProbeResult(false, "failed", "LLM review is disabled");
         }
-        String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
-        if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
-            return new ConnectionProbeResult(false, "failed", "LLM base URL, model or API key is missing");
-        }
         try {
+            String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
+            if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
+                return new ConnectionProbeResult(false, "failed", "LLM base URL, model or API key is missing");
+            }
             byte[] responseBytes = restClientBuilder
                 .clone()
                 .baseUrl(config.getBaseUrl().trim())
