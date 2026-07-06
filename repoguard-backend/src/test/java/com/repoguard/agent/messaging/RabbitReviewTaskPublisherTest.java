@@ -10,6 +10,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -22,6 +25,12 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class RabbitReviewTaskPublisherTest {
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new ReviewExecutionFailureClassifier()
+    );
+
     @Test
     void reliablePublisherRejectsMissingFailureClassifier() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
@@ -29,6 +38,19 @@ class RabbitReviewTaskPublisherTest {
         assertThatThrownBy(() -> new RabbitReliableMessagePublisher(rabbitTemplate, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("failureClassifier");
+    }
+
+    @Test
+    void constructorRejectsMissingMetrics() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+
+        assertThatThrownBy(() -> new RabbitReviewTaskPublisher(
+            new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
+            properties(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
     }
 
     @Test
@@ -77,6 +99,11 @@ class RabbitReviewTaskPublisherTest {
             .hasMessageContaining("nacked");
         verify(rabbitTemplate, times(3))
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
+        assertThat(meterRegistry.find("repoguard.rabbit.publish.failed")
+            .tag("failure_phase", "publish")
+            .tag("reason", "nacked")
+            .counter()
+            .count()).isEqualTo(1.0);
     }
 
     @Test
@@ -138,7 +165,7 @@ class RabbitReviewTaskPublisherTest {
         return new RabbitReviewTaskPublisher(
             new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
             properties,
-            null
+            metrics
         );
     }
 

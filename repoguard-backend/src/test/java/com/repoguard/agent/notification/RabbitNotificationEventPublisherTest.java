@@ -14,6 +14,7 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.AmqpConnectException;
@@ -25,6 +26,25 @@ import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class RabbitNotificationEventPublisherTest {
+
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new ReviewExecutionFailureClassifier()
+    );
+
+    @Test
+    void constructorRejectsMissingMetrics() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+
+        assertThatThrownBy(() -> new RabbitNotificationEventPublisher(
+            reliablePublisher(rabbitTemplate),
+            properties(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
 
     @Test
     void publishSendsMessageToConfiguredExchangeAndRoutingKeyAndWaitsForAck() {
@@ -79,11 +99,6 @@ class RabbitNotificationEventPublisherTest {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
         RabbitNotificationQueueProperties properties = properties();
         NotificationEventMessage message = message();
-        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
-            meterRegistry,
-            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
-        );
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(3);
             correlationData.getFuture().complete(new CorrelationData.Confirm(false, "broker refused"));
@@ -165,7 +180,7 @@ class RabbitNotificationEventPublisherTest {
         RabbitTemplate rabbitTemplate,
         RabbitNotificationQueueProperties properties
     ) {
-        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, null);
+        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, metrics);
     }
 
     private RabbitReliableMessagePublisher reliablePublisher(RabbitTemplate rabbitTemplate) {

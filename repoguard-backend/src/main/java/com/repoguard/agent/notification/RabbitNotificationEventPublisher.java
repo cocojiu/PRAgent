@@ -6,6 +6,7 @@ import com.repoguard.agent.messaging.RabbitPublishResult;
 import com.repoguard.agent.messaging.RabbitPublishSpec;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +27,9 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
         RabbitNotificationQueueProperties properties,
         RepoGuardMetrics metrics
     ) {
-        this.reliablePublisher = reliablePublisher;
-        this.properties = properties;
-        this.metrics = metrics;
+        this.reliablePublisher = Objects.requireNonNull(reliablePublisher, "reliablePublisher");
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     @Override
@@ -54,9 +55,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
                 Math.max(1, properties.getPublishMaxAttempts()),
                 failureReason
             );
-            if (metrics != null) {
-                metrics.rabbitPublishFailed("notification", failureReason);
-            }
+            metrics.rabbitPublishFailed("notification", failureReason);
             throw ex;
         }
     }
