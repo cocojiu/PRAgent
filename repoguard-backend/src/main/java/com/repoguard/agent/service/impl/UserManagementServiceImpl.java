@@ -17,6 +17,7 @@ import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
 import com.repoguard.agent.user.UserManagementDisplayMapper;
+import com.repoguard.agent.user.UserOperationAuditRecorder;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.List;
@@ -42,6 +43,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final UserOperationAuditMapper userOperationAuditMapper;
     private final PasswordHashService passwordHashService;
     private final UserManagementDisplayMapper displayMapper;
+    private final UserOperationAuditRecorder auditRecorder;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -54,6 +56,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         this.userOperationAuditMapper = userOperationAuditMapper;
         this.passwordHashService = passwordHashService;
         this.displayMapper = new UserManagementDisplayMapper();
+        this.auditRecorder = new UserOperationAuditRecorder(userAccountMapper, userOperationAuditMapper);
     }
 
     @Override
@@ -111,7 +114,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
         }
-        recordAudit(auditContext, user, ACTION_USER_CREATE, null, ROLE_VIEWER);
+        auditRecorder.record(auditContext, user, ACTION_USER_CREATE, null, ROLE_VIEWER);
         return displayMapper.toUserItem(user);
     }
 
@@ -128,7 +131,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         rotateSessionVersion(user, LocalDateTime.now());
         userAccountMapper.updateById(user);
         revokeActiveRefreshTokens(user.getId());
-        recordAudit(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
+        auditRecorder.record(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
         return displayMapper.toUserItem(user);
     }
 
@@ -156,31 +159,8 @@ public class UserManagementServiceImpl implements UserManagementService {
         if (STATUS_DISABLED.equals(normalizedStatus)) {
             revokeActiveRefreshTokens(user.getId());
         }
-        recordAudit(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
+        auditRecorder.record(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
         return displayMapper.toUserItem(user);
-    }
-
-    private void recordAudit(
-        UserOperationAuditContext auditContext,
-        UserAccount targetUser,
-        String action,
-        String beforeValue,
-        String afterValue
-    ) {
-        UserOperationAudit audit = new UserOperationAudit();
-        Long operatorId = auditContext == null ? null : auditContext.operatorId();
-        UserAccount operator = operatorId == null ? null : userAccountMapper.selectById(operatorId);
-        audit.setOperatorUserId(operatorId);
-        audit.setOperatorUsername(operator == null ? null : operator.getUsername());
-        audit.setTargetUserId(targetUser.getId());
-        audit.setTargetUsername(targetUser.getUsername());
-        audit.setAction(action);
-        audit.setBeforeValue(beforeValue);
-        audit.setAfterValue(afterValue);
-        audit.setClientIp(auditContext == null ? null : truncate(auditContext.clientIp(), 64));
-        audit.setUserAgent(auditContext == null ? null : truncate(auditContext.userAgent(), 512));
-        audit.setCreatedAt(LocalDateTime.now());
-        userOperationAuditMapper.insert(audit);
     }
 
     private UserAccount requireUser(Long userId) {
@@ -242,10 +222,4 @@ public class UserManagementServiceImpl implements UserManagementService {
         throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported user status");
     }
 
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
-    }
 }
