@@ -14,6 +14,7 @@ import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -46,9 +47,7 @@ public class HumanReviewCommandService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = cacheEvictionService;
     }
 
