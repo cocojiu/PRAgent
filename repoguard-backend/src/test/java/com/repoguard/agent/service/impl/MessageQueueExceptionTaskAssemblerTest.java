@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.entity.ReviewTask;
@@ -15,6 +16,13 @@ class MessageQueueExceptionTaskAssemblerTest {
     private final MessageQueueExceptionTaskAssembler assembler = new MessageQueueExceptionTaskAssembler(
         new ReviewTaskStateMachine()
     );
+
+    @Test
+    void constructorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new MessageQueueExceptionTaskAssembler(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
 
     @Test
     void assemblesOnlyExceptionTasksWithDisplayStatusAndCreatedTimeOrdering() {

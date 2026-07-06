@@ -56,6 +56,20 @@ class MessageQueueHealthServiceImplTest {
     );
 
     @Test
+    void healthQueryServiceRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new MessageQueueHealthQueryService(
+            reviewTaskMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            org.mockito.Mockito.mock(RabbitRuntimeHealthProbe.class),
+            null,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
     void healthSummarizesActiveConfigTopologyAndExceptionTasks() {
         properties.setExchange("repoguard.review.exchange.v2");
         properties.setQueue("repoguard.review.queue.v2");

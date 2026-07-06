@@ -13,6 +13,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -57,9 +58,10 @@ class MessageQueueHealthQueryService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
-        ReviewTaskStateMachine stateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        ReviewTaskStateMachine stateMachine = Objects.requireNonNull(
+            reviewTaskStateMachine,
+            "reviewTaskStateMachine"
+        );
         this.runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(properties, runtimeHealthProbe);
         this.exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(stateMachine);
         this.metricAssembler = new MessageQueueMetricAssembler(properties, metrics);

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 class MessageQueueExceptionTaskAssembler {
 
@@ -16,9 +17,7 @@ class MessageQueueExceptionTaskAssembler {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     MessageQueueExceptionTaskAssembler(ReviewTaskStateMachine reviewTaskStateMachine) {
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
     }
 
     List<MessageQueueExceptionTaskDto> assemble(List<ReviewTask> tasks, int maxAttempts) {
