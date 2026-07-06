@@ -9,6 +9,18 @@ public record RabbitPublishSpec(
     long confirmTimeoutMs,
     String correlationIdPrefix
 ) {
+    public static RabbitPublishSpec from(RabbitPublishProperties properties, String correlationIdPrefix) {
+        return new RabbitPublishSpec(
+            properties.getExchange(),
+            properties.getRoutingKey(),
+            properties.getPublishMaxAttempts(),
+            properties.getPublishInitialIntervalMs(),
+            properties.getPublishMultiplier(),
+            properties.getPublishConfirmTimeoutMs(),
+            correlationIdPrefix
+        );
+    }
+
     public int normalizedMaxAttempts() {
         return Math.max(1, maxAttempts);
     }

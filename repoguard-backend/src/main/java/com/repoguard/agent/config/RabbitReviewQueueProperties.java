@@ -1,9 +1,10 @@
 package com.repoguard.agent.config;
 
+import com.repoguard.agent.messaging.RabbitPublishProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.rabbit.review")
-public class RabbitReviewQueueProperties {
+public class RabbitReviewQueueProperties implements RabbitPublishProperties {
 
     private String exchange = "repoguard.review.exchange.v2";
     private String queue = "repoguard.review.queue.v2";

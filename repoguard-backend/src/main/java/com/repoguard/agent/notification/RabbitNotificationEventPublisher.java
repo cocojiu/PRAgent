@@ -67,15 +67,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
     }
 
     private RabbitPublishSpec spec(NotificationEventMessage message) {
-        return new RabbitPublishSpec(
-            properties.getExchange(),
-            properties.getRoutingKey(),
-            properties.getPublishMaxAttempts(),
-            properties.getPublishInitialIntervalMs(),
-            properties.getPublishMultiplier(),
-            properties.getPublishConfirmTimeoutMs(),
-            "notification-event-%d".formatted(message.eventId())
-        );
+        return RabbitPublishSpec.from(properties, "notification-event-%d".formatted(message.eventId()));
     }
 
     private String safePart(String value) {

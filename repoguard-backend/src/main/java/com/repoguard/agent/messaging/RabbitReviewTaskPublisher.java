@@ -68,15 +68,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     }
 
     private RabbitPublishSpec spec(ReviewTaskMessage message) {
-        return new RabbitPublishSpec(
-            properties.getExchange(),
-            properties.getRoutingKey(),
-            properties.getPublishMaxAttempts(),
-            properties.getPublishInitialIntervalMs(),
-            properties.getPublishMultiplier(),
-            properties.getPublishConfirmTimeoutMs(),
-            "review-task-%d".formatted(message.taskId())
-        );
+        return RabbitPublishSpec.from(properties, "review-task-%d".formatted(message.taskId()));
     }
 
     private String safePart(String value) {
