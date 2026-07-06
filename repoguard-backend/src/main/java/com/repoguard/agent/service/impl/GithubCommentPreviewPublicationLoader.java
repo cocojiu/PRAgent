@@ -21,9 +21,17 @@ public class GithubCommentPreviewPublicationLoader {
     }
 
     public GithubCommentPreviewPublicationData load(Long taskId, List<ReviewFinding> findings) {
+        return load(taskId, findings, loadPrSummaryPublication(taskId));
+    }
+
+    public GithubCommentPreviewPublicationData load(
+        Long taskId,
+        List<ReviewFinding> findings,
+        GithubCommentPublication prSummaryPublication
+    ) {
         return new GithubCommentPreviewPublicationData(
             loadPublicationByFindingId(taskId, findings),
-            loadPrSummaryPublication(taskId)
+            prSummaryPublication
         );
     }
 
@@ -50,7 +58,7 @@ public class GithubCommentPreviewPublicationLoader {
         ));
     }
 
-    private GithubCommentPublication loadPrSummaryPublication(Long taskId) {
+    public GithubCommentPublication loadPrSummaryPublication(Long taskId) {
         return githubCommentPublicationMapper.selectOne(
             new LambdaQueryWrapper<GithubCommentPublication>()
                 .eq(GithubCommentPublication::getTaskId, taskId)

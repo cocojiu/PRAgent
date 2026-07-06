@@ -3,11 +3,16 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
+import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -72,18 +77,20 @@ class GithubCommentPreviewServiceImplTest {
     @Test
     void getPreviewSupportsPaginationAndCommentableFilter() {
         stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(
-            changedFile("README.md", "MODIFY"),
-            changedFile("src/App.java", "MODIFY")
+        ReviewFinding pageFinding = finding(3L, "MEDIUM", "src/App.java", 10, "Validate input", "Add validation");
+        when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(previewStat(3L, 1L, 1L));
+        when(reviewFindingMapper.selectGithubCommentPreviewCommentableFindings(521L, 0L, 1))
+            .thenReturn(List.of(pageFinding));
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
+            .thenReturn(new FindingSeverityCountsDto(0L, 1L, 1L, 1L, 0L));
+        when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("src/App.java", "MODIFY")));
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3)).thenReturn(List.of(
+            changedFile("src/App.java", "MODIFY"),
+            changedFile("README.md", "MODIFY")
         ));
-        ReviewFinding skippedFinding = finding(2L, "LOW", "README.md", 9, "Known safe", "No change");
-        skippedFinding.setFeedbackStatus("FALSE_POSITIVE");
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
-            finding(1L, "HIGH", "README.md", 8, "Use structured logging", "Replace stdout"),
-            skippedFinding,
-            finding(3L, "MEDIUM", "src/App.java", 10, "Validate input", "Add validation")
-        ));
-        when(publicationMapper.selectList(any())).thenReturn(List.of(publication(1L, "line", "finding")));
+        when(changedFileMapper.selectCount(any())).thenReturn(2L);
+        when(publicationMapper.selectList(any())).thenReturn(List.of());
 
         var preview = service.getPreview(521L, 2, 1, true);
 
@@ -98,6 +105,8 @@ class GithubCommentPreviewServiceImplTest {
         assertThat(preview.items()).hasSize(1);
         assertThat(preview.items().getFirst().findingId()).isEqualTo(3L);
         assertThat(preview.items().getFirst().commentable()).isTrue();
+        verify(reviewFindingMapper, never()).selectList(any());
+        verify(reviewFindingMapper).selectGithubCommentPreviewCommentableFindings(eq(521L), eq(0L), eq(1));
     }
 
     @Test
@@ -231,6 +240,18 @@ class GithubCommentPreviewServiceImplTest {
         publication.setMessage("GitHub comment published");
         publication.setPublishedAt(LocalDateTime.of(2026, 6, 18, 11, 0));
         return publication;
+    }
+
+    private GithubCommentPreviewFindingStat previewStat(
+        Long totalFindings,
+        Long commentableFindings,
+        Long publishedFindings
+    ) {
+        GithubCommentPreviewFindingStat stat = new GithubCommentPreviewFindingStat();
+        stat.setTotalFindings(totalFindings);
+        stat.setCommentableFindings(commentableFindings);
+        stat.setPublishedFindings(publishedFindings);
+        return stat;
     }
 
     private GithubIntegrationSettings settings(

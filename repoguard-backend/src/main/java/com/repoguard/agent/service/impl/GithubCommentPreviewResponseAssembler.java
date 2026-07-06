@@ -8,6 +8,7 @@ import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewData;
+import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewPageData;
 import com.repoguard.agent.service.impl.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +59,43 @@ public class GithubCommentPreviewResponseAssembler {
         boolean commentableOnly
     ) {
         return assembleInternal(task, githubSettings, previewData, prSummary, publicationData, page, pageSize, commentableOnly);
+    }
+
+    public GithubCommentPreviewResponse assemblePaged(
+        ReviewTask task,
+        GithubIntegrationSettings githubSettings,
+        GithubCommentPreviewPageData previewData,
+        PrReviewSummaryDto prSummary,
+        GithubCommentPreviewPublicationData publicationData,
+        boolean includePrSummary,
+        int totalFindings,
+        int commentableCount,
+        int blockedCount,
+        int publishedCount,
+        int itemTotal,
+        int page,
+        int pageSize,
+        boolean commentableOnly
+    ) {
+        List<PreviewCandidate> candidates = buildPagedCandidates(previewData, publicationData, includePrSummary);
+        List<GithubCommentPreviewItem> items = candidates.stream()
+            .map(candidate -> buildPreviewItem(candidate, previewData, prSummary, publicationData))
+            .toList();
+        return new GithubCommentPreviewResponse(
+            task.getId(),
+            task.getPrNumber(),
+            task.getPrUrl(),
+            writebackCheckBuilder.build(task, githubSettings),
+            totalFindings,
+            commentableCount,
+            blockedCount,
+            publishedCount,
+            itemTotal,
+            Math.max(1, page),
+            Math.max(1, pageSize),
+            commentableOnly,
+            items
+        );
     }
 
     private GithubCommentPreviewResponse assembleInternal(
@@ -117,6 +155,24 @@ public class GithubCommentPreviewResponseAssembler {
         return candidates;
     }
 
+    private List<PreviewCandidate> buildPagedCandidates(
+        GithubCommentPreviewPageData previewData,
+        GithubCommentPreviewPublicationData publicationData,
+        boolean includePrSummary
+    ) {
+        List<PreviewCandidate> candidates = new ArrayList<>();
+        if (includePrSummary) {
+            candidates.add(PreviewCandidate.prSummary(publicationData.prSummaryPublication()));
+        }
+        candidates.addAll(previewData.pageFindings().stream()
+            .map(finding -> PreviewCandidate.finding(
+                finding,
+                publicationData.publicationByFindingId().get(finding.getId())
+            ))
+            .toList());
+        return candidates;
+    }
+
     private List<PreviewCandidate> pageSlice(List<PreviewCandidate> candidates, int page, int pageSize) {
         int safePage = Math.max(1, page);
         int safePageSize = Math.max(1, pageSize);
@@ -129,6 +185,22 @@ public class GithubCommentPreviewResponseAssembler {
     private GithubCommentPreviewItem buildPreviewItem(
         PreviewCandidate candidate,
         GithubCommentPreviewData previewData,
+        PrReviewSummaryDto prSummary,
+        GithubCommentPreviewPublicationData publicationData
+    ) {
+        if (candidate.prSummary()) {
+            return previewItemBuilder.buildPrSummaryItem(prSummary, publicationData.prSummaryPublication());
+        }
+        return previewItemBuilder.buildFindingItem(
+            candidate.finding(),
+            previewData.changedFileByPath().get(candidate.finding().getFilePath()),
+            candidate.publication()
+        );
+    }
+
+    private GithubCommentPreviewItem buildPreviewItem(
+        PreviewCandidate candidate,
+        GithubCommentPreviewPageData previewData,
         PrReviewSummaryDto prSummary,
         GithubCommentPreviewPublicationData publicationData
     ) {
