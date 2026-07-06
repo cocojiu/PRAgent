@@ -19,6 +19,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -65,9 +66,10 @@ public class ManualReviewCreationService {
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
-        this.manualReviewIdempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
-            : manualReviewIdempotencyCoordinator;
+        this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
+            manualReviewIdempotencyCoordinator,
+            "manualReviewIdempotencyCoordinator"
+        );
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
     }
 
@@ -111,9 +113,10 @@ public class ManualReviewCreationService {
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
-        this.manualReviewIdempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
-            : manualReviewIdempotencyCoordinator;
+        this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
+            manualReviewIdempotencyCoordinator,
+            "manualReviewIdempotencyCoordinator"
+        );
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
     }
 

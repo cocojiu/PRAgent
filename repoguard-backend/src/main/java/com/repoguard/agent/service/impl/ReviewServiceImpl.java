@@ -42,6 +42,7 @@ import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -69,41 +70,6 @@ public class ReviewServiceImpl implements ReviewService {
     private final GithubPullRequestOptionService githubPullRequestOptionService;
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
-
-    public ReviewServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        GithubPullRequestClient githubPullRequestClient,
-        GithubIntegrationProvider githubIntegrationProvider
-    ) {
-        this(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            githubIntegrationProvider,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            githubPullRequestClient,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
-    }
 
     @Autowired
     public ReviewServiceImpl(
@@ -146,16 +112,7 @@ public class ReviewServiceImpl implements ReviewService {
         this.reviewTaskQueryService = reviewTaskQueryService == null
             ? new ReviewTaskQueryServiceImpl(reviewTaskMapper, changedFileMapper, reviewFindingMapper, reviewTimelineMapper)
             : reviewTaskQueryService;
-        this.reviewTaskCommandService = reviewTaskCommandService == null
-            ? new ReviewTaskCommandServiceImpl(
-                reviewTaskMapper,
-                reviewTimelineMapper,
-                reviewTaskPublisher,
-                metrics,
-                cacheEvictionService,
-                this.reviewTaskStateMachine
-            )
-            : reviewTaskCommandService;
+        this.reviewTaskCommandService = Objects.requireNonNull(reviewTaskCommandService, "reviewTaskCommandService");
         this.findingFeedbackService = findingFeedbackService == null
             ? new FindingFeedbackServiceImpl(
                 reviewTaskMapper,
@@ -182,42 +139,6 @@ public class ReviewServiceImpl implements ReviewService {
         this.githubPullRequestOptionService = githubPullRequestOptionService == null
             ? new GithubPullRequestOptionServiceImpl(githubPullRequestClient, reviewTaskMapper)
             : githubPullRequestOptionService;
-    }
-
-    public ReviewServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        GithubIntegrationProvider githubIntegrationProvider,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics
-    ) {
-        this(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            githubIntegrationProvider,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            githubPullRequestClient,
-            metrics,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null
-        );
     }
 
     @Override

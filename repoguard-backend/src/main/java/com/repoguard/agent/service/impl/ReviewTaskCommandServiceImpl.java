@@ -13,6 +13,7 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -26,55 +27,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
     private final HumanReviewCommandService humanReviewCommandService;
     private final ReviewTaskRetryService reviewTaskRetryService;
     private final ManualReviewCreationService manualReviewCreationService;
-
-    public ReviewTaskCommandServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics,
-        CacheEvictionService cacheEvictionService
-    ) {
-        this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            metrics,
-            cacheEvictionService,
-            null,
-            null,
-            Runnable::run,
-            new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor()),
-            null,
-            null,
-            null,
-            null
-        );
-    }
-
-    public ReviewTaskCommandServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics,
-        CacheEvictionService cacheEvictionService,
-        ReviewTaskStateMachine reviewTaskStateMachine
-    ) {
-        this(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            metrics,
-            cacheEvictionService,
-            reviewTaskStateMachine,
-            null,
-            Runnable::run,
-            new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor()),
-            null,
-            null,
-            null,
-            null
-        );
-    }
 
     @Autowired
     public ReviewTaskCommandServiceImpl(
@@ -127,9 +79,6 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
         this.reviewTaskStateMachine = reviewTaskStateMachine == null
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
-        ManualReviewIdempotencyCoordinator idempotencyCoordinator = manualReviewIdempotencyCoordinator == null
-            ? new ManualReviewIdempotencyCoordinator(ManualReviewCleanupExecutorConfig.newManualReviewCleanupExecutor())
-            : manualReviewIdempotencyCoordinator;
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher == null
             ? new ReviewTaskAfterCommitPublisher(
                 reviewTaskMapper,
@@ -164,7 +113,10 @@ public class ReviewTaskCommandServiceImpl implements ReviewTaskCommandService {
                 cacheEvictionService,
                 this.reviewTaskStateMachine,
                 transactionManager,
-                idempotencyCoordinator,
+                Objects.requireNonNull(
+                    manualReviewIdempotencyCoordinator,
+                    "manualReviewIdempotencyCoordinator"
+                ),
                 this.reviewTaskAfterCommitPublisher
             )
             : manualReviewCreationService;

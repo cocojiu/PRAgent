@@ -39,6 +39,8 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.service.ReviewTaskCommandService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,6 +71,22 @@ class ReviewServiceImplTest {
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
+    private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
+        reviewTaskMapper,
+        reviewTimelineMapper,
+        reviewTaskPublisher,
+        null,
+        null,
+        reviewTaskStateMachine,
+        null,
+        Runnable::run,
+        new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+        null,
+        null,
+        null,
+        null
+    );
     private final ReviewServiceImpl service = new ReviewServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -76,10 +94,19 @@ class ReviewServiceImplTest {
         githubCommentPublicationMapper,
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
+        githubIntegrationProvider,
         reviewTimelineMapper,
         reviewTaskPublisher,
         githubPullRequestClient,
-        githubIntegrationProvider
+        null,
+        null,
+        null,
+        null,
+        reviewTaskCommandService,
+        null,
+        null,
+        null,
+        reviewTaskStateMachine
     );
 
     @Test
