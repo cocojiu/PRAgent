@@ -17,6 +17,7 @@ public class PullRequestDiffChunker {
     private final SemanticDiffSegmenter segmenter;
     private final SemanticDiffChunkPlanner chunkPlanner;
     private final RiskFilePrioritizer riskFilePrioritizer;
+    private final DiffChunkReasonBuilder reasonBuilder;
 
     public PullRequestDiffChunker() {
         this(new DiffRiskClassifier());
@@ -31,6 +32,7 @@ public class PullRequestDiffChunker {
         this.segmenter = segmenter == null ? new SemanticDiffSegmenter(this.riskClassifier) : segmenter;
         this.chunkPlanner = new SemanticDiffChunkPlanner();
         this.riskFilePrioritizer = new RiskFilePrioritizer(this.riskClassifier);
+        this.reasonBuilder = new DiffChunkReasonBuilder(this.riskClassifier);
     }
 
     public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
@@ -91,7 +93,7 @@ public class PullRequestDiffChunker {
             distinctFileCount(segments),
             additions,
             deletions,
-            semanticChunkReasons(source.files(), segments, policy)
+            reasonBuilder.semanticReasons(source.files(), segments, policy)
         );
     }
 
@@ -111,71 +113,14 @@ public class PullRequestDiffChunker {
             files.size(),
             additions,
             deletions,
-            chunkReasons(files, policy)
+            reasonBuilder.fileReasons(files, policy)
         );
-    }
-
-    private List<String> chunkReasons(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
-        List<String> reasons = new ArrayList<>();
-        int changedLines = files.stream().mapToInt(this::changedLines).sum();
-        if (files.size() > 1) {
-            reasons.add("multi_file");
-        }
-        if (changedLines > policy.maxLinesPerChunk() / 2) {
-            reasons.add("large_churn");
-        }
-        files.stream()
-            .flatMap(file -> riskClassifier.reasons(file).stream())
-            .distinct()
-            .forEach(reasons::add);
-        return reasons.isEmpty() ? List.of("standard") : reasons;
-    }
-
-    private List<String> semanticChunkReasons(
-        List<GithubChangedFile> sourceFiles,
-        List<SemanticDiffSegment> segments,
-        DiffChunkingPolicy policy
-    ) {
-        List<String> reasons = new ArrayList<>();
-        int changedLines = segments.stream().mapToInt(SemanticDiffSegment::changedLines).sum();
-        if (distinctSourceFileCount(sourceFiles) > 1 || distinctFileCount(segments) > 1) {
-            reasons.add("multi_file");
-        }
-        if (segments.stream().map(SemanticDiffSegment::chunkGroupKey).distinct().count() == 1) {
-            reasons.add("semantic_scope");
-        }
-        if (segments.size() > distinctFileCount(segments)) {
-            reasons.add("split_file_scope");
-        }
-        if (changedLines > policy.maxLinesPerChunk() / 2) {
-            reasons.add("large_churn");
-        }
-        segments.stream()
-            .map(SemanticDiffSegment::semanticReason)
-            .distinct()
-            .forEach(reasons::add);
-        segments.stream()
-            .flatMap(segment -> riskClassifier.reasons(segment.file()).stream())
-            .distinct()
-            .forEach(reasons::add);
-        return reasons.isEmpty() ? List.of("standard") : reasons;
     }
 
     private int distinctFileCount(List<SemanticDiffSegment> segments) {
         Set<String> filenames = new LinkedHashSet<>();
         for (SemanticDiffSegment segment : segments) {
             filenames.add(segment.file().filename());
-        }
-        return filenames.size();
-    }
-
-    private int distinctSourceFileCount(List<GithubChangedFile> files) {
-        if (files == null) {
-            return 0;
-        }
-        Set<String> filenames = new LinkedHashSet<>();
-        for (GithubChangedFile file : files) {
-            filenames.add(file.filename());
         }
         return filenames.size();
     }
