@@ -51,10 +51,10 @@ class NotificationPublishCompensationQuery {
     }
 
     int maxAttempts() {
-        return compensationPolicy.maxAttempts(properties.getPublishCompensationMaxAttempts());
+        return compensationPolicy.maxAttempts(properties);
     }
 
     int batchSize() {
-        return compensationPolicy.batchSize(properties.getPublishCompensationBatchSize());
+        return compensationPolicy.batchSize(properties);
     }
 }

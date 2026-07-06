@@ -37,4 +37,29 @@ class RabbitPublishCompensationPolicyTest {
         assertThat(policy.nextRetryAt(now, 2000)).isEqualTo(LocalDateTime.of(2026, 7, 6, 23, 30, 2));
         assertThat(policy.expiredBefore(now, 3000)).isEqualTo(LocalDateTime.of(2026, 7, 6, 23, 29, 57));
     }
+
+    @Test
+    void readsAttemptsBatchAndRetryIntervalFromSharedCompensationProperties() {
+        RabbitPublishCompensationProperties properties = new RabbitPublishCompensationProperties() {
+            @Override
+            public int getPublishCompensationMaxAttempts() {
+                return 4;
+            }
+
+            @Override
+            public int getPublishCompensationBatchSize() {
+                return 7;
+            }
+
+            @Override
+            public long getPublishCompensationIntervalMs() {
+                return 2000;
+            }
+        };
+        LocalDateTime now = LocalDateTime.of(2026, 7, 6, 23, 30);
+
+        assertThat(policy.maxAttempts(properties)).isEqualTo(4);
+        assertThat(policy.batchSize(properties)).isEqualTo(7);
+        assertThat(policy.nextRetryAt(now, properties)).isEqualTo(LocalDateTime.of(2026, 7, 6, 23, 30, 2));
+    }
 }

@@ -228,7 +228,7 @@ public class ReviewTaskPublishCompensator {
     private boolean markPublishFailed(ReviewTask task, LocalDateTime claimedAt, MessagePublishException ex) {
         LocalDateTime nextRetryAt = compensationPolicy.nextRetryAt(
             LocalDateTime.now(),
-            properties.getPublishCompensationIntervalMs()
+            properties
         );
         String error = truncate(errorMessage(ex));
         return outboxStore.markClaimedPublishFailed(task, claimedAt, instanceId, nextRetryAt, error);
@@ -259,11 +259,11 @@ public class ReviewTaskPublishCompensator {
     }
 
     private int maxAttempts() {
-        return compensationPolicy.maxAttempts(properties.getPublishCompensationMaxAttempts());
+        return compensationPolicy.maxAttempts(properties);
     }
 
     private int batchSize() {
-        return compensationPolicy.batchSize(properties.getPublishCompensationBatchSize());
+        return compensationPolicy.batchSize(properties);
     }
 
     private String errorMessage(Exception ex) {

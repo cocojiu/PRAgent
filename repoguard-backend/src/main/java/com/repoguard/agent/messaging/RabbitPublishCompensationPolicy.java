@@ -15,8 +15,16 @@ public class RabbitPublishCompensationPolicy {
         return Math.max(MIN_ATTEMPTS, configuredMaxAttempts);
     }
 
+    public int maxAttempts(RabbitPublishCompensationProperties properties) {
+        return maxAttempts(properties.getPublishCompensationMaxAttempts());
+    }
+
     public int batchSize(int configuredBatchSize) {
         return Math.max(MIN_BATCH_SIZE, configuredBatchSize);
+    }
+
+    public int batchSize(RabbitPublishCompensationProperties properties) {
+        return batchSize(properties.getPublishCompensationBatchSize());
     }
 
     public int nextAttempt(Integer currentAttempts) {
@@ -29,6 +37,10 @@ public class RabbitPublishCompensationPolicy {
 
     public LocalDateTime nextRetryAt(LocalDateTime from, long configuredRetryIntervalMs) {
         return from.plusNanos(retryIntervalMs(configuredRetryIntervalMs) * 1_000_000);
+    }
+
+    public LocalDateTime nextRetryAt(LocalDateTime from, RabbitPublishCompensationProperties properties) {
+        return nextRetryAt(from, properties.getPublishCompensationIntervalMs());
     }
 
     public LocalDateTime expiredBefore(LocalDateTime now, long configuredLeaseMs) {

@@ -1,10 +1,11 @@
 package com.repoguard.agent.config;
 
 import com.repoguard.agent.messaging.RabbitPublishProperties;
+import com.repoguard.agent.messaging.RabbitPublishCompensationProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.rabbit.notification")
-public class RabbitNotificationQueueProperties implements RabbitPublishProperties {
+public class RabbitNotificationQueueProperties implements RabbitPublishProperties, RabbitPublishCompensationProperties {
 
     private String exchange = "repoguard.notification.exchange";
     private String queue = "repoguard.notification.queue";
