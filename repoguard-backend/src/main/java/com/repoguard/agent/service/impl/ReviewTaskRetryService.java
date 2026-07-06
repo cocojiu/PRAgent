@@ -15,6 +15,7 @@ import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -53,9 +54,7 @@ public class ReviewTaskRetryService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
         this.cacheEvictionService = cacheEvictionService;
     }
