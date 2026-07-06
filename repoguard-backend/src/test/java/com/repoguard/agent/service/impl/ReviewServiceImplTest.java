@@ -53,6 +53,7 @@ import com.repoguard.agent.service.GithubCommentPublishService;
 import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -68,6 +69,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -119,7 +121,7 @@ class ReviewServiceImplTest {
     private final FindingFeedbackService findingFeedbackService = new FindingFeedbackServiceImpl(
         reviewTaskMapper,
         reviewFindingMapper,
-        reviewTimelineMapper,
+        timelineAppender(),
         null
     );
     private final GithubWritebackFailureClassifier githubWritebackFailureClassifier =
@@ -184,7 +186,7 @@ class ReviewServiceImplTest {
     private HumanReviewCommandService humanReviewCommandService() {
         return new HumanReviewCommandService(
             reviewTaskMapper,
-            reviewTimelineMapper,
+            timelineAppender(),
             reviewTaskStateMachine,
             null
         );
@@ -193,7 +195,7 @@ class ReviewServiceImplTest {
     private ReviewTaskRetryService reviewTaskRetryService(ReviewTaskAfterCommitPublisher afterCommitPublisher) {
         return new ReviewTaskRetryService(
             reviewTaskMapper,
-            reviewTimelineMapper,
+            timelineAppender(),
             reviewTaskStateMachine,
             afterCommitPublisher,
             null
@@ -206,11 +208,11 @@ class ReviewServiceImplTest {
     ) {
         return new ManualReviewCreationService(
             reviewTaskMapper,
-            reviewTimelineMapper,
+            timelineAppender(),
             null,
             null,
             reviewTaskStateMachine,
-            null,
+            (TransactionTemplate) null,
             coordinator,
             afterCommitPublisher
         );
@@ -221,11 +223,15 @@ class ReviewServiceImplTest {
             reviewTaskPublisher,
             new ReviewTaskPublishOutboxStore(
                 reviewTaskMapper,
-                reviewTimelineMapper,
+                timelineAppender(),
                 reviewTaskStateMachine
             ),
             Runnable::run
         );
+    }
+
+    private ReviewTimelineAppender timelineAppender() {
+        return new ReviewTimelineAppender(reviewTimelineMapper);
     }
 
     @Test

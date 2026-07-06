@@ -21,6 +21,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,11 +38,12 @@ class ReviewTaskPublishCompensatorTest {
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final ReviewTimelineAppender reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
     private final RabbitPublishFailureClassifier failureClassifier = new RabbitPublishFailureClassifier();
     private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
     private final ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
         reviewTaskMapper,
-        reviewTimelineMapper,
+        reviewTimelineAppender,
         reviewTaskStateMachine
     );
     private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
@@ -61,11 +63,22 @@ class ReviewTaskPublishCompensatorTest {
     void outboxStoreRejectsMissingStateMachine() {
         assertThatThrownBy(() -> new ReviewTaskPublishOutboxStore(
             reviewTaskMapper,
-            reviewTimelineMapper,
+            reviewTimelineAppender,
             null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void outboxStoreRejectsMissingTimelineAppender() {
+        assertThatThrownBy(() -> new ReviewTaskPublishOutboxStore(
+            reviewTaskMapper,
+            null,
+            reviewTaskStateMachine
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTimelineAppender");
     }
 
     @Test

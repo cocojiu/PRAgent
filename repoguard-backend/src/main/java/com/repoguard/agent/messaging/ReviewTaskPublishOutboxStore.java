@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
@@ -22,12 +21,12 @@ public class ReviewTaskPublishOutboxStore {
 
     public ReviewTaskPublishOutboxStore(
         ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
-        this.reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
+        this.reviewTimelineAppender = Objects.requireNonNull(reviewTimelineAppender, "reviewTimelineAppender");
     }
 
     public List<ReviewTask> loadDuePublishEvents(

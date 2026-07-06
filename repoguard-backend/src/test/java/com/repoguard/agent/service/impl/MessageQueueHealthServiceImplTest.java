@@ -27,6 +27,7 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -342,7 +343,7 @@ class MessageQueueHealthServiceImplTest {
         );
         ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
             reviewTaskMapper,
-            reviewTimelineMapper,
+            new ReviewTimelineAppender(reviewTimelineMapper),
             reviewTaskStateMachine
         );
         ReviewTaskRequeueService requeueService = new ReviewTaskRequeueService(

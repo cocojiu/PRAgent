@@ -9,7 +9,6 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
@@ -34,15 +33,6 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final CacheEvictionService cacheEvictionService;
-
-    FindingFeedbackServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        CacheEvictionService cacheEvictionService
-    ) {
-        this(reviewTaskMapper, reviewFindingMapper, new ReviewTimelineAppender(reviewTimelineMapper), cacheEvictionService);
-    }
 
     @Autowired
     public FindingFeedbackServiceImpl(

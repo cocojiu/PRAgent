@@ -7,7 +7,6 @@ import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
@@ -28,15 +27,6 @@ public class HumanReviewCommandService {
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final CacheEvictionService cacheEvictionService;
-
-    HumanReviewCommandService(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskStateMachine reviewTaskStateMachine,
-        CacheEvictionService cacheEvictionService
-    ) {
-        this(reviewTaskMapper, new ReviewTimelineAppender(reviewTimelineMapper), reviewTaskStateMachine, cacheEvictionService);
-    }
 
     @Autowired
     public HumanReviewCommandService(

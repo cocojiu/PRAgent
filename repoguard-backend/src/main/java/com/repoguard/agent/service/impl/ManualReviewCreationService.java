@@ -8,7 +8,6 @@ import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ManualReviewResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -69,28 +68,6 @@ public class ManualReviewCreationService {
             "manualReviewIdempotencyCoordinator"
         );
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
-    }
-
-    ManualReviewCreationService(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        RepoGuardMetrics metrics,
-        CacheEvictionService cacheEvictionService,
-        ReviewTaskStateMachine reviewTaskStateMachine,
-        TransactionTemplate manualCreateTransactionTemplate,
-        ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator,
-        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
-    ) {
-        this(
-            reviewTaskMapper,
-            new ReviewTimelineAppender(reviewTimelineMapper),
-            metrics,
-            cacheEvictionService,
-            reviewTaskStateMachine,
-            manualCreateTransactionTemplate,
-            manualReviewIdempotencyCoordinator,
-            reviewTaskAfterCommitPublisher
-        );
     }
 
     ManualReviewCreationService(

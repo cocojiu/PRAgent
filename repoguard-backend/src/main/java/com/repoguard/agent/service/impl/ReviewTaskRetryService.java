@@ -6,7 +6,6 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
@@ -27,22 +26,6 @@ public class ReviewTaskRetryService {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher;
     private final CacheEvictionService cacheEvictionService;
-
-    ReviewTaskRetryService(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskStateMachine reviewTaskStateMachine,
-        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
-        CacheEvictionService cacheEvictionService
-    ) {
-        this(
-            reviewTaskMapper,
-            new ReviewTimelineAppender(reviewTimelineMapper),
-            reviewTaskStateMachine,
-            reviewTaskAfterCommitPublisher,
-            cacheEvictionService
-        );
-    }
 
     @Autowired
     public ReviewTaskRetryService(
