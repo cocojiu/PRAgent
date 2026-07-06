@@ -7,6 +7,7 @@ import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardReviewTrendAssembler;
 import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardRuleAssembler;
@@ -21,7 +22,6 @@ import com.repoguard.agent.dto.DashboardLlmQualityResponse;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
 import com.repoguard.agent.dto.DashboardMetricDto;
 import com.repoguard.agent.dto.DashboardOverviewResponse;
-import com.repoguard.agent.dto.DashboardReviewTrendCount;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRulesResponse;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
@@ -48,6 +48,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
     private final DashboardMetricAssembler dashboardMetricAssembler;
+    private final DashboardReviewTrendAssembler reviewTrendAssembler;
     private final DashboardRiskDistributionAssembler riskDistributionAssembler;
     private final DashboardRuleAssembler dashboardRuleAssembler;
     private final DashboardHighRiskReviewAssembler highRiskReviewAssembler;
@@ -71,6 +72,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.ruleDisplayMapper = ruleDisplayMapper;
         this.overviewDisplayMapper = overviewDisplayMapper;
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
+        this.reviewTrendAssembler = new DashboardReviewTrendAssembler();
         this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
         this.dashboardRuleAssembler = new DashboardRuleAssembler(ruleDisplayMapper);
         this.highRiskReviewAssembler = new DashboardHighRiskReviewAssembler(statusMapper);
@@ -95,7 +97,7 @@ public class DashboardServiceImpl implements DashboardService {
 
         return new DashboardOverviewResponse(
             dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate)),
-            buildTrend(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate)),
+            reviewTrendAssembler.assemble(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate)),
             buildRiskDistribution(reviewTrendStartDate),
             rules.ruleHits(),
             buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate)),
@@ -116,7 +118,7 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_REVIEW_TREND, key = "'reviewTrend'", sync = true)
     public List<ReviewTrendPointDto> getReviewTrend() {
-        return buildTrend(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate()));
+        return reviewTrendAssembler.assemble(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate()));
     }
 
     @Override
@@ -162,13 +164,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private LocalDate latestReviewDate() {
         return dashboardMapper.selectLatestReviewTaskDate();
-    }
-
-    private List<ReviewTrendPointDto> buildTrend(List<DashboardReviewTrendCount> reviewTrendCounts) {
-        // 当前仪表盘图表直接消费展示标签，因此这里按格式化后的日期聚合。
-        return nullToEmpty(reviewTrendCounts).stream()
-            .map(count -> new ReviewTrendPointDto(count.getDayLabel(), safeTrendTotal(count)))
-            .toList();
     }
 
     private List<ChartSliceDto> buildRiskDistribution(LocalDate startDate) {
@@ -234,10 +229,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeCount(Long value) {
         return value == null ? 0L : value;
-    }
-
-    private long safeTrendTotal(DashboardReviewTrendCount count) {
-        return count.getTotal() == null ? 0L : count.getTotal();
     }
 
     private long safeRuleTotal(DashboardRuleHitCount count) {
