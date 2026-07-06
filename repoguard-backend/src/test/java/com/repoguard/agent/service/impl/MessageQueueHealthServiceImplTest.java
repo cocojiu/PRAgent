@@ -24,7 +24,9 @@ import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -45,15 +47,21 @@ class MessageQueueHealthServiceImplTest {
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
-    private final MessageQueueHealthServiceImpl service = new MessageQueueHealthServiceImpl(
-        reviewTaskMapper,
-        reviewTimelineMapper,
-        systemSettingLogMapper,
-        rabbitMqIntegrationProvider,
-        properties,
-        rabbitTemplate,
-        reviewTaskPublisher
-    );
+    private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final MessageQueueHealthServiceImpl service = createService(null);
+
+    @Test
+    void serviceRejectsMissingSubServices() {
+        MessageQueueHealthQueryService healthQueryService = org.mockito.Mockito.mock(MessageQueueHealthQueryService.class);
+        ReviewTaskRequeueService requeueService = org.mockito.Mockito.mock(ReviewTaskRequeueService.class);
+
+        assertThatThrownBy(() -> new MessageQueueHealthServiceImpl(null, requeueService))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("healthQueryService");
+        assertThatThrownBy(() -> new MessageQueueHealthServiceImpl(healthQueryService, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("requeueService");
+    }
 
     @Test
     void healthQueryServiceRejectsMissingStateMachine() {
@@ -194,18 +202,7 @@ class MessageQueueHealthServiceImplTest {
     @Test
     void requeueTaskPublishesOnlyAfterQueuedStateTransactionCommits() {
         RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-        MessageQueueHealthServiceImpl transactionalService = new MessageQueueHealthServiceImpl(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            systemSettingLogMapper,
-            rabbitMqIntegrationProvider,
-            properties,
-            rabbitTemplate,
-            reviewTaskPublisher,
-            transactionManager,
-            null,
-            null
-        );
+        MessageQueueHealthServiceImpl transactionalService = createService(transactionManager);
         ReviewTask task = task(42L, "PUBLISH_FAILED", 3, LocalDateTime.of(2026, 6, 11, 10, 0), null, "max attempts", LocalDateTime.of(2026, 6, 11, 9, 0));
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(4);
@@ -311,6 +308,33 @@ class MessageQueueHealthServiceImplTest {
         task.setLastPublishError(lastError);
         task.setCreatedAt(createdAt);
         return task;
+    }
+
+    private MessageQueueHealthServiceImpl createService(RecordingTransactionManager transactionManager) {
+        MessageQueueHealthQueryService healthQueryService = new MessageQueueHealthQueryService(
+            reviewTaskMapper,
+            rabbitMqIntegrationProvider,
+            properties,
+            new RabbitRuntimeHealthProbe(rabbitTemplate, properties),
+            null,
+            reviewTaskStateMachine
+        );
+        ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskStateMachine
+        );
+        ReviewTaskRequeueService requeueService = new ReviewTaskRequeueService(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            properties,
+            reviewTaskPublisher,
+            transactionManager,
+            reviewTaskStateMachine,
+            new MessageQueueAuditRecorder(systemSettingLogMapper),
+            outboxStore
+        );
+        return new MessageQueueHealthServiceImpl(healthQueryService, requeueService);
     }
 
     private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
