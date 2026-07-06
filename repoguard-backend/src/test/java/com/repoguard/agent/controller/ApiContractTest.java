@@ -14,8 +14,15 @@ import com.repoguard.agent.testsupport.ControllerEndpointCatalog;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.lang.reflect.Parameter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +32,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ApiContractTest {
+
+    private static final Pattern FRONTEND_API_OPERATION_PATTERN = Pattern.compile(
+        "^\\s{2}([a-zA-Z0-9]+): \\{\\R(?<body>.*?)^\\s{2}},?",
+        Pattern.MULTILINE | Pattern.DOTALL
+    );
+    private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
+    private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
+    private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
 
     private static final List<Class<?>> CONTROLLERS = List.of(
         AuthController.class,
@@ -204,6 +219,18 @@ class ApiContractTest {
     }
 
     @Test
+    void frontendTypedApiContractsStayWithinBackendApiSurface() throws Exception {
+        Set<String> backendEndpoints = Set.copyOf(apiSurfaceEndpointKeys());
+
+        assertThat(frontendApiContracts())
+            .as("Frontend typed api contracts must point to backend-owned controller endpoints")
+            .isNotEmpty()
+            .allSatisfy((operation, endpoint) -> assertThat(backendEndpoints)
+                .as(operation + " frontend endpoint must exist in backend API surface")
+                .contains(endpoint));
+    }
+
+    @Test
     void successfulResponsesUseStableEnvelopeFields() throws Exception {
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ContractController()).build();
 
@@ -260,6 +287,58 @@ class ApiContractTest {
                 + " body=" + ControllerEndpointCatalog.requestBodyType(endpoint.method()))
             .sorted()
             .toList();
+    }
+
+    private List<String> apiSurfaceEndpointKeys() {
+        return CONTROLLERS.stream()
+            .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
+            .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path())
+            .sorted()
+            .toList();
+    }
+
+    private Map<String, String> frontendApiContracts() throws Exception {
+        String source = Files.readString(frontendContractsPath());
+        Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
+        Map<String, String> contracts = new LinkedHashMap<>();
+        while (operationMatcher.find()) {
+            String operation = operationMatcher.group(1);
+            String body = operationMatcher.group("body");
+            extractFrontendPath(body).ifPresent(path -> contracts.put(operation, frontendHttpMethod(body) + " " + path));
+        }
+        return contracts;
+    }
+
+    private Path frontendContractsPath() {
+        Path direct = Path.of("..", "repoguard-frontend", "src", "api", "contracts.ts");
+        if (Files.exists(direct)) {
+            return direct;
+        }
+        return Path.of("repoguard-frontend", "src", "api", "contracts.ts");
+    }
+
+    private Optional<String> extractFrontendPath(String operationBody) {
+        Matcher literalPathMatcher = FRONTEND_LITERAL_PATH_PATTERN.matcher(operationBody);
+        if (literalPathMatcher.find()) {
+            return Optional.of(literalPathMatcher.group(1));
+        }
+        Matcher templatePathMatcher = FRONTEND_TEMPLATE_PATH_PATTERN.matcher(operationBody);
+        if (templatePathMatcher.find()) {
+            return Optional.of(normalizeFrontendTemplatePath(templatePathMatcher.group(1)));
+        }
+        return Optional.empty();
+    }
+
+    private String frontendHttpMethod(String operationBody) {
+        Matcher methodMatcher = FRONTEND_METHOD_PATTERN.matcher(operationBody);
+        return methodMatcher.find() ? methodMatcher.group(1) : "GET";
+    }
+
+    private String normalizeFrontendTemplatePath(String path) {
+        return path
+            .replace("${idSegment(input.findingId)}", "{findingId}")
+            .replace("${idSegment(input.taskId)}", "{taskId}")
+            .replace("${idSegment(input.id)}", "{id}");
     }
 
     @RestController
