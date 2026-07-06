@@ -24,6 +24,7 @@ class FrontendPerformanceObservationServiceImplTest {
             "overview",
             List.of(new FrontendApiWaterfallItemDto(
                 "fetchDashboardSummary",
+                "/api/v1/dashboard/summary",
                 "GET",
                 200,
                 "success",
@@ -36,6 +37,7 @@ class FrontendPerformanceObservationServiceImplTest {
         assertThat(meterRegistry.find("repoguard.frontend.api.waterfall.request")
             .tag("route", "overview")
             .tag("operation", "fetchdashboardsummary")
+            .tag("path", "/api/v1/dashboard/summary")
             .tag("method", "GET")
             .tag("status", "200")
             .tag("result", "success")
@@ -44,6 +46,7 @@ class FrontendPerformanceObservationServiceImplTest {
         assertThat(meterRegistry.find("repoguard.frontend.api.waterfall.duration")
             .tag("route", "overview")
             .tag("operation", "fetchdashboardsummary")
+            .tag("path", "/api/v1/dashboard/summary")
             .tag("method", "GET")
             .tag("status", "200")
             .tag("result", "success")
@@ -74,6 +77,7 @@ class FrontendPerformanceObservationServiceImplTest {
             "overview",
             List.of(new FrontendApiWaterfallItemDto(
                 "fetchDashboardSummary",
+                "/api/v1/dashboard/summary",
                 "GET",
                 200,
                 "success",

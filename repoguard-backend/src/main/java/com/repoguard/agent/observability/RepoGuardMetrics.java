@@ -169,12 +169,14 @@ public class RepoGuardMetrics {
         Duration duration,
         String route,
         String operation,
+        String path,
         String method,
         String status,
         String result
     ) {
         String normalizedRoute = normalize(route);
         String normalizedOperation = normalize(operation);
+        String normalizedPath = normalizePath(path);
         String normalizedMethod = normalizeHttpMethod(method);
         String normalizedStatus = normalize(status);
         String normalizedResult = normalize(result);
@@ -182,6 +184,7 @@ public class RepoGuardMetrics {
             "repoguard.frontend.api.waterfall.duration",
             "route", normalizedRoute,
             "operation", normalizedOperation,
+            "path", normalizedPath,
             "method", normalizedMethod,
             "status", normalizedStatus,
             "result", normalizedResult
@@ -190,6 +193,7 @@ public class RepoGuardMetrics {
             "repoguard.frontend.api.waterfall.request",
             "route", normalizedRoute,
             "operation", normalizedOperation,
+            "path", normalizedPath,
             "method", normalizedMethod,
             "status", normalizedStatus,
             "result", normalizedResult

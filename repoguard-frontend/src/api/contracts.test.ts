@@ -1,4 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const frontendPerformance = vi.hoisted(() => ({
+  observeFrontendApiRequest: vi.fn()
+}));
+
+vi.mock("@/observability/frontendPerformance", () => frontendPerformance);
+
 import { apiRequest } from "./contracts";
 
 const okResponse = (data: unknown) =>
@@ -16,6 +23,7 @@ const okResponse = (data: unknown) =>
 describe("apiRequest", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    frontendPerformance.observeFrontendApiRequest.mockClear();
     clearCsrfCookie();
     window.sessionStorage.clear();
     window.localStorage.clear();
@@ -256,6 +264,36 @@ describe("apiRequest", () => {
     expect(calls[6][0]).toContain("llmTrendDays=90");
     expect(calls[7][0]).toContain("/api/v1/system/health/summary");
     expect(calls.every(([, init]) => init.method === undefined)).toBe(true);
+    expect(frontendPerformance.observeFrontendApiRequest).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      operation: "fetchDashboardSummary",
+      path: "/api/v1/dashboard/summary",
+      method: "GET",
+      result: "success"
+    }));
+    expect(frontendPerformance.observeFrontendApiRequest).toHaveBeenNthCalledWith(7, expect.objectContaining({
+      operation: "fetchDashboardLlmQuality",
+      path: "/api/v1/dashboard/llm-quality",
+      method: "GET",
+      result: "success"
+    }));
+  });
+
+  it("reports low-cardinality observation paths for dynamic endpoints", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({ items: [], total: 0 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewFindings", {
+      id: 521,
+      page: 1,
+      pageSize: 20
+    });
+
+    expect(frontendPerformance.observeFrontendApiRequest).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "fetchReviewFindings",
+      path: "/api/v1/reviews/{id}/findings",
+      method: "GET",
+      result: "success"
+    }));
   });
 
   it("keeps system integration and review rule endpoint contracts", async () => {

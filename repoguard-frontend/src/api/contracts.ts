@@ -491,6 +491,8 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   const endpoint = apiEndpoints[operation] as ApiEndpoint<ApiContract[Operation]["input"]>;
   const options: RequestInit = {};
   const method = endpoint.method ?? "GET";
+  const path = endpoint.path(input);
+  const observationPath = stableObservationPath(path);
   if (method !== "GET") {
     options.method = method;
   }
@@ -501,12 +503,13 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   const startedAtMs = currentTimeMs();
   try {
     const response = await request<ApiContract[Operation]["response"]>(
-      endpoint.path(input),
+      path,
       endpoint.query?.(input),
       options
     );
     observeFrontendApiRequest({
       operation: String(operation),
+      path: observationPath,
       method,
       result: "success",
       startedAtMs,
@@ -516,6 +519,7 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   } catch (error) {
     observeFrontendApiRequest({
       operation: String(operation),
+      path: observationPath,
       method,
       status: error instanceof RequestError ? error.status : undefined,
       result: "failed",
@@ -527,3 +531,20 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
 };
 
 const currentTimeMs = () => (typeof performance === "undefined" ? Date.now() : performance.now());
+
+const stableObservationPath = (path: string) =>
+  path
+    .split("/")
+    .map(segment => {
+      if (/^\d+$/.test(segment)) {
+        return "{id}";
+      }
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) {
+        return "{uuid}";
+      }
+      if (/^[0-9a-f]{32,64}$/i.test(segment)) {
+        return "{hash}";
+      }
+      return segment;
+    })
+    .join("/");

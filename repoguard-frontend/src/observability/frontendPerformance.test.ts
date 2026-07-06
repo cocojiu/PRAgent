@@ -34,6 +34,7 @@ describe("frontend performance observation", () => {
     observation.startFrontendPerformanceObservation(() => "overview");
     observation.observeFrontendApiRequest({
       operation: "fetchDashboardSummary",
+      path: "/api/v1/dashboard/summary",
       method: "GET",
       status: 200,
       result: "success",
@@ -53,6 +54,7 @@ describe("frontend performance observation", () => {
       apiRequests: [
         {
           operation: "fetchDashboardSummary",
+          path: "/api/v1/dashboard/summary",
           method: "GET",
           status: 200,
           result: "success",
@@ -72,6 +74,7 @@ describe("frontend performance observation", () => {
     observation.startFrontendPerformanceObservation(() => "login");
     observation.observeFrontendApiRequest({
       operation: "login",
+      path: "/api/v1/auth/login",
       method: "POST",
       result: "success",
       startedAtMs: 5,

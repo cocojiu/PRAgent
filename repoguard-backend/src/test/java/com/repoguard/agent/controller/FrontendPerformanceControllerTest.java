@@ -30,6 +30,7 @@ class FrontendPerformanceControllerTest {
                       "apiRequests": [
                         {
                           "operation": "fetchDashboardSummary",
+                          "path": "/api/v1/dashboard/summary",
                           "method": "GET",
                           "status": 200,
                           "result": "success",

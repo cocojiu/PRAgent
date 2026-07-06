@@ -56,6 +56,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 duration,
                 route,
                 item.operation(),
+                item.path(),
                 item.method(),
                 status(item.status()),
                 item.result()
@@ -87,7 +88,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
         String waterfall = apiRequests.stream()
             .sorted(Comparator.comparingLong(item -> safeMillis(item.startedAtMs())))
             .limit(MAX_WATERFALL_LOG_ITEMS)
-            .map(item -> safeText(item.operation()) + ":" + safeMillis(item.durationMs()) + "ms")
+            .map(item -> safeText(item.operation()) + "@" + safeText(item.path()) + ":" + safeMillis(item.durationMs()) + "ms")
             .collect(Collectors.joining(","));
 
         log.info(

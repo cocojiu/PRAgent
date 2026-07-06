@@ -4,6 +4,7 @@ type ApiRequestResult = "success" | "failed";
 
 export type FrontendApiRequestObservation = {
   operation: string;
+  path?: string;
   method: string;
   status?: number;
   result: ApiRequestResult;
@@ -59,6 +60,7 @@ export const observeFrontendApiRequest = (observation: FrontendApiRequestObserva
   apiRequests.push({
     ...observation,
     operation: stableText(observation.operation),
+    path: stableText(observation.path),
     method: stableText(observation.method),
     status: observation.status && observation.status > 0 ? observation.status : undefined,
     startedAtMs: nonNegative(observation.startedAtMs),
