@@ -62,9 +62,7 @@ public class ManualReviewCreationService {
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
         this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
             manualReviewIdempotencyCoordinator,
@@ -109,9 +107,7 @@ public class ManualReviewCreationService {
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
         this.cacheEvictionService = cacheEvictionService;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
         this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
             manualReviewIdempotencyCoordinator,
