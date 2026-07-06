@@ -2,11 +2,19 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 class SemanticDiffChunkPlanner {
+
+    private final ChunkBudgetPolicy budgetPolicy;
+
+    SemanticDiffChunkPlanner() {
+        this(new ChunkBudgetPolicy(null));
+    }
+
+    SemanticDiffChunkPlanner(ChunkBudgetPolicy budgetPolicy) {
+        this.budgetPolicy = budgetPolicy == null ? new ChunkBudgetPolicy(null) : budgetPolicy;
+    }
 
     List<List<SemanticDiffSegment>> groupSegments(
         List<SemanticDiffSegment> prioritizedSegments,
@@ -20,9 +28,7 @@ class SemanticDiffChunkPlanner {
             int segmentLines = segment.changedLines();
             boolean semanticBoundary = currentGroupKey != null
                 && (!currentGroupKey.equals(segment.chunkGroupKey()) || splitsSameFileScope(current, segment));
-            boolean currentFull = !current.isEmpty()
-                && (distinctFileCount(current) >= policy.maxFilesPerChunk()
-                    || currentLines + segmentLines > policy.maxLinesPerChunk());
+            boolean currentFull = budgetPolicy.exceedsChunkBudget(current, currentLines, segment, policy);
             if (currentFull || (semanticBoundary && currentLines > 0)) {
                 groupedSegments.add(current);
                 current = new ArrayList<>();
@@ -37,14 +43,6 @@ class SemanticDiffChunkPlanner {
             groupedSegments.add(current);
         }
         return groupedSegments;
-    }
-
-    private int distinctFileCount(List<SemanticDiffSegment> segments) {
-        Set<String> filenames = new LinkedHashSet<>();
-        for (SemanticDiffSegment segment : segments) {
-            filenames.add(segment.file().filename());
-        }
-        return filenames.size();
     }
 
     private boolean splitsSameFileScope(List<SemanticDiffSegment> current, SemanticDiffSegment next) {

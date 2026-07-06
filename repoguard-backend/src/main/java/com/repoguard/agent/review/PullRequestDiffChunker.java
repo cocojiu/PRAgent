@@ -18,6 +18,7 @@ public class PullRequestDiffChunker {
     private final SemanticDiffChunkPlanner chunkPlanner;
     private final RiskFilePrioritizer riskFilePrioritizer;
     private final DiffChunkReasonBuilder reasonBuilder;
+    private final ChunkBudgetPolicy budgetPolicy;
 
     public PullRequestDiffChunker() {
         this(new DiffRiskClassifier());
@@ -30,7 +31,8 @@ public class PullRequestDiffChunker {
     PullRequestDiffChunker(DiffRiskClassifier riskClassifier, SemanticDiffSegmenter segmenter) {
         this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
         this.segmenter = segmenter == null ? new SemanticDiffSegmenter(this.riskClassifier) : segmenter;
-        this.chunkPlanner = new SemanticDiffChunkPlanner();
+        this.budgetPolicy = new ChunkBudgetPolicy(this.riskClassifier);
+        this.chunkPlanner = new SemanticDiffChunkPlanner(this.budgetPolicy);
         this.riskFilePrioritizer = new RiskFilePrioritizer(this.riskClassifier);
         this.reasonBuilder = new DiffChunkReasonBuilder(this.riskClassifier);
     }
@@ -49,7 +51,7 @@ public class PullRequestDiffChunker {
 
     private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, DiffChunkingPolicy policy) {
         List<GithubChangedFile> files = diff.files() == null ? List.of() : diff.files();
-        if (!requiresChunking(files, policy)) {
+        if (!budgetPolicy.requiresChunking(files, policy)) {
             return List.of(toChunk(diff, files, 1, 1));
         }
 
@@ -63,13 +65,6 @@ public class PullRequestDiffChunker {
             chunks.add(toSemanticChunk(diff, groupedSegments.get(i), i + 1, groupedSegments.size(), policy));
         }
         return chunks;
-    }
-
-    private boolean requiresChunking(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
-        int totalLines = files.stream().mapToInt(this::changedLines).sum();
-        return files.size() > policy.largePrFileThreshold()
-            || totalLines > policy.largePrLineThreshold()
-            || (files.stream().anyMatch(file -> !riskClassifier.reasons(file).isEmpty()) && files.size() > 1);
     }
 
     private PullRequestDiffChunk toChunk(GithubPullRequestDiff source, List<GithubChangedFile> files, int index, int total) {
