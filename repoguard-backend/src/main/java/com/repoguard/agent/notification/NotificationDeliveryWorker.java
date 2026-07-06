@@ -80,7 +80,8 @@ public class NotificationDeliveryWorker {
             );
         } catch (RuntimeException ex) {
             channel.basicReject(deliveryTag, false);
-            metricsRecorder.recordConsumed(startedAt, "rejected");
+            String failureCategory = failureClassifier.failureCategory(ex);
+            metricsRecorder.recordConsumed(startedAt, "rejected", failureCategory);
             LOGGER.warn(
                 "Rabbit notification message rejected eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
                 message.eventId(),
@@ -91,7 +92,7 @@ public class NotificationDeliveryWorker {
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
                 ex.getClass().getName(),
-                failureClassifier.failureCategory(ex)
+                failureCategory
             );
         }
     }

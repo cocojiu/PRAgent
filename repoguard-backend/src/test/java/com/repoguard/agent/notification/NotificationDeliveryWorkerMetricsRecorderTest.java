@@ -22,7 +22,22 @@ class NotificationDeliveryWorkerMetricsRecorderTest {
         recorder.recordConsumed(startedAt, "success");
 
         assertThat(startedAt).isEqualTo(1_000L);
-        verify(metrics).rabbitMessageConsumed(Duration.ofNanos(5_999_000L), "success");
+        verify(metrics).rabbitMessageConsumed(Duration.ofNanos(5_999_000L), "success", "unknown");
+    }
+
+    @Test
+    void recordsConsumedDurationWithFailureCategory() {
+        clock.setTimes(1_000L, 6_000_000L);
+
+        long startedAt = recorder.startedAt();
+        recorder.recordConsumed(startedAt, "rejected", "notification_http_rate_limited");
+
+        assertThat(startedAt).isEqualTo(1_000L);
+        verify(metrics).rabbitMessageConsumed(
+            Duration.ofNanos(5_999_000L),
+            "rejected",
+            "notification_http_rate_limited"
+        );
     }
 
     @Test

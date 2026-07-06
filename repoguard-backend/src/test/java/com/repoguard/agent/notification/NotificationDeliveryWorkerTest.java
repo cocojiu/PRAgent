@@ -38,7 +38,11 @@ class NotificationDeliveryWorkerTest {
 
         org.mockito.Mockito.verify(channel).basicAck(99L, false);
         org.mockito.Mockito.verify(metrics)
-            .rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("success"));
+            .rabbitMessageConsumed(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.Mockito.eq("success"),
+                org.mockito.Mockito.eq("unknown")
+            );
     }
 
     @Test
@@ -51,7 +55,11 @@ class NotificationDeliveryWorkerTest {
 
         org.mockito.Mockito.verify(channel).basicReject(100L, false);
         org.mockito.Mockito.verify(metrics)
-            .rabbitMessageConsumed(org.mockito.ArgumentMatchers.any(), org.mockito.Mockito.eq("rejected"));
+            .rabbitMessageConsumed(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.Mockito.eq("rejected"),
+                org.mockito.Mockito.eq("notification_delivery_failed")
+            );
     }
 
     @Test

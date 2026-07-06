@@ -229,9 +229,21 @@ public class RepoGuardMetrics {
     }
 
     public void rabbitMessageConsumed(Duration duration, String result) {
-        timer("repoguard.rabbit.consume.duration", "result", normalize(result))
+        rabbitMessageConsumed(duration, result, UNKNOWN);
+    }
+
+    public void rabbitMessageConsumed(Duration duration, String result, String failureCategory) {
+        timer(
+            "repoguard.rabbit.consume.duration",
+            "result", normalize(result),
+            "failure_category", normalize(failureCategory)
+        )
             .record(nonNegative(duration));
-        counter("repoguard.rabbit.consume", "result", normalize(result)).increment();
+        counter(
+            "repoguard.rabbit.consume",
+            "result", normalize(result),
+            "failure_category", normalize(failureCategory)
+        ).increment();
     }
 
     public void rabbitQueueDepth(String queue, String state, long depth) {

@@ -122,6 +122,7 @@ class RepoGuardMetricsTest {
         metrics.githubCommentPublished("success");
         metrics.githubCommentPublishDuration(Duration.ofMillis(66), "success");
         metrics.rabbitMessageConsumed(Duration.ofMillis(35), "success");
+        metrics.rabbitMessageConsumed(Duration.ofMillis(12), "rejected", "notification_timeout");
         metrics.rabbitQueueDepth("review.queue", "dlq", 7);
 
         assertThat(timerCount("repoguard.review.task.duration", "result", "completed")).isEqualTo(1);
@@ -137,8 +138,21 @@ class RepoGuardMetricsTest {
             "status", "success"
         )).isEqualTo(1.0);
         assertThat(timerCount("repoguard.github.comment.publish.duration", "result", "success")).isEqualTo(1);
-        assertThat(counter("repoguard.rabbit.consume", "result", "success")).isEqualTo(1.0);
-        assertThat(timerCount("repoguard.rabbit.consume.duration", "result", "success")).isEqualTo(1);
+        assertThat(counter(
+            "repoguard.rabbit.consume",
+            "result", "success",
+            "failure_category", "unknown"
+        )).isEqualTo(1.0);
+        assertThat(timerCount(
+            "repoguard.rabbit.consume.duration",
+            "result", "success",
+            "failure_category", "unknown"
+        )).isEqualTo(1);
+        assertThat(counter(
+            "repoguard.rabbit.consume",
+            "result", "rejected",
+            "failure_category", "notification_timeout"
+        )).isEqualTo(1.0);
         assertThat(meterRegistry.find("repoguard.rabbit.queue.depth")
             .tag("queue", "review.queue")
             .tag("state", "dlq")
