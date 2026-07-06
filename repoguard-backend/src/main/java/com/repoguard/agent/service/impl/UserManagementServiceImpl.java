@@ -16,6 +16,7 @@ import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
+import com.repoguard.agent.user.UserManagementDisplayMapper;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.List;
@@ -40,6 +41,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
     private final PasswordHashService passwordHashService;
+    private final UserManagementDisplayMapper displayMapper;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -51,6 +53,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.userOperationAuditMapper = userOperationAuditMapper;
         this.passwordHashService = passwordHashService;
+        this.displayMapper = new UserManagementDisplayMapper();
     }
 
     @Override
@@ -59,7 +62,7 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .orderByDesc(UserAccount::getCreatedAt)
                 .orderByAsc(UserAccount::getId))
             .stream()
-            .map(this::toDto)
+            .map(displayMapper::toUserItem)
             .toList();
     }
 
@@ -70,7 +73,7 @@ public class UserManagementServiceImpl implements UserManagementService {
                 .orderByDesc(UserOperationAudit::getId)
                 .last("LIMIT " + AUDIT_LIMIT))
             .stream()
-            .map(this::toAuditDto)
+            .map(displayMapper::toAuditItem)
             .toList();
     }
 
@@ -109,7 +112,7 @@ public class UserManagementServiceImpl implements UserManagementService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
         }
         recordAudit(auditContext, user, ACTION_USER_CREATE, null, ROLE_VIEWER);
-        return toDto(user);
+        return displayMapper.toUserItem(user);
     }
 
     @Override
@@ -126,7 +129,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         userAccountMapper.updateById(user);
         revokeActiveRefreshTokens(user.getId());
         recordAudit(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
-        return toDto(user);
+        return displayMapper.toUserItem(user);
     }
 
     @Override
@@ -154,7 +157,7 @@ public class UserManagementServiceImpl implements UserManagementService {
             revokeActiveRefreshTokens(user.getId());
         }
         recordAudit(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
-        return toDto(user);
+        return displayMapper.toUserItem(user);
     }
 
     private void recordAudit(
@@ -237,37 +240,6 @@ public class UserManagementServiceImpl implements UserManagementService {
             return status;
         }
         throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported user status");
-    }
-
-    private UserManagementItemDto toDto(UserAccount user) {
-        return new UserManagementItemDto(
-            user.getId(),
-            user.getUsername(),
-            user.getEmail(),
-            user.getRole(),
-            user.getStatus(),
-            user.getFailedLoginCount(),
-            user.getLockedUntil(),
-            user.getLastLoginAt(),
-            user.getCreatedAt(),
-            user.getUpdatedAt()
-        );
-    }
-
-    private UserOperationAuditDto toAuditDto(UserOperationAudit audit) {
-        return new UserOperationAuditDto(
-            audit.getId(),
-            audit.getOperatorUserId(),
-            audit.getOperatorUsername(),
-            audit.getTargetUserId(),
-            audit.getTargetUsername(),
-            audit.getAction(),
-            audit.getBeforeValue(),
-            audit.getAfterValue(),
-            audit.getClientIp(),
-            audit.getUserAgent(),
-            audit.getCreatedAt()
-        );
     }
 
     private String truncate(String value, int maxLength) {
