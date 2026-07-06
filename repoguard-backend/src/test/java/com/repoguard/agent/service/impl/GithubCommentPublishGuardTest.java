@@ -13,6 +13,13 @@ class GithubCommentPublishGuardTest {
     private final GithubCommentPublishGuard guard = new GithubCommentPublishGuard(new ReviewTaskStateMachine());
 
     @Test
+    void constructorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new GithubCommentPublishGuard(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
     void ensurePublishAllowedAllowsTaskWithoutHumanReviewRequirement() {
         ReviewTask task = new ReviewTask();
         task.setHumanReviewRequired(false);

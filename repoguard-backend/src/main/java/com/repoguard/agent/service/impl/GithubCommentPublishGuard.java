@@ -5,6 +5,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -17,9 +18,7 @@ public class GithubCommentPublishGuard {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     public GithubCommentPublishGuard(ReviewTaskStateMachine reviewTaskStateMachine) {
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
     }
 
     public void ensurePublishAllowed(ReviewTask task) {
