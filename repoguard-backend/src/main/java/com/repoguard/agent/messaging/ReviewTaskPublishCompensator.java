@@ -10,6 +10,7 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,27 +62,6 @@ public class ReviewTaskPublishCompensator {
         ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskPublisher reviewTaskPublisher,
         RabbitReviewQueueProperties properties,
-        String instanceId
-    ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null, null, null);
-    }
-
-    ReviewTaskPublishCompensator(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        RabbitReviewQueueProperties properties,
-        String instanceId,
-        RepoGuardMetrics metrics
-    ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null, null, null);
-    }
-
-    ReviewTaskPublishCompensator(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        RabbitReviewQueueProperties properties,
         String instanceId,
         RepoGuardMetrics metrics,
         ReviewTaskPublishOutboxStore outboxStore,
@@ -89,15 +69,11 @@ public class ReviewTaskPublishCompensator {
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this.reviewTaskPublisher = reviewTaskPublisher;
-        this.outboxStore = outboxStore == null
-            ? new ReviewTaskPublishOutboxStore(reviewTaskMapper, reviewTimelineMapper, reviewTaskStateMachine)
-            : outboxStore;
+        this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
         this.properties = properties;
         this.instanceId = instanceId;
         this.metrics = metrics;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.failureClassifier = new RabbitPublishFailureClassifier();
         this.compensationPolicy = compensationPolicy == null
             ? new RabbitPublishCompensationPolicy()

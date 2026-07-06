@@ -10,6 +10,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,9 +26,7 @@ public class ReviewTaskPublishOutboxStore {
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
     }
 

@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -19,6 +20,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,14 +36,68 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
+    private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
+        reviewTaskMapper,
+        reviewTimelineMapper,
+        reviewTaskStateMachine
+    );
     private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
         reviewTaskMapper,
         reviewTimelineMapper,
         reviewTaskPublisher,
         properties,
         "test-instance",
-        metrics
+        metrics,
+        outboxStore,
+        reviewTaskStateMachine,
+        null
     );
+
+    @Test
+    void outboxStoreRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new ReviewTaskPublishOutboxStore(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void compensatorRejectsMissingOutboxStore() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "test-instance",
+            metrics,
+            null,
+            reviewTaskStateMachine,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("outboxStore");
+    }
+
+    @Test
+    void compensatorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            reviewTaskPublisher,
+            properties,
+            "test-instance",
+            metrics,
+            outboxStore,
+            null,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
 
     @Test
     void compensateMarksTaskQueuedWhenPublishSucceeds() {
