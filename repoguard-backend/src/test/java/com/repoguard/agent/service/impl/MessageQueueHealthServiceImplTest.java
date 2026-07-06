@@ -70,6 +70,22 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
+    void requeueServiceRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new ReviewTaskRequeueService(
+            reviewTaskMapper,
+            reviewTimelineMapper,
+            properties,
+            reviewTaskPublisher,
+            null,
+            null,
+            org.mockito.Mockito.mock(MessageQueueAuditRecorder.class),
+            org.mockito.Mockito.mock(com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore.class)
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
     void healthSummarizesActiveConfigTopologyAndExceptionTasks() {
         properties.setExchange("repoguard.review.exchange.v2");
         properties.setQueue("repoguard.review.queue.v2");

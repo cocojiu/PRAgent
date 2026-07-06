@@ -16,6 +16,7 @@ import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -44,9 +45,7 @@ class ReviewTaskRequeueService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.properties = properties;
         this.reviewTaskPublisher = reviewTaskPublisher;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.auditRecorder = auditRecorder;
         this.outboxStore = outboxStore == null
             ? new ReviewTaskPublishOutboxStore(
