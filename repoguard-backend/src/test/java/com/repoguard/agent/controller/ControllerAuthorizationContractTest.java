@@ -51,7 +51,7 @@ class ControllerAuthorizationContractTest {
     );
 
     @Test
-    void writeEndpointsRequireExplicitRoleUnlessPubliclyWhitelisted() throws ClassNotFoundException {
+    void writeEndpointsRequireAdminRoleUnlessPubliclyWhitelisted() throws ClassNotFoundException {
         List<String> unprotectedWriteEndpoints = new ArrayList<>();
 
         for (Class<?> controller : discoverControllers()) {
@@ -59,14 +59,14 @@ class ControllerAuthorizationContractTest {
                 if (!isWriteHandler(method) || isPublicWriteEndpoint(controller, method)) {
                     continue;
                 }
-                if (!hasRequireRole(controller, method)) {
+                if (!hasAdminRole(controller, method)) {
                     unprotectedWriteEndpoints.add(endpointId(controller, method) + " " + writeMappings(method));
                 }
             }
         }
 
         assertThat(unprotectedWriteEndpoints)
-            .as("Every non-public POST/PUT/PATCH/DELETE endpoint must declare @RequireRole on the method or controller")
+            .as("Every non-public POST/PUT/PATCH/DELETE endpoint must declare @RequireRole(\"ADMIN\") on the method or controller")
             .isEmpty();
     }
 
@@ -97,14 +97,14 @@ class ControllerAuthorizationContractTest {
                 if (!isReadHandler(method)) {
                     continue;
                 }
-                if (hasRequireRole(controller, method)) {
+                if (hasAdminRole(controller, method)) {
                     adminReadEndpoints.add(endpointId(controller, method));
                 }
                 if (!isSensitiveReadEndpoint(controller, method)) {
                     continue;
                 }
                 existingSensitiveReadEndpoints.add(endpointId(controller, method));
-                if (!hasRequireRole(controller, method)) {
+                if (!hasAdminRole(controller, method)) {
                     unprotectedSensitiveReadEndpoints.add(endpointId(controller, method) + " " + readMappings(method));
                 }
             }
@@ -116,7 +116,7 @@ class ControllerAuthorizationContractTest {
             .as("Every ADMIN read endpoint must stay in the sensitive read matrix")
             .containsExactlyInAnyOrderElementsOf(SENSITIVE_READ_ENDPOINTS);
         assertThat(unprotectedSensitiveReadEndpoints)
-            .as("Sensitive GET endpoints must declare @RequireRole on the method or controller")
+            .as("Sensitive GET endpoints must declare @RequireRole(\"ADMIN\") on the method or controller")
             .isEmpty();
     }
 
@@ -144,9 +144,18 @@ class ControllerAuthorizationContractTest {
             || method.isAnnotationPresent(DeleteMapping.class);
     }
 
-    private boolean hasRequireRole(Class<?> controller, Method method) {
-        return controller.isAnnotationPresent(RequireRole.class)
-            || method.isAnnotationPresent(RequireRole.class);
+    private boolean hasAdminRole(Class<?> controller, Method method) {
+        RequireRole methodRole = method.getAnnotation(RequireRole.class);
+        if (methodRole != null) {
+            return containsAdmin(methodRole);
+        }
+        RequireRole controllerRole = controller.getAnnotation(RequireRole.class);
+        return controllerRole != null && containsAdmin(controllerRole);
+    }
+
+    private boolean containsAdmin(RequireRole requireRole) {
+        return List.of(requireRole.value()).stream()
+            .anyMatch(role -> "ADMIN".equalsIgnoreCase(role));
     }
 
     private boolean isPublicWriteEndpoint(Class<?> controller, Method method) {
