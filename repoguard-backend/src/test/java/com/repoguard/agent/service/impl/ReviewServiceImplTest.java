@@ -42,6 +42,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
@@ -82,11 +83,29 @@ class ReviewServiceImplTest {
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final ReviewTimelineQueryService reviewTimelineQueryService =
+        new ReviewTimelineQueryService(reviewTimelineMapper);
+    private final ReviewTaskListItemAssembler reviewTaskListItemAssembler = new ReviewTaskListItemAssembler();
     private final ReviewTaskQueryService reviewTaskQueryService = new ReviewTaskQueryServiceImpl(
         reviewTaskMapper,
-        changedFileMapper,
-        reviewFindingMapper,
-        reviewTimelineMapper
+        new ReviewTaskDetailAssembler(
+            new ReviewRiskProfileBuilder(),
+            new PrReviewSummaryBuilder()
+        ),
+        new ReviewTaskDetailDataLoader(
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineQueryService,
+            new ReviewTaskDetailFindingAssembler()
+        ),
+        new ReviewTaskQueryItemLoader(
+            reviewTaskMapper,
+            new ReviewFailureSummaryResolver(),
+            reviewTimelineQueryService,
+            reviewTaskListItemAssembler
+        ),
+        new ReviewTaskStatusAssembler(),
+        new ReviewTaskListQueryBuilder()
     );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
         reviewTaskMapper,

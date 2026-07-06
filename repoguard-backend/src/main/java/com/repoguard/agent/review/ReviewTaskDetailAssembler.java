@@ -15,6 +15,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -29,8 +30,8 @@ public class ReviewTaskDetailAssembler {
         ReviewRiskProfileBuilder riskProfileBuilder,
         PrReviewSummaryBuilder reviewSummaryBuilder
     ) {
-        this.riskProfileBuilder = riskProfileBuilder;
-        this.reviewSummaryBuilder = reviewSummaryBuilder;
+        this.riskProfileBuilder = Objects.requireNonNull(riskProfileBuilder, "riskProfileBuilder must not be null");
+        this.reviewSummaryBuilder = Objects.requireNonNull(reviewSummaryBuilder, "reviewSummaryBuilder must not be null");
     }
 
     public ReviewTaskDetail assemble(

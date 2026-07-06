@@ -14,7 +14,7 @@ import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import java.util.List;
 import java.util.Locale;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -31,25 +31,16 @@ public class ReviewTaskDetailDataLoader {
     private final ReviewTimelineQueryService timelineQueryService;
     private final ReviewTaskDetailFindingAssembler findingAssembler;
 
-    @Autowired
-    public ReviewTaskDetailDataLoader(
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineQueryService timelineQueryService
-    ) {
-        this(changedFileMapper, reviewFindingMapper, timelineQueryService, new ReviewTaskDetailFindingAssembler());
-    }
-
     public ReviewTaskDetailDataLoader(
         ChangedFileMapper changedFileMapper,
         ReviewFindingMapper reviewFindingMapper,
         ReviewTimelineQueryService timelineQueryService,
         ReviewTaskDetailFindingAssembler findingAssembler
     ) {
-        this.changedFileMapper = changedFileMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.timelineQueryService = timelineQueryService;
-        this.findingAssembler = findingAssembler;
+        this.changedFileMapper = Objects.requireNonNull(changedFileMapper, "changedFileMapper must not be null");
+        this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper must not be null");
+        this.timelineQueryService = Objects.requireNonNull(timelineQueryService, "timelineQueryService must not be null");
+        this.findingAssembler = Objects.requireNonNull(findingAssembler, "findingAssembler must not be null");
     }
 
     public ReviewTaskDetailData load(Long taskId) {

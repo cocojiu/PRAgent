@@ -66,6 +66,18 @@ class ReviewTaskQueryItemLoaderTest {
         assertThat(latest.status()).isEqualTo("current");
     }
 
+    @Test
+    void constructorRejectsMissingListItemAssembler() {
+        assertThatThrownBy(() -> new ReviewTaskQueryItemLoader(
+            reviewTaskMapper,
+            new ReviewFailureSummaryResolver(),
+            new ReviewTimelineQueryService(reviewTimelineMapper),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("listItemAssembler");
+    }
+
     private ReviewTask task() {
         ReviewTask task = new ReviewTask();
         task.setId(521L);

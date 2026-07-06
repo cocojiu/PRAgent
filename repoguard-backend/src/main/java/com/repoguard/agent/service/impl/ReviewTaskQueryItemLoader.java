@@ -9,6 +9,7 @@ import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,10 +26,11 @@ public class ReviewTaskQueryItemLoader {
         ReviewTimelineQueryService timelineQueryService,
         ReviewTaskListItemAssembler listItemAssembler
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.failureSummaryResolver = failureSummaryResolver;
-        this.timelineQueryService = timelineQueryService;
-        this.listItemAssembler = listItemAssembler;
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper must not be null");
+        this.failureSummaryResolver =
+            Objects.requireNonNull(failureSummaryResolver, "failureSummaryResolver must not be null");
+        this.timelineQueryService = Objects.requireNonNull(timelineQueryService, "timelineQueryService must not be null");
+        this.listItemAssembler = Objects.requireNonNull(listItemAssembler, "listItemAssembler must not be null");
     }
 
     public ReviewTask loadRequired(Long id) {

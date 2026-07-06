@@ -12,18 +12,13 @@ import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.review.PrReviewSummaryBuilder;
-import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader.ReviewTaskDetailData;
 import java.util.List;
 import java.util.Map;
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -38,53 +33,18 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     public ReviewTaskQueryServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper
-    ) {
-        this(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            new ReviewTaskDetailAssembler(
-                new ReviewRiskProfileBuilder(),
-                new PrReviewSummaryBuilder()
-            ),
-            new ReviewTaskDetailDataLoader(
-                changedFileMapper,
-                reviewFindingMapper,
-                new ReviewTimelineQueryService(reviewTimelineMapper)
-            ),
-            new ReviewTaskQueryItemLoader(
-                reviewTaskMapper,
-                new ReviewFailureSummaryResolver(),
-                new ReviewTimelineQueryService(reviewTimelineMapper),
-                new ReviewTaskListItemAssembler()
-            ),
-            new ReviewTaskStatusAssembler(),
-            new ReviewTaskListQueryBuilder()
-        );
-    }
-
-    @Autowired
-    public ReviewTaskQueryServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
         ReviewTaskDetailAssembler detailAssembler,
         ReviewTaskDetailDataLoader detailDataLoader,
         ReviewTaskQueryItemLoader queryItemLoader,
         ReviewTaskStatusAssembler statusAssembler,
         ReviewTaskListQueryBuilder listQueryBuilder
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.detailAssembler = detailAssembler;
-        this.detailDataLoader = detailDataLoader;
-        this.queryItemLoader = queryItemLoader;
-        this.statusAssembler = statusAssembler;
-        this.listQueryBuilder = listQueryBuilder;
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper must not be null");
+        this.detailAssembler = Objects.requireNonNull(detailAssembler, "detailAssembler must not be null");
+        this.detailDataLoader = Objects.requireNonNull(detailDataLoader, "detailDataLoader must not be null");
+        this.queryItemLoader = Objects.requireNonNull(queryItemLoader, "queryItemLoader must not be null");
+        this.statusAssembler = Objects.requireNonNull(statusAssembler, "statusAssembler must not be null");
+        this.listQueryBuilder = Objects.requireNonNull(listQueryBuilder, "listQueryBuilder must not be null");
     }
 
     @Override

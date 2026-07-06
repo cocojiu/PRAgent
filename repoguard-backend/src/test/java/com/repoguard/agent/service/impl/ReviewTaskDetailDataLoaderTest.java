@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -25,7 +26,8 @@ class ReviewTaskDetailDataLoaderTest {
     private final ReviewTaskDetailDataLoader loader = new ReviewTaskDetailDataLoader(
         changedFileMapper,
         reviewFindingMapper,
-        timelineQueryService
+        timelineQueryService,
+        new ReviewTaskDetailFindingAssembler()
     );
 
     @Test
@@ -100,6 +102,18 @@ class ReviewTaskDetailDataLoaderTest {
         Mockito.verify(changedFileMapper, Mockito.never()).selectPage(any(), any());
         Mockito.verify(reviewFindingMapper, Mockito.never()).selectPage(any(), any());
         Mockito.verify(timelineQueryService, Mockito.never()).loadLatestItemsByTaskId(any(), Mockito.anyInt());
+    }
+
+    @Test
+    void constructorRejectsMissingFindingAssembler() {
+        assertThatThrownBy(() -> new ReviewTaskDetailDataLoader(
+            changedFileMapper,
+            reviewFindingMapper,
+            timelineQueryService,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("findingAssembler");
     }
 
     private <T> Page<T> page(List<T> records) {
