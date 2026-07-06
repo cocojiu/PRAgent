@@ -60,8 +60,8 @@ public class ManualReviewCreationService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
-        this.cacheEvictionService = cacheEvictionService;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
         this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
             manualReviewIdempotencyCoordinator,
@@ -83,8 +83,8 @@ public class ManualReviewCreationService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.metrics = metrics;
-        this.cacheEvictionService = cacheEvictionService;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
         this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
             manualReviewIdempotencyCoordinator,
@@ -379,9 +379,7 @@ public class ManualReviewCreationService {
     }
 
     private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        cacheEvictionService.evictDashboardOverview();
     }
 
     private String lower(String value) {

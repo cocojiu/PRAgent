@@ -126,6 +126,19 @@ class ReviewRuleConfigServiceImplTest {
             .hasMessageContaining("reviewRuleMetricAssembler");
     }
 
+    @Test
+    void constructorRejectsMissingCacheEvictionService() {
+        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            null,
+            new ReviewRuleConfigPolicy(),
+            new ReviewRuleMetricAssembler()
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("cacheEvictionService");
+    }
+
     private ReviewRuleConfigRequest request(String id, String name, String severity, String status) {
         return new ReviewRuleConfigRequest(
             id,

@@ -49,7 +49,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             "reviewRuleConfigMapper must not be null"
         );
         this.reviewFindingMapper = Objects.requireNonNull(reviewFindingMapper, "reviewFindingMapper must not be null");
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.reviewRuleConfigPolicy =
             Objects.requireNonNull(reviewRuleConfigPolicy, "reviewRuleConfigPolicy must not be null");
         this.reviewRuleMetricAssembler =
@@ -120,9 +120,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        cacheEvictionService.evictDashboardOverview();
     }
 
     private ReviewRuleConfig loadReviewRule(String id) {

@@ -15,6 +15,7 @@ import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.SystemIntegrationConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
@@ -43,7 +44,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
         this.integrationConfigMapper = integrationConfigMapper;
         this.secretCryptoService = secretCryptoService;
         this.environment = environment;
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     @Override
@@ -104,9 +105,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     }
 
     private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        cacheEvictionService.evictDashboardOverview();
     }
 
     private IntegrationConfig loadGithubConfig() {

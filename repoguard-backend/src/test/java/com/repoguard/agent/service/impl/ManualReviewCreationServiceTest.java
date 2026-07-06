@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.Test;
@@ -24,5 +25,21 @@ class ManualReviewCreationServiceTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void constructorRejectsMissingCacheEvictionService() {
+        assertThatThrownBy(() -> new ManualReviewCreationService(
+            org.mockito.Mockito.mock(ReviewTaskMapper.class),
+            org.mockito.Mockito.mock(ReviewTimelineAppender.class),
+            null,
+            null,
+            new ReviewTaskStateMachine(),
+            (TransactionTemplate) null,
+            new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+            org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class)
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("cacheEvictionService");
     }
 }

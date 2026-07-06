@@ -13,6 +13,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
@@ -85,6 +86,7 @@ class ReviewServiceImplTest {
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
+    private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTimelineQueryService reviewTimelineQueryService =
         new ReviewTimelineQueryService(reviewTimelineMapper);
@@ -122,7 +124,7 @@ class ReviewServiceImplTest {
         reviewTaskMapper,
         reviewFindingMapper,
         timelineAppender(),
-        null
+        cacheEvictionService
     );
     private final GithubWritebackFailureClassifier githubWritebackFailureClassifier =
         new GithubWritebackFailureClassifier();
@@ -188,7 +190,7 @@ class ReviewServiceImplTest {
             reviewTaskMapper,
             timelineAppender(),
             reviewTaskStateMachine,
-            null
+            cacheEvictionService
         );
     }
 
@@ -198,7 +200,7 @@ class ReviewServiceImplTest {
             timelineAppender(),
             reviewTaskStateMachine,
             afterCommitPublisher,
-            null
+            cacheEvictionService
         );
     }
 
@@ -210,7 +212,7 @@ class ReviewServiceImplTest {
             reviewTaskMapper,
             timelineAppender(),
             null,
-            null,
+            cacheEvictionService,
             reviewTaskStateMachine,
             (TransactionTemplate) null,
             coordinator,

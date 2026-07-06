@@ -14,6 +14,7 @@ import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +45,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     @Override
@@ -116,9 +117,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
     }
 
     private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        cacheEvictionService.evictDashboardOverview();
     }
 
     private String cleanNote(String note) {

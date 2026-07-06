@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
@@ -59,6 +60,7 @@ class SystemConfigServiceImplTest {
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final GithubConnectionProbe githubConnectionProbe =
         new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
     private final LlmConnectionProbe llmConnectionProbe =
@@ -105,7 +107,7 @@ class SystemConfigServiceImplTest {
             integrationConfigMapper,
             secretCryptoService,
             null,
-            null
+            cacheEvictionService
         );
     private final ReviewPolicyConfigServiceImpl reviewPolicyConfigService = new ReviewPolicyConfigServiceImpl(
         reviewPolicyConfigMapper,
@@ -114,7 +116,7 @@ class SystemConfigServiceImplTest {
     private final ReviewRuleConfigServiceImpl reviewRuleConfigService = new ReviewRuleConfigServiceImpl(
         reviewRuleConfigMapper,
         reviewFindingMapper,
-        null,
+        cacheEvictionService,
         new ReviewRuleConfigPolicy(),
         new ReviewRuleMetricAssembler()
     );

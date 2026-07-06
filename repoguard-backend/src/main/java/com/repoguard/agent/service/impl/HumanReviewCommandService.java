@@ -38,7 +38,7 @@ public class HumanReviewCommandService {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
-        this.cacheEvictionService = cacheEvictionService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     public HumanReviewResponse submit(Long id, HumanReviewRequest request, String operator) {
@@ -139,9 +139,7 @@ public class HumanReviewCommandService {
     }
 
     private void evictDashboardOverview() {
-        if (cacheEvictionService != null) {
-            cacheEvictionService.evictDashboardOverview();
-        }
+        cacheEvictionService.evictDashboardOverview();
     }
 
     private String truncate(String value) {
