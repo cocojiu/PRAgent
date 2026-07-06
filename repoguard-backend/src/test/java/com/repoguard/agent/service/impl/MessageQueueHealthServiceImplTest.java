@@ -48,6 +48,15 @@ class MessageQueueHealthServiceImplTest {
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final RabbitRuntimeHealthProbe runtimeHealthProbe = new RabbitRuntimeHealthProbe(rabbitTemplate, properties);
+    private final MessageQueueRuntimeConfigAssembler runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(
+        properties,
+        runtimeHealthProbe
+    );
+    private final MessageQueueExceptionTaskAssembler exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(
+        reviewTaskStateMachine
+    );
+    private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, null);
     private final MessageQueueHealthServiceImpl service = createService(null);
 
     @Test
@@ -64,17 +73,16 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
-    void healthQueryServiceRejectsMissingStateMachine() {
+    void healthQueryServiceRejectsMissingRuntimeConfigAssembler() {
         assertThatThrownBy(() -> new MessageQueueHealthQueryService(
             reviewTaskMapper,
             rabbitMqIntegrationProvider,
-            properties,
-            org.mockito.Mockito.mock(RabbitRuntimeHealthProbe.class),
             null,
-            null
+            exceptionTaskAssembler,
+            metricAssembler
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("reviewTaskStateMachine");
+            .hasMessage("runtimeConfigAssembler");
     }
 
     @Test
@@ -314,10 +322,9 @@ class MessageQueueHealthServiceImplTest {
         MessageQueueHealthQueryService healthQueryService = new MessageQueueHealthQueryService(
             reviewTaskMapper,
             rabbitMqIntegrationProvider,
-            properties,
-            new RabbitRuntimeHealthProbe(rabbitTemplate, properties),
-            null,
-            reviewTaskStateMachine
+            runtimeConfigAssembler,
+            exceptionTaskAssembler,
+            metricAssembler
         );
         ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
             reviewTaskMapper,

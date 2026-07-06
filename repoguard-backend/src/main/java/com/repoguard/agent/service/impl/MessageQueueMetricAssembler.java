@@ -5,14 +5,17 @@ import com.repoguard.agent.dto.MessageQueueMetricDto;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class MessageQueueMetricAssembler {
 
     private final RabbitReviewQueueProperties properties;
     private final RepoGuardMetrics metrics;
 
     MessageQueueMetricAssembler(RabbitReviewQueueProperties properties, RepoGuardMetrics metrics) {
-        this.properties = properties;
+        this.properties = Objects.requireNonNull(properties, "properties");
         this.metrics = metrics;
     }
 

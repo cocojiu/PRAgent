@@ -8,7 +8,10 @@ import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class MessageQueueRuntimeConfigAssembler {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -21,8 +24,8 @@ class MessageQueueRuntimeConfigAssembler {
         RabbitReviewQueueProperties properties,
         RabbitRuntimeHealthProbe runtimeHealthProbe
     ) {
-        this.properties = properties;
-        this.runtimeHealthProbe = runtimeHealthProbe;
+        this.properties = Objects.requireNonNull(properties, "properties");
+        this.runtimeHealthProbe = Objects.requireNonNull(runtimeHealthProbe, "runtimeHealthProbe");
     }
 
     ActiveRabbitMqConfigDto activeConfig(RabbitMqIntegrationSettings settings) {
@@ -72,7 +75,7 @@ class MessageQueueRuntimeConfigAssembler {
     }
 
     private String runtimeConnectionStatus() {
-        return runtimeHealthProbe == null ? "UNKNOWN" : runtimeHealthProbe.connectionStatus();
+        return runtimeHealthProbe.connectionStatus();
     }
 
     private String configVersion(RabbitMqIntegrationSettings settings) {

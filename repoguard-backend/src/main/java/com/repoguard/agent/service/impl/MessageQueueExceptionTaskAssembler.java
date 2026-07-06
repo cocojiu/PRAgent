@@ -8,7 +8,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.stereotype.Component;
 
+@Component
 class MessageQueueExceptionTaskAssembler {
 
     private static final String STATUS_DLQ = "DLQ";

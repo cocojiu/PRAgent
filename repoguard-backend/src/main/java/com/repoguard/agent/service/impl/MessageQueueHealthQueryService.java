@@ -2,19 +2,15 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.RabbitMqIntegrationProvider;
 import com.repoguard.agent.config.RabbitMqIntegrationSettings;
-import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueExceptionTaskDto;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
-import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -33,38 +29,18 @@ class MessageQueueHealthQueryService {
     MessageQueueHealthQueryService(
         ReviewTaskMapper reviewTaskMapper,
         RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
-        RabbitReviewQueueProperties properties,
-        RabbitTemplate rabbitTemplate,
-        RepoGuardMetrics metrics,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        MessageQueueRuntimeConfigAssembler runtimeConfigAssembler,
+        MessageQueueExceptionTaskAssembler exceptionTaskAssembler,
+        MessageQueueMetricAssembler metricAssembler
     ) {
-        this(
-            reviewTaskMapper,
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
+        this.rabbitMqIntegrationProvider = Objects.requireNonNull(
             rabbitMqIntegrationProvider,
-            properties,
-            new RabbitRuntimeHealthProbe(rabbitTemplate, properties),
-            metrics,
-            reviewTaskStateMachine
+            "rabbitMqIntegrationProvider"
         );
-    }
-
-    MessageQueueHealthQueryService(
-        ReviewTaskMapper reviewTaskMapper,
-        RabbitMqIntegrationProvider rabbitMqIntegrationProvider,
-        RabbitReviewQueueProperties properties,
-        RabbitRuntimeHealthProbe runtimeHealthProbe,
-        RepoGuardMetrics metrics,
-        ReviewTaskStateMachine reviewTaskStateMachine
-    ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.rabbitMqIntegrationProvider = rabbitMqIntegrationProvider;
-        ReviewTaskStateMachine stateMachine = Objects.requireNonNull(
-            reviewTaskStateMachine,
-            "reviewTaskStateMachine"
-        );
-        this.runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(properties, runtimeHealthProbe);
-        this.exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(stateMachine);
-        this.metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
+        this.runtimeConfigAssembler = Objects.requireNonNull(runtimeConfigAssembler, "runtimeConfigAssembler");
+        this.exceptionTaskAssembler = Objects.requireNonNull(exceptionTaskAssembler, "exceptionTaskAssembler");
+        this.metricAssembler = Objects.requireNonNull(metricAssembler, "metricAssembler");
     }
 
     MessageQueueHealthResponse getHealth() {
