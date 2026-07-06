@@ -8,6 +8,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -20,11 +21,18 @@ public class RepoGuardMetrics {
     private static final String UNKNOWN = "unknown";
 
     private final MeterRegistry meterRegistry;
-    private final ReviewExecutionFailureClassifier reviewFailureClassifier = new ReviewExecutionFailureClassifier();
+    private final ReviewExecutionFailureClassifier reviewFailureClassifier;
     private final ConcurrentMap<String, AtomicLong> gauges = new ConcurrentHashMap<>();
 
-    public RepoGuardMetrics(MeterRegistry meterRegistry) {
-        this.meterRegistry = meterRegistry;
+    public RepoGuardMetrics(
+        MeterRegistry meterRegistry,
+        ReviewExecutionFailureClassifier reviewFailureClassifier
+    ) {
+        this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
+        this.reviewFailureClassifier = Objects.requireNonNull(
+            reviewFailureClassifier,
+            "reviewFailureClassifier"
+        );
     }
 
     public void reviewTaskCreated(String source) {

@@ -79,7 +79,10 @@ class CacheStatsServiceImplTest {
     }
 
     private static CacheManager initializedCacheManager() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(new SimpleMeterRegistry());
+        RepoGuardMetrics metrics = new RepoGuardMetrics(
+            new SimpleMeterRegistry(),
+            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+        );
         SimpleCacheManager cacheManager = (SimpleCacheManager) new CacheConfig().cacheManager(metrics);
         cacheManager.afterPropertiesSet();
         return cacheManager;

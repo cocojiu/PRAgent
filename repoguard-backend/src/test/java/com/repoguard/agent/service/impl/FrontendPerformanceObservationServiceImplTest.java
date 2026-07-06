@@ -17,7 +17,10 @@ import org.junit.jupiter.api.Test;
 class FrontendPerformanceObservationServiceImplTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+    );
     private final FrontendPerformanceObservationServiceImpl service =
         new FrontendPerformanceObservationServiceImpl(metrics, thresholdMonitor(metrics));
 
@@ -74,7 +77,10 @@ class FrontendPerformanceObservationServiceImplTest {
 
     @Test
     void recordsThresholdSignalsForSlowFrontendApiAndLongTask() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+        RepoGuardMetrics metrics = new RepoGuardMetrics(
+            meterRegistry,
+            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+        );
         ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
         properties.setFrontendApiDurationMs(20);
         properties.setFrontendLongTaskMs(40);
@@ -111,7 +117,10 @@ class FrontendPerformanceObservationServiceImplTest {
 
     @Test
     void appliesRouteSpecificFrontendPerformanceBudgets() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+        RepoGuardMetrics metrics = new RepoGuardMetrics(
+            meterRegistry,
+            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+        );
         ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
         properties.setFrontendApiDurationMs(2000);
         properties.setFrontendLongTaskMs(200);

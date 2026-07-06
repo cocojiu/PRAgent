@@ -80,7 +80,10 @@ class RabbitNotificationEventPublisherTest {
         RabbitNotificationQueueProperties properties = properties();
         NotificationEventMessage message = message();
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-        RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+        RepoGuardMetrics metrics = new RepoGuardMetrics(
+            meterRegistry,
+            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+        );
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(3);
             correlationData.getFuture().complete(new CorrelationData.Confirm(false, "broker refused"));

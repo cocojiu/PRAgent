@@ -12,7 +12,10 @@ import org.springframework.cache.caffeine.CaffeineCache;
 class ObservedCacheTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+    );
 
     @Test
     void recordsDashboardCacheHitMissAndMutations() {

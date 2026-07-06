@@ -3,6 +3,7 @@ package com.repoguard.agent.observability;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import java.time.Duration;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -11,7 +12,10 @@ import org.springframework.dao.CannotAcquireLockException;
 class RepoGuardMetricsTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new ReviewExecutionFailureClassifier()
+    );
 
     @Test
     void recordsReviewTaskCountersWithStableTags() {

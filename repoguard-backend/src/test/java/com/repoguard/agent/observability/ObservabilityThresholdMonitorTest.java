@@ -11,7 +11,10 @@ import org.junit.jupiter.api.Test;
 class ObservabilityThresholdMonitorTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+    );
 
     @Test
     void constructorRejectsMissingProperties() {

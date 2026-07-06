@@ -22,7 +22,10 @@ import org.springframework.stereotype.Component;
 class SqlQueryObservationInterceptorTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+    );
     private final SqlQueryObservationInterceptor interceptor = new SqlQueryObservationInterceptor(metrics, thresholdMonitor());
 
     @Test

@@ -17,7 +17,10 @@ import org.springframework.web.servlet.HandlerMapping;
 class ApiRequestObservationFilterTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+        meterRegistry,
+        new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+    );
     private final ApiRequestObservationFilter filter = new ApiRequestObservationFilter(metrics, thresholdMonitor());
 
     @Test
