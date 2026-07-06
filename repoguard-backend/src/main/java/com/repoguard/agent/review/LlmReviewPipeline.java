@@ -20,6 +20,7 @@ class LlmReviewPipeline {
     private final LlmReviewQualityScorer qualityScorer;
     private final LlmReviewCostEstimator costEstimator;
     private final LlmChunkReviewAggregator chunkReviewAggregator;
+    private final LlmFallbackReasonClassifier fallbackReasonClassifier;
     private final RepoGuardMetrics metrics;
     private final ObjectMapper objectMapper;
 
@@ -80,6 +81,7 @@ class LlmReviewPipeline {
         this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger(new RiskLevelRanker()) : reviewMerger;
         this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
         this.costEstimator = costEstimator == null ? new LlmReviewCostEstimator() : costEstimator;
+        this.fallbackReasonClassifier = new LlmFallbackReasonClassifier();
         this.metrics = metrics;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
@@ -198,13 +200,13 @@ class LlmReviewPipeline {
 
     private ReviewResult fallbackReview(ReviewPipelineContext context, String reason) {
         if (metrics != null) {
-            metrics.llmFallback(reasonCategory(reason));
+            metrics.llmFallback(fallbackReasonClassifier.category(reason));
         }
         ReviewResult fallback = ruleBasedReviewer.review(context.diff());
         ReviewPolicySettings settings = context.settings();
         return ReviewResult.fallback(
             fallback.riskLevel(),
-            normalizeReason(reason),
+            fallbackReasonClassifier.normalizeReason(reason),
             fallback.findings(),
             settings == null ? null : settings.llmProvider(),
             settings == null ? null : settings.modelName(),
@@ -215,27 +217,6 @@ class LlmReviewPipeline {
 
     private boolean isLlmReady(ReviewPolicySettings settings) {
         return settings != null && settings.exists() && settings.enabled() && settings.readyForLlmReview();
-    }
-
-    private String normalizeReason(String reason) {
-        if (reason == null || reason.isBlank()) {
-            return "LLM review unavailable";
-        }
-        return reason.replaceAll("\\s+", " ").trim();
-    }
-
-    private String reasonCategory(String reason) {
-        String normalized = normalizeReason(reason).toLowerCase();
-        int markerIndex = normalized.indexOf("category=");
-        if (markerIndex >= 0) {
-            int valueStart = markerIndex + "category=".length();
-            int valueEnd = normalized.indexOf(' ', valueStart);
-            return valueEnd < 0 ? normalized.substring(valueStart) : normalized.substring(valueStart, valueEnd);
-        }
-        if (normalized.contains("config")) {
-            return "config_incomplete";
-        }
-        return "llm_unavailable";
     }
 
     private Integer elapsedMillis(long startedAt) {
