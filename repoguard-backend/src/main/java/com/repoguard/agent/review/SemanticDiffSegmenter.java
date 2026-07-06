@@ -9,6 +9,7 @@ class SemanticDiffSegmenter {
     private final DiffRiskClassifier riskClassifier;
     private final SemanticDiffScopeResolver scopeResolver;
     private final DiffHunkSplitter hunkSplitter;
+    private final DiffHunkLineAllocator lineAllocator;
 
     SemanticDiffSegmenter(DiffRiskClassifier riskClassifier) {
         this(riskClassifier, new SemanticDiffScopeResolver(), new DiffHunkSplitter());
@@ -22,6 +23,7 @@ class SemanticDiffSegmenter {
         this.riskClassifier = riskClassifier == null ? new DiffRiskClassifier() : riskClassifier;
         this.scopeResolver = scopeResolver == null ? new SemanticDiffScopeResolver() : scopeResolver;
         this.hunkSplitter = hunkSplitter == null ? new DiffHunkSplitter() : hunkSplitter;
+        this.lineAllocator = new DiffHunkLineAllocator(this.hunkSplitter);
     }
 
     List<SemanticDiffSegment> segments(GithubChangedFile file) {
@@ -46,32 +48,11 @@ class SemanticDiffSegmenter {
         }
 
         List<SemanticDiffSegment> segments = new ArrayList<>();
-        List<Integer> visibleAdditions = hunks.stream().map(hunk -> hunkSplitter.countPatchLines(hunk, '+')).toList();
-        List<Integer> visibleDeletions = hunks.stream().map(hunk -> hunkSplitter.countPatchLines(hunk, '-')).toList();
-        int totalVisibleAdditions = visibleAdditions.stream().mapToInt(Integer::intValue).sum();
-        int totalVisibleDeletions = visibleDeletions.stream().mapToInt(Integer::intValue).sum();
-        int allocatedAdditions = 0;
-        int allocatedDeletions = 0;
+        List<DiffHunkLineAllocation> allocations = lineAllocator.allocate(file, hunks);
         for (int i = 0; i < hunks.size(); i++) {
             String hunk = hunks.get(i);
-            boolean last = i == hunks.size() - 1;
-            int additions = hunkSplitter.allocatedLines(
-                visibleAdditions.get(i),
-                totalVisibleAdditions,
-                safeInt(file.additions()),
-                allocatedAdditions,
-                last
-            );
-            int deletions = hunkSplitter.allocatedLines(
-                visibleDeletions.get(i),
-                totalVisibleDeletions,
-                safeInt(file.deletions()),
-                allocatedDeletions,
-                last
-            );
-            allocatedAdditions += additions;
-            allocatedDeletions += deletions;
-            segments.add(toSegment(file, hunk, additions, deletions));
+            DiffHunkLineAllocation allocation = allocations.get(i);
+            segments.add(toSegment(file, hunk, allocation.additions(), allocation.deletions()));
         }
         return segments;
     }
