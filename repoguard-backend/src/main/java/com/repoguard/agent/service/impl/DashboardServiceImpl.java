@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
@@ -32,8 +33,6 @@ import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.service.DashboardService;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -45,8 +44,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class DashboardServiceImpl implements DashboardService {
 
-    private static final DateTimeFormatter REVIEWED_AT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-
     private final DashboardMapper dashboardMapper;
     private final DashboardStatusMapper statusMapper;
     private final DashboardRuleDisplayMapper ruleDisplayMapper;
@@ -54,6 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardMetricAssembler dashboardMetricAssembler;
     private final DashboardRiskDistributionAssembler riskDistributionAssembler;
     private final DashboardRuleAssembler dashboardRuleAssembler;
+    private final DashboardHighRiskReviewAssembler highRiskReviewAssembler;
     private final DashboardLlmQualityFormatter llmQualityFormatter;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
@@ -76,6 +74,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
         this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
         this.dashboardRuleAssembler = new DashboardRuleAssembler(ruleDisplayMapper);
+        this.highRiskReviewAssembler = new DashboardHighRiskReviewAssembler(statusMapper);
         this.llmQualityFormatter = llmQualityFormatter;
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
@@ -192,16 +191,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private List<HighRiskReviewDto> buildHighRiskReviews(List<DashboardHighRiskReview> highRiskReviews) {
-        return nullToEmpty(highRiskReviews).stream()
-            .map(review -> new HighRiskReviewDto(
-                review.getTitle(),
-                review.getRepository(),
-                lower(review.getRiskLevel()),
-                safeHighRiskRuleHits(review),
-                formatReviewedAt(review.getCreatedAt()),
-                statusMapper.reviewTaskStatusText(review.getStatus())
-            ))
-            .toList();
+        return highRiskReviewAssembler.assemble(highRiskReviews);
     }
 
     private List<FailedRuleStatDto> buildFailedRules(List<DashboardRuleHitCount> ruleHitCounts) {
@@ -266,10 +256,6 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
-
     private String percent(long value, long total) {
         if (total == 0) {
             return "0.0%";
@@ -287,10 +273,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeRuleTotal(DashboardRuleHitCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
-    }
-
-    private long safeHighRiskRuleHits(DashboardHighRiskReview review) {
-        return review.getRuleHits() == null ? 0L : review.getRuleHits();
     }
 
     private long safeModelTaskCount(DashboardLlmQualityModelStat stat) {
@@ -343,10 +325,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeRepositoryFalsePositiveFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
         return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
-    }
-
-    private String formatReviewedAt(LocalDateTime reviewedAt) {
-        return reviewedAt == null ? "" : reviewedAt.format(REVIEWED_AT_FORMATTER);
     }
 
     private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
