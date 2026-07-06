@@ -230,6 +230,33 @@ describe("apiRequest", () => {
     expect(calls[6][0]).toContain("/api/v1/notifications");
     expect(calls[6][1].method).toBeUndefined();
   });
+
+  it("keeps dashboard overview and split module endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse([])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchDashboardOverview", { llmTrendDays: 30 });
+    await apiRequest("fetchDashboardSummary", undefined);
+    await apiRequest("fetchDashboardReviewTrend", undefined);
+    await apiRequest("fetchDashboardRiskDistribution", undefined);
+    await apiRequest("fetchDashboardRules", undefined);
+    await apiRequest("fetchDashboardHighRiskReviews", undefined);
+    await apiRequest("fetchDashboardLlmQuality", { llmTrendDays: 90 });
+    await apiRequest("fetchSystemHealthSummary", undefined);
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/dashboard/overview");
+    expect(calls[0][0]).toContain("llmTrendDays=30");
+    expect(calls[1][0]).toContain("/api/v1/dashboard/summary");
+    expect(calls[2][0]).toContain("/api/v1/dashboard/review-trend");
+    expect(calls[3][0]).toContain("/api/v1/dashboard/risk-distribution");
+    expect(calls[4][0]).toContain("/api/v1/dashboard/rules");
+    expect(calls[5][0]).toContain("/api/v1/dashboard/high-risk-reviews");
+    expect(calls[6][0]).toContain("/api/v1/dashboard/llm-quality");
+    expect(calls[6][0]).toContain("llmTrendDays=90");
+    expect(calls[7][0]).toContain("/api/v1/system/health/summary");
+    expect(calls.every(([, init]) => init.method === undefined)).toBe(true);
+  });
 });
 
 const setCsrfCookie = (token: string) => {
