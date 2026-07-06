@@ -1,11 +1,9 @@
 package com.repoguard.agent.dashboard;
 
-import jakarta.annotation.PreDestroy;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,13 +32,6 @@ public class DashboardSnapshotStore {
         }
         refreshAsync(key, loader);
         return snapshot;
-    }
-
-    @PreDestroy
-    public void shutdown() {
-        if (executor instanceof ExecutorService executorService) {
-            executorService.shutdown();
-        }
     }
 
     @SuppressWarnings("unchecked")
