@@ -1,5 +1,6 @@
 package com.repoguard.agent.controller;
 
+import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -56,8 +57,14 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("queued"))
+            .andExpect(jsonPath("$.data.message").value("Review task queued"))
             .andExpect(jsonPath("$.data.taskId").value(88))
+            .andExpect(jsonPath("$.data.existing").value(false))
             .andExpect(jsonPath("$.data.deliveryId").value("delivery-1"))
             .andExpect(jsonPath("$.data.action").value("opened"));
 
@@ -74,6 +81,32 @@ class GithubWebhookControllerTest {
     }
 
     @Test
+    void pullRequestSynchronizeKeepsQueuedResponseContractForExistingTask() throws Exception {
+        when(reviewService.triggerManualReview(any())).thenReturn(
+            new ManualReviewResponse(99L, "queued", "Existing review task reused", true, "github_webhook", "github_webhook")
+        );
+
+        byte[] payload = pullRequestPayload("synchronize", false, "def456").getBytes(StandardCharsets.UTF_8);
+        mockMvc.perform(post("/api/v1/github/webhooks")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-GitHub-Event", "pull_request")
+                .header("X-GitHub-Delivery", "delivery-sync")
+                .header("X-Hub-Signature-256", signature(payload))
+                .content(payload))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
+            .andExpect(jsonPath("$.data.status").value("queued"))
+            .andExpect(jsonPath("$.data.message").value("Existing review task reused"))
+            .andExpect(jsonPath("$.data.taskId").value(99))
+            .andExpect(jsonPath("$.data.existing").value(true))
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-sync"))
+            .andExpect(jsonPath("$.data.action").value("synchronize"));
+    }
+
+    @Test
     void nonPullRequestEventIsAcceptedAndSkipped() throws Exception {
         byte[] payload = "{\"zen\":\"Keep it logically awesome.\"}".getBytes(StandardCharsets.UTF_8);
 
@@ -84,8 +117,16 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("skipped"))
-            .andExpect(jsonPath("$.data.message").value("GitHub event is ignored"));
+            .andExpect(jsonPath("$.data.message").value("GitHub event is ignored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-2"))
+            .andExpect(jsonPath("$.data.action").doesNotExist());
 
         verify(reviewService, never()).triggerManualReview(any());
     }
@@ -101,8 +142,16 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("skipped"))
-            .andExpect(jsonPath("$.data.message").value("Draft pull request is ignored"));
+            .andExpect(jsonPath("$.data.message").value("Draft pull request is ignored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-3"))
+            .andExpect(jsonPath("$.data.action").value("opened"));
 
         verify(reviewService, never()).triggerManualReview(any());
     }
@@ -119,8 +168,16 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("skipped"))
-            .andExpect(jsonPath("$.data.message").value("GitHub repository is not monitored"));
+            .andExpect(jsonPath("$.data.message").value("GitHub repository is not monitored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-4"))
+            .andExpect(jsonPath("$.data.action").value("opened"));
 
         verify(reviewService, never()).triggerManualReview(any());
     }
@@ -136,8 +193,16 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("skipped"))
-            .andExpect(jsonPath("$.data.message").value("GitHub pull request head branch is not monitored"));
+            .andExpect(jsonPath("$.data.message").value("GitHub pull request head branch is not monitored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-5"))
+            .andExpect(jsonPath("$.data.action").value("opened"));
 
         verify(reviewService, never()).triggerManualReview(any());
     }
@@ -168,8 +233,16 @@ class GithubWebhookControllerTest {
                 .header("X-Hub-Signature-256", signature(payload))
                 .content(payload))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.message").value("OK"))
+            .andExpect(jsonPath("$.timestamp", notNullValue()))
             .andExpect(jsonPath("$.data.status").value("skipped"))
-            .andExpect(jsonPath("$.data.message").value("GitHub event is ignored"));
+            .andExpect(jsonPath("$.data.message").value("GitHub event is ignored"))
+            .andExpect(jsonPath("$.data.taskId").doesNotExist())
+            .andExpect(jsonPath("$.data.existing").doesNotExist())
+            .andExpect(jsonPath("$.data.deliveryId").value("delivery-invalid-json"))
+            .andExpect(jsonPath("$.data.action").doesNotExist());
 
         verify(reviewService, never()).triggerManualReview(any());
     }
