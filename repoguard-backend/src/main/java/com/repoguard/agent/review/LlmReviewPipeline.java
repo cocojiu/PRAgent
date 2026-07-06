@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -20,6 +18,7 @@ class LlmReviewPipeline {
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmRuleReviewMerger reviewMerger;
     private final LlmReviewQualityScorer qualityScorer;
+    private final LlmReviewCostEstimator costEstimator;
     private final RepoGuardMetrics metrics;
     private final ObjectMapper objectMapper;
 
@@ -29,10 +28,20 @@ class LlmReviewPipeline {
         LlmReviewPromptBuilder promptBuilder,
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
+        LlmReviewCostEstimator costEstimator,
         ObjectMapper objectMapper,
         RepoGuardMetrics metrics
     ) {
-        this(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, objectMapper, metrics, new PullRequestDiffChunker());
+        this(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            objectMapper,
+            metrics,
+            new PullRequestDiffChunker()
+        );
     }
 
     LlmReviewPipeline(
@@ -43,7 +52,16 @@ class LlmReviewPipeline {
         RepoGuardMetrics metrics,
         PullRequestDiffChunker diffChunker
     ) {
-        this(ruleBasedReviewer, promptBuilder, reviewMerger, new LlmReviewQualityScorer(), objectMapper, metrics, diffChunker);
+        this(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            objectMapper,
+            metrics,
+            diffChunker
+        );
     }
 
     LlmReviewPipeline(
@@ -51,6 +69,7 @@ class LlmReviewPipeline {
         LlmReviewPromptBuilder promptBuilder,
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
+        LlmReviewCostEstimator costEstimator,
         ObjectMapper objectMapper,
         RepoGuardMetrics metrics,
         PullRequestDiffChunker diffChunker
@@ -59,6 +78,7 @@ class LlmReviewPipeline {
         this.promptBuilder = promptBuilder == null ? new LlmReviewPromptBuilder() : promptBuilder;
         this.reviewMerger = reviewMerger == null ? new LlmRuleReviewMerger(new RiskLevelRanker()) : reviewMerger;
         this.qualityScorer = qualityScorer == null ? new LlmReviewQualityScorer() : qualityScorer;
+        this.costEstimator = costEstimator == null ? new LlmReviewCostEstimator() : costEstimator;
         this.metrics = metrics;
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.stages = List.of(
@@ -130,7 +150,7 @@ class LlmReviewPipeline {
                     callResult.promptTokens(),
                     callResult.completionTokens(),
                     callResult.totalTokens(),
-                    estimatedCost(settings, callResult.promptTokens(), callResult.completionTokens())
+                    costEstimator.estimate(settings, callResult.promptTokens(), callResult.completionTokens())
                 );
             }
 
@@ -174,7 +194,7 @@ class LlmReviewPipeline {
                 zeroToNull(promptTokens),
                 zeroToNull(completionTokens),
                 zeroToNull(totalTokens),
-                estimatedCost(settings, zeroToNull(promptTokens), zeroToNull(completionTokens))
+                costEstimator.estimate(settings, zeroToNull(promptTokens), zeroToNull(completionTokens))
             );
         }
     }
@@ -263,19 +283,4 @@ class LlmReviewPipeline {
         return value <= 0 ? null : value;
     }
 
-    private BigDecimal estimatedCost(ReviewPolicySettings settings, Integer promptTokens, Integer completionTokens) {
-        if (settings == null || promptTokens == null && completionTokens == null) {
-            return null;
-        }
-        BigDecimal inputPrice = settings.inputTokenPricePerMillion() == null
-            ? BigDecimal.ZERO
-            : settings.inputTokenPricePerMillion();
-        BigDecimal outputPrice = settings.outputTokenPricePerMillion() == null
-            ? BigDecimal.ZERO
-            : settings.outputTokenPricePerMillion();
-        BigDecimal inputCost = BigDecimal.valueOf(safeInt(promptTokens)).multiply(inputPrice);
-        BigDecimal outputCost = BigDecimal.valueOf(safeInt(completionTokens)).multiply(outputPrice);
-        BigDecimal total = inputCost.add(outputCost).divide(BigDecimal.valueOf(1_000_000L), 6, RoundingMode.HALF_UP);
-        return total.compareTo(BigDecimal.ZERO) == 0 ? null : total;
-    }
 }
