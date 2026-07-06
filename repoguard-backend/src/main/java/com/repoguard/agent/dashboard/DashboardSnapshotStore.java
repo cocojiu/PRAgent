@@ -6,10 +6,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -21,11 +21,9 @@ public class DashboardSnapshotStore {
     private final Set<String> refreshingKeys = ConcurrentHashMap.newKeySet();
     private final Executor executor;
 
-    public DashboardSnapshotStore() {
-        this(Executors.newSingleThreadExecutor(new DashboardSnapshotThreadFactory()));
-    }
-
-    public DashboardSnapshotStore(Executor executor) {
+    public DashboardSnapshotStore(
+        @Qualifier(DashboardSnapshotExecutorConfig.DASHBOARD_SNAPSHOT_EXECUTOR) Executor executor
+    ) {
         this.executor = executor;
     }
 
@@ -69,15 +67,5 @@ public class DashboardSnapshotStore {
                 refreshingKeys.remove(key);
             }
         });
-    }
-
-    private static final class DashboardSnapshotThreadFactory implements java.util.concurrent.ThreadFactory {
-
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "repoguard-dashboard-snapshot");
-            thread.setDaemon(true);
-            return thread;
-        }
     }
 }
