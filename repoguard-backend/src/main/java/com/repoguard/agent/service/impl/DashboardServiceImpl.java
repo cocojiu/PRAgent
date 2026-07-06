@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
+import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
@@ -26,8 +27,6 @@ import com.repoguard.agent.dto.DashboardRulesResponse;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.FailedRuleStatDto;
 import com.repoguard.agent.dto.HighRiskReviewDto;
-import com.repoguard.agent.dto.LlmQualityByModelDto;
-import com.repoguard.agent.dto.LlmQualityByRepositoryDto;
 import com.repoguard.agent.dto.ReviewTrendPointDto;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
@@ -52,7 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardRiskDistributionAssembler riskDistributionAssembler;
     private final DashboardRuleAssembler dashboardRuleAssembler;
     private final DashboardHighRiskReviewAssembler highRiskReviewAssembler;
-    private final DashboardLlmQualityFormatter llmQualityFormatter;
+    private final DashboardLlmQualityStatsAssembler llmQualityStatsAssembler;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
     private final DashboardSystemHealthProbe systemHealthProbe;
@@ -75,7 +74,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
         this.dashboardRuleAssembler = new DashboardRuleAssembler(ruleDisplayMapper);
         this.highRiskReviewAssembler = new DashboardHighRiskReviewAssembler(statusMapper);
-        this.llmQualityFormatter = llmQualityFormatter;
+        this.llmQualityStatsAssembler = new DashboardLlmQualityStatsAssembler(llmQualityFormatter);
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
         this.systemHealthProbe = systemHealthProbe;
@@ -212,36 +211,6 @@ public class DashboardServiceImpl implements DashboardService {
         return dashboardRuleAssembler.assemble(ruleHitCounts);
     }
 
-    private List<LlmQualityByModelDto> buildLlmQualityByModel(List<DashboardLlmQualityModelStat> stats) {
-        return nullToEmpty(stats).stream()
-            .map(stat -> new LlmQualityByModelDto(
-                stat.getModelLabel(),
-                safeModelTaskCount(stat),
-                llmQualityFormatter.averageDuration(stat.getAverageDurationMs()),
-                llmQualityFormatter.averageTokens(stat.getAverageTokens()),
-                llmQualityFormatter.averageCost(stat.getAverageCost()),
-                llmQualityFormatter.rate(safeModelParseSuccessCount(stat), safeModelTaskCount(stat)),
-                llmQualityFormatter.rate(safeModelFallbackCount(stat), safeModelTaskCount(stat)),
-                llmQualityFormatter.rate(safeModelPartialFallbackCount(stat), safeModelTaskCount(stat)),
-                llmQualityFormatter.rate(safeModelValidFeedbackCount(stat), safeModelReviewedFeedbackCount(stat)),
-                llmQualityFormatter.rate(safeModelFalsePositiveFeedbackCount(stat), safeModelReviewedFeedbackCount(stat))
-            ))
-            .toList();
-    }
-
-    private List<LlmQualityByRepositoryDto> buildLlmQualityByRepository(List<DashboardLlmQualityRepositoryStat> stats) {
-        return nullToEmpty(stats).stream()
-            .map(stat -> new LlmQualityByRepositoryDto(
-                stat.getRepositoryLabel(),
-                safeRepositoryTaskCount(stat),
-                llmQualityFormatter.rate(safeRepositoryFallbackCount(stat), safeRepositoryTaskCount(stat)),
-                llmQualityFormatter.rate(safeRepositoryPartialFallbackCount(stat), safeRepositoryTaskCount(stat)),
-                llmQualityFormatter.rate(safeRepositoryValidFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat)),
-                llmQualityFormatter.rate(safeRepositoryFalsePositiveFeedbackCount(stat), safeRepositoryReviewedFeedbackCount(stat))
-            ))
-            .toList();
-    }
-
     private DashboardLlmQualityResponse buildLlmQuality(
         LocalDate reviewTrendStartDate,
         DashboardLlmQualityTrendBuilder.Window llmTrendWindow
@@ -250,8 +219,8 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardLlmQualityRepositoryStat> repositoryStats = dashboardMapper.selectLlmQualityByRepositoryStats(reviewTrendStartDate);
         List<DashboardLlmQualityTrendCount> trendCounts = dashboardMapper.selectLlmQualityTrendCounts(llmTrendWindow.startDate());
         return new DashboardLlmQualityResponse(
-            buildLlmQualityByModel(modelStats),
-            buildLlmQualityByRepository(repositoryStats),
+            llmQualityStatsAssembler.assembleByModel(modelStats),
+            llmQualityStatsAssembler.assembleByRepository(repositoryStats),
             llmQualityTrendBuilder.build(trendCounts, llmTrendWindow)
         );
     }
@@ -273,58 +242,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     private long safeRuleTotal(DashboardRuleHitCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
-    }
-
-    private long safeModelTaskCount(DashboardLlmQualityModelStat stat) {
-        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
-    }
-
-    private long safeModelParseSuccessCount(DashboardLlmQualityModelStat stat) {
-        return stat.getParseSuccessCount() == null ? 0L : stat.getParseSuccessCount();
-    }
-
-    private long safeModelFallbackCount(DashboardLlmQualityModelStat stat) {
-        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
-    }
-
-    private long safeModelPartialFallbackCount(DashboardLlmQualityModelStat stat) {
-        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
-    }
-
-    private long safeModelReviewedFeedbackCount(DashboardLlmQualityModelStat stat) {
-        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
-    }
-
-    private long safeModelValidFeedbackCount(DashboardLlmQualityModelStat stat) {
-        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
-    }
-
-    private long safeModelFalsePositiveFeedbackCount(DashboardLlmQualityModelStat stat) {
-        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
-    }
-
-    private long safeRepositoryTaskCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getTaskCount() == null ? 0L : stat.getTaskCount();
-    }
-
-    private long safeRepositoryFallbackCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getFallbackCount() == null ? 0L : stat.getFallbackCount();
-    }
-
-    private long safeRepositoryPartialFallbackCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getPartialFallbackCount() == null ? 0L : stat.getPartialFallbackCount();
-    }
-
-    private long safeRepositoryReviewedFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getReviewedFeedbackCount() == null ? 0L : stat.getReviewedFeedbackCount();
-    }
-
-    private long safeRepositoryValidFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getValidFeedbackCount() == null ? 0L : stat.getValidFeedbackCount();
-    }
-
-    private long safeRepositoryFalsePositiveFeedbackCount(DashboardLlmQualityRepositoryStat stat) {
-        return stat.getFalsePositiveFeedbackCount() == null ? 0L : stat.getFalsePositiveFeedbackCount();
     }
 
     private long totalRuleHits(List<DashboardRuleHitCount> ruleHitCounts) {
