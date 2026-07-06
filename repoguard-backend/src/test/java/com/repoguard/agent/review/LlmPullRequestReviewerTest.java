@@ -247,6 +247,36 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void reviewClassifiesAuthFailureBeforeParsingResponse() throws Exception {
+        ReviewResult result = reviewAgainstHttpStatus(
+            401,
+            "application/json",
+            "{\"error\":\"invalid api_key sk-secret123456789\",\"token\":\"Bearer raw-token-value\"}"
+        );
+
+        assertThat(result.llmStatus()).isEqualTo("FALLBACK");
+        assertThat(result.statusDetail()).contains("llm_auth_failed", "status=401");
+        assertThat(result.statusDetail()).doesNotContain("Unable to parse LLM HTTP response");
+        assertThat(result.statusDetail()).doesNotContain("sk-secret123456789", "raw-token-value");
+    }
+
+    @Test
+    void reviewClassifiesServerFailureWithNonJsonBodyBeforeParsing() throws Exception {
+        ReviewResult result = reviewAgainstHttpStatus(
+            500,
+            "text/html",
+            "<html>upstream unavailable</html>"
+        );
+
+        assertThat(result.llmStatus()).isEqualTo("FALLBACK");
+        assertThat(result.statusDetail()).contains(
+            "llm_service_unavailable",
+            "status=500",
+            "responseBody=<html>upstream unavailable</html>"
+        );
+    }
+
+    @Test
     void reviewFallsBackOnlyFailedChunksToRules() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
@@ -351,6 +381,44 @@ class LlmPullRequestReviewerTest {
 
     private GithubChangedFile file(String path, int additions, int deletions) {
         return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
+    }
+
+    private ReviewResult reviewAgainstHttpStatus(int statusCode, String contentType, String responseBody) throws Exception {
+        ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
+        RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/chat/completions", exchange -> {
+            byte[] response = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", contentType);
+            exchange.sendResponseHeaders(statusCode, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+        try {
+            ReviewPolicySettings settings = llmSettings(
+                99,
+                700,
+                4,
+                450,
+                "http://127.0.0.1:" + server.getAddress().getPort()
+            );
+            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
+
+            when(reviewPolicyProvider.getSettings()).thenReturn(settings);
+            when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+
+            return new LlmPullRequestReviewer(
+                reviewPolicyProvider,
+                ruleBasedReviewer,
+                RestClient.builder(),
+                new ObjectMapper(),
+                null,
+                null
+            ).review(new ReviewTask(), diff);
+        } finally {
+            server.stop(0);
+        }
     }
 
     private static class TestableLlmPullRequestReviewer extends LlmPullRequestReviewer {

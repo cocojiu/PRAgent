@@ -101,6 +101,29 @@ class LlmConnectionProbeTest {
         }
     }
 
+    @Test
+    void probeClassifiesServerFailureWithSanitizedNonJsonBody() throws Exception {
+        try (ProbeServer server = startProbeServer(
+            "<html>LLM upstream failed token=raw-token-value</html>",
+            "text/html",
+            500
+        )) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+
+            ConnectionProbeResult result = probe.probe(config);
+
+            assertThat(result.healthy()).isFalse();
+            assertThat(result.status()).isEqualTo("failed");
+            assertThat(result.message()).contains(
+                "llm_service_unavailable",
+                "status=500",
+                "responseBody=<html>LLM upstream failed token=***</html>"
+            );
+            assertThat(result.message()).doesNotContain("raw-token-value");
+        }
+    }
+
     private ReviewPolicyConfig reviewPolicyConfig(String apiKey) {
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         config.setId(1L);

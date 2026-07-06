@@ -106,7 +106,14 @@ public final class ExternalCallErrorClassifier {
         if (!StringUtils.hasText(message)) {
             return ex.getClass().getSimpleName();
         }
-        return message.replaceAll("\\s+", " ").trim();
+        String normalized = message.replaceAll("\\s+", " ").trim();
+        if (ex instanceof RestClientResponseException responseException) {
+            String responseBody = sanitizeResponseBody(responseException.getResponseBodyAsString());
+            if (StringUtils.hasText(responseBody)) {
+                return normalized + " responseBody=" + responseBody;
+            }
+        }
+        return normalized;
     }
 
     private static String truncate(String value) {
@@ -114,5 +121,19 @@ public final class ExternalCallErrorClassifier {
             return null;
         }
         return value.length() > 300 ? value.substring(0, 297) + "..." : value;
+    }
+
+    private static String sanitizeResponseBody(String body) {
+        if (!StringUtils.hasText(body)) {
+            return null;
+        }
+        return body
+            .replaceAll("\\s+", " ")
+            .replaceAll("(?i)(bearer\\s+)[A-Za-z0-9._~+\\-/=]+", "$1***")
+            .replaceAll("(?i)(api[_-]?key\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
+            .replaceAll("(?i)(token\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
+            .replaceAll("(?i)(secret\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
+            .replaceAll("sk-[A-Za-z0-9_-]{8,}", "sk-***")
+            .trim();
     }
 }

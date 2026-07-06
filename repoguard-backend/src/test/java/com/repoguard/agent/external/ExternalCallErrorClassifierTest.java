@@ -58,6 +58,39 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void includesSanitizedLlmHttpResponseBodySummary() {
+        ExternalCallException unauthorized = ExternalCallErrorClassifier.llm(responseException(
+            401,
+            "Unauthorized",
+            "{\"error\":\"invalid api_key sk-secret123456789\",\"token\":\"Bearer raw-token-value\"}"
+        ));
+        ExternalCallException unavailable = ExternalCallErrorClassifier.llm(responseException(
+            500,
+            "Internal Server Error",
+            "<html>upstream failed</html>"
+        ));
+
+        assertThat(unauthorized.getCategory()).isEqualTo("llm_auth_failed");
+        assertThat(unauthorized.getMessage()).contains("responseBody=", "invalid api_key sk-***", "Bearer ***");
+        assertThat(unauthorized.getMessage()).doesNotContain("sk-secret123456789", "raw-token-value");
+        assertThat(unavailable.getCategory()).isEqualTo("llm_service_unavailable");
+        assertThat(unavailable.isRetryable()).isTrue();
+        assertThat(unavailable.getMessage()).contains("status=500", "responseBody=<html>upstream failed</html>");
+    }
+
+    @Test
+    void truncatesLongHttpResponseBodyDetails() {
+        ExternalCallException classified = ExternalCallErrorClassifier.llm(responseException(
+            500,
+            "Internal Server Error",
+            "x".repeat(400)
+        ));
+
+        assertThat(classified.getMessage()).contains("...");
+        assertThat(classified.getMessage().length()).isLessThan(430);
+    }
+
+    @Test
     void classifiesTimeoutWithoutHttpStatusAsRetryable() {
         ResourceAccessException timeout = new ResourceAccessException(
             "Read timed out",
@@ -86,12 +119,16 @@ class ExternalCallErrorClassifierTest {
     }
 
     private RestClientResponseException responseException(int statusCode, String statusText) {
+        return responseException(statusCode, statusText, "");
+    }
+
+    private RestClientResponseException responseException(int statusCode, String statusText, String responseBody) {
         return new RestClientResponseException(
             statusText,
             statusCode,
             statusText,
             HttpHeaders.EMPTY,
-            new byte[0],
+            responseBody.getBytes(java.nio.charset.StandardCharsets.UTF_8),
             null
         );
     }
