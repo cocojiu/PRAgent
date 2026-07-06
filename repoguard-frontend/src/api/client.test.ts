@@ -49,6 +49,7 @@ describe("auth token client", () => {
     expect(refreshInit.credentials).toBe("include");
     expect(refreshInit.body).toBeUndefined();
     expect(new Headers(refreshInit.headers).has("Content-Type")).toBe(false);
+    expect(new Headers(refreshInit.headers).has("Authorization")).toBe(false);
     expect(new Headers(refreshInit.headers).get("X-RepoGuard-CSRF")).toBe("refresh-csrf-token");
 
     const [, retryInit] = fetchMock.mock.calls[2] as [string, RequestInit];

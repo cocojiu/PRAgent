@@ -1,5 +1,7 @@
 import { normalizeRequestError, unwrapResponse } from "@/api/apiEnvelope";
+import type { ApiResponse } from "@/api/apiEnvelope";
 import { AuthSessionRefreshCoordinator } from "@/api/authRefreshCoordinator";
+import type { AuthRefreshResult, TokenPairResponse } from "@/api/authRefreshCoordinator";
 import {
   clearAuthToken,
   hasAuthToken,
@@ -12,6 +14,7 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_FETCH_CREDENTIALS: RequestCredentials = "include";
+type InternalRequestInit = RequestInit & { skipAuthorization?: boolean };
 
 export {
   clearAuthToken,
@@ -31,10 +34,7 @@ const buildUrl = (path: string, params?: Record<string, string | number | undefi
   return url.toString();
 };
 
-const refreshCoordinator = new AuthSessionRefreshCoordinator(
-  path => buildUrl(path),
-  AUTH_FETCH_CREDENTIALS
-);
+const refreshCoordinator = new AuthSessionRefreshCoordinator(requestAuthRefreshSession);
 
 export const request = async <T>(
   path: string,
@@ -58,14 +58,15 @@ export const request = async <T>(
 const doRequest = async (
   path: string,
   params?: Record<string, string | number | undefined>,
-  options: RequestInit = {}
+  options: InternalRequestInit = {}
 ) => {
+  const { skipAuthorization, ...fetchOptions } = options;
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
   const authToken = resolveAccessToken();
-  if (authToken && !headers.has("Authorization")) {
+  if (!skipAuthorization && authToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${authToken}`);
   }
   const method = options.method?.toUpperCase() ?? "GET";
@@ -75,16 +76,16 @@ const doRequest = async (
   }
 
   return fetch(buildUrl(path, params), {
-    ...options,
+    ...fetchOptions,
     headers,
-    credentials: options.credentials ?? AUTH_FETCH_CREDENTIALS
+    credentials: fetchOptions.credentials ?? AUTH_FETCH_CREDENTIALS
   }) as Promise<Response>;
 };
 
 const safeDoRequest = async (
   path: string,
   params?: Record<string, string | number | undefined>,
-  options: RequestInit = {}
+  options: InternalRequestInit = {}
 ) => {
   try {
     return await doRequest(path, params, options);
@@ -92,6 +93,20 @@ const safeDoRequest = async (
     throw normalizeRequestError(error);
   }
 };
+
+async function requestAuthRefreshSession(): Promise<AuthRefreshResult> {
+  const response = await safeDoRequest("/api/v1/auth/refresh", undefined, {
+    method: "POST",
+    skipAuthorization: true
+  });
+  if (!response.ok) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    body: await response.json() as ApiResponse<TokenPairResponse>
+  };
+}
 
 const redirectToLogin = () => {
   if (window.location.pathname === "/login") {

@@ -41,11 +41,6 @@ class ApiContractTest {
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final String FRONTEND_DIRECT_CONST_PATTERN_TEMPLATE = "const\\s+%s\\s*=\\s*\"([^\"]+)\"";
-    private static final Pattern FRONTEND_BUILD_URL_FETCH_PATTERN = Pattern.compile(
-        "fetch\\(this\\.buildUrl\\(\"([^\"]+)\"\\),\\s*\\{(?<body>.*?)\\}\\)",
-        Pattern.DOTALL
-    );
-
     private static final List<Class<?>> CONTROLLERS = List.of(
         AuthController.class,
         CacheStatsController.class,
@@ -244,10 +239,20 @@ class ApiContractTest {
         assertThat(frontendDirectApiEntrypoints())
             .as("Frontend direct api calls outside typed contracts must point to backend-owned controller endpoints")
             .containsEntry("frontendPerformance.OBSERVABILITY_ENDPOINT", "POST /api/v1/observability/frontend/performance")
-            .containsEntry("authRefreshCoordinator.refreshSession", "POST /api/v1/auth/refresh")
             .allSatisfy((operation, endpoint) -> assertThat(backendEndpoints)
                 .as(operation + " frontend direct endpoint must exist in backend API surface")
                 .contains(endpoint));
+    }
+
+    @Test
+    void authRefreshCoordinatorDoesNotOwnDirectApiFetch() throws Exception {
+        String authRefreshSource = Files.readString(frontendSourcePath("api", "authRefreshCoordinator.ts"));
+
+        assertThat(authRefreshSource)
+            .as("Auth refresh coordination must reuse the frontend API client transport instead of owning direct fetch/buildUrl details")
+            .doesNotContain("fetch(")
+            .doesNotContain("buildUrl(")
+            .doesNotContain("/api/v1/auth/refresh");
     }
 
     @Test
@@ -338,14 +343,6 @@ class ApiContractTest {
                 + frontendStringConstant(performanceSource, "OBSERVABILITY_ENDPOINT")
         );
 
-        String authRefreshSource = Files.readString(frontendSourcePath("api", "authRefreshCoordinator.ts"));
-        Matcher fetchMatcher = FRONTEND_BUILD_URL_FETCH_PATTERN.matcher(authRefreshSource);
-        if (fetchMatcher.find()) {
-            contracts.put(
-                "authRefreshCoordinator.refreshSession",
-                frontendHttpMethod(fetchMatcher.group("body")) + " " + fetchMatcher.group(1)
-            );
-        }
         return contracts;
     }
 

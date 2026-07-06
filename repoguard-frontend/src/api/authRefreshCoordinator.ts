@@ -2,22 +2,23 @@ import type { ApiResponse } from "@/api/apiEnvelope";
 import {
   hasSessionMarker,
   isSessionRemembered,
-  resolveCsrfToken,
   saveAuthTokens
 } from "@/api/authSession";
 
-interface TokenPairResponse {
+export interface TokenPairResponse {
   accessToken: string;
   refreshToken?: string;
 }
 
+export type AuthRefreshResult = {
+  ok: boolean;
+  body?: ApiResponse<TokenPairResponse>;
+};
+
 export class AuthSessionRefreshCoordinator {
   private refreshPromise: Promise<boolean> | undefined;
 
-  constructor(
-    private readonly buildUrl: (path: string) => string,
-    private readonly credentials: RequestCredentials
-  ) {
+  constructor(private readonly refreshTokens: () => Promise<AuthRefreshResult>) {
   }
 
   refreshSession() {
@@ -34,21 +35,12 @@ export class AuthSessionRefreshCoordinator {
       return false;
     }
     const remember = isSessionRemembered();
-    const headers = new Headers();
-    const csrfToken = resolveCsrfToken();
-    if (csrfToken) {
-      headers.set("X-RepoGuard-CSRF", csrfToken);
-    }
-    const response = await fetch(this.buildUrl("/api/v1/auth/refresh"), {
-      method: "POST",
-      headers,
-      credentials: this.credentials
-    });
+    const response = await this.refreshTokens();
     if (!response.ok) {
       return false;
     }
-    const body = (await response.json()) as ApiResponse<TokenPairResponse>;
-    if (!body.success || !body.data?.accessToken) {
+    const body = response.body;
+    if (!body?.success || !body.data?.accessToken) {
       return false;
     }
     saveAuthTokens(body.data.accessToken, body.data.refreshToken ?? "", remember);
