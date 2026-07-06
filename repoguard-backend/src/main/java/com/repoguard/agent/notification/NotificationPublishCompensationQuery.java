@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -13,13 +15,24 @@ class NotificationPublishCompensationQuery {
 
     private final NotificationEventMapper eventMapper;
     private final RabbitNotificationQueueProperties properties;
+    private final RabbitPublishCompensationPolicy compensationPolicy;
 
     NotificationPublishCompensationQuery(
         NotificationEventMapper eventMapper,
         RabbitNotificationQueueProperties properties
     ) {
+        this(eventMapper, properties, new RabbitPublishCompensationPolicy());
+    }
+
+    @Autowired
+    NotificationPublishCompensationQuery(
+        NotificationEventMapper eventMapper,
+        RabbitNotificationQueueProperties properties,
+        RabbitPublishCompensationPolicy compensationPolicy
+    ) {
         this.eventMapper = eventMapper;
         this.properties = properties;
+        this.compensationPolicy = compensationPolicy;
     }
 
     List<NotificationEvent> loadDueEvents() {
@@ -38,10 +51,10 @@ class NotificationPublishCompensationQuery {
     }
 
     int maxAttempts() {
-        return Math.max(1, properties.getPublishCompensationMaxAttempts());
+        return compensationPolicy.maxAttempts(properties.getPublishCompensationMaxAttempts());
     }
 
     int batchSize() {
-        return Math.max(1, properties.getPublishCompensationBatchSize());
+        return compensationPolicy.batchSize(properties.getPublishCompensationBatchSize());
     }
 }

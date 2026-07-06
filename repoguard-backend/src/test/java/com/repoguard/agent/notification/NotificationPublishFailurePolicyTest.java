@@ -3,6 +3,7 @@ package com.repoguard.agent.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -13,7 +14,11 @@ class NotificationPublishFailurePolicyTest {
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-06-18T08:30:00Z"), ZoneId.of("UTC"));
     private final NotificationPublishFailurePolicy policy =
-        new NotificationPublishFailurePolicy(new NotificationRetrySchedule(clock), new NotificationTextLimiter());
+        new NotificationPublishFailurePolicy(
+            new NotificationRetrySchedule(clock),
+            new NotificationTextLimiter(),
+            new RabbitPublishCompensationPolicy()
+        );
 
     @Test
     void firstFailureSchedulesPublishFailedWithOneMinuteRetry() {

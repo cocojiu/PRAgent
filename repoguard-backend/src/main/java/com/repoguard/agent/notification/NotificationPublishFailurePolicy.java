@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -13,11 +14,17 @@ class NotificationPublishFailurePolicy {
 
     private final NotificationRetrySchedule retrySchedule;
     private final NotificationTextLimiter textLimiter;
+    private final RabbitPublishCompensationPolicy compensationPolicy;
 
     @Autowired
-    NotificationPublishFailurePolicy(NotificationRetrySchedule retrySchedule, NotificationTextLimiter textLimiter) {
+    NotificationPublishFailurePolicy(
+        NotificationRetrySchedule retrySchedule,
+        NotificationTextLimiter textLimiter,
+        RabbitPublishCompensationPolicy compensationPolicy
+    ) {
         this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
         this.textLimiter = Objects.requireNonNull(textLimiter, "textLimiter");
+        this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
     }
 
     NotificationPublishFailureDecision decide(
@@ -25,8 +32,8 @@ class NotificationPublishFailurePolicy {
         RuntimeException ex,
         int maxAttempts
     ) {
-        int nextRetryCount = retrySchedule.nextRetryCount(event.getRetryCount());
-        boolean dead = nextRetryCount >= Math.max(1, maxAttempts);
+        int nextRetryCount = compensationPolicy.nextAttempt(event.getRetryCount());
+        boolean dead = compensationPolicy.isTerminalAttempt(nextRetryCount, maxAttempts);
         return new NotificationPublishFailureDecision(
             dead ? NotificationEventStatus.DEAD.code() : NotificationEventStatus.PUBLISH_FAILED.code(),
             nextRetryCount,

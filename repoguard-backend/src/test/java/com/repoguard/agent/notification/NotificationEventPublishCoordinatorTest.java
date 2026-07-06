@@ -11,6 +11,7 @@ import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -26,7 +27,11 @@ class NotificationEventPublishCoordinatorTest {
     private final NotificationEventPublishCoordinator coordinator = new NotificationEventPublishCoordinator(
         publisher,
         properties,
-        new NotificationPublishFailurePolicy(new NotificationRetrySchedule(), new NotificationTextLimiter()),
+        new NotificationPublishFailurePolicy(
+            new NotificationRetrySchedule(),
+            new NotificationTextLimiter(),
+            new RabbitPublishCompensationPolicy()
+        ),
         new NotificationPublishEventStateUpdater(eventMapper)
     );
 

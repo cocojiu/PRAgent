@@ -30,6 +30,7 @@ public class ReviewTaskPublishCompensator {
     private final RepoGuardMetrics metrics;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final RabbitPublishFailureClassifier failureClassifier;
+    private final RabbitPublishCompensationPolicy compensationPolicy;
 
     @Autowired
     public ReviewTaskPublishCompensator(
@@ -39,7 +40,8 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         RepoGuardMetrics metrics,
         ReviewTaskPublishOutboxStore outboxStore,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this(
             reviewTaskMapper,
@@ -49,7 +51,8 @@ public class ReviewTaskPublishCompensator {
             "repoguard-" + UUID.randomUUID(),
             metrics,
             outboxStore,
-            reviewTaskStateMachine
+            reviewTaskStateMachine,
+            compensationPolicy
         );
     }
 
@@ -60,7 +63,7 @@ public class ReviewTaskPublishCompensator {
         RabbitReviewQueueProperties properties,
         String instanceId
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, null, null, null, null);
     }
 
     ReviewTaskPublishCompensator(
@@ -71,7 +74,7 @@ public class ReviewTaskPublishCompensator {
         String instanceId,
         RepoGuardMetrics metrics
     ) {
-        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null, null);
+        this(reviewTaskMapper, reviewTimelineMapper, reviewTaskPublisher, properties, instanceId, metrics, null, null, null);
     }
 
     ReviewTaskPublishCompensator(
@@ -82,7 +85,8 @@ public class ReviewTaskPublishCompensator {
         String instanceId,
         RepoGuardMetrics metrics,
         ReviewTaskPublishOutboxStore outboxStore,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.outboxStore = outboxStore == null
@@ -95,12 +99,15 @@ public class ReviewTaskPublishCompensator {
             ? new ReviewTaskStateMachine()
             : reviewTaskStateMachine;
         this.failureClassifier = new RabbitPublishFailureClassifier();
+        this.compensationPolicy = compensationPolicy == null
+            ? new RabbitPublishCompensationPolicy()
+            : compensationPolicy;
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.publish-compensation-interval-ms:60000}")
     public void compensatePublishFailures() {
         LocalDateTime now = LocalDateTime.now();
-        LocalDateTime expiredBefore = now.minusNanos(leaseMs() * 1_000_000);
+        LocalDateTime expiredBefore = compensationPolicy.expiredBefore(now, properties.getPublishCompensationLeaseMs());
         List<ReviewTask> tasks = outboxStore.loadDuePublishEvents(now, expiredBefore, maxAttempts(), batchSize());
         for (ReviewTask task : tasks) {
             compensate(task);
@@ -123,7 +130,7 @@ public class ReviewTaskPublishCompensator {
                 );
                 return;
             }
-            int nextAttempt = safeAttempts(task) + 1;
+            int nextAttempt = compensationPolicy.nextAttempt(task.getPublishAttempts());
             LOGGER.info(
                 "Review task publish compensation claimed taskId={} repository={} prNumber={} operation=review_publish_compensation recoverySource={} currentStatus={} nextAttempt={} maxAttempts={} claimedAt={}",
                 task.getId(),
@@ -198,7 +205,7 @@ public class ReviewTaskPublishCompensator {
     }
 
     private boolean claimTask(ReviewTask task, LocalDateTime claimedAt) {
-        LocalDateTime expiredBefore = claimedAt.minusNanos(leaseMs() * 1_000_000);
+        LocalDateTime expiredBefore = compensationPolicy.expiredBefore(claimedAt, properties.getPublishCompensationLeaseMs());
         return outboxStore.claimForPublish(task, claimedAt, instanceId, expiredBefore, maxAttempts());
     }
 
@@ -219,7 +226,10 @@ public class ReviewTaskPublishCompensator {
     }
 
     private boolean markPublishFailed(ReviewTask task, LocalDateTime claimedAt, MessagePublishException ex) {
-        LocalDateTime nextRetryAt = LocalDateTime.now().plusNanos(retryIntervalMs() * 1_000_000);
+        LocalDateTime nextRetryAt = compensationPolicy.nextRetryAt(
+            LocalDateTime.now(),
+            properties.getPublishCompensationIntervalMs()
+        );
         String error = truncate(errorMessage(ex));
         return outboxStore.markClaimedPublishFailed(task, claimedAt, instanceId, nextRetryAt, error);
     }
@@ -249,19 +259,11 @@ public class ReviewTaskPublishCompensator {
     }
 
     private int maxAttempts() {
-        return Math.max(1, properties.getPublishCompensationMaxAttempts());
+        return compensationPolicy.maxAttempts(properties.getPublishCompensationMaxAttempts());
     }
 
     private int batchSize() {
-        return Math.max(1, properties.getPublishCompensationBatchSize());
-    }
-
-    private long retryIntervalMs() {
-        return Math.max(1000, properties.getPublishCompensationIntervalMs());
-    }
-
-    private long leaseMs() {
-        return Math.max(1000, properties.getPublishCompensationLeaseMs());
+        return compensationPolicy.batchSize(properties.getPublishCompensationBatchSize());
     }
 
     private String errorMessage(Exception ex) {
