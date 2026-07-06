@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.ChunkedReviewDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.LlmStatusDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
@@ -49,7 +50,8 @@ public class ReviewTaskDetailAssembler {
             timeline,
             sizeOf(findings),
             sizeOf(missingTests),
-            sizeOf(changedFiles)
+            sizeOf(changedFiles),
+            FindingSeverityCountsDto.fromFindings(findings)
         );
     }
 
@@ -64,8 +66,37 @@ public class ReviewTaskDetailAssembler {
         long missingTestTotal,
         long changedFileTotal
     ) {
+        return assemble(
+            task,
+            item,
+            findings,
+            missingTests,
+            changedFiles,
+            timeline,
+            findingTotal,
+            missingTestTotal,
+            changedFileTotal,
+            FindingSeverityCountsDto.fromFindings(findings)
+        );
+    }
+
+    public ReviewTaskDetail assemble(
+        ReviewTask task,
+        ReviewTaskListItem item,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        List<ReviewTimelineItem> timeline,
+        long findingTotal,
+        long missingTestTotal,
+        long changedFileTotal,
+        FindingSeverityCountsDto findingSeverityCounts
+    ) {
         PrRiskProfileDto riskProfile = riskProfileBuilder.build(item, findings, changedFiles);
         String effectiveRiskLevel = effectiveRiskLevel(item.riskLevel(), riskProfile);
+        FindingSeverityCountsDto effectiveSeverityCounts = findingSeverityCounts == null
+            ? FindingSeverityCountsDto.fromFindings(findings)
+            : findingSeverityCounts;
         return new ReviewTaskDetail(
             item.id(),
             item.prNumber(),
@@ -91,7 +122,17 @@ public class ReviewTaskDetailAssembler {
             changedFiles,
             timeline,
             riskProfile,
-            reviewSummaryBuilder.build(item, findings, missingTests, changedFiles, riskProfile),
+            reviewSummaryBuilder.build(
+                item,
+                findings,
+                missingTests,
+                changedFiles,
+                riskProfile,
+                effectiveSeverityCounts,
+                findingTotal,
+                missingTestTotal,
+                changedFileTotal
+            ),
             new LlmStatusDto(
                 item.llmStatus(),
                 item.duration(),
@@ -116,7 +157,8 @@ public class ReviewTaskDetailAssembler {
             item.humanReviewedAt(),
             findingTotal,
             missingTestTotal,
-            changedFileTotal
+            changedFileTotal,
+            effectiveSeverityCounts
         );
     }
 

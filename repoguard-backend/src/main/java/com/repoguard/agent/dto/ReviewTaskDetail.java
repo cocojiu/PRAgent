@@ -41,7 +41,8 @@ public record ReviewTaskDetail(
     String humanReviewedAt,
     Long findingTotal,
     Long missingTestTotal,
-    Long changedFileTotal
+    Long changedFileTotal,
+    FindingSeverityCountsDto findingSeverityCounts
 ) {
     public ReviewTaskDetail(
         Long id,
@@ -107,7 +108,8 @@ public record ReviewTaskDetail(
             null,
             sizeOf(findings),
             sizeOf(missingTests),
-            sizeOf(changedFiles)
+            sizeOf(changedFiles),
+            FindingSeverityCountsDto.fromFindings(findings)
         );
     }
 
@@ -174,7 +176,8 @@ public record ReviewTaskDetail(
             null,
             sizeOf(findings),
             sizeOf(missingTests),
-            sizeOf(changedFiles)
+            sizeOf(changedFiles),
+            FindingSeverityCountsDto.fromFindings(findings)
         );
     }
 

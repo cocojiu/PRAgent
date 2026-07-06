@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -115,6 +116,29 @@ class ReviewTaskDetailAssemblerTest {
         assertThat(result.chunkedReview().enabled()).isFalse();
         assertThat(result.chunkedReview().chunkCount()).isZero();
         assertThat(result.riskLevel()).isEqualTo("info");
+    }
+
+    @Test
+    void prSummaryUsesAggregatedSeverityCountsBeyondInitialFindingPage() {
+        ReviewTask task = new ReviewTask();
+        task.setMqRetries(0);
+
+        var result = assembler.assemble(
+            task,
+            baseItem(),
+            List.of(new ReviewFindingDto("low", "src/App.java", 12, "minor", "fix later")),
+            List.of(),
+            List.of(new ChangedFileDto("src/App.java", "modified", 12, 3)),
+            List.of(),
+            30,
+            0,
+            8,
+            new FindingSeverityCountsDto(0L, 2L, 5L, 23L, 0L)
+        );
+
+        assertThat(result.findingSeverityCounts().highOrZero()).isEqualTo(2);
+        assertThat(result.prSummary().recommendMerge()).isFalse();
+        assertThat(result.prSummary().summary()).contains("8 个变更文件、30 条审查发现");
     }
 
     private ReviewTaskListItem baseItem() {

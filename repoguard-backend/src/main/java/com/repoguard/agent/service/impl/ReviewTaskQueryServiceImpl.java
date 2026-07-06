@@ -123,7 +123,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             detailData.timeline(),
             detailData.findingTotal(),
             detailData.missingTestTotal(),
-            detailData.changedFileTotal()
+            detailData.changedFileTotal(),
+            detailData.findingSeverityCounts()
         );
     }
 

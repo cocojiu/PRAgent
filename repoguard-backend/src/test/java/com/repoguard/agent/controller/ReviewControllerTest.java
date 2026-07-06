@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublicationBatchDto;
@@ -165,7 +166,8 @@ class ReviewControllerTest {
                 "2026-06-12 11:00:00",
                 1L,
                 1L,
-                1L
+                1L,
+                new FindingSeverityCountsDto(1L, 2L, 3L, 4L, 5L)
             );
         }
 
@@ -528,6 +530,11 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.findings[0].reviewDimension").value("security"))
             .andExpect(jsonPath("$.data.findings[0].feedbackStatus").value("valid"))
             .andExpect(jsonPath("$.data.findingTotal").value(1))
+            .andExpect(jsonPath("$.data.findingSeverityCounts.critical").value(1))
+            .andExpect(jsonPath("$.data.findingSeverityCounts.high").value(2))
+            .andExpect(jsonPath("$.data.findingSeverityCounts.medium").value(3))
+            .andExpect(jsonPath("$.data.findingSeverityCounts.low").value(4))
+            .andExpect(jsonPath("$.data.findingSeverityCounts.info").value(5))
             .andExpect(jsonPath("$.data.missingTests[0].file").value("UserExportControllerTest"))
             .andExpect(jsonPath("$.data.missingTestTotal").value(1))
             .andExpect(jsonPath("$.data.changedFiles[0].path").value("src/App.java"))

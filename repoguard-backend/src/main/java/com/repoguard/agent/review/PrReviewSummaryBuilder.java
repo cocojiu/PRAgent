@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PrRiskFileDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
@@ -23,9 +24,36 @@ public class PrReviewSummaryBuilder {
         List<ChangedFileDto> changedFiles,
         PrRiskProfileDto riskProfile
     ) {
-        int criticalCount = countSeverity(findings, "critical");
-        int highCount = countSeverity(findings, "high");
-        int mediumCount = countSeverity(findings, "medium");
+        return build(
+            task,
+            findings,
+            missingTests,
+            changedFiles,
+            riskProfile,
+            FindingSeverityCountsDto.fromFindings(findings),
+            findings.size(),
+            missingTests.size(),
+            changedFiles.size()
+        );
+    }
+
+    public PrReviewSummaryDto build(
+        ReviewTaskListItem task,
+        List<ReviewFindingDto> findings,
+        List<MissingTestDto> missingTests,
+        List<ChangedFileDto> changedFiles,
+        PrRiskProfileDto riskProfile,
+        FindingSeverityCountsDto severityCounts,
+        long findingTotal,
+        long missingTestTotal,
+        long changedFileTotal
+    ) {
+        FindingSeverityCountsDto effectiveCounts = severityCounts == null
+            ? FindingSeverityCountsDto.fromFindings(findings)
+            : severityCounts;
+        int criticalCount = Math.toIntExact(effectiveCounts.criticalOrZero());
+        int highCount = Math.toIntExact(effectiveCounts.highOrZero());
+        int mediumCount = Math.toIntExact(effectiveCounts.mediumOrZero());
         String overallRisk = riskProfile == null ? "info" : riskProfile.level();
         boolean humanReviewRequired = Boolean.TRUE.equals(task.humanReviewRequired())
             || Boolean.TRUE.equals(riskProfile == null ? false : riskProfile.recommendHumanReview());
@@ -37,11 +65,15 @@ public class PrReviewSummaryBuilder {
             mediumCount,
             humanReviewRequired
         );
-        List<String> keyRisks = buildKeyRisks(riskProfile, missingTests, criticalCount, highCount, mediumCount);
+        List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount);
         List<String> focusFiles = buildFocusFiles(riskProfile, changedFiles);
         String summary = "本次 PR 综合风险为 " + riskText(overallRisk)
             + "，包含 " + changedFiles.size() + " 个变更文件、" + findings.size() + " 条审查发现"
             + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
+            + "。";
+        summary = "本次 PR 综合风险为" + riskText(overallRisk)
+            + "，包含 " + changedFileTotal + " 个变更文件、" + findingTotal + " 条审查发现"
+            + (missingTestTotal == 0 ? "" : "、" + missingTestTotal + " 条缺失测试建议")
             + "。";
         String commentBody = buildCommentBody(
             task,
@@ -81,12 +113,15 @@ public class PrReviewSummaryBuilder {
 
     private List<String> buildKeyRisks(
         PrRiskProfileDto riskProfile,
-        List<MissingTestDto> missingTests,
+        long missingTestTotal,
         int criticalCount,
         int highCount,
         int mediumCount
     ) {
         List<String> risks = new java.util.ArrayList<>();
+        List<MissingTestDto> missingTests = missingTestTotal <= 0
+            ? List.of()
+            : java.util.Collections.nCopies(Math.toIntExact(Math.min(missingTestTotal, Integer.MAX_VALUE)), null);
         if (criticalCount > 0) {
             risks.add("包含 " + criticalCount + " 条严重风险发现");
         }

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -34,6 +35,8 @@ class ReviewTaskDetailDataLoaderTest {
             page(List.of(finding())),
             page(List.of(missingTest()))
         );
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
+            .thenReturn(new FindingSeverityCountsDto(0L, 3L, 2L, 1L, 0L));
         when(timelineQueryService.loadLatestItemsByTaskId(521L, 20)).thenReturn(List.of(
             new ReviewTimelineItem("Review completed", "10:21:00", "done"),
             new ReviewTimelineItem("Review running", "10:20:00", "current")
@@ -60,6 +63,8 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.changedFileTotal()).isEqualTo(1);
         assertThat(result.findingTotal()).isEqualTo(1);
         assertThat(result.missingTestTotal()).isEqualTo(1);
+        assertThat(result.findingSeverityCounts().highOrZero()).isEqualTo(3);
+        assertThat(result.findingSeverityCounts().mediumOrZero()).isEqualTo(2);
 
         ArgumentCaptor<Page> changedFilePageCaptor = ArgumentCaptor.forClass(Page.class);
         Mockito.verify(changedFileMapper).selectPage(changedFilePageCaptor.capture(), any());
@@ -69,6 +74,7 @@ class ReviewTaskDetailDataLoaderTest {
         Mockito.verify(reviewFindingMapper, Mockito.times(2)).selectPage(findingPageCaptor.capture(), any());
         assertThat(findingPageCaptor.getAllValues()).hasSize(2);
         findingPageCaptor.getAllValues().forEach(this::assertInitialDetailPage);
+        Mockito.verify(reviewFindingMapper).selectFindingSeverityCounts(521L);
         Mockito.verify(timelineQueryService).loadLatestItemsByTaskId(521L, 20);
     }
 

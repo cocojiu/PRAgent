@@ -20,15 +20,25 @@ export const useReviewDetailDerivedCollections = ({
   const reviewTimeline = computed(() => selectedTask.value?.timeline ?? []);
   const riskProfile = computed(() => selectedTask.value?.riskProfile);
 
-  const findingCounts = computed<Record<RiskLevel, number>>(() =>
-    reviewFindings.value.reduce(
+  const findingCounts = computed<Record<RiskLevel, number>>(() => {
+    const severityCounts = selectedTask.value?.findingSeverityCounts;
+    if (severityCounts) {
+      return {
+        critical: severityCounts.critical ?? 0,
+        high: severityCounts.high ?? 0,
+        medium: severityCounts.medium ?? 0,
+        low: severityCounts.low ?? 0,
+        info: severityCounts.info ?? 0
+      };
+    }
+    return reviewFindings.value.reduce(
       (counts, finding) => {
         counts[finding.severity] += 1;
         return counts;
       },
       { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-    )
-  );
+    );
+  });
 
   const findingCountByFile = computed(() =>
     reviewFindings.value.reduce<Record<string, number>>((counts, finding) => {

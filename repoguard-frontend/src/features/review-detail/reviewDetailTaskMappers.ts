@@ -9,6 +9,13 @@ export const normalizeReviewTaskDetail = (task: ReviewTaskDetail): ReviewTaskDet
   findingTotal: task.findingTotal ?? task.findings?.length ?? 0,
   missingTestTotal: task.missingTestTotal ?? task.missingTests?.length ?? 0,
   changedFileTotal: task.changedFileTotal ?? task.changedFiles?.length ?? 0,
+  findingSeverityCounts: {
+    critical: task.findingSeverityCounts?.critical ?? 0,
+    high: task.findingSeverityCounts?.high ?? 0,
+    medium: task.findingSeverityCounts?.medium ?? 0,
+    low: task.findingSeverityCounts?.low ?? 0,
+    info: task.findingSeverityCounts?.info ?? 0
+  },
   riskProfile: {
     score: task.riskProfile?.score ?? 0,
     level: (task.riskProfile?.level ?? "info") as RiskLevel,

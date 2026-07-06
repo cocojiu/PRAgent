@@ -50,6 +50,7 @@ export interface ReviewTaskDetail extends ReviewTask {
   findingTotal: number;
   missingTestTotal: number;
   changedFileTotal: number;
+  findingSeverityCounts?: FindingSeverityCounts;
   timeline: TimelineItem[];
   riskProfile: PrRiskProfile;
   prSummary: PrReviewSummary;
@@ -252,6 +253,14 @@ export interface PrRiskProfile {
   humanReviewReason: string;
   signals: string[];
   highRiskFiles: PrRiskFile[];
+}
+
+export interface FindingSeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+  info: number;
 }
 
 export interface PrRiskFile {
