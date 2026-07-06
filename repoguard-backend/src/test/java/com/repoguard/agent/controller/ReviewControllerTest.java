@@ -53,6 +53,19 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ReviewControllerTest {
 
     private ReviewQuery lastListQuery;
+    private Long lastFindingsTaskId;
+    private int lastFindingsPage;
+    private int lastFindingsPageSize;
+    private String lastFindingsSeverity;
+    private String lastFindingsCategory;
+    private String lastFindingsFeedbackStatus;
+    private Long lastChangedFilesTaskId;
+    private int lastChangedFilesPage;
+    private int lastChangedFilesPageSize;
+    private Boolean lastChangedFilesHasFinding;
+    private Long lastMissingTestsTaskId;
+    private int lastMissingTestsPage;
+    private int lastMissingTestsPageSize;
     private int lastPublicationPage;
     private int lastPublicationPageSize;
     private String lastPublicationStatus;
@@ -180,6 +193,12 @@ class ReviewControllerTest {
             String category,
             String feedbackStatus
         ) {
+            lastFindingsTaskId = id;
+            lastFindingsPage = page;
+            lastFindingsPageSize = pageSize;
+            lastFindingsSeverity = severity;
+            lastFindingsCategory = category;
+            lastFindingsFeedbackStatus = feedbackStatus;
             return new PageResponse<>(List.of(new ReviewFindingDto(
                 1L,
                 "high",
@@ -202,11 +221,18 @@ class ReviewControllerTest {
 
         @Override
         public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+            lastChangedFilesTaskId = id;
+            lastChangedFilesPage = page;
+            lastChangedFilesPageSize = pageSize;
+            lastChangedFilesHasFinding = hasFinding;
             return new PageResponse<>(List.of(new ChangedFileDto("src/App.java", "modified", 12, 3)), 1);
         }
 
         @Override
         public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+            lastMissingTestsTaskId = id;
+            lastMissingTestsPage = page;
+            lastMissingTestsPageSize = pageSize;
             return new PageResponse<>(
                 List.of(new MissingTestDto("UserExportControllerTest", "exportUsers", "controller", "Add authorization regression test")),
                 1
@@ -577,6 +603,12 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.items[0].id").value(1))
             .andExpect(jsonPath("$.data.items[0].severity").value("high"))
             .andExpect(jsonPath("$.data.items[0].file").value("src/App.java"));
+        assertThat(lastFindingsTaskId).isEqualTo(512L);
+        assertThat(lastFindingsPage).isEqualTo(1);
+        assertThat(lastFindingsPageSize).isEqualTo(20);
+        assertThat(lastFindingsSeverity).isEqualTo("high");
+        assertThat(lastFindingsCategory).isEqualTo("security");
+        assertThat(lastFindingsFeedbackStatus).isEqualTo("valid");
     }
 
     @Test
@@ -591,6 +623,10 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.items", hasSize(1)))
             .andExpect(jsonPath("$.data.items[0].path").value("src/App.java"))
             .andExpect(jsonPath("$.data.items[0].changeType").value("modified"));
+        assertThat(lastChangedFilesTaskId).isEqualTo(512L);
+        assertThat(lastChangedFilesPage).isEqualTo(1);
+        assertThat(lastChangedFilesPageSize).isEqualTo(20);
+        assertThat(lastChangedFilesHasFinding).isTrue();
     }
 
     @Test
@@ -604,6 +640,9 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.items", hasSize(1)))
             .andExpect(jsonPath("$.data.items[0].file").value("UserExportControllerTest"))
             .andExpect(jsonPath("$.data.items[0].method").value("exportUsers"));
+        assertThat(lastMissingTestsTaskId).isEqualTo(512L);
+        assertThat(lastMissingTestsPage).isEqualTo(1);
+        assertThat(lastMissingTestsPageSize).isEqualTo(20);
     }
 
     @Test
