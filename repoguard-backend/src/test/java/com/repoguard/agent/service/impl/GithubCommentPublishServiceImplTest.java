@@ -46,17 +46,26 @@ class GithubCommentPublishServiceImplTest {
     private final GithubCommentPreviewService previewService = org.mockito.Mockito.mock(
         GithubCommentPreviewService.class
     );
-    private final GithubCommentPublishServiceImpl service = new GithubCommentPublishServiceImpl(
-        reviewTaskMapper,
+    private final GithubCommentPublicationRecorder publicationRecorder = new GithubCommentPublicationRecorder(
         publicationMapper,
         batchMapper,
-        batchItemMapper,
-        githubPullRequestClient,
+        batchItemMapper
+    );
+    private final GithubWritebackFailureClassifier writebackFailureClassifier =
+        new GithubWritebackFailureClassifier();
+    private final GithubCommentPublishServiceImpl service = new GithubCommentPublishServiceImpl(
+        reviewTaskMapper,
         null,
         null,
-        new ReviewTaskStateMachine(),
-        new GithubWritebackFailureClassifier(),
-        previewService
+        previewService,
+        new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
+        new GithubCommentPublishPlanBuilder(),
+        new GithubCommentDraftPublisher(
+            githubPullRequestClient,
+            publicationRecorder,
+            writebackFailureClassifier
+        ),
+        publicationRecorder
     );
 
     @Test

@@ -9,14 +9,12 @@ import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.service.GithubCommentPreviewService;
 import com.repoguard.agent.service.impl.ReviewFailureSummaryResolver.ReviewFailureSummary;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -35,36 +33,9 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
     private final GithubCommentPreviewPublicationLoader previewPublicationLoader;
     private final GithubCommentPreviewResponseAssembler responseAssembler;
 
-    public GithubCommentPreviewServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubIntegrationProvider githubIntegrationProvider,
-        ReviewRiskProfileBuilder riskProfileBuilder,
-        PrReviewSummaryBuilder reviewSummaryBuilder
-    ) {
-        this(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            githubCommentPublicationMapper,
-            githubIntegrationProvider,
-            riskProfileBuilder,
-            reviewSummaryBuilder,
-            new ReviewTaskListItemAssembler(),
-            new GithubCommentPreviewDataLoader(changedFileMapper, reviewFindingMapper),
-            new GithubCommentPreviewPublicationLoader(githubCommentPublicationMapper),
-            new GithubCommentPreviewResponseAssembler()
-        );
-    }
-
     @Autowired
     public GithubCommentPreviewServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewRiskProfileBuilder riskProfileBuilder,
         PrReviewSummaryBuilder reviewSummaryBuilder,
@@ -73,14 +44,14 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
         GithubCommentPreviewPublicationLoader previewPublicationLoader,
         GithubCommentPreviewResponseAssembler responseAssembler
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.githubIntegrationProvider = githubIntegrationProvider;
-        this.riskProfileBuilder = riskProfileBuilder;
-        this.reviewSummaryBuilder = reviewSummaryBuilder;
-        this.listItemAssembler = listItemAssembler;
-        this.previewDataLoader = previewDataLoader;
-        this.previewPublicationLoader = previewPublicationLoader;
-        this.responseAssembler = responseAssembler;
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
+        this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
+        this.riskProfileBuilder = Objects.requireNonNull(riskProfileBuilder, "riskProfileBuilder");
+        this.reviewSummaryBuilder = Objects.requireNonNull(reviewSummaryBuilder, "reviewSummaryBuilder");
+        this.listItemAssembler = Objects.requireNonNull(listItemAssembler, "listItemAssembler");
+        this.previewDataLoader = Objects.requireNonNull(previewDataLoader, "previewDataLoader");
+        this.previewPublicationLoader = Objects.requireNonNull(previewPublicationLoader, "previewPublicationLoader");
+        this.responseAssembler = Objects.requireNonNull(responseAssembler, "responseAssembler");
     }
 
     @Override

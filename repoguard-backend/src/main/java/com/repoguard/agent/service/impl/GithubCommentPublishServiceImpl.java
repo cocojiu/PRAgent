@@ -6,21 +6,16 @@ import com.repoguard.agent.dto.GithubCommentPreviewResponse;
 import com.repoguard.agent.dto.GithubCommentPublishItem;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
-import com.repoguard.agent.github.GithubWritebackFailureClassifier;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.GithubCommentPreviewService;
 import com.repoguard.agent.service.GithubCommentPublishService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -36,42 +31,6 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     private final GithubCommentDraftPublisher draftPublisher;
     private final GithubCommentPublicationRecorder publicationRecorder;
 
-    public GithubCommentPublishServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService,
-        ReviewTaskStateMachine reviewTaskStateMachine,
-        GithubWritebackFailureClassifier writebackFailureClassifier,
-        GithubCommentPreviewService previewService
-    ) {
-        this(
-            reviewTaskMapper,
-            metrics,
-            notificationDispatchService,
-            previewService,
-            new GithubCommentPublishGuard(reviewTaskStateMachine),
-            new GithubCommentPublishPlanBuilder(),
-            new GithubCommentDraftPublisher(
-                githubPullRequestClient,
-                new GithubCommentPublicationRecorder(
-                    githubCommentPublicationMapper,
-                    githubCommentPublicationBatchMapper,
-                    githubCommentPublicationBatchItemMapper
-                ),
-                writebackFailureClassifier
-            ),
-            new GithubCommentPublicationRecorder(
-                githubCommentPublicationMapper,
-                githubCommentPublicationBatchMapper,
-                githubCommentPublicationBatchItemMapper
-            )
-        );
-    }
-
     @Autowired
     public GithubCommentPublishServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -83,14 +42,14 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         GithubCommentDraftPublisher draftPublisher,
         GithubCommentPublicationRecorder publicationRecorder
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.metrics = metrics;
         this.notificationDispatchService = notificationDispatchService;
-        this.previewService = previewService;
-        this.publishGuard = publishGuard;
-        this.publishPlanBuilder = publishPlanBuilder;
-        this.draftPublisher = draftPublisher;
-        this.publicationRecorder = publicationRecorder;
+        this.previewService = Objects.requireNonNull(previewService, "previewService");
+        this.publishGuard = Objects.requireNonNull(publishGuard, "publishGuard");
+        this.publishPlanBuilder = Objects.requireNonNull(publishPlanBuilder, "publishPlanBuilder");
+        this.draftPublisher = Objects.requireNonNull(draftPublisher, "draftPublisher");
+        this.publicationRecorder = Objects.requireNonNull(publicationRecorder, "publicationRecorder");
     }
 
     @Override

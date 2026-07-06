@@ -109,28 +109,37 @@ class ReviewServiceImplTest {
         reviewTimelineMapper,
         null
     );
-    private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
-        reviewTaskMapper,
-        changedFileMapper,
-        reviewFindingMapper,
-        githubCommentPublicationMapper,
-        githubIntegrationProvider,
-        new ReviewRiskProfileBuilder(),
-        new PrReviewSummaryBuilder()
-    );
     private final GithubWritebackFailureClassifier githubWritebackFailureClassifier =
         new GithubWritebackFailureClassifier();
+    private final GithubCommentPublicationRecorder githubCommentPublicationRecorder =
+        new GithubCommentPublicationRecorder(
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper
+        );
+    private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
+        reviewTaskMapper,
+        githubIntegrationProvider,
+        new ReviewRiskProfileBuilder(),
+        new PrReviewSummaryBuilder(),
+        new ReviewTaskListItemAssembler(),
+        new GithubCommentPreviewDataLoader(changedFileMapper, reviewFindingMapper),
+        new GithubCommentPreviewPublicationLoader(githubCommentPublicationMapper),
+        new GithubCommentPreviewResponseAssembler()
+    );
     private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
-        githubCommentPublicationMapper,
-        githubCommentPublicationBatchMapper,
-        githubCommentPublicationBatchItemMapper,
-        githubPullRequestClient,
         null,
         null,
-        reviewTaskStateMachine,
-        githubWritebackFailureClassifier,
-        githubCommentPreviewService
+        githubCommentPreviewService,
+        new GithubCommentPublishGuard(reviewTaskStateMachine),
+        new GithubCommentPublishPlanBuilder(),
+        new GithubCommentDraftPublisher(
+            githubPullRequestClient,
+            githubCommentPublicationRecorder,
+            githubWritebackFailureClassifier
+        ),
+        githubCommentPublicationRecorder
     );
     private final GithubCommentHistoryQueryService githubCommentHistoryQueryService =
         new GithubCommentHistoryQueryServiceImpl(

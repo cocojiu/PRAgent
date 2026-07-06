@@ -40,12 +40,13 @@ class GithubCommentPreviewServiceImplTest {
     );
     private final GithubCommentPreviewServiceImpl service = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
-        changedFileMapper,
-        reviewFindingMapper,
-        publicationMapper,
         integrationProvider,
         new ReviewRiskProfileBuilder(),
-        new PrReviewSummaryBuilder()
+        new PrReviewSummaryBuilder(),
+        new ReviewTaskListItemAssembler(),
+        new GithubCommentPreviewDataLoader(changedFileMapper, reviewFindingMapper),
+        new GithubCommentPreviewPublicationLoader(publicationMapper),
+        new GithubCommentPreviewResponseAssembler()
     );
 
     @Test
