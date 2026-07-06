@@ -18,9 +18,18 @@ public class GithubPaginator {
     private static final int MAX_PAGES = 100;
 
     private final RestClient restClient;
+    private final int maxPages;
 
     public GithubPaginator(RestClient.Builder restClientBuilder) {
+        this(restClientBuilder, MAX_PAGES);
+    }
+
+    GithubPaginator(RestClient.Builder restClientBuilder, int maxPages) {
         this.restClient = GithubRestClientFactory.build(restClientBuilder);
+        if (maxPages < 1) {
+            throw new IllegalArgumentException("maxPages must be positive");
+        }
+        this.maxPages = maxPages;
     }
 
     public <T> List<T> fetchPages(
@@ -31,7 +40,7 @@ public class GithubPaginator {
         ExternalCallResilience resilience
     ) {
         List<T> items = new ArrayList<>();
-        for (int page = 1; page <= MAX_PAGES; page++) {
+        for (int page = 1; page <= maxPages; page++) {
             String url = pageUrlBuilder.apply(page);
             T[] pageItems = executeGithub(operation, resilience, () -> restClient.get()
                 .uri(url)
@@ -44,6 +53,13 @@ public class GithubPaginator {
             items.addAll(Arrays.asList(pageItems));
             if (pageItems.length < PAGE_SIZE) {
                 break;
+            }
+            if (page == maxPages) {
+                throw new IllegalStateException(
+                    "GitHub pagination limit reached operation=" + operation
+                        + " pages=" + maxPages
+                        + " pageSize=" + PAGE_SIZE
+                );
             }
         }
         return items;
