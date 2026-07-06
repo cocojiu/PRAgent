@@ -1,7 +1,6 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
@@ -14,7 +13,6 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.ConnectionTestService;
-import java.time.LocalDateTime;
 import javax.sql.DataSource;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -37,6 +35,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner;
     private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner;
     private final ConnectionTestConfigFactory configFactory;
+    private final IntegrationConnectionCheckMarker connectionCheckMarker;
 
     public ConnectionTestServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
@@ -72,6 +71,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
             this.rabbitMqConnectionProbe
         );
         this.configFactory = new ConnectionTestConfigFactory(secretCryptoService);
+        this.connectionCheckMarker = new IntegrationConnectionCheckMarker(integrationConfigMapper);
     }
 
     @Override
@@ -81,7 +81,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig config = transientConfig
             ? configFactory.githubIntegrationForTest(GITHUB_PROVIDER, configRequest, savedConfig)
             : savedConfig;
-        return githubConnectionTestRunner.run(config, transientConfig, this::markIntegrationChecked);
+        return githubConnectionTestRunner.run(config, transientConfig, connectionCheckMarker::markChecked);
     }
 
     @Override
@@ -98,7 +98,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig config = transientConfig
             ? configFactory.serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig)
             : savedConfig;
-        return mysqlConnectionTestRunner.run(savedConfig, config, transientConfig, this::markIntegrationChecked);
+        return mysqlConnectionTestRunner.run(savedConfig, config, transientConfig, connectionCheckMarker::markChecked);
     }
 
     @Override
@@ -108,7 +108,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         IntegrationConfig config = transientConfig
             ? configFactory.serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig)
             : savedConfig;
-        return rabbitMqConnectionTestRunner.run(savedConfig, config, transientConfig, this::markIntegrationChecked);
+        return rabbitMqConnectionTestRunner.run(savedConfig, config, transientConfig, connectionCheckMarker::markChecked);
     }
 
     private IntegrationConfig findGithubConfig() {
@@ -125,24 +125,6 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
 
     private ReviewPolicyConfig findReviewPolicy() {
         return reviewPolicyConfigMapper.selectById(1L);
-    }
-
-    private void markIntegrationChecked(IntegrationConfig config, String error) {
-        if (config == null || config.getId() == null) {
-            return;
-        }
-        config.setLastCheckedAt(LocalDateTime.now());
-        config.setLastError(error);
-        config.setStatus(error == null ? "CONFIGURED" : "FAILED");
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (error == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("last_error", null)
-            );
-        }
     }
 
 }
