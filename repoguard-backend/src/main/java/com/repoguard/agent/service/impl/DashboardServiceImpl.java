@@ -7,6 +7,7 @@ import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
+import com.repoguard.agent.dashboard.DashboardRuleAssembler;
 import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardStatusMapper;
 import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
@@ -52,6 +53,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardOverviewDisplayMapper overviewDisplayMapper;
     private final DashboardMetricAssembler dashboardMetricAssembler;
     private final DashboardRiskDistributionAssembler riskDistributionAssembler;
+    private final DashboardRuleAssembler dashboardRuleAssembler;
     private final DashboardLlmQualityFormatter llmQualityFormatter;
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
@@ -73,6 +75,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.overviewDisplayMapper = overviewDisplayMapper;
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
         this.riskDistributionAssembler = new DashboardRiskDistributionAssembler(overviewDisplayMapper);
+        this.dashboardRuleAssembler = new DashboardRuleAssembler(ruleDisplayMapper);
         this.llmQualityFormatter = llmQualityFormatter;
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
@@ -216,10 +219,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private DashboardRulesResponse buildRules(List<DashboardRuleHitCount> ruleHitCounts) {
-        return new DashboardRulesResponse(
-            buildRuleHits(ruleHitCounts),
-            buildFailedRules(ruleHitCounts)
-        );
+        return dashboardRuleAssembler.assemble(ruleHitCounts);
     }
 
     private List<LlmQualityByModelDto> buildLlmQualityByModel(List<DashboardLlmQualityModelStat> stats) {
