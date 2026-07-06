@@ -93,6 +93,37 @@ describe("apiRequest", () => {
     expect(new Headers(init.headers).get("X-RepoGuard-CSRF")).toBe("logout-csrf-token");
   });
 
+  it("posts secret re-encryption requests to the protected system config endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      executed: false,
+      scannedCount: 1,
+      reEncryptedCount: 1,
+      skippedCount: 0,
+      failedCount: 0,
+      items: []
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("reEncryptSecrets", {
+      sourceEncryptionKey: "source-secret",
+      sourceKeyId: "old-key",
+      targetEncryptionKey: "target-secret",
+      targetKeyId: "new-key",
+      execute: false
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/config/secrets/re-encryption");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({
+      sourceEncryptionKey: "source-secret",
+      sourceKeyId: "old-key",
+      targetEncryptionKey: "target-secret",
+      targetKeyId: "new-key",
+      execute: false
+    }));
+  });
+
   it("keeps review detail heavy sections on explicit paged endpoint queries", async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
     vi.stubGlobal("fetch", fetchMock);

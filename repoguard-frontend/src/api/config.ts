@@ -6,6 +6,7 @@ import type {
   ReviewRuleStatusRequest,
   NotificationBindingRequest,
   NotificationBindingStatusRequest,
+  SecretReEncryptionRequest,
   ServiceIntegrationConfigRequest,
   SystemSettingsRequest
 } from "@/types";
@@ -37,6 +38,9 @@ export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undef
 
 export const updateSystemSettings = (payload: SystemSettingsRequest) =>
   apiRequest("updateSystemSettings", payload);
+
+export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
+  apiRequest("reEncryptSecrets", payload);
 
 export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
 

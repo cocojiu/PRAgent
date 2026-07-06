@@ -109,6 +109,8 @@
       </article>
     </section>
 
+    <SecretReEncryptionPanel :can-manage="canManage" />
+
     <section class="settings-bottom-grid">
       <article class="dashboard-card preview-card">
         <h2>配置预览</h2>
@@ -148,6 +150,7 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
+import SecretReEncryptionPanel from "@/features/system-settings/components/SecretReEncryptionPanel.vue";
 import { routeNames } from "@/router/names";
 import { getErrorMessage } from "@/utils/errors";
 import type {

@@ -34,6 +34,45 @@ export interface SettingLog {
   status: string;
 }
 
+export type SecretReEncryptionStatus =
+  | "RE_ENCRYPTED"
+  | "WOULD_RE_ENCRYPT"
+  | "SKIPPED_EMPTY"
+  | "SKIPPED_TARGET_KEY"
+  | "KEY_MISMATCH"
+  | "DECRYPT_FAILED"
+  | "FAILED";
+
+export interface SecretReEncryptionRequest {
+  sourceEncryptionKey: string;
+  sourceKeyId?: string;
+  targetEncryptionKey: string;
+  targetKeyId: string;
+  execute?: boolean;
+  confirmText?: string;
+}
+
+export interface SecretReEncryptionItem {
+  tableName: string;
+  recordId: number;
+  fieldName: string;
+  provider?: string;
+  sourceFormat?: string;
+  sourceKeyId?: string;
+  targetKeyId?: string;
+  status: SecretReEncryptionStatus;
+  message?: string;
+}
+
+export interface SecretReEncryptionResponse {
+  executed: boolean;
+  scannedCount: number;
+  reEncryptedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  items: SecretReEncryptionItem[];
+}
+
 export interface SystemSettings {
   base: BaseSettings;
   policy: ReviewPolicySettings;

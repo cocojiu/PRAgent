@@ -63,9 +63,57 @@
   gap: 18px;
 }
 
+.secret-re-encryption-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.secret-re-encryption-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.secret-re-encryption-head p {
+  margin: 6px 0 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.secret-re-encryption-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.secret-re-encryption-form {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.secret-re-encryption-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.secret-re-encryption-summary {
+  border-radius: 8px;
+}
+
+.secret-re-encryption-table {
+  width: 100%;
+}
+
 @media (max-width: 1280px) {
   .settings-grid,
   .settings-bottom-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .secret-re-encryption-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -73,6 +121,16 @@
 @media (max-width: 760px) {
   .settings-grid,
   .settings-bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .secret-re-encryption-head,
+  .secret-re-encryption-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .secret-re-encryption-form {
     grid-template-columns: minmax(0, 1fr);
   }
 }

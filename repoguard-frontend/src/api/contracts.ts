@@ -42,6 +42,8 @@ import type {
   ReviewRuleConfigRequest,
   ReviewRulesResponse,
   ReviewRuleStatusRequest,
+  SecretReEncryptionRequest,
+  SecretReEncryptionResponse,
   ReviewTrendPoint,
   ReviewTask,
   ReviewTaskDetail,
@@ -152,6 +154,7 @@ export type ApiContract = {
   updateReviewPolicyConfig: ApiOperation<ReviewPolicyConfigRequest, ReviewPolicyConfig>;
   fetchSystemSettings: ApiOperation<undefined, SystemSettings>;
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
+  reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionResponse>;
   fetchReviewRules: ApiOperation<undefined, ReviewRulesResponse>;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<{ id: string; payload: ReviewRuleConfigRequest }, ReviewRuleConfig>;
@@ -364,6 +367,11 @@ const apiEndpoints: ApiEndpointMap = {
   updateSystemSettings: {
     method: "PUT",
     path: () => "/api/v1/config/system-settings",
+    body: input => input
+  },
+  reEncryptSecrets: {
+    method: "POST",
+    path: () => "/api/v1/config/secrets/re-encryption",
     body: input => input
   },
   fetchReviewRules: {
