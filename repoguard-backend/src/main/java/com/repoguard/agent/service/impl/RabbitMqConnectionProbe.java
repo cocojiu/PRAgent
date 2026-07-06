@@ -1,8 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
-import com.repoguard.agent.security.SecretCryptoService;
-import java.net.URI;
+import java.util.Objects;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -16,11 +15,11 @@ public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfi
     static final String PROVIDER = "RABBITMQ";
 
     private final RabbitTemplate rabbitTemplate;
-    private final SecretCryptoService secretCryptoService;
+    private final RabbitMqProbeConnectionFactory connectionFactory;
 
-    public RabbitMqConnectionProbe(RabbitTemplate rabbitTemplate, SecretCryptoService secretCryptoService) {
+    public RabbitMqConnectionProbe(RabbitTemplate rabbitTemplate, RabbitMqProbeConnectionFactory connectionFactory) {
         this.rabbitTemplate = rabbitTemplate;
-        this.secretCryptoService = secretCryptoService;
+        this.connectionFactory = Objects.requireNonNull(connectionFactory, "connectionFactory");
     }
 
     @Override
@@ -51,45 +50,12 @@ public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfi
     }
 
     public ConnectionProbeResult configuredProbe(IntegrationConfig config) {
-        try (com.rabbitmq.client.Connection connection = rabbitMqConnectionFactory(config).newConnection()) {
+        try (com.rabbitmq.client.Connection connection = connectionFactory.create(config).newConnection()) {
             boolean open = connection.isOpen();
             return new ConnectionProbeResult(open, open ? "connected" : "failed", open ? null : "RabbitMQ connection is not open");
         } catch (Exception ex) {
             return new ConnectionProbeResult(false, "failed", conciseError(ex));
         }
-    }
-
-    com.rabbitmq.client.ConnectionFactory rabbitMqConnectionFactory(IntegrationConfig config) {
-        URI uri = URI.create(config.getBaseUrl());
-        com.rabbitmq.client.ConnectionFactory factory = new com.rabbitmq.client.ConnectionFactory();
-        if (StringUtils.hasText(uri.getHost())) {
-            factory.setHost(uri.getHost());
-        }
-        if (uri.getPort() > 0) {
-            factory.setPort(uri.getPort());
-        }
-        if (StringUtils.hasText(config.getDefaultOwner())) {
-            factory.setUsername(config.getDefaultOwner());
-        }
-        String secret = secretCryptoService.decrypt(config.getTokenValue());
-        if (StringUtils.hasText(secret)) {
-            factory.setPassword(secret);
-        }
-        String virtualHost = StringUtils.hasText(config.getDefaultRepo()) ? config.getDefaultRepo() : pathVirtualHost(uri);
-        if (StringUtils.hasText(virtualHost)) {
-            factory.setVirtualHost(virtualHost);
-        }
-        factory.setConnectionTimeout(2_000);
-        factory.setRequestedHeartbeat(10);
-        return factory;
-    }
-
-    private String pathVirtualHost(URI uri) {
-        String path = uri.getPath();
-        if (!StringUtils.hasText(path) || "/".equals(path)) {
-            return "/";
-        }
-        return path.substring(1);
     }
 
     private String conciseError(Exception ex) {

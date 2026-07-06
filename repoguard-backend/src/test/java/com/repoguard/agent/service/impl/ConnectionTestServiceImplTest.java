@@ -46,7 +46,10 @@ class ConnectionTestServiceImplTest {
     private final LlmConnectionProbe llmConnectionProbe =
         new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService);
     private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
-    private final RabbitMqConnectionProbe rabbitMqConnectionProbe = new RabbitMqConnectionProbe(null, secretCryptoService);
+    private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
+        new RabbitMqProbeConnectionFactory(secretCryptoService);
+    private final RabbitMqConnectionProbe rabbitMqConnectionProbe =
+        new RabbitMqConnectionProbe(null, rabbitMqConnectionFactory);
     private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner =
         new GithubIntegrationConnectionTestRunner(githubConnectionProbe);
     private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner =
