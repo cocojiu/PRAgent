@@ -10,10 +10,11 @@ public class ApiRequestObservationFilterConfig {
 
     @Bean
     public FilterRegistrationBean<ApiRequestObservationFilter> apiRequestObservationFilterRegistration(
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        ObservabilityThresholdMonitor thresholdMonitor
     ) {
         FilterRegistrationBean<ApiRequestObservationFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new ApiRequestObservationFilter(metrics));
+        registration.setFilter(new ApiRequestObservationFilter(metrics, thresholdMonitor));
         registration.addUrlPatterns("/api/v1/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         return registration;

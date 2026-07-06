@@ -11,8 +11,12 @@ class ObservabilityFilterConfigTest {
     @Test
     void traceFilterRunsBeforeApiObservationAndSecurityFilters() {
         var traceRegistration = new TraceIdFilterConfig().traceIdFilterRegistration();
+        RepoGuardMetrics metrics = new RepoGuardMetrics(new SimpleMeterRegistry());
         var apiRegistration = new ApiRequestObservationFilterConfig()
-            .apiRequestObservationFilterRegistration(new RepoGuardMetrics(new SimpleMeterRegistry()));
+            .apiRequestObservationFilterRegistration(
+                metrics,
+                new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties())
+            );
 
         assertThat(traceRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
         assertThat(apiRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE + 1);

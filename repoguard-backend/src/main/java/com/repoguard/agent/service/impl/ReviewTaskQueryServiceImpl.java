@@ -112,8 +112,11 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     @Override
     public ReviewTaskDetail getReviewDetail(Long id) {
         ReviewTask task = queryItemLoader.loadRequired(id);
-        ReviewTaskDetailData detailData = detailDataLoader.load(id);
-        ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(task, detailData.timeline());
+        ReviewTaskDetailData detailData = detailDataLoader.loadSummary(id);
+        ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(
+            task,
+            detailDataLoader.loadTimelineItems(id, 20)
+        );
         return detailAssembler.assemble(
             task,
             item,

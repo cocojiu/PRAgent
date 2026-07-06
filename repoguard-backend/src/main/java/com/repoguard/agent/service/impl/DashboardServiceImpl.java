@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
+import com.repoguard.agent.dashboard.DashboardLlmTrendDays;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
@@ -12,6 +13,7 @@ import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardRuleAssembler;
 import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.dashboard.DashboardStatusMapper;
 import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
 import com.repoguard.agent.dto.ChartSliceDto;
@@ -32,6 +34,7 @@ import com.repoguard.agent.service.DashboardService;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -47,6 +50,7 @@ public class DashboardServiceImpl implements DashboardService {
     private final DashboardLlmQualityTrendBuilder llmQualityTrendBuilder;
     private final DashboardReviewTrendWindow reviewTrendWindow;
     private final DashboardSystemHealthProbe systemHealthProbe;
+    private final DashboardSnapshotStore snapshotStore;
 
     public DashboardServiceImpl(
         DashboardMapper dashboardMapper,
@@ -58,6 +62,31 @@ public class DashboardServiceImpl implements DashboardService {
         DashboardReviewTrendWindow reviewTrendWindow,
         DashboardSystemHealthProbe systemHealthProbe
     ) {
+        this(
+            dashboardMapper,
+            statusMapper,
+            ruleDisplayMapper,
+            overviewDisplayMapper,
+            llmQualityFormatter,
+            llmQualityTrendBuilder,
+            reviewTrendWindow,
+            systemHealthProbe,
+            new DashboardSnapshotStore(Runnable::run)
+        );
+    }
+
+    @Autowired
+    public DashboardServiceImpl(
+        DashboardMapper dashboardMapper,
+        DashboardStatusMapper statusMapper,
+        DashboardRuleDisplayMapper ruleDisplayMapper,
+        DashboardOverviewDisplayMapper overviewDisplayMapper,
+        DashboardLlmQualityFormatter llmQualityFormatter,
+        DashboardLlmQualityTrendBuilder llmQualityTrendBuilder,
+        DashboardReviewTrendWindow reviewTrendWindow,
+        DashboardSystemHealthProbe systemHealthProbe,
+        DashboardSnapshotStore snapshotStore
+    ) {
         this.dashboardMapper = dashboardMapper;
         this.dashboardMetricAssembler = new DashboardMetricAssembler(overviewDisplayMapper);
         this.reviewTrendAssembler = new DashboardReviewTrendAssembler();
@@ -68,6 +97,7 @@ public class DashboardServiceImpl implements DashboardService {
         this.llmQualityTrendBuilder = llmQualityTrendBuilder;
         this.reviewTrendWindow = reviewTrendWindow;
         this.systemHealthProbe = systemHealthProbe;
+        this.snapshotStore = snapshotStore;
     }
 
     @Override
@@ -77,6 +107,13 @@ public class DashboardServiceImpl implements DashboardService {
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_OVERVIEW + ":" + DashboardLlmTrendDays.normalize(llmTrendDays),
+            () -> buildOverview(llmTrendDays)
+        );
+    }
+
+    private DashboardOverviewResponse buildOverview(Integer llmTrendDays) {
         LocalDate latestReviewDate = latestReviewDate();
         DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate);
         LocalDate reviewTrendStartDate = reviewTrendWindow.startDate(latestReviewDate);
@@ -100,31 +137,46 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_SUMMARY, key = "'summary'", sync = true)
     public List<DashboardMetricDto> getSummary() {
-        return dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate()));
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_SUMMARY + ":summary",
+            () -> dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate()))
+        );
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_REVIEW_TREND, key = "'reviewTrend'", sync = true)
     public List<ReviewTrendPointDto> getReviewTrend() {
-        return reviewTrendAssembler.assemble(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate()));
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_REVIEW_TREND + ":reviewTrend",
+            () -> reviewTrendAssembler.assemble(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate()))
+        );
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_RISK_DISTRIBUTION, key = "'riskDistribution'", sync = true)
     public List<ChartSliceDto> getRiskDistribution() {
-        return buildRiskDistribution(reviewTrendStartDate());
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_RISK_DISTRIBUTION + ":riskDistribution",
+            () -> buildRiskDistribution(reviewTrendStartDate())
+        );
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_RULES, key = "'rules'", sync = true)
     public DashboardRulesResponse getRules() {
-        return buildRules(dashboardMapper.selectRuleHitCounts(reviewTrendStartDate()));
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_RULES + ":rules",
+            () -> buildRules(dashboardMapper.selectRuleHitCounts(reviewTrendStartDate()))
+        );
     }
 
     @Override
     @Cacheable(cacheNames = CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, key = "'highRiskReviews'", sync = true)
     public List<HighRiskReviewDto> getHighRiskReviews() {
-        return buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate()));
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS + ":highRiskReviews",
+            () -> buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate()))
+        );
     }
 
     @Override
@@ -134,6 +186,13 @@ public class DashboardServiceImpl implements DashboardService {
         sync = true
     )
     public DashboardLlmQualityResponse getLlmQuality(Integer llmTrendDays) {
+        return snapshotStore.getOrLoad(
+            CacheNames.DASHBOARD_LLM_QUALITY + ":" + DashboardLlmTrendDays.normalize(llmTrendDays),
+            () -> buildLlmQuality(llmTrendDays)
+        );
+    }
+
+    private DashboardLlmQualityResponse buildLlmQuality(Integer llmTrendDays) {
         LocalDate latestReviewDate = latestReviewDate();
         return buildLlmQuality(
             reviewTrendWindow.startDate(latestReviewDate),

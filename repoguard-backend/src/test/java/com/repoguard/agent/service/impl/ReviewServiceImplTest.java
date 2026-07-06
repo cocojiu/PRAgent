@@ -31,6 +31,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
@@ -588,7 +589,7 @@ class ReviewServiceImplTest {
     }
 
     @Test
-    void getReviewDetailBuildsPrRiskProfileFromFindingsAndChangedFiles() {
+    void getReviewDetailReturnsSummaryWithoutInitialDetailCollections() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         mockDetailPages(List.of(
             changedFile("repoguard-backend/src/main/resources/db/migration/V22__unsafe_change.sql", "ADD", 180, 20),
@@ -602,17 +603,19 @@ class ReviewServiceImplTest {
 
         var result = service.getReviewDetail(521L);
 
-        assertThat(result.riskLevel()).isEqualTo("high");
-        assertThat(result.riskProfile().score()).isGreaterThanOrEqualTo(55);
-        assertThat(result.riskProfile().level()).isEqualTo("high");
-        assertThat(result.llm().riskLevel()).isEqualTo("high");
-        assertThat(result.prSummary().overallRisk()).isEqualTo("high");
-        assertThat(result.prSummary().githubCommentBody()).contains("风险等级：高");
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.changedFiles()).isEmpty();
+        assertThat(result.missingTests()).isEmpty();
+        assertThat(result.timeline()).isEmpty();
+        assertThat(result.findingTotal()).isEqualTo(2);
+        assertThat(result.changedFileTotal()).isEqualTo(3);
+        assertThat(result.missingTestTotal()).isZero();
+        assertThat(result.riskProfile().summary()).contains("3 个变更文件", "审查发现 2 条");
+        assertThat(result.prSummary().summary()).contains("3 个变更文件、2 条审查发现");
+        assertThat(result.prSummary().githubCommentBody()).contains("任务 #521");
         assertThat(result.riskProfile().recommendHumanReview()).isTrue();
         assertThat(result.riskProfile().signals()).contains("包含 1 条高危以上发现");
-        assertThat(result.riskProfile().summary()).contains("3 个变更文件");
-        assertThat(result.riskProfile().highRiskFiles()).hasSize(2);
-        assertThat(result.riskProfile().highRiskFiles().getFirst().reasons()).contains("数据库迁移");
+        assertThat(result.riskProfile().highRiskFiles()).isEmpty();
     }
 
     @Test
@@ -1018,6 +1021,18 @@ class ReviewServiceImplTest {
     ) {
         when(changedFileMapper.selectPage(any(), any())).thenReturn(page(changedFiles));
         when(reviewFindingMapper.selectPage(any(), any())).thenReturn(page(findings), page(missingTests));
+        when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
+        when(reviewFindingMapper.selectCount(any())).thenReturn((long) findings.size(), (long) missingTests.size());
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(findings));
+    }
+
+    private FindingSeverityCountsDto severityCounts(List<ReviewFinding> findings) {
+        long critical = findings.stream().filter(finding -> "CRITICAL".equalsIgnoreCase(finding.getSeverity())).count();
+        long high = findings.stream().filter(finding -> "HIGH".equalsIgnoreCase(finding.getSeverity())).count();
+        long medium = findings.stream().filter(finding -> "MEDIUM".equalsIgnoreCase(finding.getSeverity())).count();
+        long low = findings.stream().filter(finding -> "LOW".equalsIgnoreCase(finding.getSeverity())).count();
+        long known = critical + high + medium + low;
+        return new FindingSeverityCountsDto(critical, high, medium, low, findings.size() - known);
     }
 
     private <T> Page<T> page(List<T> records) {

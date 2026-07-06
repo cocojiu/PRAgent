@@ -25,9 +25,15 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
     private static final String UNKNOWN_PATH = "/api/v1/unknown";
 
     private final RepoGuardMetrics metrics;
+    private final ObservabilityThresholdMonitor thresholdMonitor;
 
     public ApiRequestObservationFilter(RepoGuardMetrics metrics) {
+        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
+    }
+
+    public ApiRequestObservationFilter(RepoGuardMetrics metrics, ObservabilityThresholdMonitor thresholdMonitor) {
         this.metrics = metrics;
+        this.thresholdMonitor = thresholdMonitor;
     }
 
     @Override
@@ -51,14 +57,20 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
             failure = ex;
             throw ex;
         } finally {
+            Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
+            String path = observationPath(request);
+            int status = effectiveStatus(responseWrapper.getStatus(), failure);
+            String outcome = outcome(responseWrapper.getStatus(), failure);
+            long responseBytes = responseWrapper.bodyBytes();
             metrics.apiRequest(
-                Duration.ofNanos(System.nanoTime() - startNanos),
+                duration,
                 request.getMethod(),
-                observationPath(request),
-                effectiveStatus(responseWrapper.getStatus(), failure),
-                outcome(responseWrapper.getStatus(), failure),
-                responseWrapper.bodyBytes()
+                path,
+                status,
+                outcome,
+                responseBytes
             );
+            thresholdMonitor.apiRequest(duration, path, responseBytes);
         }
     }
 

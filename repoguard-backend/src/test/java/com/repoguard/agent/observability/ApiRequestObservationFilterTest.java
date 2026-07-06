@@ -117,6 +117,37 @@ class ApiRequestObservationFilterTest {
     }
 
     @Test
+    void recordsThresholdSignalWhenApiResponseBytesExceedConfiguredLimit() throws Exception {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setApiResponseBytes(4);
+        ApiRequestObservationFilter thresholdFilter = new ApiRequestObservationFilter(
+            metrics,
+            new ObservabilityThresholdMonitor(metrics, properties)
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews/521");
+        request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/reviews/{id}");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        thresholdFilter.doFilter(request, response, new MockFilterChain() {
+            @Override
+            public void doFilter(
+                jakarta.servlet.ServletRequest servletRequest,
+                jakarta.servlet.ServletResponse servletResponse
+            ) throws IOException {
+                HttpServletResponse httpResponse = (HttpServletResponse) servletResponse;
+                httpResponse.setStatus(200);
+                httpResponse.getWriter().write("large-response");
+            }
+        });
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_response_bytes",
+            "subject", "_api_v1_reviews_id_"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
     void skipsNonApiRequests() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/actuator/health");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -132,5 +163,9 @@ class ApiRequestObservationFilterTest {
 
     private double responseBytes(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).summary().totalAmount();
+    }
+
+    private double counter(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).counter().count();
     }
 }

@@ -78,6 +78,30 @@ class ReviewTaskDetailDataLoaderTest {
         Mockito.verify(timelineQueryService).loadLatestItemsByTaskId(521L, 20);
     }
 
+    @Test
+    void loadsSummaryWithoutFetchingInitialDetailRows() {
+        when(changedFileMapper.selectCount(any())).thenReturn(12L);
+        when(reviewFindingMapper.selectCount(any())).thenReturn(30L, 4L);
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
+            .thenReturn(new FindingSeverityCountsDto(1L, 2L, 3L, 24L, 0L));
+
+        var result = loader.loadSummary(521L);
+
+        assertThat(result.changedFiles()).isEmpty();
+        assertThat(result.findings()).isEmpty();
+        assertThat(result.missingTests()).isEmpty();
+        assertThat(result.timeline()).isEmpty();
+        assertThat(result.changedFileTotal()).isEqualTo(12);
+        assertThat(result.findingTotal()).isEqualTo(30);
+        assertThat(result.missingTestTotal()).isEqualTo(4);
+        assertThat(result.findingSeverityCounts().criticalOrZero()).isEqualTo(1);
+        assertThat(result.findingSeverityCounts().highOrZero()).isEqualTo(2);
+
+        Mockito.verify(changedFileMapper, Mockito.never()).selectPage(any(), any());
+        Mockito.verify(reviewFindingMapper, Mockito.never()).selectPage(any(), any());
+        Mockito.verify(timelineQueryService, Mockito.never()).loadLatestItemsByTaskId(any(), Mockito.anyInt());
+    }
+
     private <T> Page<T> page(List<T> records) {
         Page<T> page = Page.of(1, 20);
         page.setRecords(records);

@@ -202,6 +202,17 @@ class RepoGuardMetricsTest {
         )).isEqualTo(1.0);
     }
 
+    @Test
+    void recordsObservabilityThresholdExceededWithStableTags() {
+        metrics.observabilityThresholdExceeded("API Response Bytes", "/api/v1/reviews/{id}");
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_response_bytes",
+            "subject", "_api_v1_reviews_id_"
+        )).isEqualTo(1.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }

@@ -71,6 +71,20 @@ public class ReviewTaskDetailDataLoader {
         );
     }
 
+    public ReviewTaskDetailData loadSummary(Long taskId) {
+        FindingSeverityCountsDto findingSeverityCounts = reviewFindingMapper.selectFindingSeverityCounts(taskId);
+        return new ReviewTaskDetailData(
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            countChangedFiles(taskId),
+            countFindings(taskId),
+            countMissingTests(taskId),
+            findingSeverityCounts == null ? FindingSeverityCountsDto.empty() : findingSeverityCounts
+        );
+    }
+
     public List<ReviewTimelineItem> loadTimelineItems(Long taskId, int limit) {
         return timelineQueryService.loadLatestItemsByTaskId(taskId, limit);
     }
@@ -101,12 +115,26 @@ public class ReviewTaskDetailDataLoader {
     public PageResponse<MissingTestDto> loadMissingTestsPage(Long taskId, int page, int pageSize) {
         Page<ReviewFinding> result = reviewFindingMapper.selectPage(
             Page.of(page, pageSize),
-            new LambdaQueryWrapper<ReviewFinding>()
-                .eq(ReviewFinding::getTaskId, taskId)
-                .eq(ReviewFinding::getCategory, CATEGORY_MISSING_TEST)
-                .orderByAsc(ReviewFinding::getId)
+            missingTestPageQuery(taskId)
         );
         return new PageResponse<>(findingAssembler.toMissingTestDtos(pageRecords(result)), pageTotal(result));
+    }
+
+    private long countChangedFiles(Long taskId) {
+        Long total = changedFileMapper.selectCount(
+            new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId)
+        );
+        return total == null ? 0L : total;
+    }
+
+    private long countFindings(Long taskId) {
+        Long total = reviewFindingMapper.selectCount(findingPageQuery(taskId, null, null, null));
+        return total == null ? 0L : total;
+    }
+
+    private long countMissingTests(Long taskId) {
+        Long total = reviewFindingMapper.selectCount(missingTestPageQuery(taskId));
+        return total == null ? 0L : total;
     }
 
     private <T> List<T> pageRecords(Page<T> page) {
@@ -168,6 +196,13 @@ public class ReviewTaskDetailDataLoader {
             }
         }
         return wrapper;
+    }
+
+    private LambdaQueryWrapper<ReviewFinding> missingTestPageQuery(Long taskId) {
+        return new LambdaQueryWrapper<ReviewFinding>()
+            .eq(ReviewFinding::getTaskId, taskId)
+            .eq(ReviewFinding::getCategory, CATEGORY_MISSING_TEST)
+            .orderByAsc(ReviewFinding::getId);
     }
 
     private String normalizeUpper(String value) {

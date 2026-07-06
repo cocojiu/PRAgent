@@ -54,6 +54,32 @@ class SqlQueryObservationInterceptorTest {
     }
 
     @Test
+    void recordsThresholdSignalWhenSqlRowsExceedConfiguredLimit() throws Throwable {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setSqlRows(2);
+        SqlQueryObservationInterceptor thresholdInterceptor = new SqlQueryObservationInterceptor(
+            metrics,
+            new ObservabilityThresholdMonitor(metrics, properties)
+        );
+        Executor target = mock(Executor.class);
+        MappedStatement mappedStatement = mappedStatement("DashboardMapper.selectMetricStat");
+        List<Object> rows = List.of("a", "b");
+        when(target.query(mappedStatement, null, RowBounds.DEFAULT, null)).thenReturn(rows);
+
+        thresholdInterceptor.intercept(new Invocation(
+            target,
+            queryMethod("query"),
+            new Object[] {mappedStatement, null, RowBounds.DEFAULT, null}
+        ));
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "sql_rows",
+            "subject", "dashboardmapper.selectmetricstat"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
     void recordsSixArgumentQueryInvocation() throws Throwable {
         Executor target = mock(Executor.class);
         MappedStatement mappedStatement = mappedStatement("ReviewTaskMapper.selectPage");
@@ -157,5 +183,9 @@ class SqlQueryObservationInterceptorTest {
 
     private double summaryTotal(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).summary().totalAmount();
+    }
+
+    private double counter(String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).counter().count();
     }
 }

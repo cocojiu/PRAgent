@@ -1,5 +1,9 @@
 server:
   port: 8081
+  compression:
+    enabled: ${SERVER_COMPRESSION_ENABLED:true}
+    mime-types: application/json,text/html,text/xml,text/plain,text/css,text/javascript,application/javascript
+    min-response-size: ${SERVER_COMPRESSION_MIN_RESPONSE_SIZE:1024}
 
 spring:
   application:
@@ -51,6 +55,15 @@ management:
         enabled: true
 
 repoguard:
+  observability:
+    thresholds:
+      enabled: ${REPOGUARD_OBSERVABILITY_THRESHOLDS_ENABLED:true}
+      api-duration-ms: ${REPOGUARD_OBSERVABILITY_API_DURATION_MS:2000}
+      api-response-bytes: ${REPOGUARD_OBSERVABILITY_API_RESPONSE_BYTES:524288}
+      sql-duration-ms: ${REPOGUARD_OBSERVABILITY_SQL_DURATION_MS:500}
+      sql-rows: ${REPOGUARD_OBSERVABILITY_SQL_ROWS:1000}
+      frontend-api-duration-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_API_DURATION_MS:2000}
+      frontend-long-task-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_LONG_TASK_MS:200}
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}

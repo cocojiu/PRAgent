@@ -206,6 +206,14 @@ public class RepoGuardMetrics {
         ).increment();
     }
 
+    public void observabilityThresholdExceeded(String signal, String subject) {
+        counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", normalize(signal),
+            "subject", normalize(subject)
+        ).increment();
+    }
+
     public void rabbitPublishFailed(String reason) {
         rabbitPublishFailed("publish", reason);
     }

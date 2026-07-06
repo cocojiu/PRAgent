@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.PrRiskFileDto;
 import com.repoguard.agent.dto.PrRiskProfileDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
@@ -85,6 +86,57 @@ public class ReviewRiskProfileBuilder {
         );
     }
 
+    public PrRiskProfileDto buildSummary(
+        ReviewTaskListItem task,
+        FindingSeverityCountsDto severityCounts,
+        long findingTotal,
+        long changedFileTotal
+    ) {
+        FindingSeverityCountsDto effectiveCounts = severityCounts == null ? FindingSeverityCountsDto.empty() : severityCounts;
+        long criticalCount = effectiveCounts.criticalOrZero();
+        long highCount = effectiveCounts.highOrZero();
+        long mediumCount = effectiveCounts.mediumOrZero();
+        long lowCount = effectiveCounts.lowOrZero();
+        int score = Math.toIntExact(Math.min(
+            criticalCount * 35
+                + highCount * 25
+                + mediumCount * 12
+                + lowCount * 4
+                + Math.min(changedFileTotal * 2, 20),
+            100
+        ));
+        String level = scoreToRiskLevel(score, task.riskLevel());
+        List<String> signals = new java.util.ArrayList<>();
+        if (criticalCount + highCount > 0) {
+            signals.add("包含 " + (criticalCount + highCount) + " 条高危以上发现");
+        }
+        if (mediumCount > 0) {
+            signals.add("包含 " + mediumCount + " 条中风险发现");
+        }
+        if (changedFileTotal >= 8) {
+            signals.add("变更文件较多：" + changedFileTotal + " 个文件");
+        }
+        if (signals.isEmpty()) {
+            signals.add("未发现明显放大风险的变更信号");
+        }
+
+        boolean recommendHumanReview = criticalCount + highCount > 0
+            || score >= 55
+            || Boolean.TRUE.equals(task.humanReviewRequired());
+        String humanReviewReason = recommendHumanReview
+            ? "风险分达到 " + score + "，建议人工复核后再回写或合并。"
+            : "风险分较低，可按常规自动审查流程推进。";
+        return new PrRiskProfileDto(
+            score,
+            level,
+            buildSummaryRiskText(level, score, findingTotal, changedFileTotal),
+            recommendHumanReview,
+            humanReviewReason,
+            signals,
+            List.of()
+        );
+    }
+
     private PrRiskFileDto toRiskFile(ChangedFileDto file, int findingCount) {
         List<String> reasons = riskReasons(file);
         int churn = safeInt(file.additions()) + safeInt(file.deletions());
@@ -147,6 +199,13 @@ public class ReviewRiskProfileBuilder {
             + "（" + score + "/100），覆盖 "
             + fileCount + " 个变更文件、" + totalChurn + " 行增删，审查发现 "
             + findingCount + " 条。";
+    }
+
+    private String buildSummaryRiskText(String level, int score, long findingTotal, long changedFileTotal) {
+        return "本次 PR 综合风险为 " + lower(level)
+            + "（" + score + "/100），覆盖 "
+            + changedFileTotal + " 个变更文件，审查发现 "
+            + findingTotal + " 条。";
     }
 
     private String lower(String value) {

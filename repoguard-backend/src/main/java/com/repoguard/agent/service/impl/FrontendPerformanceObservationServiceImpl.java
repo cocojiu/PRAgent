@@ -3,6 +3,8 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
+import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
+import com.repoguard.agent.observability.ObservabilityThresholdProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
 import java.time.Duration;
@@ -12,6 +14,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -26,9 +29,19 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
     private static final String UNKNOWN = "unknown";
 
     private final RepoGuardMetrics metrics;
+    private final ObservabilityThresholdMonitor thresholdMonitor;
 
     public FrontendPerformanceObservationServiceImpl(RepoGuardMetrics metrics) {
+        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
+    }
+
+    @Autowired
+    public FrontendPerformanceObservationServiceImpl(
+        RepoGuardMetrics metrics,
+        ObservabilityThresholdMonitor thresholdMonitor
+    ) {
         this.metrics = metrics;
+        this.thresholdMonitor = thresholdMonitor;
     }
 
     @Override
@@ -37,15 +50,23 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
         List<FrontendApiWaterfallItemDto> apiRequests = limited(request == null ? null : request.apiRequests(), MAX_API_REQUESTS);
         List<FrontendLongTaskItemDto> longTasks = limited(request == null ? null : request.longTasks(), MAX_LONG_TASKS);
 
-        apiRequests.forEach(item -> metrics.frontendApiWaterfallRequest(
-            duration(item.durationMs()),
-            route,
-            item.operation(),
-            item.method(),
-            status(item.status()),
-            item.result()
-        ));
-        longTasks.forEach(item -> metrics.frontendLongTask(duration(item.durationMs()), route));
+        apiRequests.forEach(item -> {
+            Duration duration = duration(item.durationMs());
+            metrics.frontendApiWaterfallRequest(
+                duration,
+                route,
+                item.operation(),
+                item.method(),
+                status(item.status()),
+                item.result()
+            );
+            thresholdMonitor.frontendApiRequest(duration, route);
+        });
+        longTasks.forEach(item -> {
+            Duration duration = duration(item.durationMs());
+            metrics.frontendLongTask(duration, route);
+            thresholdMonitor.frontendLongTask(duration, route);
+        });
         if (!apiRequests.isEmpty() || !longTasks.isEmpty()) {
             logObservation(route, apiRequests, longTasks);
         }

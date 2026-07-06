@@ -16,6 +16,7 @@ import org.apache.ibatis.plugin.Plugin;
 import org.apache.ibatis.plugin.Signature;
 import org.apache.ibatis.session.ResultHandler;
 import org.apache.ibatis.session.RowBounds;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -45,9 +46,16 @@ public class SqlQueryObservationInterceptor implements Interceptor {
     private static final String UNKNOWN = "unknown";
 
     private final RepoGuardMetrics metrics;
+    private final ObservabilityThresholdMonitor thresholdMonitor;
 
     public SqlQueryObservationInterceptor(RepoGuardMetrics metrics) {
+        this(metrics, new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()));
+    }
+
+    @Autowired
+    public SqlQueryObservationInterceptor(RepoGuardMetrics metrics, ObservabilityThresholdMonitor thresholdMonitor) {
         this.metrics = metrics;
+        this.thresholdMonitor = thresholdMonitor;
     }
 
     @Override
@@ -66,13 +74,17 @@ public class SqlQueryObservationInterceptor implements Interceptor {
             failure = ex;
             throw ex;
         } finally {
+            Duration duration = Duration.ofNanos(System.nanoTime() - startNanos);
+            String statement = statementId(mappedStatement);
+            long rows = rowCount(result);
             metrics.sqlQuery(
-                Duration.ofNanos(System.nanoTime() - startNanos),
-                statementId(mappedStatement),
+                duration,
+                statement,
                 command(mappedStatement),
                 failure == null ? "success" : "failed",
-                rowCount(result)
+                rows
             );
+            thresholdMonitor.sqlQuery(duration, statement, rows);
         }
     }
 

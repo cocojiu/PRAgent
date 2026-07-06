@@ -207,7 +207,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { fetchReviewChangedFiles, fetchReviewFindings, fetchReviewMissingTests } from "@/api/reviews";
+import { fetchReviewChangedFiles, fetchReviewFindings, fetchReviewMissingTests, fetchReviewTimeline } from "@/api/reviews";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -249,7 +249,7 @@ import {
   useReviewDetailRetry,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
-import type { ReviewStatus } from "@/types";
+import type { ReviewStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
@@ -305,6 +305,11 @@ const resetDetailSectionPages = () => {
   missingTestsPage.value = 1;
 };
 
+function afterDetailSummaryLoaded(task: ReviewTaskDetail) {
+  resetDetailSectionPages();
+  void loadInitialDetailSections(task);
+}
+
 const {
   errorMessage,
   lastRefreshedAt,
@@ -317,7 +322,7 @@ const {
   selectedTask,
   silentRefreshing
 } = useReviewDetailLoader({
-  afterDetailLoaded: resetDetailSectionPages,
+  afterDetailLoaded: afterDetailSummaryLoaded,
   clearGithubCommentPreviewAndHistory,
   getTaskId: () => Number(route.params.id),
   isTerminalReviewStatus,
@@ -551,6 +556,39 @@ const loadMissingTestsPage = async (page: number) => {
     missingTestsLoading.value = false;
   }
 };
+
+const loadTimelineItems = async () => {
+  if (!selectedTask.value) {
+    return;
+  }
+  const taskId = selectedTask.value.id;
+  try {
+    const timeline = await fetchReviewTimeline(taskId, { limit: 20 });
+    if (!selectedTask.value || selectedTask.value.id !== taskId) {
+      return;
+    }
+    selectedTask.value = {
+      ...selectedTask.value,
+      timeline
+    };
+  } catch (error) {
+    ElMessage.warning(getErrorMessage(error, "时间线加载失败"));
+  }
+};
+
+function loadInitialDetailSections(task: ReviewTaskDetail) {
+  const requests: Promise<void>[] = [loadTimelineItems()];
+  if (task.findingTotal > 0) {
+    requests.push(loadFindingsPage(1));
+  }
+  if (task.changedFileTotal > 0) {
+    requests.push(loadChangedFilesPage(1));
+  }
+  if (task.missingTestTotal > 0) {
+    requests.push(loadMissingTestsPage(1));
+  }
+  void Promise.allSettled(requests);
+}
 
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
   canManage,

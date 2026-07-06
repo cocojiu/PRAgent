@@ -67,11 +67,7 @@ public class PrReviewSummaryBuilder {
         );
         List<String> keyRisks = buildKeyRisks(riskProfile, missingTestTotal, criticalCount, highCount, mediumCount);
         List<String> focusFiles = buildFocusFiles(riskProfile, changedFiles);
-        String summary = "本次 PR 综合风险为 " + riskText(overallRisk)
-            + "，包含 " + changedFiles.size() + " 个变更文件、" + findings.size() + " 条审查发现"
-            + (missingTests.isEmpty() ? "" : "、" + missingTests.size() + " 条缺失测试建议")
-            + "。";
-        summary = "本次 PR 综合风险为" + riskText(overallRisk)
+        String summary = "本次 PR 综合风险为" + riskText(overallRisk)
             + "，包含 " + changedFileTotal + " 个变更文件、" + findingTotal + " 条审查发现"
             + (missingTestTotal == 0 ? "" : "、" + missingTestTotal + " 条缺失测试建议")
             + "。";
@@ -119,9 +115,6 @@ public class PrReviewSummaryBuilder {
         int mediumCount
     ) {
         List<String> risks = new java.util.ArrayList<>();
-        List<MissingTestDto> missingTests = missingTestTotal <= 0
-            ? List.of()
-            : java.util.Collections.nCopies(Math.toIntExact(Math.min(missingTestTotal, Integer.MAX_VALUE)), null);
         if (criticalCount > 0) {
             risks.add("包含 " + criticalCount + " 条严重风险发现");
         }
@@ -131,8 +124,8 @@ public class PrReviewSummaryBuilder {
         if (mediumCount > 0) {
             risks.add("包含 " + mediumCount + " 条中风险发现");
         }
-        if (!missingTests.isEmpty()) {
-            risks.add("存在 " + missingTests.size() + " 条缺失测试建议");
+        if (missingTestTotal > 0) {
+            risks.add("存在 " + missingTestTotal + " 条缺失测试建议");
         }
         if (riskProfile != null && riskProfile.signals() != null) {
             riskProfile.signals().stream()

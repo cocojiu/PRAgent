@@ -92,11 +92,13 @@ public class ReviewTaskDetailAssembler {
         long changedFileTotal,
         FindingSeverityCountsDto findingSeverityCounts
     ) {
-        PrRiskProfileDto riskProfile = riskProfileBuilder.build(item, findings, changedFiles);
-        String effectiveRiskLevel = effectiveRiskLevel(item.riskLevel(), riskProfile);
         FindingSeverityCountsDto effectiveSeverityCounts = findingSeverityCounts == null
             ? FindingSeverityCountsDto.fromFindings(findings)
             : findingSeverityCounts;
+        PrRiskProfileDto riskProfile = summaryOnly(findings, changedFiles)
+            ? riskProfileBuilder.buildSummary(item, effectiveSeverityCounts, findingTotal, changedFileTotal)
+            : riskProfileBuilder.build(item, findings, changedFiles);
+        String effectiveRiskLevel = effectiveRiskLevel(item.riskLevel(), riskProfile);
         return new ReviewTaskDetail(
             item.id(),
             item.prNumber(),
@@ -167,6 +169,10 @@ public class ReviewTaskDetailAssembler {
             return riskProfile.level();
         }
         return lower(taskRiskLevel);
+    }
+
+    private boolean summaryOnly(List<ReviewFindingDto> findings, List<ChangedFileDto> changedFiles) {
+        return (findings == null || findings.isEmpty()) && (changedFiles == null || changedFiles.isEmpty());
     }
 
     private ChunkedReviewDto buildChunkedReview(String promptSummary) {

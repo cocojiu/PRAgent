@@ -126,6 +126,18 @@ class DashboardServiceImplTest {
     }
 
     @Test
+    void summaryModuleReturnsLastSnapshotWhenRefreshFails() {
+        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+        var firstSummary = service.getSummary();
+        when(dashboardMapper.selectMetricStat(any())).thenThrow(new IllegalStateException("database busy"));
+
+        var secondSummary = service.getSummary();
+
+        assertThat(secondSummary).isEqualTo(firstSummary);
+        assertThat(secondSummary.get(0).value()).isEqualTo("3");
+    }
+
+    @Test
     void llmQualityModuleLoadsOnlyLlmQualityAggregates() {
         when(dashboardMapper.selectLlmQualityByModelStats(any())).thenReturn(List.of(
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L)

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
+import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
+import com.repoguard.agent.observability.ObservabilityThresholdProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
@@ -55,5 +57,41 @@ class FrontendPerformanceObservationServiceImplTest {
             .tag("route", "overview")
             .timer()
             .totalTime(java.util.concurrent.TimeUnit.MILLISECONDS)).isEqualTo(83.0);
+    }
+
+    @Test
+    void recordsThresholdSignalsForSlowFrontendApiAndLongTask() {
+        RepoGuardMetrics metrics = new RepoGuardMetrics(meterRegistry);
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setFrontendApiDurationMs(20);
+        properties.setFrontendLongTaskMs(40);
+        FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
+            metrics,
+            new ObservabilityThresholdMonitor(metrics, properties)
+        );
+
+        thresholdService.record(new FrontendPerformanceReportRequest(
+            "overview",
+            List.of(new FrontendApiWaterfallItemDto(
+                "fetchDashboardSummary",
+                "GET",
+                200,
+                "success",
+                12L,
+                48L
+            )),
+            List.of(new FrontendLongTaskItemDto(90L, 83L))
+        ));
+
+        assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
+            .tag("signal", "frontend_api_duration")
+            .tag("subject", "overview")
+            .counter()
+            .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
+            .tag("signal", "frontend_long_task")
+            .tag("subject", "overview")
+            .counter()
+            .count()).isEqualTo(1.0);
     }
 }
