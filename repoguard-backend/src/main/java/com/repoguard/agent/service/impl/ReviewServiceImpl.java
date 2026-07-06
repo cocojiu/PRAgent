@@ -156,7 +156,12 @@ public class ReviewServiceImpl implements ReviewService {
             )
             : reviewTaskCommandService;
         this.findingFeedbackService = findingFeedbackService == null
-            ? new FindingFeedbackServiceImpl(reviewTaskMapper, reviewFindingMapper, reviewTimelineMapper, cacheEvictionService)
+            ? new FindingFeedbackServiceImpl(
+                reviewTaskMapper,
+                reviewFindingMapper,
+                new ReviewTimelineAppender(reviewTimelineMapper),
+                cacheEvictionService
+            )
             : findingFeedbackService;
         this.githubCommentApplicationService = githubCommentApplicationService == null
             ? new GithubCommentApplicationServiceImpl(

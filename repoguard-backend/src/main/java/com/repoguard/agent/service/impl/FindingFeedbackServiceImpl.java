@@ -1,7 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
@@ -9,7 +7,6 @@ import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -17,6 +14,7 @@ import com.repoguard.agent.service.FindingFeedbackService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -33,18 +31,28 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
+    private final ReviewTimelineAppender reviewTimelineAppender;
     private final CacheEvictionService cacheEvictionService;
 
-    public FindingFeedbackServiceImpl(
+    FindingFeedbackServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewFindingMapper reviewFindingMapper,
         ReviewTimelineMapper reviewTimelineMapper,
         CacheEvictionService cacheEvictionService
     ) {
+        this(reviewTaskMapper, reviewFindingMapper, new ReviewTimelineAppender(reviewTimelineMapper), cacheEvictionService);
+    }
+
+    @Autowired
+    public FindingFeedbackServiceImpl(
+        ReviewTaskMapper reviewTaskMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        ReviewTimelineAppender reviewTimelineAppender,
+        CacheEvictionService cacheEvictionService
+    ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
+        this.reviewTimelineAppender = reviewTimelineAppender;
         this.cacheEvictionService = cacheEvictionService;
     }
 
@@ -72,7 +80,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
         reviewFindingMapper.updateById(finding);
-        appendReviewTimeline(
+        reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
             findingFeedbackTimelineLabel(finding, status),
             feedbackAt,
@@ -114,33 +122,6 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
     private String findingFeedbackTimelineLabel(ReviewFinding finding, String status) {
         String file = StringUtils.hasText(finding.getFilePath()) ? finding.getFilePath() : "unknown file";
         return truncate("Finding feedback updated: " + lower(status) + " for " + file);
-    }
-
-    private void appendReviewTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        reviewTimelineMapper.update(
-            new UpdateWrapper<ReviewTimeline>()
-                .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
-        );
-
-        ReviewTimeline timeline = new ReviewTimeline();
-        timeline.setTaskId(taskId);
-        timeline.setLabel(label);
-        timeline.setEventTime(eventTime);
-        timeline.setStatus(status);
-        timeline.setSortOrder(nextTimelineSortOrder(taskId));
-        reviewTimelineMapper.insert(timeline);
-    }
-
-    private int nextTimelineSortOrder(Long taskId) {
-        ReviewTimeline latest = reviewTimelineMapper.selectOne(
-            new LambdaQueryWrapper<ReviewTimeline>()
-                .eq(ReviewTimeline::getTaskId, taskId)
-                .orderByDesc(ReviewTimeline::getSortOrder)
-                .last("limit 1")
-        );
-        return latest == null || latest.getSortOrder() == null ? 1 : latest.getSortOrder() + 1;
     }
 
     private void evictDashboardOverview() {

@@ -12,6 +12,7 @@ import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.DataRetentionServiceImpl;
+import com.repoguard.agent.service.impl.FindingFeedbackServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentApplicationServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewServiceImpl;
 import com.repoguard.agent.service.impl.GithubCommentPreviewResponseAssembler;
@@ -47,6 +48,7 @@ class SpringBeanConstructorSelectionTest {
             AuthTokenService.class,
             SecretCryptoService.class,
             DataRetentionServiceImpl.class,
+            FindingFeedbackServiceImpl.class,
             DashboardLlmQualityTrendBuilder.class,
             DashboardReviewTrendWindow.class,
             GithubCommentApplicationServiceImpl.class,
