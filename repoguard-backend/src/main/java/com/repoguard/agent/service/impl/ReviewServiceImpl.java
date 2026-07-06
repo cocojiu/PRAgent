@@ -1,7 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
@@ -22,25 +20,12 @@ import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
-import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.messaging.ReviewTaskPublisher;
-import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
-import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,94 +36,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ReviewServiceImpl implements ReviewService {
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ChangedFileMapper changedFileMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
-    private final GithubCommentPublicationMapper githubCommentPublicationMapper;
-    private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
-    private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
-    private final ReviewTaskPublisher reviewTaskPublisher;
-    private final GithubPullRequestClient githubPullRequestClient;
-    private final RepoGuardMetrics metrics;
-    private final NotificationDispatchService notificationDispatchService;
-    private final CacheEvictionService cacheEvictionService;
     private final ReviewTaskQueryService reviewTaskQueryService;
     private final ReviewTaskCommandService reviewTaskCommandService;
     private final FindingFeedbackService findingFeedbackService;
     private final GithubCommentApplicationService githubCommentApplicationService;
     private final GithubPullRequestOptionService githubPullRequestOptionService;
-    private final GithubIntegrationProvider githubIntegrationProvider;
-    private final ReviewTaskStateMachine reviewTaskStateMachine;
 
     @Autowired
     public ReviewServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        GithubIntegrationProvider githubIntegrationProvider,
-        ReviewTimelineMapper reviewTimelineMapper,
-        ReviewTaskPublisher reviewTaskPublisher,
-        GithubPullRequestClient githubPullRequestClient,
-        RepoGuardMetrics metrics,
-        NotificationDispatchService notificationDispatchService,
-        CacheEvictionService cacheEvictionService,
         ReviewTaskQueryService reviewTaskQueryService,
         ReviewTaskCommandService reviewTaskCommandService,
         FindingFeedbackService findingFeedbackService,
         GithubCommentApplicationService githubCommentApplicationService,
-        GithubPullRequestOptionService githubPullRequestOptionService,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        GithubPullRequestOptionService githubPullRequestOptionService
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.changedFileMapper = changedFileMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.githubCommentPublicationMapper = githubCommentPublicationMapper;
-        this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
-        this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
-        this.githubIntegrationProvider = githubIntegrationProvider;
-        this.reviewTaskStateMachine = reviewTaskStateMachine == null
-            ? new ReviewTaskStateMachine()
-            : reviewTaskStateMachine;
-        this.reviewTimelineMapper = reviewTimelineMapper;
-        this.reviewTaskPublisher = reviewTaskPublisher;
-        this.githubPullRequestClient = githubPullRequestClient;
-        this.metrics = metrics;
-        this.notificationDispatchService = notificationDispatchService;
-        this.cacheEvictionService = cacheEvictionService;
-        this.reviewTaskQueryService = reviewTaskQueryService == null
-            ? new ReviewTaskQueryServiceImpl(reviewTaskMapper, changedFileMapper, reviewFindingMapper, reviewTimelineMapper)
-            : reviewTaskQueryService;
+        this.reviewTaskQueryService = Objects.requireNonNull(reviewTaskQueryService, "reviewTaskQueryService");
         this.reviewTaskCommandService = Objects.requireNonNull(reviewTaskCommandService, "reviewTaskCommandService");
-        this.findingFeedbackService = findingFeedbackService == null
-            ? new FindingFeedbackServiceImpl(
-                reviewTaskMapper,
-                reviewFindingMapper,
-                new ReviewTimelineAppender(reviewTimelineMapper),
-                cacheEvictionService
-            )
-            : findingFeedbackService;
-        this.githubCommentApplicationService = githubCommentApplicationService == null
-            ? new GithubCommentApplicationServiceImpl(
-                reviewTaskMapper,
-                changedFileMapper,
-                reviewFindingMapper,
-                githubCommentPublicationMapper,
-                githubCommentPublicationBatchMapper,
-                githubCommentPublicationBatchItemMapper,
-                githubIntegrationProvider,
-                githubPullRequestClient,
-                metrics,
-                notificationDispatchService,
-                this.reviewTaskStateMachine
-            )
-            : githubCommentApplicationService;
-        this.githubPullRequestOptionService = githubPullRequestOptionService == null
-            ? new GithubPullRequestOptionServiceImpl(githubPullRequestClient, reviewTaskMapper)
-            : githubPullRequestOptionService;
+        this.findingFeedbackService = Objects.requireNonNull(findingFeedbackService, "findingFeedbackService");
+        this.githubCommentApplicationService = Objects.requireNonNull(
+            githubCommentApplicationService,
+            "githubCommentApplicationService"
+        );
+        this.githubPullRequestOptionService = Objects.requireNonNull(
+            githubPullRequestOptionService,
+            "githubPullRequestOptionService"
+        );
     }
 
     @Override

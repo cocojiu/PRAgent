@@ -40,7 +40,11 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.service.FindingFeedbackService;
+import com.repoguard.agent.service.GithubCommentApplicationService;
+import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
+import com.repoguard.agent.service.ReviewTaskQueryService;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,6 +76,12 @@ class ReviewServiceImplTest {
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final ReviewTaskQueryService reviewTaskQueryService = new ReviewTaskQueryServiceImpl(
+        reviewTaskMapper,
+        changedFileMapper,
+        reviewFindingMapper,
+        reviewTimelineMapper
+    );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
         reviewTaskMapper,
         reviewTimelineMapper,
@@ -87,7 +97,13 @@ class ReviewServiceImplTest {
         null,
         null
     );
-    private final ReviewServiceImpl service = new ReviewServiceImpl(
+    private final FindingFeedbackService findingFeedbackService = new FindingFeedbackServiceImpl(
+        reviewTaskMapper,
+        reviewFindingMapper,
+        reviewTimelineMapper,
+        null
+    );
+    private final GithubCommentApplicationService githubCommentApplicationService = new GithubCommentApplicationServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
         reviewFindingMapper,
@@ -95,18 +111,21 @@ class ReviewServiceImplTest {
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
         githubIntegrationProvider,
-        reviewTimelineMapper,
-        reviewTaskPublisher,
         githubPullRequestClient,
         null,
         null,
-        null,
-        null,
-        reviewTaskCommandService,
-        null,
-        null,
-        null,
         reviewTaskStateMachine
+    );
+    private final GithubPullRequestOptionService githubPullRequestOptionService = new GithubPullRequestOptionServiceImpl(
+        githubPullRequestClient,
+        reviewTaskMapper
+    );
+    private final ReviewServiceImpl service = new ReviewServiceImpl(
+        reviewTaskQueryService,
+        reviewTaskCommandService,
+        findingFeedbackService,
+        githubCommentApplicationService,
+        githubPullRequestOptionService
     );
 
     @Test
