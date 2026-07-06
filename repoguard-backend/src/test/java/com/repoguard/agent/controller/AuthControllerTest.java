@@ -204,6 +204,21 @@ class AuthControllerTest {
     }
 
     @Test
+    void refreshWithCookieAndBodyTokenRequiresCsrfHeader() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "refresh-token-value"
+                    }
+                    """)
+                .cookie(refreshCookie(), csrfCookie()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
     void refreshWithCookieTokenRejectsMismatchedCsrfHeader() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .cookie(refreshCookie(), csrfCookie())
@@ -211,6 +226,22 @@ class AuthControllerTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void refreshWithCookieAndDifferentBodyTokenReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "different-refresh-token"
+                    }
+                    """)
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
@@ -339,6 +370,37 @@ class AuthControllerTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void logoutWithCookieAndBodyTokenRequiresCsrfHeader() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "refresh-token-value"
+                    }
+                    """)
+                .cookie(refreshCookie(), csrfCookie()))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+    }
+
+    @Test
+    void logoutWithCookieAndDifferentBodyTokenReturns400() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "refreshToken": "different-refresh-token"
+                    }
+                    """)
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test

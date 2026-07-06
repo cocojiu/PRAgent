@@ -229,8 +229,14 @@ public class AuthController {
         String csrfCookieToken,
         HttpServletRequest httpRequest
     ) {
-        if (StringUtils.hasText(requestRefreshToken) || !StringUtils.hasText(cookieRefreshToken)) {
+        if (!StringUtils.hasText(cookieRefreshToken)) {
             return;
+        }
+        if (StringUtils.hasText(requestRefreshToken) && !secureEquals(cookieRefreshToken, requestRefreshToken)) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Request refresh token must match cookie refresh token"
+            );
         }
         String headerToken = httpRequest == null ? null : httpRequest.getHeader(CSRF_TOKEN_HEADER_NAME);
         if (!StringUtils.hasText(csrfCookieToken)
