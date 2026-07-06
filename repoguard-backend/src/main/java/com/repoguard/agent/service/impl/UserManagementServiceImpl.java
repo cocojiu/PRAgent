@@ -17,6 +17,7 @@ import com.repoguard.agent.service.UserManagementService;
 import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import com.repoguard.agent.user.UserManagementDisplayMapper;
 import com.repoguard.agent.user.UserOperationAuditRecorder;
+import com.repoguard.agent.user.UserRoleStatusPolicy;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.List;
@@ -27,10 +28,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class UserManagementServiceImpl implements UserManagementService {
 
-    private static final String ROLE_ADMIN = "ADMIN";
-    private static final String ROLE_VIEWER = "VIEWER";
-    private static final String STATUS_ACTIVE = "ACTIVE";
-    private static final String STATUS_DISABLED = "DISABLED";
     private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
     private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
@@ -42,6 +39,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final UserManagementDisplayMapper displayMapper;
     private final UserOperationAuditRecorder auditRecorder;
     private final UserAccountSessionInvalidator sessionInvalidator;
+    private final UserRoleStatusPolicy roleStatusPolicy;
 
     public UserManagementServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -55,6 +53,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         this.displayMapper = new UserManagementDisplayMapper();
         this.auditRecorder = new UserOperationAuditRecorder(userAccountMapper, userOperationAuditMapper);
         this.sessionInvalidator = new UserAccountSessionInvalidator(userRefreshTokenMapper);
+        this.roleStatusPolicy = new UserRoleStatusPolicy();
     }
 
     @Override
@@ -101,8 +100,8 @@ public class UserManagementServiceImpl implements UserManagementService {
         user.setUsername(username);
         user.setEmail(email);
         user.setPasswordHash(passwordHashService.hash(request.password()));
-        user.setRole(ROLE_VIEWER);
-        user.setStatus(STATUS_ACTIVE);
+        user.setRole(roleStatusPolicy.viewerRole());
+        user.setStatus(roleStatusPolicy.activeStatus());
         user.setFailedLoginCount(0);
         user.setSessionVersion(0);
         user.setCreatedAt(now);
@@ -112,17 +111,17 @@ public class UserManagementServiceImpl implements UserManagementService {
         } catch (DuplicateKeyException ex) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
         }
-        auditRecorder.record(auditContext, user, ACTION_USER_CREATE, null, ROLE_VIEWER);
+        auditRecorder.record(auditContext, user, ACTION_USER_CREATE, null, roleStatusPolicy.viewerRole());
         return displayMapper.toUserItem(user);
     }
 
     @Override
     @Transactional
     public UserManagementItemDto updateRole(UserOperationAuditContext auditContext, Long userId, String role) {
-        String normalizedRole = normalizeRole(role);
+        String normalizedRole = roleStatusPolicy.normalizeRole(role);
         UserAccount user = requireUser(userId);
         String beforeRole = user.getRole();
-        if (ROLE_ADMIN.equals(user.getRole()) && ROLE_VIEWER.equals(normalizedRole)) {
+        if (roleStatusPolicy.isAdmin(user) && roleStatusPolicy.isViewerRole(normalizedRole)) {
             ensureAnotherActiveAdmin(userId);
         }
         user.setRole(normalizedRole);
@@ -137,25 +136,25 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Override
     @Transactional
     public UserManagementItemDto updateStatus(UserOperationAuditContext auditContext, Long userId, String status) {
-        String normalizedStatus = normalizeStatus(status);
+        String normalizedStatus = roleStatusPolicy.normalizeStatus(status);
         UserAccount user = requireUser(userId);
         String beforeStatus = user.getStatus();
         Long operatorId = auditContext == null ? null : auditContext.operatorId();
-        if (operatorId != null && operatorId.equals(userId) && STATUS_DISABLED.equals(normalizedStatus)) {
+        if (operatorId != null && operatorId.equals(userId) && roleStatusPolicy.isDisabledStatus(normalizedStatus)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Cannot disable your own account");
         }
-        if (ROLE_ADMIN.equals(user.getRole()) && STATUS_DISABLED.equals(normalizedStatus)) {
+        if (roleStatusPolicy.isAdmin(user) && roleStatusPolicy.isDisabledStatus(normalizedStatus)) {
             ensureAnotherActiveAdmin(userId);
         }
         user.setStatus(normalizedStatus);
         LocalDateTime now = LocalDateTime.now();
         sessionInvalidator.rotateSessionVersion(user, now);
-        if (STATUS_ACTIVE.equals(normalizedStatus)) {
+        if (roleStatusPolicy.isActiveStatus(normalizedStatus)) {
             user.setFailedLoginCount(0);
             user.setLockedUntil(null);
         }
         userAccountMapper.updateById(user);
-        if (STATUS_DISABLED.equals(normalizedStatus)) {
+        if (roleStatusPolicy.isDisabledStatus(normalizedStatus)) {
             sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
         }
         auditRecorder.record(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
@@ -172,8 +171,8 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     private void ensureAnotherActiveAdmin(Long userId) {
         Long count = userAccountMapper.selectCount(new LambdaQueryWrapper<UserAccount>()
-            .eq(UserAccount::getRole, ROLE_ADMIN)
-            .eq(UserAccount::getStatus, STATUS_ACTIVE)
+            .eq(UserAccount::getRole, roleStatusPolicy.adminRole())
+            .eq(UserAccount::getStatus, roleStatusPolicy.activeStatus())
             .ne(UserAccount::getId, userId));
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one active administrator is required");
@@ -190,20 +189,6 @@ public class UserManagementServiceImpl implements UserManagementService {
 
     private boolean isStrongEnough(String password) {
         return password.chars().anyMatch(Character::isLetter) && password.chars().anyMatch(Character::isDigit);
-    }
-
-    private String normalizeRole(String role) {
-        if (ROLE_ADMIN.equals(role) || ROLE_VIEWER.equals(role)) {
-            return role;
-        }
-        throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported user role");
-    }
-
-    private String normalizeStatus(String status) {
-        if (STATUS_ACTIVE.equals(status) || STATUS_DISABLED.equals(status)) {
-            return status;
-        }
-        throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported user status");
     }
 
 }
