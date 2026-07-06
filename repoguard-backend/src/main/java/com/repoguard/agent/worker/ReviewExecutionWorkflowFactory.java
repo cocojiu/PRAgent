@@ -51,31 +51,31 @@ class ReviewExecutionWorkflowFactory {
             new ReviewTaskDurationPolicy()
         );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
+        ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
+            reviewTaskMapper,
+            claimService,
+            completionApplier,
+            clock
+        );
         ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(metrics);
         ReviewExecutionFailureClassifier failureClassifier = new ReviewExecutionFailureClassifier();
         ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
             new ReviewExecutionNoopCacheEvictionService()
         );
         ReviewExecutionFailureHandler failureHandler = new ReviewExecutionFailureHandler(
-            reviewTaskMapper,
-            claimService,
-            completionApplier,
+            taskTerminalWriter,
             timelineRecorder,
             metricsRecorder,
             cacheInvalidator,
-            clock,
             failureClassifier
         );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
-            reviewTaskMapper,
-            claimService,
-            completionApplier,
+            taskTerminalWriter,
             changedFileReplacementService,
             findingReplacementService,
             timelineRecorder,
             metricsRecorder,
-            cacheInvalidator,
-            clock
+            cacheInvalidator
         );
         return new ReviewExecutionWorkflow(
             pullRequestReviewer,

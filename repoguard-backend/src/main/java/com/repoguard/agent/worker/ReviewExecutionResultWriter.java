@@ -2,7 +2,6 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
@@ -10,36 +9,27 @@ import org.springframework.stereotype.Component;
 @Component
 class ReviewExecutionResultWriter {
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ReviewTaskClaimService claimService;
-    private final ReviewTaskCompletionApplier completionApplier;
+    private final ReviewExecutionTaskTerminalWriter taskTerminalWriter;
     private final ChangedFileReplacementService changedFileReplacementService;
     private final ReviewFindingReplacementService findingReplacementService;
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewExecutionMetricsRecorder metricsRecorder;
     private final ReviewExecutionCacheInvalidator cacheInvalidator;
-    private final ReviewExecutionClock clock;
 
     ReviewExecutionResultWriter(
-        ReviewTaskMapper reviewTaskMapper,
-        ReviewTaskClaimService claimService,
-        ReviewTaskCompletionApplier completionApplier,
+        ReviewExecutionTaskTerminalWriter taskTerminalWriter,
         ChangedFileReplacementService changedFileReplacementService,
         ReviewFindingReplacementService findingReplacementService,
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewExecutionMetricsRecorder metricsRecorder,
-        ReviewExecutionCacheInvalidator cacheInvalidator,
-        ReviewExecutionClock clock
+        ReviewExecutionCacheInvalidator cacheInvalidator
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.claimService = claimService;
-        this.completionApplier = completionApplier;
+        this.taskTerminalWriter = taskTerminalWriter;
         this.changedFileReplacementService = changedFileReplacementService;
         this.findingReplacementService = findingReplacementService;
         this.timelineRecorder = timelineRecorder;
         this.metricsRecorder = metricsRecorder;
         this.cacheInvalidator = cacheInvalidator;
-        this.clock = clock;
     }
 
     WriteResult applyCompleted(
@@ -49,19 +39,16 @@ class ReviewExecutionResultWriter {
         LocalDateTime startedAt,
         String claimId
     ) {
-        LocalDateTime finishedAt = clock.now();
-        boolean humanReviewRequired = completionApplier.applyCompleted(task, reviewResult, startedAt, finishedAt);
-        claimService.ensureClaimOwnedAndFenceTerminalStatus(task, claimId);
-        claimService.releaseReviewClaim(task);
-        reviewTaskMapper.updateById(task);
+        ReviewExecutionTaskTerminalWriter.CompletedTaskWrite taskWrite =
+            taskTerminalWriter.applyCompleted(task, reviewResult, startedAt, claimId);
         changedFileReplacementService.replace(task.getId(), diff);
-        timelineRecorder.diffFetched(task, finishedAt);
+        timelineRecorder.diffFetched(task, taskWrite.finishedAt());
         int findingCount = findingReplacementService.replace(task.getId(), reviewResult);
-        timelineRecorder.reviewGenerated(task, reviewResult, finishedAt);
-        timelineRecorder.reviewTerminal(task, humanReviewRequired, finishedAt);
-        metricsRecorder.recordCompleted(reviewResult, startedAt, finishedAt);
+        timelineRecorder.reviewGenerated(task, reviewResult, taskWrite.finishedAt());
+        timelineRecorder.reviewTerminal(task, taskWrite.humanReviewRequired(), taskWrite.finishedAt());
+        metricsRecorder.recordCompleted(reviewResult, startedAt, taskWrite.finishedAt());
         cacheInvalidator.reviewTaskChanged();
-        return new WriteResult(findingCount, humanReviewRequired);
+        return new WriteResult(findingCount, taskWrite.humanReviewRequired());
     }
 
     record WriteResult(int findingCount, boolean humanReviewRequired) {

@@ -121,40 +121,39 @@ class ReviewExecutionRequiredDependenciesTest {
     }
 
     @Test
-    void failureHandlerRequiresCompletionApplierDependency() {
-        ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
-
+    void failureHandlerRequiresTaskTerminalWriterDependency() {
         assertThatThrownBy(() -> new ReviewExecutionFailureHandler(
-            reviewTaskMapper,
             null,
             null,
             null,
             null,
-            null,
-            new ReviewExecutionClock(),
             new ReviewExecutionFailureClassifier()
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("completionApplier");
+            .hasMessage("taskTerminalWriter");
     }
 
     @Test
     void failureHandlerRequiresFailureClassifierDependency() {
         ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+        ReviewTaskStateMachine stateMachine = new ReviewTaskStateMachine();
+        ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
+            stateMachine,
+            new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
+            new ReviewTaskFailureOutcomePolicy(),
+            new ReviewTaskDurationPolicy()
+        );
 
         assertThatThrownBy(() -> new ReviewExecutionFailureHandler(
-            reviewTaskMapper,
-            null,
-            new ReviewTaskCompletionApplier(
-                new ReviewTaskStateMachine(),
-                new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker()),
-                new ReviewTaskFailureOutcomePolicy(),
-                new ReviewTaskDurationPolicy()
+            new ReviewExecutionTaskTerminalWriter(
+                reviewTaskMapper,
+                new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
+                completionApplier,
+                new ReviewExecutionClock()
             ),
             null,
             null,
             null,
-            new ReviewExecutionClock(),
             null
         ))
             .isInstanceOf(NullPointerException.class)
@@ -208,14 +207,17 @@ class ReviewExecutionRequiredDependenciesTest {
             ),
             new ReviewFindingEntityMapper()
         );
-        new ReviewExecutionFailureHandler(
+        ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
             reviewTaskMapper,
-            null,
+            new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
             completionApplier,
+            new ReviewExecutionClock()
+        );
+        new ReviewExecutionFailureHandler(
+            taskTerminalWriter,
             null,
             null,
             null,
-            new ReviewExecutionClock(),
             new ReviewExecutionFailureClassifier()
         );
     }
