@@ -42,7 +42,6 @@ class ApiContractTest {
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
-    private static final String FRONTEND_DIRECT_CONST_PATTERN_TEMPLATE = "const\\s+%s\\s*=\\s*\"([^\"]+)\"";
     private static final List<Class<?>> CONTROLLERS = List.of(
         AuthController.class,
         CacheStatsController.class,
@@ -237,11 +236,12 @@ class ApiContractTest {
     @Test
     void frontendDirectApiEntrypointsStayWithinBackendApiSurface() throws Exception {
         Set<String> backendEndpoints = Set.copyOf(apiSurfaceEndpointKeys());
+        Map<String, String> directEntrypoints = frontendDirectApiEntrypoints();
 
-        assertThat(frontendDirectApiEntrypoints())
+        assertThat(directEntrypoints)
             .as("Frontend direct api calls outside typed contracts must point to backend-owned controller endpoints")
-            .containsEntry("frontendPerformance.OBSERVABILITY_ENDPOINT", "POST /api/v1/observability/frontend/performance")
-            .allSatisfy((operation, endpoint) -> assertThat(backendEndpoints)
+            .isEmpty();
+        directEntrypoints.forEach((operation, endpoint) -> assertThat(backendEndpoints)
                 .as(operation + " frontend direct endpoint must exist in backend API surface")
                 .contains(endpoint));
     }
@@ -250,7 +250,7 @@ class ApiContractTest {
     void frontendApiPathLiteralsOutsideClientAndContractsStayExplicitlyWhitelisted() throws Exception {
         assertThat(frontendApiPathLiteralsOutsideClientAndContracts())
             .as("Production frontend API path literals outside typed contracts/client transport must stay explicitly whitelisted")
-            .containsExactly("observability/frontendPerformance.ts -> /api/v1/observability/frontend/performance");
+            .isEmpty();
     }
 
     @Test
@@ -344,15 +344,7 @@ class ApiContractTest {
     }
 
     private Map<String, String> frontendDirectApiEntrypoints() throws Exception {
-        Map<String, String> contracts = new LinkedHashMap<>();
-        String performanceSource = Files.readString(frontendSourcePath("observability", "frontendPerformance.ts"));
-        contracts.put(
-            "frontendPerformance.OBSERVABILITY_ENDPOINT",
-            frontendMethodNearSymbol(performanceSource, "OBSERVABILITY_ENDPOINT") + " "
-                + frontendStringConstant(performanceSource, "OBSERVABILITY_ENDPOINT")
-        );
-
-        return contracts;
+        return Map.of();
     }
 
     private Path frontendContractsPath() {
@@ -434,21 +426,6 @@ class ApiContractTest {
     private String frontendHttpMethod(String operationBody) {
         Matcher methodMatcher = FRONTEND_METHOD_PATTERN.matcher(operationBody);
         return methodMatcher.find() ? methodMatcher.group(1) : "GET";
-    }
-
-    private String frontendMethodNearSymbol(String source, String symbol) {
-        int index = source.indexOf(symbol);
-        String searchArea = index < 0 ? source : source.substring(index);
-        return frontendHttpMethod(searchArea);
-    }
-
-    private String frontendStringConstant(String source, String constantName) {
-        Matcher matcher = Pattern.compile(FRONTEND_DIRECT_CONST_PATTERN_TEMPLATE.formatted(constantName))
-            .matcher(source);
-        assertThat(matcher.find())
-            .as("frontend direct endpoint constant " + constantName + " must exist")
-            .isTrue();
-        return matcher.group(1);
     }
 
     private String normalizeFrontendTemplatePath(String path) {

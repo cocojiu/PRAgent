@@ -4,7 +4,7 @@ const frontendPerformance = vi.hoisted(() => ({
   observeFrontendApiRequest: vi.fn()
 }));
 
-vi.mock("@/observability/frontendPerformance", () => frontendPerformance);
+vi.mock("@/observability/frontendPerformanceBuffer", () => frontendPerformance);
 
 import { apiRequest } from "./contracts";
 
@@ -276,6 +276,43 @@ describe("apiRequest", () => {
       method: "GET",
       result: "success"
     }));
+  });
+
+  it("posts frontend performance reports through the typed contract without self-observation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse(null));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("reportFrontendPerformance", {
+      route: "overview",
+      apiRequests: [{
+        operation: "fetchDashboardSummary",
+        path: "/api/v1/dashboard/summary",
+        method: "GET",
+        status: 200,
+        result: "success",
+        startedAtMs: 12,
+        durationMs: 48
+      }],
+      longTasks: []
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/observability/frontend/performance");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({
+      route: "overview",
+      apiRequests: [{
+        operation: "fetchDashboardSummary",
+        path: "/api/v1/dashboard/summary",
+        method: "GET",
+        status: 200,
+        result: "success",
+        startedAtMs: 12,
+        durationMs: 48
+      }],
+      longTasks: []
+    }));
+    expect(frontendPerformance.observeFrontendApiRequest).not.toHaveBeenCalled();
   });
 
   it("reports low-cardinality observation paths for dynamic endpoints", async () => {

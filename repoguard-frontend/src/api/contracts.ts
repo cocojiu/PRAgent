@@ -1,5 +1,6 @@
 import { request } from "@/api/client";
-import { observeFrontendApiRequest } from "@/observability/frontendPerformance";
+import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
+import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
 import type { AuthResponse, CurrentUser, LoginRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import type {
@@ -70,6 +71,7 @@ type ApiEndpoint<Input> = {
   path: (input: Input) => string;
   query?: (input: Input) => QueryParams;
   body?: (input: Input) => unknown;
+  observe?: boolean;
 };
 
 type NotificationPageInput = {
@@ -183,6 +185,7 @@ export type ApiContract = {
   createUser: ApiOperation<UserCreateRequest, ManagedUser>;
   updateUserRole: ApiOperation<UserRoleInput, ManagedUser>;
   updateUserStatus: ApiOperation<UserStatusInput, ManagedUser>;
+  reportFrontendPerformance: ApiOperation<FrontendPerformanceReport, void>;
 };
 
 type ApiEndpointMap = {
@@ -481,6 +484,12 @@ const apiEndpoints: ApiEndpointMap = {
     method: "PUT",
     path: input => `/api/v1/users/${idSegment(input.id)}/status`,
     body: input => ({ status: input.status })
+  },
+  reportFrontendPerformance: {
+    method: "POST",
+    path: () => "/api/v1/observability/frontend/performance",
+    body: input => input,
+    observe: false
   }
 };
 
@@ -493,6 +502,7 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   const method = endpoint.method ?? "GET";
   const path = endpoint.path(input);
   const observationPath = stableObservationPath(path);
+  const shouldObserve = endpoint.observe !== false;
   if (method !== "GET") {
     options.method = method;
   }
@@ -507,25 +517,29 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
       endpoint.query?.(input),
       options
     );
-    observeFrontendApiRequest({
-      operation: String(operation),
-      path: observationPath,
-      method,
-      result: "success",
-      startedAtMs,
-      durationMs: currentTimeMs() - startedAtMs
-    });
+    if (shouldObserve) {
+      observeFrontendApiRequest({
+        operation: String(operation),
+        path: observationPath,
+        method,
+        result: "success",
+        startedAtMs,
+        durationMs: currentTimeMs() - startedAtMs
+      });
+    }
     return response;
   } catch (error) {
-    observeFrontendApiRequest({
-      operation: String(operation),
-      path: observationPath,
-      method,
-      status: error instanceof RequestError ? error.status : undefined,
-      result: "failed",
-      startedAtMs,
-      durationMs: currentTimeMs() - startedAtMs
-    });
+    if (shouldObserve) {
+      observeFrontendApiRequest({
+        operation: String(operation),
+        path: observationPath,
+        method,
+        status: error instanceof RequestError ? error.status : undefined,
+        result: "failed",
+        startedAtMs,
+        durationMs: currentTimeMs() - startedAtMs
+      });
+    }
     throw error;
   }
 };
