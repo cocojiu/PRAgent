@@ -18,6 +18,8 @@ public class ObservabilityThresholdProperties {
     private long frontendLongTaskMs = 200;
     private Map<String, Long> apiDurationMsByPath = new HashMap<>();
     private Map<String, Long> apiResponseBytesByPath = new HashMap<>();
+    private Map<String, Long> frontendApiDurationMsByRoute = new HashMap<>();
+    private Map<String, Long> frontendLongTaskMsByRoute = new HashMap<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -91,5 +93,25 @@ public class ObservabilityThresholdProperties {
         this.apiResponseBytesByPath = apiResponseBytesByPath == null
             ? new HashMap<>()
             : new HashMap<>(apiResponseBytesByPath);
+    }
+
+    public Map<String, Long> getFrontendApiDurationMsByRoute() {
+        return frontendApiDurationMsByRoute;
+    }
+
+    public void setFrontendApiDurationMsByRoute(Map<String, Long> frontendApiDurationMsByRoute) {
+        this.frontendApiDurationMsByRoute = frontendApiDurationMsByRoute == null
+            ? new HashMap<>()
+            : new HashMap<>(frontendApiDurationMsByRoute);
+    }
+
+    public Map<String, Long> getFrontendLongTaskMsByRoute() {
+        return frontendLongTaskMsByRoute;
+    }
+
+    public void setFrontendLongTaskMsByRoute(Map<String, Long> frontendLongTaskMsByRoute) {
+        this.frontendLongTaskMsByRoute = frontendLongTaskMsByRoute == null
+            ? new HashMap<>()
+            : new HashMap<>(frontendLongTaskMsByRoute);
     }
 }

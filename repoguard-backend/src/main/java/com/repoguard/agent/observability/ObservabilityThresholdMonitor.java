@@ -61,8 +61,13 @@ public class ObservabilityThresholdMonitor {
             return;
         }
         long durationMs = millis(duration);
-        if (durationMs >= properties.getFrontendApiDurationMs()) {
-            thresholdExceeded("frontend_api_duration", route, durationMs, properties.getFrontendApiDurationMs(), "ms");
+        long threshold = thresholdForSubject(
+            route,
+            properties.getFrontendApiDurationMsByRoute(),
+            properties.getFrontendApiDurationMs()
+        );
+        if (durationMs >= threshold) {
+            thresholdExceeded("frontend_api_duration", route, durationMs, threshold, "ms");
         }
     }
 
@@ -71,8 +76,13 @@ public class ObservabilityThresholdMonitor {
             return;
         }
         long durationMs = millis(duration);
-        if (durationMs >= properties.getFrontendLongTaskMs()) {
-            thresholdExceeded("frontend_long_task", route, durationMs, properties.getFrontendLongTaskMs(), "ms");
+        long threshold = thresholdForSubject(
+            route,
+            properties.getFrontendLongTaskMsByRoute(),
+            properties.getFrontendLongTaskMs()
+        );
+        if (durationMs >= threshold) {
+            thresholdExceeded("frontend_long_task", route, durationMs, threshold, "ms");
         }
     }
 
@@ -97,10 +107,14 @@ public class ObservabilityThresholdMonitor {
     }
 
     private long thresholdForPath(String path, Map<String, Long> overrides, long defaultValue) {
-        if (!StringUtils.hasText(path) || overrides == null || overrides.isEmpty()) {
+        return thresholdForSubject(path, overrides, defaultValue);
+    }
+
+    private long thresholdForSubject(String subject, Map<String, Long> overrides, long defaultValue) {
+        if (!StringUtils.hasText(subject) || overrides == null || overrides.isEmpty()) {
             return defaultValue;
         }
-        Long threshold = overrides.get(path.trim());
+        Long threshold = overrides.get(subject.trim());
         if (threshold == null || threshold <= 0) {
             return defaultValue;
         }

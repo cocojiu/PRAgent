@@ -64,6 +64,10 @@ repoguard:
       sql-rows: ${REPOGUARD_OBSERVABILITY_SQL_ROWS:1000}
       frontend-api-duration-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_API_DURATION_MS:2000}
       frontend-long-task-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_LONG_TASK_MS:200}
+      frontend-api-duration-ms-by-route:
+        "[overview]": ${REPOGUARD_OBSERVABILITY_FRONTEND_OVERVIEW_API_DURATION_MS:1200}
+      frontend-long-task-ms-by-route:
+        "[overview]": ${REPOGUARD_OBSERVABILITY_FRONTEND_OVERVIEW_LONG_TASK_MS:120}
       api-duration-ms-by-path:
         "[/api/v1/dashboard/overview]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_OVERVIEW_API_DURATION_MS:1000}
         "[/api/v1/dashboard/summary]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_SUMMARY_API_DURATION_MS:500}
