@@ -16,6 +16,7 @@ import jakarta.validation.constraints.Min;
 import java.lang.reflect.Parameter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ class ApiContractTest {
     private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
+    private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
     private static final String FRONTEND_DIRECT_CONST_PATTERN_TEMPLATE = "const\\s+%s\\s*=\\s*\"([^\"]+)\"";
     private static final List<Class<?>> CONTROLLERS = List.of(
         AuthController.class,
@@ -245,6 +247,13 @@ class ApiContractTest {
     }
 
     @Test
+    void frontendApiPathLiteralsOutsideClientAndContractsStayExplicitlyWhitelisted() throws Exception {
+        assertThat(frontendApiPathLiteralsOutsideClientAndContracts())
+            .as("Production frontend API path literals outside typed contracts/client transport must stay explicitly whitelisted")
+            .containsExactly("observability/frontendPerformance.ts -> /api/v1/observability/frontend/performance");
+    }
+
+    @Test
     void authRefreshCoordinatorDoesNotOwnDirectApiFetch() throws Exception {
         String authRefreshSource = Files.readString(frontendSourcePath("api", "authRefreshCoordinator.ts"));
 
@@ -350,6 +359,18 @@ class ApiContractTest {
         return frontendSourcePath("api", "contracts.ts");
     }
 
+    private Path frontendSourceRoot() {
+        Path candidate = Path.of("..", "repoguard-frontend", "src");
+        if (Files.exists(candidate)) {
+            return candidate;
+        }
+        Path rootCandidate = Path.of("repoguard-frontend", "src");
+        if (Files.exists(rootCandidate)) {
+            return rootCandidate;
+        }
+        return candidate;
+    }
+
     private Path frontendSourcePath(String first, String second) {
         Path candidate = Path.of("..", "repoguard-frontend", "src", first, second);
         if (Files.exists(candidate)) {
@@ -360,6 +381,42 @@ class ApiContractTest {
             return rootCandidate;
         }
         return candidate;
+    }
+
+    private List<String> frontendApiPathLiteralsOutsideClientAndContracts() throws Exception {
+        Path root = frontendSourceRoot();
+        List<String> literals = new ArrayList<>();
+        try (var paths = Files.walk(root)) {
+            for (Path path : paths
+                .filter(Files::isRegularFile)
+                .filter(this::isProductionFrontendSource)
+                .filter(file -> !isFrontendClientOrContract(root, file))
+                .sorted()
+                .toList()) {
+                String source = Files.readString(path);
+                Matcher matcher = FRONTEND_API_PATH_LITERAL_PATTERN.matcher(source);
+                while (matcher.find()) {
+                    literals.add(frontendRelativePath(root, path) + " -> " + matcher.group(1));
+                }
+            }
+        }
+        return literals;
+    }
+
+    private boolean isProductionFrontendSource(Path path) {
+        String filename = path.getFileName().toString();
+        return (filename.endsWith(".ts") || filename.endsWith(".vue"))
+            && !filename.endsWith(".test.ts")
+            && !filename.endsWith(".spec.ts");
+    }
+
+    private boolean isFrontendClientOrContract(Path root, Path path) {
+        String relativePath = frontendRelativePath(root, path);
+        return "api/client.ts".equals(relativePath) || "api/contracts.ts".equals(relativePath);
+    }
+
+    private String frontendRelativePath(Path root, Path path) {
+        return root.relativize(path).toString().replace('\\', '/');
     }
 
     private Optional<String> extractFrontendPath(String operationBody) {
