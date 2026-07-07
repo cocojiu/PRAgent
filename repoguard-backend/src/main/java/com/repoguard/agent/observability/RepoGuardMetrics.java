@@ -70,6 +70,17 @@ public class RepoGuardMetrics {
         ).increment();
     }
 
+    public void externalCallRetried(ExternalCallException ex, int attempt) {
+        counter(
+            "repoguard.external.call.retry",
+            "system", normalize(ex.getSystem()),
+            "category", normalize(ex.getCategory()),
+            "retryable", Boolean.toString(ex.isRetryable()),
+            "status", ex.getStatusCode() == null ? "none" : ex.getStatusCode().toString(),
+            "attempt", Integer.toString(Math.max(1, attempt))
+        ).increment();
+    }
+
     public void refreshTokenReuseDetected() {
         counter("repoguard.auth.refresh_token.reuse_detected").increment();
     }

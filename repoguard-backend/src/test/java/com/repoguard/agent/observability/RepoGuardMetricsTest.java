@@ -68,6 +68,27 @@ class RepoGuardMetricsTest {
     }
 
     @Test
+    void recordsExternalCallRetryAttemptsWithClassificationTags() {
+        metrics.externalCallRetried(new ExternalCallException(
+            "LLM",
+            "llm_service_unavailable",
+            true,
+            503,
+            "service unavailable",
+            new RuntimeException("503")
+        ), 2);
+
+        assertThat(counter(
+            "repoguard.external.call.retry",
+            "system", "llm",
+            "category", "llm_service_unavailable",
+            "retryable", "true",
+            "status", "503",
+            "attempt", "2"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
     void recordsRefreshTokenReuseDetection() {
         metrics.refreshTokenReuseDetected();
 

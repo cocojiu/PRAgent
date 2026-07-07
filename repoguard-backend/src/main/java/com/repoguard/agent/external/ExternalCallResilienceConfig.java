@@ -17,13 +17,16 @@ import org.springframework.context.annotation.Configuration;
 public class ExternalCallResilienceConfig {
 
     @Bean
-    public ExternalCallResilience externalCallResilience(ExternalCallResilienceProperties properties) {
+    public ExternalCallResilience externalCallResilience(
+        ExternalCallResilienceProperties properties,
+        ExternalCallRetryMetricsRecorder retryMetricsRecorder
+    ) {
         return new ExternalCallResilience(
             circuitBreaker("github", properties.getGithub()),
-            retry("github", properties.getGithub(), ExternalCallErrorClassifier::github),
+            retry("github", properties.getGithub(), ExternalCallErrorClassifier::github, retryMetricsRecorder),
             rateLimiter("github", properties.getGithub()),
             circuitBreaker("llm", properties.getLlm()),
-            retry("llm", properties.getLlm(), ExternalCallErrorClassifier::llm),
+            retry("llm", properties.getLlm(), ExternalCallErrorClassifier::llm, retryMetricsRecorder),
             rateLimiter("llm", properties.getLlm()),
             bulkhead("llm", properties.getLlm())
         );
@@ -43,14 +46,17 @@ public class ExternalCallResilienceConfig {
     private Retry retry(
         String name,
         ExternalCallResilienceProperties.Instance properties,
-        Function<RuntimeException, ExternalCallException> classifier
+        Function<RuntimeException, ExternalCallException> classifier,
+        ExternalCallRetryMetricsRecorder retryMetricsRecorder
     ) {
         RetryConfig config = RetryConfig.custom()
             .maxAttempts(Math.max(1, properties.getRetryMaxAttempts()))
             .waitDuration(Duration.ofMillis(Math.max(0, properties.getRetryWaitMillis())))
             .retryOnException(throwable -> isRetryable(classifier, throwable))
             .build();
-        return Retry.of("repoguard-" + name, config);
+        Retry retry = Retry.of("repoguard-" + name, config);
+        retry.getEventPublisher().onRetry(event -> retryMetricsRecorder.record(classifier, event));
+        return retry;
     }
 
     private boolean isRetryable(

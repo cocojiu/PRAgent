@@ -11,6 +11,7 @@ import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.retry.event.RetryOnRetryEvent;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -18,6 +19,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientResponseException;
 
 class ExternalCallResilienceTest {
+
+    private final ExternalCallRetryMetricsRecorder retryMetricsRecorder = org.mockito.Mockito.mock(
+        ExternalCallRetryMetricsRecorder.class
+    );
 
     @Test
     void githubCircuitOpenUsesExistingExternalCallClassification() {
@@ -90,6 +95,8 @@ class ExternalCallResilienceTest {
             .isInstanceOf(RestClientResponseException.class);
 
         assertThat(attempts).hasValue(1);
+        org.mockito.Mockito.verify(retryMetricsRecorder, org.mockito.Mockito.never())
+            .record(org.mockito.Mockito.any(), org.mockito.Mockito.any());
     }
 
     @Test
@@ -106,6 +113,8 @@ class ExternalCallResilienceTest {
 
         assertThat(result).isEqualTo("ok");
         assertThat(attempts).hasValue(3);
+        org.mockito.Mockito.verify(retryMetricsRecorder, org.mockito.Mockito.times(2))
+            .record(org.mockito.Mockito.any(), org.mockito.Mockito.any(RetryOnRetryEvent.class));
     }
 
     @Test
@@ -120,6 +129,8 @@ class ExternalCallResilienceTest {
             .isInstanceOf(RestClientResponseException.class);
 
         assertThat(attempts).hasValue(1);
+        org.mockito.Mockito.verify(retryMetricsRecorder, org.mockito.Mockito.never())
+            .record(org.mockito.Mockito.any(), org.mockito.Mockito.any());
     }
 
     private ExternalCallResilience resilience(CircuitBreaker githubCircuitBreaker, CircuitBreaker llmCircuitBreaker) {
@@ -168,7 +179,7 @@ class ExternalCallResilienceTest {
         properties.getGithub().setRetryWaitMillis(0);
         properties.getLlm().setRetryMaxAttempts(retryMaxAttempts);
         properties.getLlm().setRetryWaitMillis(0);
-        return new ExternalCallResilienceConfig().externalCallResilience(properties);
+        return new ExternalCallResilienceConfig().externalCallResilience(properties, retryMetricsRecorder);
     }
 
     private RestClientResponseException responseException(int statusCode, String statusText) {
