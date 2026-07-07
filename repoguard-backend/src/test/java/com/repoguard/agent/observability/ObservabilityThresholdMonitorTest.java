@@ -179,6 +179,36 @@ class ObservabilityThresholdMonitorTest {
         )).isEqualTo(1.0);
     }
 
+    @Test
+    void dataRetentionCleanupFailureUsesUnifiedThresholdSignal() {
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(
+            metrics,
+            new ObservabilityThresholdProperties()
+        );
+
+        monitor.dataRetentionCleanupFailure(true, "database_error");
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "data_retention_cleanup_failed",
+            "subject", "execute_database_error"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
+    void dataRetentionCleanupFailureCanDisableSingleFailureThresholdSignal() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setDataRetentionCleanupFailures(2);
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.dataRetentionCleanupFailure(false, "bad_request");
+
+        assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
+            .tag("signal", "data_retention_cleanup_failed")
+            .tag("subject", "dry_run_bad_request")
+            .counter()).isNull();
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }

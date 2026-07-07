@@ -17,6 +17,7 @@ public class ObservabilityThresholdProperties {
     private long frontendApiDurationMs = 2000;
     private long frontendLongTaskMs = 200;
     private long externalCallRetryAttempt = 1;
+    private long dataRetentionCleanupFailures = 1;
     private Map<String, Long> apiDurationMsByPath = new HashMap<>();
     private Map<String, Long> apiResponseBytesByPath = new HashMap<>();
     private Map<String, Long> frontendApiDurationMsByRoute = new HashMap<>();
@@ -85,6 +86,14 @@ public class ObservabilityThresholdProperties {
 
     public void setExternalCallRetryAttempt(long externalCallRetryAttempt) {
         this.externalCallRetryAttempt = externalCallRetryAttempt;
+    }
+
+    public long getDataRetentionCleanupFailures() {
+        return dataRetentionCleanupFailures;
+    }
+
+    public void setDataRetentionCleanupFailures(long dataRetentionCleanupFailures) {
+        this.dataRetentionCleanupFailures = dataRetentionCleanupFailures;
     }
 
     public Map<String, Long> getApiDurationMsByPath() {

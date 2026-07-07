@@ -65,6 +65,7 @@ repoguard:
       frontend-api-duration-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_API_DURATION_MS:2000}
       frontend-long-task-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_LONG_TASK_MS:200}
       external-call-retry-attempt: ${REPOGUARD_OBSERVABILITY_EXTERNAL_CALL_RETRY_ATTEMPT:1}
+      data-retention-cleanup-failures: ${REPOGUARD_OBSERVABILITY_DATA_RETENTION_CLEANUP_FAILURES:1}
       frontend-api-duration-ms-by-route:
         "[overview]": ${REPOGUARD_OBSERVABILITY_FRONTEND_OVERVIEW_API_DURATION_MS:1200}
         "[task-detail]": ${REPOGUARD_OBSERVABILITY_FRONTEND_TASK_DETAIL_API_DURATION_MS:1500}

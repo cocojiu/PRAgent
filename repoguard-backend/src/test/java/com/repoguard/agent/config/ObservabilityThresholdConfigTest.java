@@ -64,6 +64,15 @@ class ObservabilityThresholdConfigTest {
             .isPositive();
     }
 
+    @Test
+    void dataRetentionCleanupFailureThresholdDeclaresBudget() {
+        Properties properties = applicationProperties();
+
+        assertThat(defaultValue(properties.getProperty(
+            "repoguard.observability.thresholds.data-retention-cleanup-failures"
+        ))).isPositive();
+    }
+
     private Properties applicationProperties() {
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         yaml.setResources(new ClassPathResource("application.yml"));

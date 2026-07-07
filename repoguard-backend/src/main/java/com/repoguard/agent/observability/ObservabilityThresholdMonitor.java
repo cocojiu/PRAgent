@@ -131,6 +131,22 @@ public class ObservabilityThresholdMonitor {
         }
     }
 
+    public void dataRetentionCleanupFailure(boolean executed, String reason) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        long threshold = Math.max(1, properties.getDataRetentionCleanupFailures());
+        if (threshold <= 1) {
+            thresholdExceeded(
+                "data_retention_cleanup_failed",
+                dataRetentionCleanupSubject(executed, reason),
+                1,
+                threshold,
+                "failures"
+            );
+        }
+    }
+
     private void thresholdExceeded(String signal, String subject, long value, long threshold, String unit) {
         metrics.observabilityThresholdExceeded(signal, subject);
         LOGGER.warn(
@@ -204,6 +220,10 @@ public class ObservabilityThresholdMonitor {
 
     private String externalCallSystem(ExternalCallException ex) {
         return safeSubject(ex.getSystem()).toLowerCase(Locale.ROOT);
+    }
+
+    private String dataRetentionCleanupSubject(boolean executed, String reason) {
+        return (executed ? "execute" : "dry_run") + "|" + safeSubject(reason);
     }
 
     private String safeSubject(String subject) {

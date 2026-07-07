@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
+import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -14,13 +15,26 @@ import org.springframework.dao.DataAccessResourceFailureException;
 class DataRetentionMetricsRecorderTest {
 
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
-    private final DataRetentionMetricsRecorder recorder = new DataRetentionMetricsRecorder(metrics);
+    private final ObservabilityThresholdMonitor thresholdMonitor = org.mockito.Mockito.mock(
+        ObservabilityThresholdMonitor.class
+    );
+    private final DataRetentionMetricsRecorder recorder = new DataRetentionMetricsRecorder(
+        metrics,
+        thresholdMonitor
+    );
 
     @Test
     void constructorRejectsMissingMetrics() {
-        assertThatThrownBy(() -> new DataRetentionMetricsRecorder(null))
+        assertThatThrownBy(() -> new DataRetentionMetricsRecorder(null, thresholdMonitor))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
+    }
+
+    @Test
+    void constructorRejectsMissingThresholdMonitor() {
+        assertThatThrownBy(() -> new DataRetentionMetricsRecorder(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("thresholdMonitor");
     }
 
     @Test
@@ -65,5 +79,8 @@ class DataRetentionMetricsRecorderTest {
         verify(metrics).dataRetentionCleanupFailed(true, "bad_request");
         verify(metrics).dataRetentionCleanupFailed(false, "database_error");
         verify(metrics).dataRetentionCleanupFailed(true, "cleanup_failed");
+        verify(thresholdMonitor).dataRetentionCleanupFailure(true, "bad_request");
+        verify(thresholdMonitor).dataRetentionCleanupFailure(false, "database_error");
+        verify(thresholdMonitor).dataRetentionCleanupFailure(true, "cleanup_failed");
     }
 }
