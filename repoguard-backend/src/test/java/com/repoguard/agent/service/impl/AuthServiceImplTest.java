@@ -25,6 +25,7 @@ import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -43,13 +44,16 @@ class AuthServiceImplTest {
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
+    private final UserAccountSessionInvalidator sessionInvalidator =
+        new UserAccountSessionInvalidator(userRefreshTokenMapper);
     private final AuthServiceImpl authService = new AuthServiceImpl(
         userAccountMapper,
         userRefreshTokenMapper,
         userLoginAuditMapper,
         passwordHashService,
         authProperties,
-        authTokenService
+        authTokenService,
+        sessionInvalidator
     );
 
     @AfterEach
@@ -372,6 +376,21 @@ class AuthServiceImplTest {
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void constructorRequiresSessionInvalidator() {
+        assertThatThrownBy(() -> new AuthServiceImpl(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            userLoginAuditMapper,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("sessionInvalidator");
     }
 
     private UserRefreshToken activeRefreshToken(String refreshToken, LocalDateTime expiresAt) {

@@ -22,10 +22,12 @@ import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import com.repoguard.agent.web.AuditClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordHashService passwordHashService;
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
+    private final UserAccountSessionInvalidator sessionInvalidator;
 
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -58,7 +61,8 @@ public class AuthServiceImpl implements AuthService {
         UserLoginAuditMapper userLoginAuditMapper,
         PasswordHashService passwordHashService,
         AuthProperties authProperties,
-        AuthTokenService authTokenService
+        AuthTokenService authTokenService,
+        UserAccountSessionInvalidator sessionInvalidator
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
@@ -66,6 +70,7 @@ public class AuthServiceImpl implements AuthService {
         this.passwordHashService = passwordHashService;
         this.authProperties = authProperties;
         this.authTokenService = authTokenService;
+        this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
     }
 
     @Override
@@ -180,7 +185,7 @@ public class AuthServiceImpl implements AuthService {
             .set("status", STATUS_REVOKED)
             .set("revoked_at", now)
             .set("updated_at", now));
-        rotateSessionVersion(user, now);
+        rotateSessionVersionAndPersist(user, now);
         recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
         return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
     }
@@ -265,20 +270,11 @@ public class AuthServiceImpl implements AuthService {
             revokeIfPresent(storedToken, now);
             return;
         }
-        rotateSessionVersion(user, now);
-        revokeActiveRefreshTokens(user.getId(), now);
+        rotateSessionVersionAndPersist(user, now);
+        sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
         storedToken.setStatus(STATUS_REVOKED);
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
-    }
-
-    private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("user_id", userId)
-            .eq("status", STATUS_ACTIVE)
-            .set("status", STATUS_REVOKED)
-            .set("revoked_at", now)
-            .set("updated_at", now));
     }
 
     private boolean revokeActiveRefreshToken(UserRefreshToken storedToken, LocalDateTime now) {
@@ -299,9 +295,8 @@ public class AuthServiceImpl implements AuthService {
         return true;
     }
 
-    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
-        user.setSessionVersion((user.getSessionVersion() == null ? 0 : user.getSessionVersion()) + 1);
-        user.setUpdatedAt(now);
+    private void rotateSessionVersionAndPersist(UserAccount user, LocalDateTime now) {
+        sessionInvalidator.rotateSessionVersion(user, now);
         userAccountMapper.updateById(user);
     }
 
