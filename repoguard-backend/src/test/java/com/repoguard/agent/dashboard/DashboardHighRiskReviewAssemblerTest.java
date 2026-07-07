@@ -32,6 +32,15 @@ class DashboardHighRiskReviewAssemblerTest {
     }
 
     @Test
+    void normalizesRiskLevelWhitespaceForDisplay() {
+        List<HighRiskReviewDto> result = assembler.assemble(List.of(
+            highRiskReview("Fix auth bypass", "api", " CRITICAL ", 4L, "COMPLETED", LocalDateTime.of(2026, 6, 17, 9, 30))
+        ));
+
+        assertThat(result.getFirst().riskLevel()).isEqualTo("critical");
+    }
+
+    @Test
     void handlesNullValuesAndSource() {
         List<HighRiskReviewDto> result = assembler.assemble(List.of(
             highRiskReview("Untitled", "api", null, null, null, null)

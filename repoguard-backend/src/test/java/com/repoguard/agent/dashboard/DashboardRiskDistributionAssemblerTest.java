@@ -46,6 +46,22 @@ class DashboardRiskDistributionAssemblerTest {
     }
 
     @Test
+    void normalizesCriticalUnknownAndBlankRiskLevelsBeforeCalculatingPercent() {
+        List<ChartSliceDto> result = assembler.assemble(List.of(
+            riskLevelCount(" critical ", 2L),
+            riskLevelCount("medium", 1L),
+            riskLevelCount("unexpected", 1L),
+            riskLevelCount("", 1L),
+            riskLevelCount(null, 1L)
+        ));
+
+        assertThat(result).extracting(ChartSliceDto::value)
+            .containsExactly(2L, 1L, 0L, 3L);
+        assertThat(result).extracting(ChartSliceDto::percent)
+            .containsExactly("33.3%", "16.7%", "0.0%", "50.0%");
+    }
+
+    @Test
     void nullSourceProducesZeroDistribution() {
         List<ChartSliceDto> result = assembler.assemble(null);
 

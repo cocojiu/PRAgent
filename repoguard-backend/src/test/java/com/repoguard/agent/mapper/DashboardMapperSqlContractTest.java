@@ -30,8 +30,8 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
             .contains("count(*) as total")
-            .contains("risk_level in ('high', 'critical')")
-            .contains("status = 'failed'")
+            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('high', 'critical')")
+            .contains("upper(coalesce(nullif(trim(status), ''), '')) = 'failed'")
             .contains("avg(coalesce(duration_seconds, 0)) as averagedurationseconds");
     }
 
@@ -68,9 +68,10 @@ class DashboardMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
-            .contains("risk_level as risklevel")
+            .contains("normalized_risk_level as risklevel")
             .contains("count(*) as total")
-            .contains("group by risk_level");
+            .contains("group by normalized_risk_level");
+        assertRiskLevelBucketNormalization(sql);
     }
 
     @Test
@@ -80,7 +81,8 @@ class DashboardMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task t")
             .contains("left join review_finding f on f.task_id = t.id and f.category = 'finding'")
-            .contains("where t.risk_level in ('high', 'critical')")
+            .contains("upper(coalesce(nullif(trim(t.risk_level), ''), 'info')) as risklevel")
+            .contains("where upper(coalesce(nullif(trim(t.risk_level), ''), 'info')) in ('high', 'critical')")
             .contains("t.created_at >= #{startdate}")
             .contains("order by t.created_at desc")
             .contains("limit 5");
@@ -188,5 +190,14 @@ class DashboardMapperSqlContractTest {
             .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) <> 'unreviewed'")
             .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'valid'")
             .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'false_positive'");
+    }
+
+    private void assertRiskLevelBucketNormalization(String sql) {
+        assertThat(sql)
+            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('high', 'critical')")
+            .contains("then 'high'")
+            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('medium', 'low')")
+            .contains("then upper(coalesce(nullif(trim(risk_level), ''), 'info'))")
+            .contains("else 'info'");
     }
 }

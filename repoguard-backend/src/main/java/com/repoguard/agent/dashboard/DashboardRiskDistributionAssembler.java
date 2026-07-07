@@ -21,7 +21,7 @@ public class DashboardRiskDistributionAssembler {
 
     public List<ChartSliceDto> assemble(List<DashboardRiskLevelCount> riskLevelCounts) {
         Map<String, Long> countByRisk = nullToEmpty(riskLevelCounts).stream()
-            .collect(Collectors.toMap(DashboardRiskLevelCount::getRiskLevel, this::safeTotal, Long::sum));
+            .collect(Collectors.toMap(this::normalizeRiskLevel, this::safeTotal, Long::sum));
         long total = countByRisk.values().stream().mapToLong(Long::longValue).sum();
 
         return List.of(
@@ -46,6 +46,18 @@ public class DashboardRiskDistributionAssembler {
 
     private long safeTotal(DashboardRiskLevelCount count) {
         return count.getTotal() == null ? 0L : count.getTotal();
+    }
+
+    private String normalizeRiskLevel(DashboardRiskLevelCount count) {
+        if (count.getRiskLevel() == null || count.getRiskLevel().trim().isEmpty()) {
+            return "INFO";
+        }
+        String riskLevel = count.getRiskLevel().trim().toUpperCase(Locale.ROOT);
+        return switch (riskLevel) {
+            case "CRITICAL", "HIGH" -> "HIGH";
+            case "MEDIUM", "LOW" -> riskLevel;
+            default -> "INFO";
+        };
     }
 
     private <T> List<T> nullToEmpty(List<T> values) {

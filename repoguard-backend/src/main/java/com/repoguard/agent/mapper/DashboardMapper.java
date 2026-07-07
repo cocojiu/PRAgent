@@ -26,8 +26,12 @@ public interface DashboardMapper {
     @Select("""
         select
             count(*) as total,
-            sum(case when risk_level in ('HIGH', 'CRITICAL') then 1 else 0 end) as highRisk,
-            sum(case when status = 'FAILED' then 1 else 0 end) as failed,
+            sum(case
+                when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
+                then 1 else 0 end) as highRisk,
+            sum(case
+                when upper(coalesce(nullif(trim(status), ''), '')) = 'FAILED'
+                then 1 else 0 end) as failed,
             avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
         from review_task
         where created_at >= #{startDate}
@@ -35,10 +39,20 @@ public interface DashboardMapper {
     DashboardMetricStat selectMetricStat(@Param("startDate") LocalDate startDate);
 
     @Select("""
-        select risk_level as riskLevel, count(*) as total
-        from review_task
-        where created_at >= #{startDate}
-        group by risk_level
+        select normalized_risk_level as riskLevel, count(*) as total
+        from (
+            select
+                case
+                    when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
+                    then 'HIGH'
+                    when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('MEDIUM', 'LOW')
+                    then upper(coalesce(nullif(trim(risk_level), ''), 'INFO'))
+                    else 'INFO'
+                end as normalized_risk_level
+            from review_task
+            where created_at >= #{startDate}
+        ) risk_stats
+        group by normalized_risk_level
         """)
     List<DashboardRiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
 
@@ -65,15 +79,16 @@ public interface DashboardMapper {
         select
             t.title as title,
             t.repository as repository,
-            t.risk_level as riskLevel,
+            upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')) as riskLevel,
             count(f.id) as ruleHits,
             t.created_at as createdAt,
             t.status as status
         from review_task t
         left join review_finding f on f.task_id = t.id and f.category = 'FINDING'
-        where t.risk_level in ('HIGH', 'CRITICAL')
+        where upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
           and t.created_at >= #{startDate}
-        group by t.id, t.title, t.repository, t.risk_level, t.created_at, t.status
+        group by t.id, t.title, t.repository, upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')),
+            t.created_at, t.status
         order by t.created_at desc
         limit 5
         """)

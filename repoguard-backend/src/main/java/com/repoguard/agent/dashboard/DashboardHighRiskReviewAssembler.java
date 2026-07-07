@@ -38,7 +38,7 @@ public class DashboardHighRiskReviewAssembler {
     }
 
     private String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
+        return value == null ? null : value.trim().toLowerCase(Locale.ROOT);
     }
 
     private String formatReviewedAt(LocalDateTime reviewedAt) {
