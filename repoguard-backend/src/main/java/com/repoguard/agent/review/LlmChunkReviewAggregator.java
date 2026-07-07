@@ -9,7 +9,6 @@ import java.util.Objects;
 
 class LlmChunkReviewAggregator {
 
-    static final String PARTIAL_FALLBACK_STATUS = "partial_fallback";
     static final String CHUNK_PARTIAL_FAILURE_CATEGORY = "chunk_partial_failure";
 
     private final RuleBasedPullRequestReviewer ruleBasedReviewer;
@@ -52,7 +51,7 @@ class LlmChunkReviewAggregator {
             null,
             null,
             null,
-            aggregation.failedChunks() > 0 ? PARTIAL_FALLBACK_STATUS : null,
+            aggregation.failedChunks() > 0 ? LlmParseStatus.PARTIAL_FALLBACK.code() : null,
             promptBuilder.chunkedPromptSummary(
                 fullDiff,
                 chunks,

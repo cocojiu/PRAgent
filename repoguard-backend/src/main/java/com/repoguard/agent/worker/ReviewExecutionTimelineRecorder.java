@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.LlmParseStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
@@ -43,7 +44,7 @@ class ReviewExecutionTimelineRecorder {
     }
 
     private String reviewGeneratedLabel(ReviewResult reviewResult) {
-        if ("partial_fallback".equalsIgnoreCase(reviewResult.llmParseStatus())) {
+        if (LlmParseStatus.PARTIAL_FALLBACK.is(reviewResult.llmParseStatus())) {
             return "Code review generated with partial rule fallback";
         }
         if (LlmStatus.FALLBACK != LlmStatus.from(reviewResult.llmStatus())) {
