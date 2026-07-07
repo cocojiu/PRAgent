@@ -1,9 +1,6 @@
 package com.repoguard.agent.external;
 
-import java.net.SocketTimeoutException;
-import java.util.Locale;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 public final class ExternalCallErrorClassifier {
@@ -83,22 +80,7 @@ public final class ExternalCallErrorClassifier {
     }
 
     private static boolean isTimeout(RuntimeException ex, String detail) {
-        if (ex instanceof ResourceAccessException && containsTimeout(detail)) {
-            return true;
-        }
-        Throwable cause = ex.getCause();
-        while (cause != null) {
-            if (cause instanceof SocketTimeoutException) {
-                return true;
-            }
-            cause = cause.getCause();
-        }
-        return containsTimeout(detail);
-    }
-
-    private static boolean containsTimeout(String detail) {
-        return StringUtils.hasText(detail)
-            && detail.toLowerCase(Locale.ROOT).matches(".*(timeout|timed out|read timed out|connect timed out).*");
+        return ExternalFailureSignals.hasTimeoutSignal(ex, detail, false);
     }
 
     private static String detail(RuntimeException ex) {

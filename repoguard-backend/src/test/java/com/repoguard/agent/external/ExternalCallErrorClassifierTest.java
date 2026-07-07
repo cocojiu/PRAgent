@@ -149,6 +149,17 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void classifiesGithubTimeoutWithoutHttpStatusAsRetryable() {
+        ResourceAccessException timeout = new ResourceAccessException("connect timed out");
+
+        ExternalCallException classified = ExternalCallErrorClassifier.github(timeout);
+
+        assertThat(classified.getCategory()).isEqualTo("github_timeout");
+        assertThat(classified.isRetryable()).isTrue();
+        assertThat(classified.getStatusCode()).isNull();
+    }
+
+    @Test
     void keepsExistingExternalCallExceptionUnchanged() {
         ExternalCallException original = new ExternalCallException(
             "GitHub",
