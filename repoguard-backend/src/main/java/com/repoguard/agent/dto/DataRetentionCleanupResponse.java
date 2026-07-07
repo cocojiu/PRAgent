@@ -4,6 +4,7 @@ public record DataRetentionCleanupResponse(
     boolean executed,
     int retentionDays,
     int maxTasks,
+    String backupReference,
     String cutoffTime,
     long candidateTasks,
     int selectedTasks,

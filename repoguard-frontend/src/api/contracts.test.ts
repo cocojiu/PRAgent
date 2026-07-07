@@ -141,6 +141,7 @@ describe("apiRequest", () => {
       retentionDays: 90,
       maxTasks: 500,
       execute: false,
+      backupReference: "backup://mysql/prod/2026-07-07T22:00:00",
       confirmText: "DRY_RUN"
     });
     await apiRequest("resetRefreshToken", {
@@ -158,6 +159,7 @@ describe("apiRequest", () => {
       retentionDays: 90,
       maxTasks: 500,
       execute: false,
+      backupReference: "backup://mysql/prod/2026-07-07T22:00:00",
       confirmText: "DRY_RUN"
     }));
     expect(calls[2][0]).toContain("/api/v1/auth/refresh-token/reset");

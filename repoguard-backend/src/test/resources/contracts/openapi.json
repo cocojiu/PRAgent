@@ -4524,6 +4524,10 @@
           "execute" : {
             "type" : "boolean"
           },
+          "backupReference" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
           "confirmText" : {
             "type" : "string",
             "maxLength" : 32
@@ -4544,6 +4548,9 @@
           "maxTasks" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "backupReference" : {
+            "type" : "string"
           },
           "cutoffTime" : {
             "type" : "string"

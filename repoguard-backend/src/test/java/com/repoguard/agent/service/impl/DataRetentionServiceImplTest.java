@@ -63,10 +63,11 @@ class DataRetentionServiceImplTest {
         when(reviewTaskMapper.selectCount(any())).thenReturn(2L);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(1L), task(2L)));
 
-        var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null));
+        var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
 
         assertThat(response.executed()).isFalse();
         assertThat(response.retentionDays()).isEqualTo(30);
+        assertThat(response.backupReference()).isNull();
         assertThat(response.candidateTasks()).isEqualTo(2);
         assertThat(response.selectedTasks()).isEqualTo(2);
         verify(metricsRecorder).record(response);
@@ -86,9 +87,16 @@ class DataRetentionServiceImplTest {
         when(reviewFindingMapper.delete(any())).thenReturn(6);
         when(reviewTaskMapper.delete(any())).thenReturn(1);
 
-        var response = service.cleanup(new DataRetentionCleanupRequest(7, 50, true, "CLEANUP"));
+        var response = service.cleanup(new DataRetentionCleanupRequest(
+            7,
+            50,
+            true,
+            "backup://mysql/prod/2026-07-07T22:00:00",
+            "CLEANUP"
+        ));
 
         assertThat(response.executed()).isTrue();
+        assertThat(response.backupReference()).isEqualTo("backup://mysql/prod/2026-07-07T22:00:00");
         assertThat(response.deletedBatchItems()).isEqualTo(3);
         assertThat(response.deletedTasks()).isEqualTo(1);
         verify(metricsRecorder).record(response);
@@ -112,9 +120,26 @@ class DataRetentionServiceImplTest {
 
     @Test
     void cleanupExecuteRequiresConfirmationText() {
-        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(7, 50, true, null)))
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
+            7,
+            50,
+            true,
+            "backup://mysql/prod/2026-07-07T22:00:00",
+            null
+        )))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("CLEANUP");
+        verify(metricsRecorder).recordFailure(
+            org.mockito.Mockito.eq(true),
+            org.mockito.Mockito.any(BusinessException.class)
+        );
+    }
+
+    @Test
+    void cleanupExecuteRequiresBackupReference() {
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(7, 50, true, "   ", "CLEANUP")))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("backupReference");
         verify(metricsRecorder).recordFailure(
             org.mockito.Mockito.eq(true),
             org.mockito.Mockito.any(BusinessException.class)
@@ -127,7 +152,7 @@ class DataRetentionServiceImplTest {
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(reviewTaskMapper.selectCount(any())).thenThrow(failure);
 
-        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null)))
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null)))
             .isSameAs(failure);
 
         verify(metricsRecorder).recordFailure(false, failure);

@@ -43,6 +43,7 @@ class DataRetentionMetricsRecorderTest {
             true,
             90,
             500,
+            "backup://mysql/prod/2026-07-07T22:00:00",
             "2026-07-07 22:00:00",
             12,
             5,

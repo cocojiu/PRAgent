@@ -93,6 +93,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         if (execute && (request.confirmText() == null || !CONFIRM_TEXT.equals(request.confirmText().trim()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供确认短语 CLEANUP。");
         }
+        String backupReference = resolveBackupReference(request, execute);
 
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
         LambdaQueryWrapper<ReviewTask> candidateQuery = candidateTaskQuery(cutoff);
@@ -109,6 +110,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 false,
                 retentionDays,
                 maxTasks,
+                backupReference,
                 cutoff,
                 candidateTasks,
                 taskIds.size(),
@@ -148,6 +150,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             true,
             retentionDays,
             maxTasks,
+            backupReference,
             cutoff,
             candidateTasks,
             taskIds.size(),
@@ -170,6 +173,21 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         return retentionDays == null || retentionDays <= 0 ? DEFAULT_RETENTION_DAYS : retentionDays;
     }
 
+    private String resolveBackupReference(DataRetentionCleanupRequest request, boolean execute) {
+        String backupReference = normalizeBlankToNull(request == null ? null : request.backupReference());
+        if (execute && backupReference == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供备份凭证 backupReference。");
+        }
+        return backupReference;
+    }
+
+    private String normalizeBlankToNull(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
+    }
+
     private LambdaQueryWrapper<ReviewTask> candidateTaskQuery(LocalDateTime cutoff) {
         return new LambdaQueryWrapper<ReviewTask>()
             .lt(ReviewTask::getCreatedAt, cutoff)
@@ -180,6 +198,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         boolean executed,
         int retentionDays,
         int maxTasks,
+        String backupReference,
         LocalDateTime cutoff,
         long candidateTasks,
         int selectedTasks,
@@ -195,6 +214,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             executed,
             retentionDays,
             maxTasks,
+            backupReference,
             cutoff.format(DATE_TIME_FORMATTER),
             candidateTasks,
             selectedTasks,

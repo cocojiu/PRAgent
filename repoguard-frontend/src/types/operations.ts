@@ -16,6 +16,7 @@ export interface DataRetentionCleanupRequest {
   retentionDays?: number;
   maxTasks?: number;
   execute?: boolean;
+  backupReference?: string;
   confirmText?: string;
 }
 
@@ -23,6 +24,7 @@ export interface DataRetentionCleanupResponse {
   executed: boolean;
   retentionDays: number;
   maxTasks: number;
+  backupReference?: string;
   cutoffTime: string;
   candidateTasks: number;
   selectedTasks: number;

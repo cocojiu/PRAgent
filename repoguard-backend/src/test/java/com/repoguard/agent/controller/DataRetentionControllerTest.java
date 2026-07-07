@@ -25,6 +25,25 @@ class DataRetentionControllerTest {
         .build();
 
     @Test
+    void cleanupRejectsOverlongBackupReferenceBeforeServiceCall() throws Exception {
+        mockMvc.perform(post("/api/v1/config/data-retention/cleanup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "retentionDays": 30,
+                      "maxTasks": 100,
+                      "execute": true,
+                      "backupReference": "%s",
+                      "confirmText": "CLEANUP"
+                    }
+                    """.formatted("x".repeat(129))))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+
+        verify(dataRetentionService, never()).cleanup(any());
+    }
+
+    @Test
     void cleanupRejectsOverlongConfirmationTextBeforeServiceCall() throws Exception {
         mockMvc.perform(post("/api/v1/config/data-retention/cleanup")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -33,6 +52,7 @@ class DataRetentionControllerTest {
                       "retentionDays": 30,
                       "maxTasks": 100,
                       "execute": true,
+                      "backupReference": "backup://mysql/prod/2026-07-07T22:00:00",
                       "confirmText": "%s"
                     }
                     """.formatted("x".repeat(33))))
@@ -48,6 +68,7 @@ class DataRetentionControllerTest {
             false,
             30,
             100,
+            "backup://mysql/prod/2026-07-07T22:00:00",
             "2026-07-03 12:00:00",
             0,
             0,
@@ -67,11 +88,13 @@ class DataRetentionControllerTest {
                       "retentionDays": 30,
                       "maxTasks": 100,
                       "execute": true,
+                      "backupReference": "backup://mysql/prod/2026-07-07T22:00:00",
                       "confirmText": "CLEANUP"
                     }
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.retentionDays").value(30))
-            .andExpect(jsonPath("$.data.maxTasks").value(100));
+            .andExpect(jsonPath("$.data.maxTasks").value(100))
+            .andExpect(jsonPath("$.data.backupReference").value("backup://mysql/prod/2026-07-07T22:00:00"));
     }
 }
