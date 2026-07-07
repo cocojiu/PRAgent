@@ -34,6 +34,21 @@ class OpenApiPathsContractTest {
     }
 
     @Test
+    void openApiJsonSnapshotStaysAlignedWithGeneratedDocument() throws Exception {
+        Map<String, Object> document = OpenApiContractDocument.fromControllers(controllers());
+        Map<String, Object> snapshot = OpenApiContractDocument.fromJson(
+            Files.readString(Path.of("src/test/resources/contracts/openapi.json"))
+        );
+
+        assertThat(snapshot)
+            .as("Generated OpenAPI JSON changed. Update the reviewed JSON snapshot with generated-client impact.")
+            .isEqualTo(document);
+        assertThat(OpenApiContractDocument.fromJson(OpenApiContractDocument.toJson(document)))
+            .as("OpenAPI JSON serialization should round-trip without losing contract fields.")
+            .isEqualTo(document);
+    }
+
+    @Test
     void openApiDocumentUsesCodegenSafeUniqueOperationIds() {
         List<String> operationIds = OpenApiContractDocument.operationIds(OpenApiContractDocument.fromControllers(controllers()));
 

@@ -1,0 +1,2560 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RepoGuard Agent API",
+    "version": "0.0.1-SNAPSHOT"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerLogin",
+        "x-controller-operation": "AuthController#login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "AuthLoginRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerLogout",
+        "x-controller-operation": "AuthController#logout",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "AuthLogoutRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthLogoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerMe",
+        "x-controller-operation": "AuthController#me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerRefresh",
+        "x-controller-operation": "AuthController#refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "AuthRefreshRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/refresh-token/reset": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerResetRefreshToken",
+        "x-controller-operation": "AuthController#resetRefreshToken",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "AuthRefreshTokenResetRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRefreshTokenResetRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "authControllerRegister",
+        "x-controller-operation": "AuthController#register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "AuthRegisterRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cache/stats": {
+      "get": {
+        "tags": [
+          "CacheStats"
+        ],
+        "operationId": "cacheStatsControllerGetStats",
+        "x-controller-operation": "CacheStatsController#getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/data-retention/cleanup": {
+      "post": {
+        "tags": [
+          "DataRetention"
+        ],
+        "operationId": "dataRetentionControllerCleanup",
+        "x-controller-operation": "DataRetentionController#cleanup",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "DataRetentionCleanupRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DataRetentionCleanupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetGithubIntegration",
+        "x-controller-operation": "SystemConfigController#getGithubIntegration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateGithubIntegration",
+        "x-controller-operation": "SystemConfigController#updateGithubIntegration",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "GithubIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GithubIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/github/test": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerTestGithubIntegration",
+        "x-controller-operation": "SystemConfigController#testGithubIntegration",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "GithubIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GithubIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/mysql": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetMysqlIntegration",
+        "x-controller-operation": "SystemConfigController#getMysqlIntegration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateMysqlIntegration",
+        "x-controller-operation": "SystemConfigController#updateMysqlIntegration",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ServiceIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/mysql/test": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerTestMysqlConnection",
+        "x-controller-operation": "SystemConfigController#testMysqlConnection",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "ServiceIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/rabbitmq": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetRabbitMqIntegration",
+        "x-controller-operation": "SystemConfigController#getRabbitMqIntegration",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateRabbitMqIntegration",
+        "x-controller-operation": "SystemConfigController#updateRabbitMqIntegration",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ServiceIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/integrations/rabbitmq/test": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerTestRabbitMqConnection",
+        "x-controller-operation": "SystemConfigController#testRabbitMqConnection",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "ServiceIntegrationConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/notification-bindings": {
+      "get": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerListBindings",
+        "x-controller-operation": "NotificationIntegrationController#listBindings",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "organization",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerCreateBinding",
+        "x-controller-operation": "NotificationIntegrationController#createBinding",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "NotificationBindingRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationBindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/notification-bindings/{id}": {
+      "delete": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerDeleteBinding",
+        "x-controller-operation": "NotificationIntegrationController#deleteBinding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerUpdateBinding",
+        "x-controller-operation": "NotificationIntegrationController#updateBinding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "NotificationBindingRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationBindingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/notification-bindings/{id}/status": {
+      "put": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerUpdateBindingStatus",
+        "x-controller-operation": "NotificationIntegrationController#updateBindingStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "NotificationBindingStatusRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationBindingStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/notification-bindings/{id}/test": {
+      "post": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerTestBinding",
+        "x-controller-operation": "NotificationIntegrationController#testBinding",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-policy": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetReviewPolicy",
+        "x-controller-operation": "SystemConfigController#getReviewPolicy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateReviewPolicy",
+        "x-controller-operation": "SystemConfigController#updateReviewPolicy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ReviewPolicyConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPolicyConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-policy/test": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerTestReviewPolicy",
+        "x-controller-operation": "SystemConfigController#testReviewPolicy",
+        "parameters": [],
+        "requestBody": {
+          "required": false,
+          "x-java-type": "ReviewPolicyConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPolicyConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-rules": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetReviewRules",
+        "x-controller-operation": "SystemConfigController#getReviewRules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerCreateReviewRule",
+        "x-controller-operation": "SystemConfigController#createReviewRule",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ReviewRuleConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRuleConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-rules/{id}": {
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateReviewRule",
+        "x-controller-operation": "SystemConfigController#updateReviewRule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ReviewRuleConfigRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRuleConfigRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-rules/{id}/status": {
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateReviewRuleStatus",
+        "x-controller-operation": "SystemConfigController#updateReviewRuleStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ReviewRuleStatusRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRuleStatusRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption": {
+      "post": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerReEncryptSecrets",
+        "x-controller-operation": "SystemConfigController#reEncryptSecrets",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "SecretReEncryptionRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SecretReEncryptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/system-settings": {
+      "get": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerGetSystemSettings",
+        "x-controller-operation": "SystemConfigController#getSystemSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "SystemConfig"
+        ],
+        "operationId": "systemConfigControllerUpdateSystemSettings",
+        "x-controller-operation": "SystemConfigController#updateSystemSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "SystemSettingsRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/high-risk-reviews": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetHighRiskReviews",
+        "x-controller-operation": "DashboardController#getHighRiskReviews",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/llm-quality": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetLlmQuality",
+        "x-controller-operation": "DashboardController#getLlmQuality",
+        "parameters": [
+          {
+            "name": "llmTrendDays",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/overview": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetOverview",
+        "x-controller-operation": "DashboardController#getOverview",
+        "parameters": [
+          {
+            "name": "llmTrendDays",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/review-trend": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetReviewTrend",
+        "x-controller-operation": "DashboardController#getReviewTrend",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/risk-distribution": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetRiskDistribution",
+        "x-controller-operation": "DashboardController#getRiskDistribution",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/rules": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetRules",
+        "x-controller-operation": "DashboardController#getRules",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/summary": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "operationId": "dashboardControllerGetSummary",
+        "x-controller-operation": "DashboardController#getSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/github/webhooks": {
+      "post": {
+        "tags": [
+          "GithubWebhook"
+        ],
+        "operationId": "githubWebhookControllerReceive",
+        "x-controller-operation": "GithubWebhookController#receive",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "byte[]",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/message-queue/health": {
+      "get": {
+        "tags": [
+          "MessageQueueHealth"
+        ],
+        "operationId": "messageQueueHealthControllerGetHealth",
+        "x-controller-operation": "MessageQueueHealthController#getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/message-queue/tasks/{taskId}/requeue": {
+      "post": {
+        "tags": [
+          "MessageQueueHealth"
+        ],
+        "operationId": "messageQueueHealthControllerRequeueTask",
+        "x-controller-operation": "MessageQueueHealthController#requeueTask",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notification-deliveries": {
+      "get": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerListDeliveries",
+        "x-controller-operation": "NotificationIntegrationController#listDeliveries",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notification-events": {
+      "get": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerListEvents",
+        "x-controller-operation": "NotificationIntegrationController#listEvents",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notification-events/{id}/retry": {
+      "post": {
+        "tags": [
+          "NotificationIntegration"
+        ],
+        "operationId": "notificationIntegrationControllerRetryEvent",
+        "x-controller-operation": "NotificationIntegrationController#retryEvent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "tags": [
+          "Notification"
+        ],
+        "operationId": "notificationControllerGetNotifications",
+        "x-controller-operation": "NotificationController#getNotifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/observability/frontend/performance": {
+      "post": {
+        "tags": [
+          "FrontendPerformance"
+        ],
+        "operationId": "frontendPerformanceControllerRecordPerformance",
+        "x-controller-operation": "FrontendPerformanceController#recordPerformance",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "FrontendPerformanceReportRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FrontendPerformanceReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListReviews",
+        "x-controller-operation": "ReviewController#listReviews",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repository",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "riskLevel",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "triggerSource",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/github/pull-requests": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListConfiguredGithubPullRequests",
+        "x-controller-operation": "ReviewController#listConfiguredGithubPullRequests",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/manual": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerTriggerManualReview",
+        "x-controller-operation": "ReviewController#triggerManualReview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "ManualReviewRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/repositories": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListRepositories",
+        "x-controller-operation": "ReviewController#listRepositories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerGetReviewDetail",
+        "x-controller-operation": "ReviewController#getReviewDetail",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/changed-files": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListChangedFiles",
+        "x-controller-operation": "ReviewController#listChangedFiles",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasFinding",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/findings": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListReviewFindings",
+        "x-controller-operation": "ReviewController#listReviewFindings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "feedbackStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/findings/{findingId}/feedback": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerUpdateFindingFeedback",
+        "x-controller-operation": "ReviewController#updateFindingFeedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "findingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "FindingFeedbackRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindingFeedbackRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/github-comments": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerPublishGithubComments",
+        "x-controller-operation": "ReviewController#publishGithubComments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/github-comments/preview": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerGetGithubCommentPreview",
+        "x-controller-operation": "ReviewController#getGithubCommentPreview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentableOnly",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/github-comments/publications": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerGetGithubCommentPublicationHistory",
+        "x-controller-operation": "ReviewController#getGithubCommentPublicationHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/human-review": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerSubmitHumanReview",
+        "x-controller-operation": "ReviewController#submitHumanReview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "HumanReviewRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/missing-tests": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListMissingTests",
+        "x-controller-operation": "ReviewController#listMissingTests",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/retry": {
+      "post": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerRetryReview",
+        "x-controller-operation": "ReviewController#retryReview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/status": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerGetReviewStatus",
+        "x-controller-operation": "ReviewController#getReviewStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/{id}/timeline": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "reviewControllerListReviewTimeline",
+        "x-controller-operation": "ReviewController#listReviewTimeline",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/health/summary": {
+      "get": {
+        "tags": [
+          "SystemHealth"
+        ],
+        "operationId": "systemHealthControllerGetSystemHealthSummary",
+        "x-controller-operation": "SystemHealthController#getSystemHealthSummary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "tags": [
+          "UserManagement"
+        ],
+        "operationId": "userManagementControllerListUsers",
+        "x-controller-operation": "UserManagementController#listUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "UserManagement"
+        ],
+        "operationId": "userManagementControllerCreateUser",
+        "x-controller-operation": "UserManagementController#createUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "UserCreateRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/audits": {
+      "get": {
+        "tags": [
+          "UserManagement"
+        ],
+        "operationId": "userManagementControllerListOperationAudits",
+        "x-controller-operation": "UserManagementController#listOperationAudits",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}/role": {
+      "put": {
+        "tags": [
+          "UserManagement"
+        ],
+        "operationId": "userManagementControllerUpdateRole",
+        "x-controller-operation": "UserManagementController#updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "UserRoleUpdateRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRoleUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/{id}/status": {
+      "put": {
+        "tags": [
+          "UserManagement"
+        ],
+        "operationId": "userManagementControllerUpdateStatus",
+        "x-controller-operation": "UserManagementController#updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "x-java-type": "UserStatusUpdateRequest",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "x-java-response-envelope": "ApiResponse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiResponse": {
+        "type": "object",
+        "x-java-type": "ApiResponse"
+      },
+      "AuthLoginRequest": {
+        "type": "object",
+        "x-java-type": "AuthLoginRequest"
+      },
+      "AuthLogoutRequest": {
+        "type": "object",
+        "x-java-type": "AuthLogoutRequest"
+      },
+      "AuthRefreshRequest": {
+        "type": "object",
+        "x-java-type": "AuthRefreshRequest"
+      },
+      "AuthRefreshTokenResetRequest": {
+        "type": "object",
+        "x-java-type": "AuthRefreshTokenResetRequest"
+      },
+      "AuthRegisterRequest": {
+        "type": "object",
+        "x-java-type": "AuthRegisterRequest"
+      },
+      "DataRetentionCleanupRequest": {
+        "type": "object",
+        "x-java-type": "DataRetentionCleanupRequest"
+      },
+      "FindingFeedbackRequest": {
+        "type": "object",
+        "x-java-type": "FindingFeedbackRequest"
+      },
+      "FrontendPerformanceReportRequest": {
+        "type": "object",
+        "x-java-type": "FrontendPerformanceReportRequest"
+      },
+      "GithubIntegrationConfigRequest": {
+        "type": "object",
+        "x-java-type": "GithubIntegrationConfigRequest"
+      },
+      "HumanReviewRequest": {
+        "type": "object",
+        "x-java-type": "HumanReviewRequest"
+      },
+      "ManualReviewRequest": {
+        "type": "object",
+        "x-java-type": "ManualReviewRequest"
+      },
+      "NotificationBindingRequest": {
+        "type": "object",
+        "x-java-type": "NotificationBindingRequest"
+      },
+      "NotificationBindingStatusRequest": {
+        "type": "object",
+        "x-java-type": "NotificationBindingStatusRequest"
+      },
+      "ReviewPolicyConfigRequest": {
+        "type": "object",
+        "x-java-type": "ReviewPolicyConfigRequest"
+      },
+      "ReviewRuleConfigRequest": {
+        "type": "object",
+        "x-java-type": "ReviewRuleConfigRequest"
+      },
+      "ReviewRuleStatusRequest": {
+        "type": "object",
+        "x-java-type": "ReviewRuleStatusRequest"
+      },
+      "SecretReEncryptionRequest": {
+        "type": "object",
+        "x-java-type": "SecretReEncryptionRequest"
+      },
+      "ServiceIntegrationConfigRequest": {
+        "type": "object",
+        "x-java-type": "ServiceIntegrationConfigRequest"
+      },
+      "SystemSettingsRequest": {
+        "type": "object",
+        "x-java-type": "SystemSettingsRequest"
+      },
+      "UserCreateRequest": {
+        "type": "object",
+        "x-java-type": "UserCreateRequest"
+      },
+      "UserRoleUpdateRequest": {
+        "type": "object",
+        "x-java-type": "UserRoleUpdateRequest"
+      },
+      "UserStatusUpdateRequest": {
+        "type": "object",
+        "x-java-type": "UserStatusUpdateRequest"
+      }
+    }
+  }
+}

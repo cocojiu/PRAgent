@@ -1,5 +1,9 @@
 package com.repoguard.agent.testsupport;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.repoguard.agent.testsupport.ControllerEndpointCatalog.Endpoint;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -14,6 +18,8 @@ import java.util.Set;
 public final class OpenApiContractDocument {
 
     private static final String APPLICATION_JSON = "application/json";
+    private static final ObjectMapper JSON = new ObjectMapper()
+        .enable(SerializationFeature.INDENT_OUTPUT);
 
     private OpenApiContractDocument() {
     }
@@ -61,6 +67,23 @@ public final class OpenApiContractDocument {
             }
         }
         return operationIds;
+    }
+
+    public static String toJson(Map<String, Object> document) {
+        try {
+            return JSON.writeValueAsString(document) + System.lineSeparator();
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize OpenAPI contract document", ex);
+        }
+    }
+
+    public static Map<String, Object> fromJson(String content) {
+        try {
+            return JSON.readValue(content, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to parse OpenAPI contract document", ex);
+        }
     }
 
     private static Map<String, Object> info() {
