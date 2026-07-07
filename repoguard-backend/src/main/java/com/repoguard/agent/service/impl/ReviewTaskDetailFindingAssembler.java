@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -18,7 +19,6 @@ public class ReviewTaskDetailFindingAssembler {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String CATEGORY_FINDING = "FINDING";
     private static final String CATEGORY_MISSING_TEST = "MISSING_TEST";
-    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
 
     public List<ChangedFileDto> toChangedFileDtos(List<ChangedFile> changedFiles) {
         return changedFiles.stream().map(this::toChangedFileDto).toList();
@@ -56,7 +56,7 @@ public class ReviewTaskDetailFindingAssembler {
             defaultString(finding.getFixExample()),
             Boolean.TRUE.equals(finding.getIsBlocking()),
             defaultString(finding.getReviewDimension()),
-            lower(resolveFindingFeedbackStatus(finding)),
+            FindingFeedbackStatus.fromFinding(finding).dtoCode(),
             finding.getFeedbackNote(),
             finding.getFeedbackBy(),
             formatDateTimeOrNull(finding.getFeedbackAt())
@@ -70,10 +70,6 @@ public class ReviewTaskDetailFindingAssembler {
             finding.getTestType(),
             finding.getRecommendation()
         );
-    }
-
-    private String resolveFindingFeedbackStatus(ReviewFinding finding) {
-        return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
     }
 
     private String formatDateTimeOrNull(LocalDateTime value) {

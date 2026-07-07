@@ -7,12 +7,12 @@ import com.repoguard.agent.dto.PrReviewSummaryDto;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewData;
 import com.repoguard.agent.service.impl.GithubCommentPreviewDataLoader.GithubCommentPreviewPageData;
 import com.repoguard.agent.service.impl.GithubCommentPreviewPublicationLoader.GithubCommentPreviewPublicationData;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -22,8 +22,6 @@ public class GithubCommentPreviewResponseAssembler {
 
     private final GithubCommentWritebackCheckBuilder writebackCheckBuilder;
     private final GithubCommentPreviewItemBuilder previewItemBuilder;
-    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
-    private static final String FEEDBACK_VALID = "VALID";
 
     public GithubCommentPreviewResponseAssembler(
         GithubCommentWritebackCheckBuilder writebackCheckBuilder,
@@ -239,10 +237,7 @@ public class GithubCommentPreviewResponseAssembler {
             if (prSummary) {
                 return true;
             }
-            String feedbackStatus = StringUtils.hasText(finding.getFeedbackStatus())
-                ? finding.getFeedbackStatus().trim().toUpperCase(Locale.ROOT)
-                : FEEDBACK_UNREVIEWED;
-            return FEEDBACK_UNREVIEWED.equals(feedbackStatus) || FEEDBACK_VALID.equals(feedbackStatus);
+            return FindingFeedbackStatus.fromFinding(finding).commentable();
         }
     }
 }

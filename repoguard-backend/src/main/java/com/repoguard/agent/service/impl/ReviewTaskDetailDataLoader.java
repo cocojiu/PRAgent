@@ -12,6 +12,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -173,8 +174,8 @@ public class ReviewTaskDetailDataLoader {
             wrapper.eq(ReviewFinding::getReviewDimension, normalizeUpper(category));
         }
         if (StringUtils.hasText(feedbackStatus)) {
-            String normalizedStatus = normalizeUpper(feedbackStatus);
-            if ("UNREVIEWED".equals(normalizedStatus)) {
+            String normalizedStatus = FindingFeedbackStatus.queryCode(feedbackStatus);
+            if (FindingFeedbackStatus.UNREVIEWED.code().equals(normalizedStatus)) {
                 wrapper.and(query -> query
                     .isNull(ReviewFinding::getFeedbackStatus)
                     .or()

@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.github.GithubCommentTargetType;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Set;
@@ -19,11 +20,6 @@ import org.springframework.util.StringUtils;
 public class GithubCommentPreviewItemBuilder {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
-    private static final String FEEDBACK_VALID = "VALID";
-    private static final String FEEDBACK_FALSE_POSITIVE = "FALSE_POSITIVE";
-    private static final String FEEDBACK_FIXED = "FIXED";
-    private static final String FEEDBACK_IGNORED = "IGNORED";
 
     public GithubCommentPreviewItem buildFindingItem(
         ReviewFinding finding,
@@ -52,7 +48,7 @@ public class GithubCommentPreviewItemBuilder {
             publication == null || publication.getPublishedAt() == null
                 ? null
                 : publication.getPublishedAt().format(DATE_TIME_FORMATTER),
-            lower(resolveFindingFeedbackStatus(finding))
+            FindingFeedbackStatus.fromFinding(finding).dtoCode()
         );
     }
 
@@ -151,21 +147,16 @@ public class GithubCommentPreviewItemBuilder {
     }
 
     private boolean isActionableFinding(ReviewFinding finding) {
-        String feedbackStatus = resolveFindingFeedbackStatus(finding);
-        return FEEDBACK_UNREVIEWED.equals(feedbackStatus) || FEEDBACK_VALID.equals(feedbackStatus);
+        return FindingFeedbackStatus.fromFinding(finding).commentable();
     }
 
     private String feedbackSkipReason(ReviewFinding finding) {
-        return switch (resolveFindingFeedbackStatus(finding)) {
-            case FEEDBACK_FALSE_POSITIVE -> "Finding marked as false positive and will not be published";
-            case FEEDBACK_FIXED -> "Finding marked as fixed and will not be published";
-            case FEEDBACK_IGNORED -> "Finding marked as ignored and will not be published";
+        return switch (FindingFeedbackStatus.fromFinding(finding)) {
+            case FALSE_POSITIVE -> "Finding marked as false positive and will not be published";
+            case FIXED -> "Finding marked as fixed and will not be published";
+            case IGNORED -> "Finding marked as ignored and will not be published";
             default -> "Finding is not actionable and will not be published";
         };
-    }
-
-    private String resolveFindingFeedbackStatus(ReviewFinding finding) {
-        return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
     }
 
     private String lower(String value) {

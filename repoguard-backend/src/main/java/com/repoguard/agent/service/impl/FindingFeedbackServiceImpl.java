@@ -9,12 +9,12 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -25,11 +25,6 @@ import org.springframework.util.StringUtils;
 public class FindingFeedbackServiceImpl implements FindingFeedbackService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String FEEDBACK_UNREVIEWED = "UNREVIEWED";
-    private static final String FEEDBACK_VALID = "VALID";
-    private static final String FEEDBACK_FALSE_POSITIVE = "FALSE_POSITIVE";
-    private static final String FEEDBACK_FIXED = "FIXED";
-    private static final String FEEDBACK_IGNORED = "IGNORED";
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewFindingMapper reviewFindingMapper;
@@ -66,9 +61,9 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review finding not found: " + findingId);
         }
 
-        String status = normalizeFindingFeedbackStatus(request.status());
+        FindingFeedbackStatus status = normalizeFindingFeedbackStatus(request.status());
         LocalDateTime feedbackAt = LocalDateTime.now();
-        finding.setFeedbackStatus(status);
+        finding.setFeedbackStatus(status.code());
         finding.setFeedbackNote(cleanNote(request.note()));
         finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
@@ -87,34 +82,24 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         return new FindingFeedbackResponse(
             finding.getId(),
             finding.getTaskId(),
-            lower(resolveFindingFeedbackStatus(finding)),
+            FindingFeedbackStatus.fromFinding(finding).dtoCode(),
             finding.getFeedbackNote(),
             finding.getFeedbackBy(),
             formatDateTimeOrNull(finding.getFeedbackAt())
         );
     }
 
-    private String normalizeFindingFeedbackStatus(String status) {
-        if (!StringUtils.hasText(status)) {
-            return FEEDBACK_UNREVIEWED;
+    private FindingFeedbackStatus normalizeFindingFeedbackStatus(String status) {
+        try {
+            return FindingFeedbackStatus.from(status);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported finding feedback status: " + status);
         }
-        return switch (status.trim().toUpperCase(Locale.ROOT)) {
-            case "VALID" -> FEEDBACK_VALID;
-            case "FALSE_POSITIVE" -> FEEDBACK_FALSE_POSITIVE;
-            case "FIXED" -> FEEDBACK_FIXED;
-            case "IGNORED" -> FEEDBACK_IGNORED;
-            case "UNREVIEWED" -> FEEDBACK_UNREVIEWED;
-            default -> throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported finding feedback status: " + status);
-        };
     }
 
-    private String resolveFindingFeedbackStatus(ReviewFinding finding) {
-        return StringUtils.hasText(finding.getFeedbackStatus()) ? finding.getFeedbackStatus() : FEEDBACK_UNREVIEWED;
-    }
-
-    private String findingFeedbackTimelineLabel(ReviewFinding finding, String status) {
+    private String findingFeedbackTimelineLabel(ReviewFinding finding, FindingFeedbackStatus status) {
         String file = StringUtils.hasText(finding.getFilePath()) ? finding.getFilePath() : "unknown file";
-        return truncate("Finding feedback updated: " + lower(status) + " for " + file);
+        return truncate("Finding feedback updated: " + status.dtoCode() + " for " + file);
     }
 
     private void evictDashboardOverview() {
@@ -137,7 +122,4 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         return value.length() > 120 ? value.substring(0, 117) + "..." : value;
     }
 
-    private String lower(String value) {
-        return value == null ? null : value.toLowerCase(Locale.ROOT);
-    }
 }
