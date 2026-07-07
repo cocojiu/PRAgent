@@ -25,12 +25,14 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
     @Select("""
         select
             count(*) as totalHits,
-            sum(case when feedback_status = 'VALID' then 1 else 0 end) as validCount,
-            sum(case when feedback_status = 'FALSE_POSITIVE' then 1 else 0 end) as falsePositiveCount,
             sum(case
-                when feedback_status is not null
-                  and feedback_status <> ''
-                  and feedback_status <> 'UNREVIEWED'
+                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                then 1 else 0 end) as validCount,
+            sum(case
+                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                then 1 else 0 end) as falsePositiveCount,
+            sum(case
+                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
                 then 1 else 0 end) as reviewedCount
         from review_finding
         where category = 'FINDING'

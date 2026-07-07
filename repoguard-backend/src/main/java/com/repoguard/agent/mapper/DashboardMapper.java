@@ -157,10 +157,14 @@ public interface DashboardMapper {
                     coalesce(nullif(trim(t.llm_model), ''), 'unknown')
                 ) as modelLabel,
                 sum(case
-                    when f.feedback_status is not null and f.feedback_status <> '' and f.feedback_status <> 'UNREVIEWED'
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
                     then 1 else 0 end) as reviewedFeedbackCount,
-                sum(case when f.feedback_status = 'VALID' then 1 else 0 end) as validFeedbackCount,
-                sum(case when f.feedback_status = 'FALSE_POSITIVE' then 1 else 0 end) as falsePositiveFeedbackCount
+                sum(case
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                    then 1 else 0 end) as validFeedbackCount,
+                sum(case
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                    then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
             where t.llm_status is not null
@@ -213,10 +217,14 @@ public interface DashboardMapper {
                     else concat(trim(t.organization), '/', coalesce(nullif(trim(t.repository), ''), 'unknown'))
                 end as repositoryLabel,
                 sum(case
-                    when f.feedback_status is not null and f.feedback_status <> '' and f.feedback_status <> 'UNREVIEWED'
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
                     then 1 else 0 end) as reviewedFeedbackCount,
-                sum(case when f.feedback_status = 'VALID' then 1 else 0 end) as validFeedbackCount,
-                sum(case when f.feedback_status = 'FALSE_POSITIVE' then 1 else 0 end) as falsePositiveFeedbackCount
+                sum(case
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                    then 1 else 0 end) as validFeedbackCount,
+                sum(case
+                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                    then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
             where t.llm_status is not null

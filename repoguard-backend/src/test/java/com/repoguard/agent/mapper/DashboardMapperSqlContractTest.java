@@ -124,6 +124,8 @@ class DashboardMapperSqlContractTest {
             .contains("limit 6");
         assertLlmQualityStatusNormalization(byModelSql);
         assertLlmQualityStatusNormalization(byRepositorySql);
+        assertFeedbackStatusNormalization(byModelSql);
+        assertFeedbackStatusNormalization(byRepositorySql);
     }
 
     @Test
@@ -179,5 +181,12 @@ class DashboardMapperSqlContractTest {
             .contains("lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'")
             .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'")
             .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'");
+    }
+
+    private void assertFeedbackStatusNormalization(String sql) {
+        assertThat(sql)
+            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) <> 'unreviewed'")
+            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'valid'")
+            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'false_positive'");
     }
 }
