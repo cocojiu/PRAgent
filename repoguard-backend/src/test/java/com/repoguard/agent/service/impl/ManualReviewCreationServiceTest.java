@@ -9,6 +9,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.Test;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class ManualReviewCreationServiceTest {
@@ -59,5 +60,37 @@ class ManualReviewCreationServiceTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
+    }
+
+    @Test
+    void constructorRejectsMissingTransactionTemplate() {
+        assertThatThrownBy(() -> new ManualReviewCreationService(
+            org.mockito.Mockito.mock(ReviewTaskMapper.class),
+            org.mockito.Mockito.mock(ReviewTimelineAppender.class),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(CacheEvictionService.class),
+            new ReviewTaskStateMachine(),
+            (TransactionTemplate) null,
+            new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+            org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class)
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("manualCreateTransactionTemplate");
+    }
+
+    @Test
+    void constructorRejectsMissingTransactionManager() {
+        assertThatThrownBy(() -> new ManualReviewCreationService(
+            org.mockito.Mockito.mock(ReviewTaskMapper.class),
+            org.mockito.Mockito.mock(ReviewTimelineAppender.class),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(CacheEvictionService.class),
+            new ReviewTaskStateMachine(),
+            (PlatformTransactionManager) null,
+            new ManualReviewIdempotencyCoordinator(org.mockito.Mockito.mock(ScheduledExecutorService.class)),
+            org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class)
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("transactionManager");
     }
 }

@@ -72,9 +72,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class ReviewServiceImplTest {
 
@@ -94,6 +95,7 @@ class ReviewServiceImplTest {
         NotificationDispatchService.class
     );
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
+    private final RecordingTransactionManager manualReviewTransactionManager = new RecordingTransactionManager();
     private final ReviewTimelineQueryService reviewTimelineQueryService =
         new ReviewTimelineQueryService(reviewTimelineMapper);
     private final ReviewTaskListItemAssembler reviewTaskListItemAssembler = new ReviewTaskListItemAssembler();
@@ -220,7 +222,7 @@ class ReviewServiceImplTest {
             metrics,
             cacheEvictionService,
             reviewTaskStateMachine,
-            (TransactionTemplate) null,
+            new TransactionTemplate(manualReviewTransactionManager),
             coordinator,
             afterCommitPublisher
         );
@@ -913,35 +915,27 @@ class ReviewServiceImplTest {
             task.setId(522L);
             return 1;
         }).when(reviewTaskMapper).insertManualReviewOrReuse(any(ReviewTask.class));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            assertThat(manualReviewTransactionManager.committed).isTrue();
+            return null;
+        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            var result = service.triggerManualReview(new ManualReviewRequest(
-                "octocat",
-                "Hello-World",
-                2,
-                "Smoke review",
-                "public-pr-after-commit",
-                "master",
-                "github_pr_picker"
-            ));
+        var result = service.triggerManualReview(new ManualReviewRequest(
+            "octocat",
+            "Hello-World",
+            2,
+            "Smoke review",
+            "public-pr-after-commit",
+            "master",
+            "github_pr_picker"
+        ));
 
-            assertThat(result.status()).isEqualTo("queued");
-            assertThat(result.taskId()).isEqualTo(522L);
-            verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
-
-            List<TransactionSynchronization> synchronizations = TransactionSynchronizationManager.getSynchronizations();
-            assertThat(synchronizations).hasSize(2);
-            synchronizations.forEach(TransactionSynchronization::afterCommit);
-            synchronizations.forEach(synchronization -> synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
-
-            ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
-            verify(reviewTaskPublisher).publish(messageCaptor.capture());
-            assertThat(messageCaptor.getValue().taskId()).isEqualTo(522L);
-            assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-after-commit");
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        assertThat(result.status()).isEqualTo("queued");
+        assertThat(result.taskId()).isEqualTo(522L);
+        ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
+        verify(reviewTaskPublisher).publish(messageCaptor.capture());
+        assertThat(messageCaptor.getValue().taskId()).isEqualTo(522L);
+        assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-after-commit");
     }
 
     @Test
@@ -1017,7 +1011,7 @@ class ReviewServiceImplTest {
             "github_pr_picker"
         ));
 
-        assertThat(result.status()).isEqualTo("publish_failed");
+        assertThat(result.status()).isEqualTo("queued");
 
         ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
         verify(reviewTaskMapper).updateById(taskCaptor.capture());
@@ -1290,6 +1284,30 @@ class ReviewServiceImplTest {
         boolean existing,
         String status
     ) {
+    }
+
+    private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+        private boolean committed;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+            committed = false;
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            committed = true;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            committed = false;
+        }
     }
 
     private static class CountingManualReviewIdempotencyCoordinator extends ManualReviewIdempotencyCoordinator {

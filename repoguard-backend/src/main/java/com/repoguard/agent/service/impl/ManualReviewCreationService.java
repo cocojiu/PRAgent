@@ -85,7 +85,10 @@ public class ManualReviewCreationService {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
-        this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
+        this.manualCreateTransactionTemplate = Objects.requireNonNull(
+            manualCreateTransactionTemplate,
+            "manualCreateTransactionTemplate"
+        );
         this.manualReviewIdempotencyCoordinator = Objects.requireNonNull(
             manualReviewIdempotencyCoordinator,
             "manualReviewIdempotencyCoordinator"
@@ -133,10 +136,9 @@ public class ManualReviewCreationService {
     }
 
     private TransactionTemplate buildManualCreateTransactionTemplate(PlatformTransactionManager transactionManager) {
-        if (transactionManager == null) {
-            return null;
-        }
-        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        TransactionTemplate template = new TransactionTemplate(
+            Objects.requireNonNull(transactionManager, "transactionManager")
+        );
         template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         return template;
     }
@@ -164,9 +166,6 @@ public class ManualReviewCreationService {
     }
 
     private ManualReviewResponse executeManualCreateTransaction(ManualReviewCreation creation) {
-        if (manualCreateTransactionTemplate == null) {
-            return creation.create();
-        }
         return manualCreateTransactionTemplate.execute(status -> creation.create());
     }
 
