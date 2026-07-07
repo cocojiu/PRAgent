@@ -8,6 +8,8 @@ import org.springframework.web.client.RestClientResponseException;
 
 public final class ExternalHttpFailureDetail {
 
+    private static final int MAX_RESPONSE_BODY_LENGTH = 240;
+
     private final String retryAfter;
     private final String responseBody;
 
@@ -48,7 +50,8 @@ public final class ExternalHttpFailureDetail {
         if (!StringUtils.hasText(responseBody)) {
             return null;
         }
-        return Objects.requireNonNull(bodySanitizer, "bodySanitizer").apply(responseBody);
+        String safeBody = Objects.requireNonNull(bodySanitizer, "bodySanitizer").apply(responseBody);
+        return summarizeResponseBody(safeBody);
     }
 
     private static String normalizeResponseBody(String body) {
@@ -56,6 +59,15 @@ public final class ExternalHttpFailureDetail {
             return null;
         }
         return body.replaceAll("\\s+", " ").trim();
+    }
+
+    private static String summarizeResponseBody(String body) {
+        if (!StringUtils.hasText(body)) {
+            return null;
+        }
+        return body.length() > MAX_RESPONSE_BODY_LENGTH
+            ? body.substring(0, MAX_RESPONSE_BODY_LENGTH - 3) + "..."
+            : body;
     }
 
     private static String sanitizeForExternalCall(String body) {

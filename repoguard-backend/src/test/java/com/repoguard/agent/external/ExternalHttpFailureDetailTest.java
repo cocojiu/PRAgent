@@ -53,6 +53,25 @@ class ExternalHttpFailureDetailTest {
     }
 
     @Test
+    void responseBodySummaryIsSharedAfterSanitization() {
+        String longBody = "{\"token\":\"raw-token\",\"message\":\"" + "a".repeat(260) + "\"}";
+        ExternalHttpFailureDetail detail = ExternalHttpFailureDetail.from(responseException(
+            500,
+            "Internal Server Error",
+            longBody,
+            new HttpHeaders()
+        ));
+
+        String externalMessage = detail.appendTo("GitHub failed");
+        String webhookMessage = detail.webhookMessage("Webhook HTTP request failed", 500);
+
+        assertThat(responseBody(externalMessage)).hasSize(240).endsWith("...");
+        assertThat(responseBody(webhookMessage)).hasSize(240).endsWith("...");
+        assertThat(externalMessage).doesNotContain("raw-token");
+        assertThat(webhookMessage).doesNotContain("raw-token");
+    }
+
+    @Test
     void fromRejectsMissingException() {
         assertThatThrownBy(() -> ExternalHttpFailureDetail.from(null))
             .isInstanceOf(NullPointerException.class)
@@ -73,5 +92,9 @@ class ExternalHttpFailureDetailTest {
             responseBody.getBytes(StandardCharsets.UTF_8),
             StandardCharsets.UTF_8
         );
+    }
+
+    private String responseBody(String message) {
+        return message.substring(message.indexOf("responseBody=") + "responseBody=".length());
     }
 }
