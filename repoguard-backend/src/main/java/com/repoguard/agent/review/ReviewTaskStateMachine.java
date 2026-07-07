@@ -94,7 +94,13 @@ public class ReviewTaskStateMachine {
     }
 
     public List<String> dataRetentionCandidateStatuses() {
-        return List.of(ReviewTaskStatus.COMPLETED.code(), ReviewTaskStatus.FAILED.code());
+        return List.of(
+            ReviewTaskStatus.COMPLETED.code(),
+            ReviewTaskStatus.FAILED.code(),
+            ReviewTaskStatus.APPROVED.code(),
+            ReviewTaskStatus.CHANGES_REQUESTED.code(),
+            ReviewTaskStatus.REJECTED.code()
+        );
     }
 
     public void ensureHumanReviewAllowed(boolean humanReviewRequired, String humanReviewStatus) {

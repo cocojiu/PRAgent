@@ -92,6 +92,12 @@ class ReviewTaskStateMachineTest {
 
     @Test
     void dataRetentionCandidateStatusesIncludeOnlyTerminalCleanupStatuses() {
-        assertThat(stateMachine.dataRetentionCandidateStatuses()).containsExactly("COMPLETED", "FAILED");
+        assertThat(stateMachine.dataRetentionCandidateStatuses()).containsExactly(
+            "COMPLETED",
+            "FAILED",
+            "APPROVED",
+            "CHANGES_REQUESTED",
+            "REJECTED"
+        );
     }
 }
