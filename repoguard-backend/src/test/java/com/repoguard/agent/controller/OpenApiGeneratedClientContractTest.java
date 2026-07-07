@@ -15,6 +15,9 @@ import org.junit.jupiter.api.Test;
 
 class OpenApiGeneratedClientContractTest {
 
+    private static final Path GENERATED_CLIENT_SURFACE_SNAPSHOT =
+        Path.of("src/test/resources/contracts/openapi-generated-client.surface.snapshot");
+
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
         "POST /api/v1/auth/refresh",
         "POST /api/v1/github/webhooks"
@@ -78,7 +81,8 @@ class OpenApiGeneratedClientContractTest {
             .isNotEmpty()
             .containsExactlyElementsOf(surface.stream().sorted().distinct().toList())
             .allMatch(line -> line.matches("[a-zA-Z][a-zA-Z0-9]*\\(.*\\): Promise<[^>]+(>[^>]*)?>; // (GET|POST|PUT|DELETE) /api/v1/.*"))
-            .noneMatch(line -> line.contains("unknown"));
+            .noneMatch(line -> line.contains("unknown"))
+            .noneMatch(line -> line.contains("byte[]"));
         assertThat(surface)
             .contains(
                 "authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout",
@@ -88,12 +92,26 @@ class OpenApiGeneratedClientContractTest {
             );
     }
 
+    @Test
+    void generatedClientDryRunSurfaceSnapshotStaysReviewed() throws Exception {
+        assertThat(OpenApiGeneratedClientDryRun.clientSurfaceLines(openApiDocument()))
+            .as("Generated client dry-run surface changed. Review the TypeScript client impact before updating the snapshot.")
+            .containsExactlyElementsOf(generatedClientSurfaceSnapshot());
+    }
+
     private Map<String, GeneratedOperation> generatedOperations() throws Exception {
         return OpenApiGeneratedClientDryRun.operations(openApiDocument());
     }
 
     private Map<String, Object> openApiDocument() throws Exception {
         return OpenApiContractDocument.fromJson(Files.readString(Path.of("src/test/resources/contracts/openapi.json")));
+    }
+
+    private List<String> generatedClientSurfaceSnapshot() throws Exception {
+        return Files.readAllLines(GENERATED_CLIENT_SURFACE_SNAPSHOT).stream()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty())
+            .toList();
     }
 
 }

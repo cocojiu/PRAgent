@@ -72,7 +72,7 @@ public final class OpenApiGeneratedClientDryRun {
         }
         Object requestBodyType = map(operation.get("requestBody")).get("x-java-type");
         return requestBodyType instanceof String value
-            ? FrontendApiContractCatalog.normalizeJavaResponseType(value)
+            ? typescriptDataType(value)
             : "unknown";
     }
 
@@ -80,8 +80,15 @@ public final class OpenApiGeneratedClientDryRun {
         Map<String, Object> responses = map(operation.get("responses"));
         Object responseData = map(responses.get("200")).get("x-java-response-data");
         return responseData instanceof String value
-            ? FrontendApiContractCatalog.normalizeJavaResponseType(value)
+            ? typescriptDataType(value)
             : "unknown";
+    }
+
+    private static String typescriptDataType(String javaType) {
+        if ("byte[]".equals(javaType)) {
+            return "Uint8Array";
+        }
+        return FrontendApiContractCatalog.normalizeJavaResponseType(javaType);
     }
 
     private static String typescriptScalarType(Map<String, Object> schema) {
