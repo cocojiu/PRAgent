@@ -33,7 +33,7 @@ public class ReviewExecutionFailureClassifier {
         if (statusCode != null) {
             return httpFailureCategory(statusCode);
         }
-        if (ExternalFailureSignals.hasRetryAfterSignal(detail)) {
+        if (ExternalFailureSignals.hasRateLimitSignal(detail)) {
             return "review_external_rate_limited";
         }
         if (isTimeout(ex, detail)) {

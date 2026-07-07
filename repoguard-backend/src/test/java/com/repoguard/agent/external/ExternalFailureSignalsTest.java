@@ -26,6 +26,15 @@ class ExternalFailureSignalsTest {
     }
 
     @Test
+    void detectsStructuredRateLimitSignalWithoutRetryAfter() {
+        assertThat(ExternalFailureSignals.hasRateLimitSignal(
+            "request failed rateLimitRemaining=0 rateLimitReset=1763456789 responseBody={}"
+        )).isTrue();
+        assertThat(ExternalFailureSignals.hasRateLimitSignal("request failed rate limit exceeded")).isTrue();
+        assertThat(ExternalFailureSignals.hasRateLimitSignal("request failed")).isFalse();
+    }
+
+    @Test
     void extractsRetryAfterValueBeforeResponseBody() {
         assertThat(ExternalFailureSignals.retryAfterFromDetail(
             "request failed status=429 retryAfter=60 responseBody={}"
@@ -36,9 +45,22 @@ class ExternalFailureSignalsTest {
         assertThat(ExternalFailureSignals.retryAfterFromDetail(
             "request failed retryAfter=60 rateLimitLimit=5000 rateLimitUsed=4999 rateLimitResource=core"
         )).isEqualTo("60");
+        assertThat(ExternalFailureSignals.retryAfterFromDetail(
+            "request failed retryafter=60 ratelimitremaining=0 responsebody={}"
+        )).isEqualTo("60");
         assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed retryAfter=Wed, 21 Oct 2026 07:28:00 GMT"))
             .isEqualTo("Wed, 21 Oct 2026 07:28:00 GMT");
         assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed")).isEmpty();
+    }
+
+    @Test
+    void exposesStructuredHttpDiagnosticsFromDetail() {
+        ExternalHttpFailureDiagnostics diagnostics = ExternalFailureSignals.httpDiagnosticsFromDetail(
+            "request failed retryAfter=60 rateLimitRemaining=0"
+        );
+
+        assertThat(diagnostics.retryAfter()).isEqualTo("60");
+        assertThat(diagnostics.rateLimitRemaining()).isEqualTo("0");
     }
 
     @Test

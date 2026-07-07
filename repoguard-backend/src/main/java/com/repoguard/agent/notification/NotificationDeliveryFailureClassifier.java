@@ -17,7 +17,7 @@ class NotificationDeliveryFailureClassifier {
         if (statusCode != null) {
             return httpFailureCategory(statusCode);
         }
-        if (ExternalFailureSignals.hasRetryAfterSignal(detail)) {
+        if (ExternalFailureSignals.hasRateLimitSignal(detail)) {
             return "notification_http_rate_limited";
         }
         if (isTimeout(ex, detail)) {

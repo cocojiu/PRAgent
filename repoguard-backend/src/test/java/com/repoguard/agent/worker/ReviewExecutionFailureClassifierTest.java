@@ -67,6 +67,16 @@ class ReviewExecutionFailureClassifierTest {
     }
 
     @Test
+    void classifiesRateLimitDiagnosticsAsRateLimited() {
+        RuntimeException failure = new IllegalStateException(
+            "provider throttled rateLimitRemaining=0 rateLimitReset=1763456789 responseBody={}"
+        );
+
+        assertThat(classifier.failureCategory(failure))
+            .isEqualTo("review_external_rate_limited");
+    }
+
+    @Test
     void classifiesTimeoutByCauseChain() {
         RuntimeException failure = new ResourceAccessException(
             "I/O error",

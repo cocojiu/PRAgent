@@ -24,7 +24,7 @@ public final class ExternalRetryAfterHint {
     }
 
     static String retryAfter(String detail) {
-        return clean(ExternalFailureSignals.retryAfterFromDetail(detail));
+        return ExternalHttpFailureDiagnostics.fromDetail(detail).retryAfter();
     }
 
     private static String clean(String value) {

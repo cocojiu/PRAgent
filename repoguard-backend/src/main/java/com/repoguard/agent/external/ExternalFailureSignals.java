@@ -8,9 +8,6 @@ import org.springframework.util.StringUtils;
 public final class ExternalFailureSignals {
 
     private static final String STATUS_MARKER = "status=";
-    private static final String RETRY_AFTER_MARKER = "retryAfter=";
-    private static final String RESPONSE_BODY_MARKER = " responseBody=";
-    private static final String RATE_LIMIT_MARKER_PREFIX = " rateLimit";
 
     private ExternalFailureSignals() {
     }
@@ -45,20 +42,26 @@ public final class ExternalFailureSignals {
 
     public static boolean hasRetryAfterSignal(String detail) {
         return StringUtils.hasText(detail)
-            && (detail.contains("retryafter=") || detail.contains("retry-after"));
+            && (ExternalHttpFailureDiagnostics.fromDetail(detail).hasRetryAfter()
+                || detail.toLowerCase(Locale.ROOT).contains("retry-after"));
+    }
+
+    public static boolean hasRateLimitSignal(String detail) {
+        if (!StringUtils.hasText(detail)) {
+            return false;
+        }
+        String lowerDetail = detail.toLowerCase(Locale.ROOT);
+        return ExternalHttpFailureDiagnostics.fromDetail(detail).hasRateLimitSignal()
+            || lowerDetail.contains("retry-after")
+            || lowerDetail.contains("rate limit");
     }
 
     public static String retryAfterFromDetail(String detail) {
-        if (!StringUtils.hasText(detail)) {
-            return "";
-        }
-        int markerIndex = detail.indexOf(RETRY_AFTER_MARKER);
-        if (markerIndex < 0) {
-            return "";
-        }
-        int valueStart = markerIndex + RETRY_AFTER_MARKER.length();
-        int valueEnd = earliestMarkerIndex(detail, valueStart);
-        return detail.substring(valueStart, valueEnd);
+        return ExternalHttpFailureDiagnostics.fromDetail(detail).retryAfter();
+    }
+
+    public static ExternalHttpFailureDiagnostics httpDiagnosticsFromDetail(String detail) {
+        return ExternalHttpFailureDiagnostics.fromDetail(detail);
     }
 
     public static boolean hasTimeoutSignal(
@@ -89,15 +92,4 @@ public final class ExternalFailureSignals {
             && detail.toLowerCase(Locale.ROOT).matches(".*(timeout|timed out|read timed out|connect timed out).*");
     }
 
-    private static int earliestMarkerIndex(String detail, int start) {
-        int end = detail.length();
-        end = nearest(detail, RESPONSE_BODY_MARKER, start, end);
-        end = nearest(detail, RATE_LIMIT_MARKER_PREFIX, start, end);
-        return end;
-    }
-
-    private static int nearest(String detail, String marker, int start, int currentEnd) {
-        int index = detail.indexOf(marker, start);
-        return index < 0 ? currentEnd : Math.min(currentEnd, index);
-    }
 }
