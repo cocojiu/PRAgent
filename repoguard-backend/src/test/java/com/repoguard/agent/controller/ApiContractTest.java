@@ -44,6 +44,11 @@ class ApiContractTest {
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
+    private static final Pattern FRONTEND_INLINE_QUERY_PATTERN = Pattern.compile(
+        "query: [^=]+=> \\(\\{(?<query>.*?)\\}\\)",
+        Pattern.DOTALL
+    );
+    private static final Pattern FRONTEND_QUERY_KEY_PATTERN = Pattern.compile("^\\s+([a-zA-Z0-9_]+):", Pattern.MULTILINE);
 
     @Test
     void controllerBasePathsStayVersionedUnderApiV1() {
@@ -164,6 +169,28 @@ class ApiContractTest {
     }
 
     @Test
+    void frontendTypedApiContractsKeepTransportShapeAlignedWithBackendApiSurface() throws Exception {
+        Map<String, BackendEndpointContract> backendContracts = backendEndpointContracts();
+
+        assertThat(frontendEndpointContracts())
+            .as("Frontend typed api contracts must keep method/query/body shape aligned with backend API surface")
+            .isNotEmpty()
+            .allSatisfy((operation, frontendContract) -> {
+                BackendEndpointContract backendContract = backendContracts.get(frontendContract.endpointKey());
+
+                assertThat(backendContract)
+                    .as(operation + " frontend endpoint must exist in backend API surface")
+                    .isNotNull();
+                assertThat(backendContract.queryParamNames())
+                    .as(operation + " frontend query params must be backed by controller @RequestParam names")
+                    .containsAll(frontendContract.queryParamNames());
+                assertThat(frontendContract.hasRequestBody())
+                    .as(operation + " frontend body usage must match backend @RequestBody contract")
+                    .isEqualTo(backendContract.hasRequestBody());
+            });
+    }
+
+    @Test
     void frontendDirectApiEntrypointsStayWithinBackendApiSurface() throws Exception {
         Set<String> backendEndpoints = Set.copyOf(apiSurfaceEndpointKeys());
         Map<String, String> directEntrypoints = frontendDirectApiEntrypoints();
@@ -261,6 +288,21 @@ class ApiContractTest {
             .toList();
     }
 
+    private Map<String, BackendEndpointContract> backendEndpointContracts() {
+        Map<String, BackendEndpointContract> contracts = new LinkedHashMap<>();
+        controllers().stream()
+            .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
+            .sorted((left, right) -> (left.httpMethod() + " " + left.path()).compareTo(right.httpMethod() + " " + right.path()))
+            .forEach(endpoint -> contracts.put(
+                endpoint.httpMethod() + " " + endpoint.path(),
+                new BackendEndpointContract(
+                    ControllerEndpointCatalog.requestParamNames(endpoint.method()),
+                    !"-".equals(ControllerEndpointCatalog.requestBodyType(endpoint.method()))
+                )
+            ));
+        return contracts;
+    }
+
     private List<String> apiSurfaceSnapshot() throws Exception {
         return Files.readAllLines(Path.of("src/test/resources/contracts/api-surface.snapshot")).stream()
             .map(String::trim)
@@ -277,13 +319,27 @@ class ApiContractTest {
     }
 
     private Map<String, String> frontendApiContracts() throws Exception {
+        Map<String, String> contracts = new LinkedHashMap<>();
+        frontendEndpointContracts().forEach((operation, contract) -> contracts.put(operation, contract.endpointKey()));
+        return contracts;
+    }
+
+    private Map<String, FrontendEndpointContract> frontendEndpointContracts() throws Exception {
         String source = Files.readString(frontendContractsPath());
         Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
-        Map<String, String> contracts = new LinkedHashMap<>();
+        Map<String, FrontendEndpointContract> contracts = new LinkedHashMap<>();
         while (operationMatcher.find()) {
             String operation = operationMatcher.group(1);
             String body = operationMatcher.group("body");
-            extractFrontendPath(body).ifPresent(path -> contracts.put(operation, frontendHttpMethod(body) + " " + path));
+            extractFrontendPath(body).ifPresent(path -> contracts.put(
+                operation,
+                new FrontendEndpointContract(
+                    frontendHttpMethod(body),
+                    path,
+                    frontendQueryParamNames(body),
+                    body.contains("body:")
+                )
+            ));
         }
         return contracts;
     }
@@ -392,6 +448,25 @@ class ApiContractTest {
         return methodMatcher.find() ? methodMatcher.group(1) : "GET";
     }
 
+    private List<String> frontendQueryParamNames(String operationBody) {
+        if (!operationBody.contains("query:")) {
+            return List.of();
+        }
+        if (operationBody.contains("query: notificationQuery")) {
+            return List.of("page", "pageSize", "status", "taskId");
+        }
+        Matcher queryMatcher = FRONTEND_INLINE_QUERY_PATTERN.matcher(operationBody);
+        if (!queryMatcher.find()) {
+            return List.of("<unparsed-query>");
+        }
+        Matcher keyMatcher = FRONTEND_QUERY_KEY_PATTERN.matcher(queryMatcher.group("query"));
+        List<String> queryParamNames = new ArrayList<>();
+        while (keyMatcher.find()) {
+            queryParamNames.add(keyMatcher.group(1));
+        }
+        return queryParamNames.stream().distinct().toList();
+    }
+
     private String normalizeFrontendTemplatePath(String path) {
         return path
             .replace("${idSegment(input.findingId)}", "{findingId}")
@@ -415,5 +490,20 @@ class ApiContractTest {
     }
 
     record ContractPayload(String value) {
+    }
+
+    record BackendEndpointContract(List<String> queryParamNames, boolean hasRequestBody) {
+    }
+
+    record FrontendEndpointContract(
+        String httpMethod,
+        String path,
+        List<String> queryParamNames,
+        boolean hasRequestBody
+    ) {
+
+        String endpointKey() {
+            return httpMethod + " " + path;
+        }
     }
 }
