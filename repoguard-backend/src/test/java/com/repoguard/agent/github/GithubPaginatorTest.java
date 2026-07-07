@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -24,6 +25,10 @@ class GithubPaginatorTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
+    private final ExternalHttpJsonResponseReader jsonResponseReader = new ExternalHttpJsonResponseReader(
+        objectMapper,
+        responseReader
+    );
 
     @Test
     void failsWhenMaxPageStillLooksTruncated() throws Exception {
@@ -148,7 +153,7 @@ class GithubPaginatorTest {
     }
 
     private GithubPaginator paginator() {
-        return new GithubPaginator(RestClient.builder(), objectMapper, responseReader, 2);
+        return new GithubPaginator(RestClient.builder(), jsonResponseReader, 2);
     }
 
     private ExternalCallResilience passthroughResilience() {

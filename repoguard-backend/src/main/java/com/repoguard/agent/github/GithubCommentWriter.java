@@ -1,12 +1,11 @@
 package com.repoguard.agent.github;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
-import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,20 +26,17 @@ public class GithubCommentWriter {
 
     private final RestClient restClient;
     private final GithubIntegrationHealthReporter healthReporter;
-    private final ObjectMapper objectMapper;
-    private final ExternalHttpResponseReader responseReader;
+    private final ExternalHttpJsonResponseReader jsonResponseReader;
 
     @Autowired
     public GithubCommentWriter(
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter,
-        ObjectMapper objectMapper,
-        ExternalHttpResponseReader responseReader
+        ExternalHttpJsonResponseReader jsonResponseReader
     ) {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
+        this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
     }
 
     public List<GithubReviewCommentResult> publishPullRequestComments(
@@ -229,8 +225,7 @@ public class GithubCommentWriter {
         Class<T> responseType,
         String operation
     ) throws IOException {
-        byte[] body = responseReader.readSuccessfulBody(response, "GitHub " + operation + " failed");
-        return body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
+        return jsonResponseReader.readSuccessfulJson(response, responseType, "GitHub " + operation + " failed");
     }
 
     private boolean containsUnresolvableLineSignal(String value) {

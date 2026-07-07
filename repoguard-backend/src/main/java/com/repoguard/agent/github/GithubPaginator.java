@@ -1,9 +1,8 @@
 package com.repoguard.agent.github;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
-import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,28 +24,24 @@ public class GithubPaginator {
     private static final int MAX_PAGES = 100;
 
     private final RestClient restClient;
-    private final ObjectMapper objectMapper;
-    private final ExternalHttpResponseReader responseReader;
+    private final ExternalHttpJsonResponseReader jsonResponseReader;
     private final int maxPages;
 
     @Autowired
     public GithubPaginator(
         RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        ExternalHttpResponseReader responseReader
+        ExternalHttpJsonResponseReader jsonResponseReader
     ) {
-        this(restClientBuilder, objectMapper, responseReader, MAX_PAGES);
+        this(restClientBuilder, jsonResponseReader, MAX_PAGES);
     }
 
     GithubPaginator(
         RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        ExternalHttpResponseReader responseReader,
+        ExternalHttpJsonResponseReader jsonResponseReader,
         int maxPages
     ) {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
-        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
+        this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
         if (maxPages < 1) {
             throw new IllegalArgumentException("maxPages must be positive");
         }
@@ -101,8 +96,11 @@ public class GithubPaginator {
         Class<T[]> responseType,
         String operation
     ) throws IOException {
-        byte[] body = responseReader.readSuccessfulBody(response, "GitHub " + operation + " failed");
-        T[] parsedBody = body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
+        T[] parsedBody = jsonResponseReader.readSuccessfulJson(
+            response,
+            responseType,
+            "GitHub " + operation + " failed"
+        );
         HttpHeaders headers = new HttpHeaders();
         headers.putAll(response.getHeaders());
         return new ResponseEntity<>(parsedBody, headers, response.getStatusCode());

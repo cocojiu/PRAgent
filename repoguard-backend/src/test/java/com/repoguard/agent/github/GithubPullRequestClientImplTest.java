@@ -10,6 +10,7 @@ import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
@@ -31,6 +32,10 @@ class GithubPullRequestClientImplTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
+    private final ExternalHttpJsonResponseReader jsonResponseReader = new ExternalHttpJsonResponseReader(
+        objectMapper,
+        responseReader
+    );
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final GithubIntegrationHealthReporter healthReporter = new GithubIntegrationHealthReporter(
@@ -278,14 +283,14 @@ class GithubPullRequestClientImplTest {
     }
 
     private GithubPaginator paginator(RestClient.Builder restClientBuilder) {
-        return new GithubPaginator(restClientBuilder, objectMapper, responseReader, 100);
+        return new GithubPaginator(restClientBuilder, jsonResponseReader, 100);
     }
 
     private GithubCommentWriter commentWriter(
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter
     ) {
-        return new GithubCommentWriter(restClientBuilder, healthReporter, objectMapper, responseReader);
+        return new GithubCommentWriter(restClientBuilder, healthReporter, jsonResponseReader);
     }
 
     private ExternalCallResilience passthroughResilience() {
