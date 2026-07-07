@@ -17,6 +17,8 @@ class OpenApiGeneratedClientContractTest {
 
     private static final Path GENERATED_CLIENT_SURFACE_SNAPSHOT =
         Path.of("src/test/resources/contracts/openapi-generated-client.surface.snapshot");
+    private static final Path GENERATED_CLIENT_MIGRATION_SNAPSHOT =
+        Path.of("src/test/resources/contracts/openapi-generated-client.migration.snapshot");
 
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
         "POST /api/v1/auth/refresh",
@@ -99,6 +101,13 @@ class OpenApiGeneratedClientContractTest {
             .containsExactlyElementsOf(generatedClientSurfaceSnapshot());
     }
 
+    @Test
+    void frontendTypedOperationsMapToGeneratedClientOperationsSnapshotStaysReviewed() throws Exception {
+        assertThat(generatedClientMigrationLines())
+            .as("Frontend typed operation to generated client operation mapping changed. Review migration impact before updating the snapshot.")
+            .containsExactlyElementsOf(generatedClientMigrationSnapshot());
+    }
+
     private Map<String, GeneratedOperation> generatedOperations() throws Exception {
         return OpenApiGeneratedClientDryRun.operations(openApiDocument());
     }
@@ -109,6 +118,27 @@ class OpenApiGeneratedClientContractTest {
 
     private List<String> generatedClientSurfaceSnapshot() throws Exception {
         return Files.readAllLines(GENERATED_CLIENT_SURFACE_SNAPSHOT).stream()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty())
+            .toList();
+    }
+
+    private List<String> generatedClientMigrationLines() throws Exception {
+        Map<String, GeneratedOperation> generatedOperations = generatedOperations();
+        return FrontendApiContractCatalog.endpointContracts().entrySet().stream()
+            .map(entry -> {
+                GeneratedOperation generatedOperation = generatedOperations.get(entry.getValue().endpointKey());
+                assertThat(generatedOperation)
+                    .as(entry.getKey() + " must map to a generated OpenAPI client operation")
+                    .isNotNull();
+                return entry.getKey() + " -> " + generatedOperation.operationId() + " // " + entry.getValue().endpointKey();
+            })
+            .sorted()
+            .toList();
+    }
+
+    private List<String> generatedClientMigrationSnapshot() throws Exception {
+        return Files.readAllLines(GENERATED_CLIENT_MIGRATION_SNAPSHOT).stream()
             .map(String::trim)
             .filter(line -> !line.isEmpty())
             .toList();
