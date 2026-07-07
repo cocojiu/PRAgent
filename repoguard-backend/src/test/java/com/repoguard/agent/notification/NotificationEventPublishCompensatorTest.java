@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -9,7 +10,10 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,6 +22,7 @@ class NotificationEventPublishCompensatorTest {
 
     private final NotificationEventMapper eventMapper = org.mockito.Mockito.mock(NotificationEventMapper.class);
     private final NotificationEventPublisher eventPublisher = org.mockito.Mockito.mock(NotificationEventPublisher.class);
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
     private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
     private final NotificationOutboxEventStore outboxEventStore = new NotificationOutboxEventStore(eventMapper);
@@ -34,7 +39,8 @@ class NotificationEventPublishCompensatorTest {
             new NotificationTextLimiter(),
             compensationPolicy
         ),
-        new NotificationPublishEventStateUpdater(eventMapper)
+        new NotificationPublishEventStateUpdater(eventMapper),
+        new RabbitPublishFailureClassifier()
     );
 
     @Test
@@ -47,6 +53,7 @@ class NotificationEventPublishCompensatorTest {
 
         verify(eventPublisher).publish(any(NotificationEventMessage.class));
         verify(eventMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(metrics).rabbitPublishCompensationSucceeded("notification");
     }
 
     @Test
@@ -58,6 +65,22 @@ class NotificationEventPublishCompensatorTest {
         compensator().compensate();
 
         verify(eventPublisher, never()).publish(any(NotificationEventMessage.class));
+        verify(metrics, never()).rabbitPublishCompensationSucceeded("notification");
+        verify(metrics, never()).rabbitPublishCompensationFailed(any(), any());
+    }
+
+    @Test
+    void recordsFailedCompensationMetricWhenPublishStillFails() {
+        NotificationEvent event = event();
+        when(eventMapper.selectList(any())).thenReturn(List.of(event));
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        doThrow(new MessagePublishException("publisher confirm timed out"))
+            .when(eventPublisher)
+            .publish(any(NotificationEventMessage.class));
+
+        compensator().compensate();
+
+        verify(metrics).rabbitPublishCompensationFailed("notification", "confirm_timeout");
     }
 
     private NotificationEventPublishCompensator compensator() {
@@ -65,6 +88,7 @@ class NotificationEventPublishCompensatorTest {
             outboxEventStore,
             compensationQuery,
             publishCoordinator,
+            metrics,
             "test-node"
         );
     }

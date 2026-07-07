@@ -12,6 +12,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,8 @@ class NotificationEventPublishCoordinatorTest {
             new NotificationTextLimiter(),
             new RabbitPublishCompensationPolicy()
         ),
-        new NotificationPublishEventStateUpdater(eventMapper)
+        new NotificationPublishEventStateUpdater(eventMapper),
+        new RabbitPublishFailureClassifier()
     );
 
     @AfterEach
@@ -80,13 +82,15 @@ class NotificationEventPublishCoordinatorTest {
             .when(publisher)
             .publish(any(NotificationEventMessage.class));
 
-        coordinator.publish(event());
+        NotificationPublishResult result = coordinator.publish(event());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(eventMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSet())
             .contains("status", "retry_count", "next_retry_at", "last_error", "publish_claimed_at", "publish_claimed_by");
+        assertThat(result.success()).isFalse();
+        assertThat(result.failureReason()).isEqualTo("confirm_timeout");
     }
 
     private NotificationEvent event() {
