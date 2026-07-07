@@ -42,6 +42,7 @@ class DataRetentionServiceImplTest {
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
     private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
+    private final DataRetentionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(DataRetentionMetricsRecorder.class);
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -51,7 +52,8 @@ class DataRetentionServiceImplTest {
         githubCommentPublicationBatchMapper,
         githubCommentPublicationBatchItemMapper,
         systemSettingsProvider,
-        new ReviewTaskStateMachine()
+        new ReviewTaskStateMachine(),
+        metricsRecorder
     );
 
     @Test
@@ -66,6 +68,7 @@ class DataRetentionServiceImplTest {
         assertThat(response.retentionDays()).isEqualTo(30);
         assertThat(response.candidateTasks()).isEqualTo(2);
         assertThat(response.selectedTasks()).isEqualTo(2);
+        verify(metricsRecorder).record(response);
         verify(changedFileMapper, never()).delete(any(Wrapper.class));
         verify(reviewTaskMapper, never()).delete(any(Wrapper.class));
     }
@@ -87,6 +90,7 @@ class DataRetentionServiceImplTest {
         assertThat(response.executed()).isTrue();
         assertThat(response.deletedBatchItems()).isEqualTo(3);
         assertThat(response.deletedTasks()).isEqualTo(1);
+        verify(metricsRecorder).record(response);
         InOrder order = inOrder(
             githubCommentPublicationBatchItemMapper,
             githubCommentPublicationMapper,
@@ -123,10 +127,29 @@ class DataRetentionServiceImplTest {
             githubCommentPublicationBatchMapper,
             githubCommentPublicationBatchItemMapper,
             systemSettingsProvider,
-            null
+            null,
+            metricsRecorder
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
+    }
+
+    @Test
+    void constructorRejectsMissingMetricsRecorder() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            new ReviewTaskStateMachine(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metricsRecorder");
     }
 
     private ReviewTask task(Long id) {

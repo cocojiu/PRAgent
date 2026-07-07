@@ -114,6 +114,18 @@ public class RepoGuardMetrics {
             .record(nonNegative(duration));
     }
 
+    public void dataRetentionCleanup(boolean executed, long candidateTasks, int selectedTasks, int deletedTasks) {
+        String mode = executed ? "execute" : "dry_run";
+        counter(
+            "repoguard.data_retention.cleanup",
+            "mode", mode,
+            "result", "completed"
+        ).increment();
+        dataRetentionCleanupTasks(mode, "candidate", candidateTasks);
+        dataRetentionCleanupTasks(mode, "selected", selectedTasks);
+        dataRetentionCleanupTasks(mode, "deleted", deletedTasks);
+    }
+
     public void apiRequest(
         Duration duration,
         String method,
@@ -324,6 +336,15 @@ public class RepoGuardMetrics {
             .baseUnit(baseUnit)
             .tags(tags)
             .register(meterRegistry);
+    }
+
+    private void dataRetentionCleanupTasks(String mode, String kind, long count) {
+        summaryWithUnit(
+            "repoguard.data_retention.cleanup.tasks",
+            "tasks",
+            "mode", mode,
+            "kind", kind
+        ).record(Math.max(0L, count));
     }
 
     private Duration nonNegative(Duration duration) {

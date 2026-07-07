@@ -96,6 +96,39 @@ class RepoGuardMetricsTest {
     }
 
     @Test
+    void recordsDataRetentionCleanupMetrics() {
+        metrics.dataRetentionCleanup(false, 12, 5, 0);
+        metrics.dataRetentionCleanup(true, 9, 4, 4);
+
+        assertThat(counter(
+            "repoguard.data_retention.cleanup",
+            "mode", "dry_run",
+            "result", "completed"
+        )).isEqualTo(1.0);
+        assertThat(counter(
+            "repoguard.data_retention.cleanup",
+            "mode", "execute",
+            "result", "completed"
+        )).isEqualTo(1.0);
+        assertThat(summaryTotal(
+            "repoguard.data_retention.cleanup.tasks",
+            "mode", "dry_run",
+            "kind", "candidate"
+        )).isEqualTo(12.0);
+        assertThat(summaryTotal(
+            "repoguard.data_retention.cleanup.tasks",
+            "mode", "execute",
+            "kind", "deleted"
+        )).isEqualTo(4.0);
+        assertThat(meterRegistry.find("repoguard.data_retention.cleanup.tasks")
+            .tag("mode", "execute")
+            .tag("kind", "selected")
+            .summary()
+            .getId()
+            .getBaseUnit()).isEqualTo("tasks");
+    }
+
+    @Test
     void recordsRabbitPublishAndCompensationCounters() {
         metrics.rabbitPublishFailed("Confirm timed out");
         metrics.rabbitPublishCompensationSucceeded();

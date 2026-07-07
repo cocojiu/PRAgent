@@ -48,6 +48,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
     private final SystemSettingsProvider systemSettingsProvider;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
+    private final DataRetentionMetricsRecorder metricsRecorder;
 
     @Autowired
     public DataRetentionServiceImpl(
@@ -59,7 +60,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
         SystemSettingsProvider systemSettingsProvider,
-        ReviewTaskStateMachine reviewTaskStateMachine
+        ReviewTaskStateMachine reviewTaskStateMachine,
+        DataRetentionMetricsRecorder metricsRecorder
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -70,6 +72,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
         this.systemSettingsProvider = systemSettingsProvider;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
     }
 
     @Override
@@ -93,7 +96,21 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             .toList();
 
         if (!execute || taskIds.isEmpty()) {
-            return response(false, retentionDays, maxTasks, cutoff, candidateTasks, taskIds.size(), 0, 0, 0, 0, 0, 0, 0);
+            return recorded(response(
+                false,
+                retentionDays,
+                maxTasks,
+                cutoff,
+                candidateTasks,
+                taskIds.size(),
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            ));
         }
 
         int deletedBatchItems = githubCommentPublicationBatchItemMapper.delete(
@@ -118,7 +135,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, taskIds)
         );
 
-        return response(
+        return recorded(response(
             true,
             retentionDays,
             maxTasks,
@@ -132,7 +149,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             deletedTimelines,
             deletedFindings,
             deletedTasks
-        );
+        ));
     }
 
     private int resolveRetentionDays(DataRetentionCleanupRequest request) {
@@ -180,5 +197,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             deletedFindings,
             deletedTasks
         );
+    }
+
+    private DataRetentionCleanupResponse recorded(DataRetentionCleanupResponse response) {
+        metricsRecorder.record(response);
+        return response;
     }
 }
