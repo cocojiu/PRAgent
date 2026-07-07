@@ -138,7 +138,7 @@ class LlmConnectionProbeTest {
             assertThat(result.message()).contains(
                 "llm_service_unavailable",
                 "status=500",
-                "responseBody=<html>LLM upstream failed token=***</html>"
+                "responseBody=<html>LLM upstream failed token=****"
             );
             assertThat(result.message()).doesNotContain("raw-token-value");
         }

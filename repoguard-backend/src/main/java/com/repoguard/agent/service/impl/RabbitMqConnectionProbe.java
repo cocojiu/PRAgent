@@ -4,7 +4,6 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import java.util.Objects;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 /**
  * Probes runtime and saved RabbitMQ connectivity.
@@ -59,14 +58,6 @@ public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfi
     }
 
     private String conciseError(Exception ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message) && ex.getCause() != null) {
-            message = ex.getCause().getMessage();
-        }
-        if (!StringUtils.hasText(message)) {
-            return ex.getClass().getSimpleName();
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
+        return ConnectionProbeErrorMessage.concise(ex);
     }
 }

@@ -80,14 +80,6 @@ public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> 
     }
 
     private String conciseError(Exception ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message) && ex.getCause() != null) {
-            message = ex.getCause().getMessage();
-        }
-        if (!StringUtils.hasText(message)) {
-            return ex.getClass().getSimpleName();
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
+        return ConnectionProbeErrorMessage.concise(ex);
     }
 }

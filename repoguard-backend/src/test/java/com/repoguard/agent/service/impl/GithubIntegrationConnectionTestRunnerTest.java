@@ -90,8 +90,9 @@ class GithubIntegrationConnectionTestRunnerTest {
             "retryAfter=60",
             "rateLimitRemaining=0",
             "rateLimitReset=1763456789",
-            "responseBody={\"message\":\"API rate limit exceeded\",\"token\":\"***\"}"
+            "responseBody={\"message\":\"API rate limit exceeded\",\"token\":\""
         );
+        assertThat(result.message()).hasSizeLessThanOrEqualTo(240).endsWith("...");
         assertThat(result.message()).doesNotContain("raw-token-value");
         assertThat(markedError.get()).isEqualTo(result.message());
     }

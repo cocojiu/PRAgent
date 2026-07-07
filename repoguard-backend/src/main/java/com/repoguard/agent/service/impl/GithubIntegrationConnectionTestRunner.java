@@ -7,7 +7,6 @@ import com.repoguard.agent.external.ExternalCallException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.function.BiConsumer;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
@@ -57,19 +56,11 @@ class GithubIntegrationConnectionTestRunner {
         return ex;
     }
 
-    private String conciseError(Exception ex) {
-        String message = ex.getMessage();
-        if (!StringUtils.hasText(message) && ex.getCause() != null) {
-            message = ex.getCause().getMessage();
-        }
-        if (!StringUtils.hasText(message)) {
-            return ex.getClass().getSimpleName();
-        }
-        String normalized = message.replaceAll("\\s+", " ").trim();
-        return normalized.length() > 240 ? normalized.substring(0, 237) + "..." : normalized;
-    }
-
     private String format(LocalDateTime time) {
         return time == null ? null : time.format(DATE_TIME_FORMATTER);
+    }
+
+    private String conciseError(Exception ex) {
+        return ConnectionProbeErrorMessage.concise(ex);
     }
 }
