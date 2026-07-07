@@ -93,6 +93,26 @@ class ReviewTaskListItemAssemblerTest {
         assertThat(result.humanReviewStatus()).isEqualTo("unknown");
     }
 
+    @Test
+    void normalizesKnownLlmStatusThroughEnumBoundary() {
+        ReviewTask task = baseTask();
+        task.setLlmStatus(" completed ");
+
+        var result = assembler.assemble(task, new ReviewFailureSummary(null, null, null));
+
+        assertThat(result.llmStatus()).isEqualTo("completed");
+    }
+
+    @Test
+    void normalizesUnexpectedLlmStatusToUnknown() {
+        ReviewTask task = baseTask();
+        task.setLlmStatus("legacy_done");
+
+        var result = assembler.assemble(task, new ReviewFailureSummary(null, null, null));
+
+        assertThat(result.llmStatus()).isEqualTo("unknown");
+    }
+
     private ReviewTask baseTask() {
         ReviewTask task = new ReviewTask();
         task.setId(521L);

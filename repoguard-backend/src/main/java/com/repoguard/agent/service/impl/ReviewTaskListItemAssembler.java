@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.service.impl.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import java.time.LocalDateTime;
@@ -27,7 +28,7 @@ public class ReviewTaskListItemAssembler {
             lower(task.getStatus()),
             lower(task.getRiskLevel()),
             task.getMqRetries(),
-            lower(task.getLlmStatus()),
+            lower(resolveLlmStatus(task)),
             ReviewTaskSource.dtoCodeOrDefault(task.getSource()),
             ReviewTaskSource.dtoCodeOrDefault(task.getTriggerSource()),
             task.getCreatedAt().format(DATE_TIME_FORMATTER),
@@ -41,6 +42,13 @@ public class ReviewTaskListItemAssembler {
             task.getHumanReviewBy(),
             formatDateTimeOrNull(task.getHumanReviewedAt())
         );
+    }
+
+    private String resolveLlmStatus(ReviewTask task) {
+        if (task.getLlmStatus() == null || task.getLlmStatus().isBlank()) {
+            return null;
+        }
+        return LlmStatus.from(task.getLlmStatus()).code();
     }
 
     private String resolveHumanReviewStatus(ReviewTask task) {
