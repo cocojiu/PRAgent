@@ -213,7 +213,7 @@ class ReviewServiceImplTest {
         return new ManualReviewCreationService(
             reviewTaskMapper,
             timelineAppender(),
-            null,
+            metrics,
             cacheEvictionService,
             reviewTaskStateMachine,
             (TransactionTemplate) null,
@@ -897,6 +897,7 @@ class ReviewServiceImplTest {
         verify(reviewTaskMapper).insertManualReviewOrReuse(org.mockito.Mockito.argThat((ReviewTask task) ->
             "GITHUB_PR_PICKER".equals(task.getSource()) && "GITHUB_PR_PICKER".equals(task.getTriggerSource())
         ));
+        verify(metrics).reviewTaskCreated("GITHUB_PR_PICKER");
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
     }
 

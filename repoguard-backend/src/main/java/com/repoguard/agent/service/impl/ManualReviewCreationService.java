@@ -59,7 +59,7 @@ public class ManualReviewCreationService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.manualCreateTransactionTemplate = buildManualCreateTransactionTemplate(transactionManager);
@@ -82,7 +82,7 @@ public class ManualReviewCreationService {
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.manualCreateTransactionTemplate = manualCreateTransactionTemplate;
@@ -194,9 +194,7 @@ public class ManualReviewCreationService {
         ownerFuture.complete(task);
         cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
         evictDashboardOverview();
-        if (metrics != null) {
-            metrics.reviewTaskCreated(source.code());
-        }
+        metrics.reviewTaskCreated(source.code());
         ReviewTaskMessage message = new ReviewTaskMessage(
             task.getId(),
             organization,
