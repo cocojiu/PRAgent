@@ -153,6 +153,26 @@ class SystemIntegrationConfigServiceImplTest {
     }
 
     @Test
+    void updateGithubIntegrationPreservesDamagedExistingTokenWhenMaskedValueIsSubmitted() {
+        IntegrationConfig config = githubConfig("enc:v2:local:not-a-real-payload");
+        when(integrationConfigMapper.selectOne(any())).thenReturn(config);
+
+        var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
+            "https://api.github.com",
+            "****",
+            "repo-guard-demo",
+            "spring-boot-demo"
+        ));
+
+        assertThat(config.getTokenValue()).isEqualTo("enc:v2:local:not-a-real-payload");
+        assertThat(config.getStatus()).isEqualTo("CONFIGURED");
+        assertThat(result.token()).isNull();
+        assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
+        verify(integrationConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictDashboardOverview();
+    }
+
+    @Test
     void updateMysqlIntegrationKeepsExistingSecretWhenMaskedValueIsSubmitted() {
         IntegrationConfig config = serviceConfig("MYSQL", "mysql-existing-1234");
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);

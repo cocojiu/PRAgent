@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretUpdateValue;
 import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.SystemIntegrationConfigService;
 import java.time.LocalDateTime;
@@ -57,12 +58,12 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
-        String token = resolveSecretValue(config.getTokenValue(), request.token());
+        SecretUpdateValue token = SecretUpdateValue.resolve(secretCryptoService, config.getTokenValue(), request.token());
         config.setBaseUrl(request.baseUrl().trim());
-        config.setTokenValue(secretCryptoService.encrypt(token));
+        config.setTokenValue(token.encryptedValue());
         config.setDefaultOwner(trimToNull(request.defaultOwner()));
         config.setDefaultRepo(trimToNull(request.defaultRepo()));
-        config.setStatus(StringUtils.hasText(token) ? "CONFIGURED" : "NOT_CONFIGURED");
+        config.setStatus(token.configured() ? "CONFIGURED" : "NOT_CONFIGURED");
         config.setLastError(null);
         config.setUpdatedAt(LocalDateTime.now());
         integrationConfigMapper.updateById(config);
@@ -127,11 +128,11 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
 
     private ServiceIntegrationConfigDto updateServiceIntegration(String provider, ServiceIntegrationConfigRequest request) {
         IntegrationConfig config = loadServiceIntegration(provider);
-        String secret = resolveSecretValue(config.getTokenValue(), request.secret());
+        SecretUpdateValue secret = SecretUpdateValue.resolve(secretCryptoService, config.getTokenValue(), request.secret());
         config.setBaseUrl(request.baseUrl().trim());
         config.setDefaultOwner(trimToNull(request.username()));
         config.setDefaultRepo(trimToNull(request.resource()));
-        config.setTokenValue(secretCryptoService.encrypt(secret));
+        config.setTokenValue(secret.encryptedValue());
         config.setStatus(StringUtils.hasText(config.getBaseUrl()) ? "CONFIGURED" : "NOT_CONFIGURED");
         config.setLastError(null);
         config.setUpdatedAt(LocalDateTime.now());
@@ -263,17 +264,6 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
             format(config.getUpdatedAt()),
             secret.status()
         );
-    }
-
-    private String resolveSecretValue(String encryptedCurrentValue, String submittedValue) {
-        if (submittedValue == null) {
-            return secretCryptoService.decrypt(encryptedCurrentValue);
-        }
-        String trimmed = submittedValue.trim();
-        if (trimmed.startsWith("****")) {
-            return secretCryptoService.decrypt(encryptedCurrentValue);
-        }
-        return StringUtils.hasText(trimmed) ? trimmed : null;
     }
 
     private String trimToNull(String value) {

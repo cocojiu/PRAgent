@@ -6,6 +6,7 @@ import com.repoguard.agent.dto.NotificationBindingRequest;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.notification.NotificationBindingStatus;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretUpdateValue;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
@@ -16,8 +17,6 @@ import org.springframework.util.StringUtils;
  */
 @Component
 public class NotificationBindingRequestApplier {
-
-    private static final String MASKED_SECRET = NotificationBindingResponseAssembler.MASKED_SECRET;
 
     private final SecretCryptoService secretCryptoService;
 
@@ -36,12 +35,20 @@ public class NotificationBindingRequestApplier {
         binding.setOrganization(request.organization().trim());
         binding.setRepository(request.repository().trim());
         binding.setEnabled(Boolean.TRUE.equals(request.enabled()));
-        String webhookUrl = resolveSecret(create ? null : binding.getWebhookUrlValue(), request.webhookUrl());
-        if (!StringUtils.hasText(webhookUrl)) {
+        SecretUpdateValue webhookUrl = SecretUpdateValue.resolve(
+            secretCryptoService,
+            create ? null : binding.getWebhookUrlValue(),
+            request.webhookUrl()
+        );
+        if (!webhookUrl.configured()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Webhook URL is required");
         }
-        binding.setWebhookUrlValue(secretCryptoService.encrypt(webhookUrl));
-        binding.setSecretValue(secretCryptoService.encrypt(resolveSecret(create ? null : binding.getSecretValue(), request.secret())));
+        binding.setWebhookUrlValue(webhookUrl.encryptedValue());
+        binding.setSecretValue(SecretUpdateValue.resolve(
+            secretCryptoService,
+            create ? null : binding.getSecretValue(),
+            request.secret()
+        ).encryptedValue());
         binding.setNotifyReviewCompleted(request.notifyReviewCompleted());
         binding.setNotifyReviewFailed(request.notifyReviewFailed());
         binding.setNotifyHumanReviewRequired(request.notifyHumanReviewRequired());
@@ -49,13 +56,6 @@ public class NotificationBindingRequestApplier {
         binding.setStatus(NotificationBindingStatus.CONFIGURED.code());
         binding.setLastError(null);
         binding.setUpdatedAt(now);
-    }
-
-    private String resolveSecret(String encryptedExisting, String requested) {
-        if (MASKED_SECRET.equals(requested)) {
-            return secretCryptoService.decrypt(encryptedExisting);
-        }
-        return trim(requested);
     }
 
     private String normalizeProvider(String provider) {

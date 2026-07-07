@@ -66,6 +66,20 @@ class NotificationBindingRequestApplierTest {
     }
 
     @Test
+    void applyUpdatePreservesBrokenExistingSecretsWhenRequestContainsMask() {
+        NotificationChannelBinding binding = bindingWithSecrets();
+        when(secretCryptoService.decrypt("enc:old-webhook")).thenThrow(new IllegalStateException("Unable to decrypt secret"));
+        when(secretCryptoService.decrypt("enc:old-secret")).thenThrow(new IllegalStateException("Unable to decrypt secret"));
+
+        applier.apply(binding, request("******", "******"), now(), false);
+
+        assertThat(binding.getWebhookUrlValue()).isEqualTo("enc:old-webhook");
+        assertThat(binding.getSecretValue()).isEqualTo("enc:old-secret");
+        assertThat(binding.getStatus()).isEqualTo(NotificationBindingStatus.CONFIGURED.code());
+        assertThat(binding.getLastError()).isNull();
+    }
+
+    @Test
     void applyRejectsMissingWebhookUrl() {
         NotificationChannelBinding binding = new NotificationChannelBinding();
 

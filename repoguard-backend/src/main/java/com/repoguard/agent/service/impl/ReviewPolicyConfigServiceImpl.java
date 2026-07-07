@@ -7,6 +7,7 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.security.SecretUpdateValue;
 import com.repoguard.agent.security.SecretValueView;
 import com.repoguard.agent.service.ReviewPolicyConfigService;
 import java.math.BigDecimal;
@@ -58,12 +59,12 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     )
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
-        String apiKey = resolveSecretValue(config.getApiKeyValue(), request.apiKey());
+        SecretUpdateValue apiKey = SecretUpdateValue.resolve(secretCryptoService, config.getApiKeyValue(), request.apiKey());
         config.setLlmEnabled(request.llmEnabled());
         config.setLlmProvider(request.llmProvider().trim());
         config.setModelName(request.modelName().trim());
         config.setBaseUrl(trimToNull(request.baseUrl()));
-        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
+        config.setApiKeyValue(apiKey.encryptedValue());
         config.setTimeoutSeconds(request.timeoutSeconds());
         config.setTemperature(request.temperature());
         config.setMaxTokens(request.maxTokens());
@@ -139,17 +140,6 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
             format(config.getUpdatedAt()),
             secret.status()
         );
-    }
-
-    private String resolveSecretValue(String encryptedCurrentValue, String submittedValue) {
-        if (submittedValue == null) {
-            return secretCryptoService.decrypt(encryptedCurrentValue);
-        }
-        String trimmed = submittedValue.trim();
-        if (trimmed.startsWith("****")) {
-            return secretCryptoService.decrypt(encryptedCurrentValue);
-        }
-        return StringUtils.hasText(trimmed) ? trimmed : null;
     }
 
     private String trimToNull(String value) {
