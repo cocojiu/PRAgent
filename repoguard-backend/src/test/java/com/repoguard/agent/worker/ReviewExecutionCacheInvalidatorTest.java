@@ -24,13 +24,4 @@ class ReviewExecutionCacheInvalidatorTest {
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
     }
-
-    @Test
-    void noopCacheEvictionServiceKeepsCompatibilityWhenCacheIsUnavailable() {
-        ReviewExecutionCacheInvalidator invalidator = new ReviewExecutionCacheInvalidator(
-            new ReviewExecutionNoopCacheEvictionService()
-        );
-
-        invalidator.reviewTaskChanged();
-    }
 }

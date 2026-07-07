@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
@@ -21,6 +22,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
@@ -426,7 +428,7 @@ class ReviewTaskExecutorImplTest {
         );
         ReviewExecutionFailureClassifier failureClassifier = new ReviewExecutionFailureClassifier();
         ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
-            new ReviewExecutionNoopCacheEvictionService()
+            org.mockito.Mockito.mock(CacheEvictionService.class)
         );
         ReviewExecutionFailureHandler failureHandler = new ReviewExecutionFailureHandler(
             taskTerminalWriter,
@@ -458,7 +460,7 @@ class ReviewTaskExecutorImplTest {
             claimService,
             failureHandler,
             resultWriter,
-            new ReviewExecutionNotifier(new ReviewExecutionNoopNotificationDispatchService()),
+            new ReviewExecutionNotifier(org.mockito.Mockito.mock(NotificationDispatchService.class)),
             new ReviewExecutionDiffStats(),
             new ReviewExecutionLog(clock, logContextFormatter),
             clock

@@ -29,14 +29,4 @@ class ReviewExecutionNotifierTest {
             .isInstanceOf(NullPointerException.class)
             .hasMessage("notificationDispatchService");
     }
-
-    @Test
-    void noopDispatchServiceKeepsCompatibilityWhenNotificationsAreUnavailable() {
-        ReviewExecutionNotifier notifier = new ReviewExecutionNotifier(
-            new ReviewExecutionNoopNotificationDispatchService()
-        );
-
-        notifier.reviewFinished(new ReviewTask(), 0);
-        notifier.reviewFailed(new ReviewTask());
-    }
 }

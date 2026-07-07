@@ -215,6 +215,9 @@ Invoke-Check "secret and token leakage heuristic scan" {
         }
 
         $absolutePath = Join-Path $Root $normalizedPath
+        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) {
+            continue
+        }
         $matches = Select-String -LiteralPath $absolutePath -Pattern $secretPattern -AllMatches
         if ($matches) {
             $locations = $matches | ForEach-Object { "$($_.Path):$($_.LineNumber)" }
