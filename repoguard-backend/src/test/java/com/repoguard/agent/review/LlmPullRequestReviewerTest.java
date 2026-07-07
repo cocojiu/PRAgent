@@ -33,7 +33,7 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
             new ObjectMapper(),
-            null,
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
             null,
             null,
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
@@ -41,6 +41,22 @@ class LlmPullRequestReviewerTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("promptBuilder");
+    }
+
+    @Test
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            new ObjectMapper(),
+            null,
+            null,
+            new LlmReviewPromptBuilder(),
+            org.mockito.Mockito.mock(LlmReviewPipeline.class),
+            new LlmHttpResponseReader()
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
     }
 
     @Test
@@ -402,14 +418,17 @@ class LlmPullRequestReviewerTest {
     ) {
         ObjectMapper objectMapper = new ObjectMapper();
         LlmReviewPromptBuilder promptBuilder = new LlmReviewPromptBuilder();
+        RepoGuardMetrics effectiveMetrics = metrics == null
+            ? org.mockito.Mockito.mock(RepoGuardMetrics.class)
+            : metrics;
         return new LlmPullRequestReviewer(
             reviewPolicyProvider,
             RestClient.builder(),
             objectMapper,
-            metrics,
+            effectiveMetrics,
             resilience,
             promptBuilder,
-            pipeline(ruleBasedReviewer, objectMapper, metrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
+            pipeline(ruleBasedReviewer, objectMapper, effectiveMetrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
             new LlmHttpResponseReader()
         );
     }
@@ -499,17 +518,33 @@ class LlmPullRequestReviewerTest {
             List<GithubPullRequestDiff> reviewedChunks,
             String failingFilePart
         ) {
+            this(
+                reviewPolicyProvider,
+                ruleBasedReviewer,
+                reviewedChunks,
+                failingFilePart,
+                org.mockito.Mockito.mock(RepoGuardMetrics.class)
+            );
+        }
+
+        private TestableLlmPullRequestReviewer(
+            ReviewPolicyProvider reviewPolicyProvider,
+            RuleBasedPullRequestReviewer ruleBasedReviewer,
+            List<GithubPullRequestDiff> reviewedChunks,
+            String failingFilePart,
+            RepoGuardMetrics metrics
+        ) {
             super(
                 reviewPolicyProvider,
                 RestClient.builder(),
                 new ObjectMapper(),
-                null,
+                metrics,
                 null,
                 new LlmReviewPromptBuilder(),
                 pipeline(
                     ruleBasedReviewer,
                     new ObjectMapper(),
-                    null,
+                    metrics,
                     DiffChunkingTestFixtures.chunker(),
                     new LlmReviewPromptBuilder()
                 ),

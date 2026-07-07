@@ -5,6 +5,7 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 class LlmChunkReviewAggregator {
 
@@ -26,12 +27,12 @@ class LlmChunkReviewAggregator {
         LlmReviewCostEstimator costEstimator,
         RepoGuardMetrics metrics
     ) {
-        this.ruleBasedReviewer = ruleBasedReviewer;
-        this.promptBuilder = promptBuilder;
-        this.reviewMerger = reviewMerger;
-        this.qualityScorer = qualityScorer;
-        this.costEstimator = costEstimator;
-        this.metrics = metrics;
+        this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
+        this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
+        this.reviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
+        this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
+        this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     ReviewResult aggregate(
@@ -82,9 +83,7 @@ class LlmChunkReviewAggregator {
             ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
             return aggregation.addLlmResult(parsed, callResult, reviewMerger);
         } catch (RuntimeException ex) {
-            if (metrics != null) {
-                metrics.llmFallback(CHUNK_PARTIAL_FAILURE_CATEGORY);
-            }
+            metrics.llmFallback(CHUNK_PARTIAL_FAILURE_CATEGORY);
             ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
             return aggregation.addFallbackResult(ruleReview, reviewMerger);
         }

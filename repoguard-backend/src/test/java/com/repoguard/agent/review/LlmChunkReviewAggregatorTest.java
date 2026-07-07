@@ -1,6 +1,7 @@
 package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -37,6 +38,20 @@ class LlmChunkReviewAggregatorTest {
         new LlmReviewFindingMapper(),
         new LlmReviewParseFailureSummarizer()
     );
+
+    @Test
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new LlmChunkReviewAggregator(
+            ruleBasedReviewer,
+            new LlmReviewPromptBuilder(),
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
 
     @Test
     void aggregatesSuccessfulChunksAndFallsBackOnlyFailedChunksToRules() {

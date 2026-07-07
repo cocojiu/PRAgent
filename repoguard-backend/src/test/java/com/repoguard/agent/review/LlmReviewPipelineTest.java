@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +18,7 @@ class LlmReviewPipelineTest {
     private final LlmReviewResultParser reviewResultParser = parser();
     private final LlmFallbackReasonClassifier fallbackReasonClassifier = new LlmFallbackReasonClassifier();
     private final PullRequestDiffChunker diffChunker = DiffChunkingTestFixtures.chunker();
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
 
     @Test
     void constructorRejectsMissingExplicitDependencies() {
@@ -26,6 +28,17 @@ class LlmReviewPipelineTest {
         assertMissing("qualityScorer", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, null, costEstimator, reviewResultParser, fallbackReasonClassifier, diffChunker));
         assertMissing("costEstimator", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, null, reviewResultParser, fallbackReasonClassifier, diffChunker));
         assertMissing("reviewResultParser", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, null, fallbackReasonClassifier, diffChunker));
+        assertMissing("metrics", () -> new LlmReviewPipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            null,
+            fallbackReasonClassifier,
+            diffChunker
+        ));
         assertMissing("fallbackReasonClassifier", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, null, diffChunker));
         assertMissing("diffChunker", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, null));
     }
@@ -53,7 +66,7 @@ class LlmReviewPipelineTest {
             qualityScorer,
             costEstimator,
             reviewResultParser,
-            null,
+            metrics,
             fallbackReasonClassifier,
             diffChunker
         );

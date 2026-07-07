@@ -42,7 +42,7 @@ class LlmReviewPipeline {
         this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
         this.fallbackReasonClassifier = Objects.requireNonNull(fallbackReasonClassifier, "fallbackReasonClassifier");
         this.reviewResultParser = Objects.requireNonNull(reviewResultParser, "reviewResultParser");
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
             this.ruleBasedReviewer,
             this.promptBuilder,
@@ -156,9 +156,7 @@ class LlmReviewPipeline {
     }
 
     private ReviewResult fallbackReview(ReviewPipelineContext context, String reason) {
-        if (metrics != null) {
-            metrics.llmFallback(fallbackReasonClassifier.category(reason));
-        }
+        metrics.llmFallback(fallbackReasonClassifier.category(reason));
         ReviewResult fallback = ruleBasedReviewer.review(context.diff());
         ReviewPolicySettings settings = context.settings();
         return ReviewResult.fallback(

@@ -69,7 +69,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.resilience = resilience;
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
@@ -117,16 +117,12 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                     clientResponse,
                     "LLM request failed"
                 )));
-            if (metrics != null) {
-                metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
-            }
+            metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             return extractLlmCallResult(response == null ? "" : new String(response, StandardCharsets.UTF_8));
         } catch (RuntimeException ex) {
             var classified = ExternalCallErrorClassifier.llm(ex);
-            if (metrics != null) {
-                metrics.externalCallFailed(classified);
-                metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "failed");
-            }
+            metrics.externalCallFailed(classified);
+            metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "failed");
             throw classified;
         }
     }
