@@ -74,12 +74,28 @@ class ObservedCacheTest {
         assertThat(meterRegistry.find("repoguard.dashboard.cache.operation").counter()).isNull();
     }
 
+    @Test
+    void requiresDelegateAndMetrics() {
+        Cache delegate = caffeineCache("dashboardOverview");
+
+        assertThatThrownBy(() -> new ObservedCache(null, metrics, true))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("delegate");
+        assertThatThrownBy(() -> new ObservedCache(delegate, null, false))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
+
     private Cache observedCache(String name, boolean observeAccess) {
         return new ObservedCache(
-            new CaffeineCache(name, Caffeine.newBuilder().recordStats().build(), false),
+            caffeineCache(name),
             metrics,
             observeAccess
         );
+    }
+
+    private Cache caffeineCache(String name) {
+        return new CaffeineCache(name, Caffeine.newBuilder().recordStats().build(), false);
     }
 
     private double counter(String name, String... tags) {

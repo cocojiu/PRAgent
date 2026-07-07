@@ -4,6 +4,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
+import java.util.Objects;
 import org.springframework.cache.Cache;
 import org.springframework.lang.Nullable;
 
@@ -14,8 +15,8 @@ public class ObservedCache implements Cache {
     private final boolean observeAccess;
 
     public ObservedCache(Cache delegate, RepoGuardMetrics metrics, boolean observeAccess) {
-        this.delegate = delegate;
-        this.metrics = metrics;
+        this.delegate = Objects.requireNonNull(delegate, "delegate");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.observeAccess = observeAccess;
     }
 
