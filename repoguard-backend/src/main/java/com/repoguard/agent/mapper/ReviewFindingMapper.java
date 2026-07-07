@@ -139,4 +139,32 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         @Param("offset") long offset,
         @Param("limit") int limit
     );
+
+    @Select("""
+        select *
+        from review_finding finding
+        where finding.task_id = #{taskId}
+          and finding.category = 'FINDING'
+          and finding.id > #{afterFindingId}
+          and not exists (
+              select 1
+              from github_comment_publication publication
+              where publication.task_id = finding.task_id
+                and publication.finding_id = finding.id
+                and publication.success = 1
+                and publication.github_url is not null
+                and trim(publication.github_url) <> ''
+          )
+          and (
+              upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
+                  in ('UNREVIEWED', 'VALID')
+          )
+        order by finding.id asc
+        limit #{limit}
+        """)
+    List<ReviewFinding> selectGithubCommentPublishCandidatesAfterId(
+        @Param("taskId") Long taskId,
+        @Param("afterFindingId") long afterFindingId,
+        @Param("limit") int limit
+    );
 }

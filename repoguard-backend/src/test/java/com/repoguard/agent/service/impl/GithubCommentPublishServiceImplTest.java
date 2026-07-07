@@ -9,8 +9,6 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
-import com.repoguard.agent.dto.GithubCommentPreviewResponse;
-import com.repoguard.agent.dto.GithubCommentWritebackCheck;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
@@ -24,7 +22,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
-import com.repoguard.agent.service.GithubCommentPreviewService;
+import com.repoguard.agent.service.impl.GithubCommentPublishCandidateLoader.GithubCommentPublishCandidateOverview;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -44,8 +42,8 @@ class GithubCommentPublishServiceImplTest {
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(
         GithubPullRequestClient.class
     );
-    private final GithubCommentPreviewService previewService = org.mockito.Mockito.mock(
-        GithubCommentPreviewService.class
+    private final GithubCommentPublishCandidateLoader publishCandidateLoader = org.mockito.Mockito.mock(
+        GithubCommentPublishCandidateLoader.class
     );
     private final GithubCommentPublishMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(
         GithubCommentPublishMetricsRecorder.class
@@ -64,7 +62,7 @@ class GithubCommentPublishServiceImplTest {
         reviewTaskMapper,
         metricsRecorder,
         notificationDispatchService,
-        previewService,
+        publishCandidateLoader,
         new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
         new GithubCommentPublishPlanBuilder(),
         new GithubCommentDraftPublisher(
@@ -77,12 +75,15 @@ class GithubCommentPublishServiceImplTest {
 
     @Test
     void publishGithubCommentsSendsCommentableDraftsAndRecordsBatchHistory() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(previewService.getFullPreview(521L)).thenReturn(preview(List.of(
-            item(null, "PR summary", null, "pull_request", true, false),
-            item(1L, "Use logger", 8, "line", true, false),
-            item(2L, "Already published", 9, "line", false, true)
-        )));
+        ReviewTask task = task();
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(publishCandidateLoader.loadOverview(task)).thenReturn(overview(
+            2,
+            item(null, "PR summary", null, "pull_request", true, false)
+        ));
+        when(publishCandidateLoader.loadFindingCandidates(521L, 0L, 49)).thenReturn(List.of(
+            item(1L, "Use logger", 8, "line", true, false)
+        ));
         when(publicationMapper.selectOne(any())).thenReturn(null);
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
             new GithubReviewCommentResult(null, "PR summary", null, "pull_request", true, "published",
@@ -98,10 +99,10 @@ class GithubCommentPublishServiceImplTest {
         assertThat(result.failedCount()).isZero();
         assertThat(result.skippedCount()).isEqualTo(1);
         assertThat(result.items()).extracting("status")
-            .containsExactly("published", "published", "already_published");
+            .containsExactly("published", "published");
         verify(publicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
         verify(batchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(batchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
+        verify(batchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
         verify(metricsRecorder).recordItems(2, 0, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(false));
         verify(notificationDispatchService).githubCommentsPublished(
@@ -113,10 +114,12 @@ class GithubCommentPublishServiceImplTest {
 
     @Test
     void publishGithubCommentsClassifiesGithubPermissionFailure() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(previewService.getFullPreview(521L)).thenReturn(preview(List.of(
+        ReviewTask task = task();
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(publishCandidateLoader.loadOverview(task)).thenReturn(overview(1, null));
+        when(publishCandidateLoader.loadFindingCandidates(521L, 0L, 50)).thenReturn(List.of(
             item(1L, "Use logger", 8, "line", true, false)
-        )));
+        ));
         when(publicationMapper.selectOne(any())).thenReturn(null);
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
             new GithubReviewCommentResult(1L, "README.md", 8, "line", false, "failed",
@@ -129,7 +132,7 @@ class GithubCommentPublishServiceImplTest {
         assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_permission_denied");
         assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 权限不足");
         assertThat(result.items().getFirst().failureSuggestion()).contains("评论权限");
-        verify(metricsRecorder).recordItems(0, 1, 0);
+        verify(metricsRecorder).recordItems(0, 1, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(true));
     }
 
@@ -139,7 +142,7 @@ class GithubCommentPublishServiceImplTest {
             reviewTaskMapper,
             null,
             notificationDispatchService,
-            previewService,
+            publishCandidateLoader,
             new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
             new GithubCommentPublishPlanBuilder(),
             new GithubCommentDraftPublisher(
@@ -159,7 +162,7 @@ class GithubCommentPublishServiceImplTest {
             reviewTaskMapper,
             metricsRecorder,
             null,
-            previewService,
+            publishCandidateLoader,
             new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
             new GithubCommentPublishPlanBuilder(),
             new GithubCommentDraftPublisher(
@@ -184,33 +187,12 @@ class GithubCommentPublishServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Human review");
 
-        verify(previewService, never()).getFullPreview(any());
+        verify(publishCandidateLoader, never()).loadOverview(any());
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
     }
 
-    private GithubCommentPreviewResponse preview(List<GithubCommentPreviewItem> items) {
-        return new GithubCommentPreviewResponse(
-            521L,
-            1,
-            "https://github.com/octocat/Hello-World/pull/1",
-            new GithubCommentWritebackCheck(
-                "ready",
-                "success",
-                "octocat",
-                "Hello-World",
-                "octocat",
-                "Hello-World",
-                true,
-                true,
-                true,
-                null,
-                List.of()
-            ),
-            2,
-            (int) items.stream().filter(GithubCommentPreviewItem::commentable).count(),
-            (int) items.stream().filter(item -> !item.commentable()).count(),
-            items
-        );
+    private GithubCommentPublishCandidateOverview overview(int totalFindings, GithubCommentPreviewItem prSummaryCandidate) {
+        return new GithubCommentPublishCandidateOverview(totalFindings, prSummaryCandidate);
     }
 
     private GithubCommentPreviewItem item(

@@ -14,14 +14,18 @@ import org.springframework.stereotype.Component;
 public class GithubCommentPublishPlanBuilder {
 
     public GithubCommentPublishPlan build(GithubCommentPreviewResponse preview) {
+        return build(preview.items());
+    }
+
+    public GithubCommentPublishPlan build(java.util.List<GithubCommentPreviewItem> items) {
         return new GithubCommentPublishPlan(
-            buildDrafts(preview),
-            buildSkippedItems(preview)
+            buildDrafts(items),
+            buildSkippedItems(items)
         );
     }
 
-    private java.util.List<GithubReviewCommentDraft> buildDrafts(GithubCommentPreviewResponse preview) {
-        return preview.items().stream()
+    private java.util.List<GithubReviewCommentDraft> buildDrafts(java.util.List<GithubCommentPreviewItem> items) {
+        return items.stream()
             .filter(GithubCommentPreviewItem::commentable)
             .map(item -> new GithubReviewCommentDraft(
                 item.findingId(),
@@ -33,8 +37,8 @@ public class GithubCommentPublishPlanBuilder {
             .toList();
     }
 
-    private java.util.List<GithubCommentPublishItem> buildSkippedItems(GithubCommentPreviewResponse preview) {
-        return preview.items().stream()
+    private java.util.List<GithubCommentPublishItem> buildSkippedItems(java.util.List<GithubCommentPreviewItem> items) {
+        return items.stream()
             .filter(item -> !item.commentable())
             .map(item -> new GithubCommentPublishItem(
                 item.findingId(),

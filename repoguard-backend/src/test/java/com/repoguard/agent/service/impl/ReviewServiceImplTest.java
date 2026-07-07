@@ -158,11 +158,21 @@ class ReviewServiceImplTest {
             new GithubCommentPreviewItemBuilder()
         )
     );
+    private final GithubCommentPublishCandidateLoader githubCommentPublishCandidateLoader =
+        new GithubCommentPublishCandidateLoader(
+            changedFileMapper,
+            reviewFindingMapper,
+            new GithubCommentPreviewPublicationLoader(githubCommentPublicationMapper),
+            new GithubCommentPreviewItemBuilder(),
+            new ReviewTaskListItemAssembler(),
+            new ReviewRiskProfileBuilder(),
+            new PrReviewSummaryBuilder()
+        );
     private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
         githubCommentPublishMetricsRecorder,
         notificationDispatchService,
-        githubCommentPreviewService,
+        githubCommentPublishCandidateLoader,
         new GithubCommentPublishGuard(reviewTaskStateMachine),
         new GithubCommentPublishPlanBuilder(),
         new GithubCommentDraftPublisher(
@@ -335,14 +345,12 @@ class ReviewServiceImplTest {
 
     @Test
     void publishGithubCommentsSendsOnlyCommentableDrafts() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        List<ReviewFinding> findings = List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", null, "文件末尾缺少换行符", "添加换行符")
-        ));
+        );
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        stubGithubCommentPublishCandidates(findings, findings, null);
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
             new GithubReviewCommentResult(null, "PR 总评", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/summary", 100L),
             new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L),
@@ -364,13 +372,11 @@ class ReviewServiceImplTest {
 
     @Test
     void publishGithubCommentsAddsReadableFailureForPermissionError() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        List<ReviewFinding> findings = List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
-        ));
+        );
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
+        stubGithubCommentPublishCandidates(findings, findings, publishedPrSummaryPublication());
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
             new GithubReviewCommentResult(
                 1L,
@@ -395,11 +401,10 @@ class ReviewServiceImplTest {
 
     @Test
     void publishGithubCommentsSkipsAlreadyPublishedFindings() {
-        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        List<ReviewFinding> findings = List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
-        ));
+        );
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task());
         GithubCommentPublication publication = new GithubCommentPublication();
         publication.setTaskId(521L);
         publication.setFindingId(1L);
@@ -420,17 +425,18 @@ class ReviewServiceImplTest {
         summaryPublication.setMessage("GitHub comment published");
         summaryPublication.setPublishedAt(LocalDateTime.of(2026, 6, 7, 10, 1));
         when(githubCommentPublicationMapper.selectOne(any())).thenReturn(summaryPublication);
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of(publication));
+        stubGithubCommentPublishCandidates(findings, List.of(), summaryPublication);
 
         var result = service.publishGithubComments(521L);
 
         assertThat(result.attemptedCount()).isZero();
         assertThat(result.succeededCount()).isZero();
         assertThat(result.skippedCount()).isEqualTo(2);
-        assertThat(result.items()).extracting("status").containsExactly("already_published", "already_published");
-        assertThat(result.items()).extracting("url").contains("https://github.com/comment/summary", "https://github.com/comment/1");
+        assertThat(result.items()).isEmpty();
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
+        verify(githubCommentPublicationBatchItemMapper, never()).insert(any(GithubCommentPublicationBatchItem.class));
     }
 
     @Test
@@ -528,11 +534,9 @@ class ReviewServiceImplTest {
         validFinding.setFeedbackStatus("VALID");
         ReviewFinding ignoredFinding = finding(2L, "LOW", "README", 3, "Known issue", "Track separately");
         ignoredFinding.setFeedbackStatus("IGNORED");
+        List<ReviewFinding> findings = List.of(validFinding, ignoredFinding);
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
-        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, ignoredFinding));
+        stubGithubCommentPublishCandidates(findings, List.of(validFinding), null);
         when(githubPullRequestClient.publishPullRequestComments(any(), any())).thenReturn(List.of(
             new GithubReviewCommentResult(null, "PR 总评", null, "pull_request", true, "published", "GitHub comment published", "https://github.com/comment/summary", 100L),
             new GithubReviewCommentResult(1L, "README", 2, "line", true, "published", "GitHub comment published", "https://github.com/comment/1", 101L)
@@ -544,9 +548,7 @@ class ReviewServiceImplTest {
         assertThat(result.attemptedCount()).isEqualTo(2);
         assertThat(result.succeededCount()).isEqualTo(2);
         assertThat(result.skippedCount()).isEqualTo(1);
-        assertThat(result.items()).extracting("findingId").containsExactly(null, 1L, 2L);
-        assertThat(result.items().getLast().status()).isEqualTo("skipped");
-        assertThat(result.items().getLast().message()).isEqualTo("Finding marked as ignored and will not be published");
+        assertThat(result.items()).extracting("findingId").containsExactly(null, 1L);
     }
 
     @Test
@@ -1187,6 +1189,50 @@ class ReviewServiceImplTest {
         when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3))
             .thenReturn(changedFiles.stream().limit(3).toList());
         when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
+    }
+
+    private void stubGithubCommentPublishCandidates(
+        List<ReviewFinding> allFindings,
+        List<ReviewFinding> publishCandidates,
+        GithubCommentPublication prSummaryPublication
+    ) {
+        List<ChangedFile> changedFiles = allFindings.stream()
+            .map(ReviewFinding::getFilePath)
+            .filter(path -> path != null && !path.isBlank())
+            .distinct()
+            .map(path -> changedFile(path, "MODIFY"))
+            .toList();
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(prSummaryPublication);
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(previewStat(
+            allFindings.size(),
+            publishCandidates.size(),
+            Math.max(0L, allFindings.size() - publishCandidates.size())
+        ));
+        when(reviewFindingMapper.selectGithubCommentPublishCandidatesAfterId(
+            org.mockito.Mockito.eq(521L),
+            org.mockito.Mockito.eq(0L),
+            org.mockito.Mockito.anyInt()
+        )).thenReturn(publishCandidates);
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(allFindings));
+        when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
+        when(changedFileMapper.selectList(any())).thenReturn(changedFiles);
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3))
+            .thenReturn(changedFiles.stream().limit(3).toList());
+        when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
+    }
+
+    private GithubCommentPublication publishedPrSummaryPublication() {
+        GithubCommentPublication publication = new GithubCommentPublication();
+        publication.setTaskId(521L);
+        publication.setFindingId(null);
+        publication.setTargetType("pull_request");
+        publication.setSuccess(true);
+        publication.setStatus("published");
+        publication.setGithubUrl("https://github.com/comment/summary");
+        publication.setMessage("GitHub comment published");
+        publication.setPublishedAt(LocalDateTime.of(2026, 6, 7, 10, 1));
+        return publication;
     }
 
     private long commentablePreviewFindingCount(List<ReviewFinding> findings) {

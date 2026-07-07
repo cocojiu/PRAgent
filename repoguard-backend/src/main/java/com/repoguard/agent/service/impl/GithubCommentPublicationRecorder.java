@@ -111,7 +111,7 @@ public class GithubCommentPublicationRecorder {
     }
 
     private String resolvePublicationBatchStatus(GithubCommentPublishResponse response) {
-        if (response.totalFindings() == 0) {
+        if (response.attemptedCount() == 0 && response.skippedCount() == 0) {
             return GithubCommentPublicationBatchStatus.EMPTY.code();
         }
         if (response.failedCount() > 0) {
