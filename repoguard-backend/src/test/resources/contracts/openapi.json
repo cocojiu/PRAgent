@@ -855,35 +855,45 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "organization",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 128
           }
         }, {
           "name" : "repository",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 128
           }
         }, {
           "name" : "provider",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         } ],
         "responses" : {
@@ -997,7 +1007,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -1044,7 +1056,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "requestBody" : {
@@ -1104,7 +1118,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "requestBody" : {
@@ -1164,7 +1180,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -1452,7 +1470,8 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64
           }
         } ],
         "requestBody" : {
@@ -1512,7 +1531,8 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64
           }
         } ],
         "requestBody" : {
@@ -1763,7 +1783,8 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32"
           }
         } ],
         "responses" : {
@@ -1812,7 +1833,8 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32"
           }
         } ],
         "responses" : {
@@ -2135,7 +2157,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -2184,28 +2208,37 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "status",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         }, {
           "name" : "taskId",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64"
           }
         } ],
         "responses" : {
@@ -2268,28 +2301,37 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "status",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         }, {
           "name" : "taskId",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64"
           }
         } ],
         "responses" : {
@@ -2352,7 +2394,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -2496,56 +2540,69 @@
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "repository",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 128
           }
         }, {
           "name" : "status",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         }, {
           "name" : "riskLevel",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         }, {
           "name" : "source",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64
           }
         }, {
           "name" : "triggerSource",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64
           }
         }, {
           "name" : "keyword",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 255
           }
         } ],
         "responses" : {
@@ -2748,7 +2805,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -2797,28 +2856,37 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "page",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "hasFinding",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "boolean"
           }
         } ],
         "responses" : {
@@ -2881,42 +2949,54 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "page",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "severity",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         }, {
           "name" : "category",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 64
           }
         }, {
           "name" : "feedbackStatus",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         } ],
         "responses" : {
@@ -2979,14 +3059,18 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "findingId",
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "requestBody" : {
@@ -3046,7 +3130,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -3095,28 +3181,36 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "page",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100
           }
         }, {
           "name" : "commentableOnly",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "boolean",
+            "default" : false
           }
         } ],
         "responses" : {
@@ -3165,28 +3259,38 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "page",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         }, {
           "name" : "status",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 32
           }
         } ],
         "responses" : {
@@ -3235,7 +3339,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "requestBody" : {
@@ -3295,21 +3401,30 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "page",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
           }
         }, {
           "name" : "pageSize",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         } ],
         "responses" : {
@@ -3372,7 +3487,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -3421,7 +3538,9 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         } ],
         "responses" : {
@@ -3470,14 +3589,20 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         }, {
           "name" : "limit",
           "in" : "query",
           "required" : false,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
           }
         } ],
         "responses" : {
@@ -3715,7 +3840,8 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64"
           }
         } ],
         "requestBody" : {
@@ -3775,7 +3901,8 @@
           "in" : "path",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "integer",
+            "format" : "int64"
           }
         } ],
         "requestBody" : {

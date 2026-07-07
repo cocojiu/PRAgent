@@ -87,17 +87,35 @@ public final class ControllerEndpointCatalog {
     }
 
     public static List<String> requestParamNames(Method method) {
-        return List.of(method.getParameters()).stream()
-            .filter(parameter -> parameter.isAnnotationPresent(RequestParam.class))
+        return requestParameters(method).stream()
             .map(ControllerEndpointCatalog::requestParamName)
             .toList();
     }
 
     public static List<String> pathVariableNames(Method method) {
-        return List.of(method.getParameters()).stream()
-            .filter(parameter -> parameter.isAnnotationPresent(PathVariable.class))
+        return pathVariableParameters(method).stream()
             .map(ControllerEndpointCatalog::pathVariableName)
             .toList();
+    }
+
+    public static List<Parameter> requestParameters(Method method) {
+        return List.of(method.getParameters()).stream()
+            .filter(parameter -> parameter.isAnnotationPresent(RequestParam.class))
+            .toList();
+    }
+
+    public static List<Parameter> pathVariableParameters(Method method) {
+        return List.of(method.getParameters()).stream()
+            .filter(parameter -> parameter.isAnnotationPresent(PathVariable.class))
+            .toList();
+    }
+
+    public static String requestParameterName(Parameter parameter) {
+        return requestParamName(parameter);
+    }
+
+    public static String pathVariableParameterName(Parameter parameter) {
+        return pathVariableName(parameter);
     }
 
     public static List<String> pathTemplateVariableNames(String path) {

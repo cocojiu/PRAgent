@@ -38,6 +38,8 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.Set;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ValueConstants;
 
 public final class OpenApiContractDocument {
 
@@ -149,22 +151,61 @@ public final class OpenApiContractDocument {
 
     private static List<Map<String, Object>> parameters(Endpoint endpoint) {
         List<Map<String, Object>> parameters = new ArrayList<>();
+        List<Parameter> pathVariableParameters = ControllerEndpointCatalog.pathVariableParameters(endpoint.method());
         for (String name : ControllerEndpointCatalog.pathTemplateVariableNames(endpoint.path())) {
-            parameters.add(parameter(name, "path", true));
+            Parameter javaParameter = pathVariableParameters.stream()
+                .filter(parameter -> name.equals(ControllerEndpointCatalog.pathVariableParameterName(parameter)))
+                .findFirst()
+                .orElse(null);
+            parameters.add(parameter(name, "path", true, javaParameter));
         }
-        for (String name : ControllerEndpointCatalog.requestParamNames(endpoint.method())) {
-            parameters.add(parameter(name, "query", false));
+        for (Parameter requestParameter : ControllerEndpointCatalog.requestParameters(endpoint.method())) {
+            String name = ControllerEndpointCatalog.requestParameterName(requestParameter);
+            parameters.add(parameter(name, "query", requestParameterRequired(requestParameter), requestParameter));
         }
         return parameters;
     }
 
-    private static Map<String, Object> parameter(String name, String in, boolean required) {
+    private static Map<String, Object> parameter(String name, String in, boolean required, Parameter javaParameter) {
         Map<String, Object> parameter = new LinkedHashMap<>();
         parameter.put("name", name);
         parameter.put("in", in);
         parameter.put("required", required);
-        parameter.put("schema", scalarSchema("string"));
+        parameter.put("schema", parameterSchema(javaParameter));
         return parameter;
+    }
+
+    private static boolean requestParameterRequired(Parameter parameter) {
+        RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
+        return requestParam != null
+            && requestParam.required()
+            && ValueConstants.DEFAULT_NONE.equals(requestParam.defaultValue());
+    }
+
+    private static Map<String, Object> parameterSchema(Parameter parameter) {
+        if (parameter == null) {
+            return scalarSchema("string");
+        }
+        Map<String, Object> schema = schemaForType(parameter.getParameterizedType(), new LinkedHashSet<>());
+        applyValidationConstraints(parameter, schema);
+        RequestParam requestParam = parameter.getAnnotation(RequestParam.class);
+        if (requestParam != null && !ValueConstants.DEFAULT_NONE.equals(requestParam.defaultValue())) {
+            schema.put("default", coerceDefaultValue(requestParam.defaultValue(), parameter.getType()));
+        }
+        return schema;
+    }
+
+    private static Object coerceDefaultValue(String value, Class<?> type) {
+        if (type == int.class || type == Integer.class) {
+            return Integer.parseInt(value);
+        }
+        if (type == long.class || type == Long.class) {
+            return Long.parseLong(value);
+        }
+        if (type == boolean.class || type == Boolean.class) {
+            return Boolean.parseBoolean(value);
+        }
+        return value;
     }
 
     private static Map<String, Object> requestBody(Method method) {
@@ -510,9 +551,47 @@ public final class OpenApiContractDocument {
     }
 
     private static void applyValidationConstraints(RecordComponent component, Map<String, Object> schema) {
-        annotation(component, NotBlank.class).ifPresent(ignored -> schema.put("minLength", 1));
-        annotation(component, Email.class).ifPresent(ignored -> schema.put("format", "email"));
-        annotation(component, Size.class).ifPresent(size -> {
+        applyValidationConstraints(
+            schema,
+            annotation(component, NotBlank.class),
+            annotation(component, Email.class),
+            annotation(component, Size.class),
+            annotation(component, Pattern.class),
+            annotation(component, Min.class),
+            annotation(component, Max.class),
+            annotation(component, DecimalMin.class),
+            annotation(component, DecimalMax.class)
+        );
+    }
+
+    private static void applyValidationConstraints(Parameter parameter, Map<String, Object> schema) {
+        applyValidationConstraints(
+            schema,
+            annotation(parameter, NotBlank.class),
+            annotation(parameter, Email.class),
+            annotation(parameter, Size.class),
+            annotation(parameter, Pattern.class),
+            annotation(parameter, Min.class),
+            annotation(parameter, Max.class),
+            annotation(parameter, DecimalMin.class),
+            annotation(parameter, DecimalMax.class)
+        );
+    }
+
+    private static void applyValidationConstraints(
+        Map<String, Object> schema,
+        Optional<NotBlank> notBlank,
+        Optional<Email> email,
+        Optional<Size> sizeConstraint,
+        Optional<Pattern> patternConstraint,
+        Optional<Min> minConstraint,
+        Optional<Max> maxConstraint,
+        Optional<DecimalMin> decimalMinConstraint,
+        Optional<DecimalMax> decimalMaxConstraint
+    ) {
+        notBlank.ifPresent(ignored -> schema.put("minLength", 1));
+        email.ifPresent(ignored -> schema.put("format", "email"));
+        sizeConstraint.ifPresent(size -> {
             if ("array".equals(schema.get("type"))) {
                 putIfNonDefault(schema, "minItems", size.min(), 0);
                 putIfNonDefault(schema, "maxItems", size.max(), Integer.MAX_VALUE);
@@ -521,14 +600,14 @@ public final class OpenApiContractDocument {
                 putIfNonDefault(schema, "maxLength", size.max(), Integer.MAX_VALUE);
             }
         });
-        annotation(component, Pattern.class).ifPresent(pattern -> schema.put("pattern", pattern.regexp()));
-        annotation(component, Min.class).ifPresent(min -> schema.put("minimum", min.value()));
-        annotation(component, Max.class).ifPresent(max -> schema.put("maximum", max.value()));
-        annotation(component, DecimalMin.class).ifPresent(min -> {
+        patternConstraint.ifPresent(pattern -> schema.put("pattern", pattern.regexp()));
+        minConstraint.ifPresent(min -> schema.put("minimum", min.value()));
+        maxConstraint.ifPresent(max -> schema.put("maximum", max.value()));
+        decimalMinConstraint.ifPresent(min -> {
             BigDecimal value = new BigDecimal(min.value());
             schema.put(min.inclusive() ? "minimum" : "exclusiveMinimum", value);
         });
-        annotation(component, DecimalMax.class).ifPresent(max -> {
+        decimalMaxConstraint.ifPresent(max -> {
             BigDecimal value = new BigDecimal(max.value());
             schema.put(max.inclusive() ? "maximum" : "exclusiveMaximum", value);
         });
@@ -557,6 +636,10 @@ public final class OpenApiContractDocument {
         }
         annotation = component.getAccessor().getAnnotation(annotationType);
         return Optional.ofNullable(annotation);
+    }
+
+    private static <T extends Annotation> Optional<T> annotation(Parameter parameter, Class<T> annotationType) {
+        return Optional.ofNullable(parameter.getAnnotation(annotationType));
     }
 
     private static String tag(Class<?> controller) {

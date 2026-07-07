@@ -110,6 +110,37 @@ class OpenApiPathsContractTest {
     }
 
     @Test
+    void openApiParametersExposeJavaTypesAndValidationConstraints() {
+        Map<String, Object> paths = map(OpenApiContractDocument.fromControllers(controllers()).get("paths"));
+
+        Map<String, Object> listReviews = operation(paths, "/api/v1/reviews", "get");
+        assertThat(parameterSchema(listReviews, "page"))
+            .containsEntry("type", "integer")
+            .containsEntry("format", "int32")
+            .containsEntry("minimum", 1L)
+            .containsEntry("default", 1);
+        assertThat(parameterSchema(listReviews, "pageSize"))
+            .containsEntry("type", "integer")
+            .containsEntry("format", "int32")
+            .containsEntry("minimum", 1L)
+            .containsEntry("maximum", 100L)
+            .containsEntry("default", 20);
+        assertThat(parameterSchema(listReviews, "repository"))
+            .containsEntry("type", "string")
+            .containsEntry("maxLength", 128);
+
+        Map<String, Object> reviewDetail = operation(paths, "/api/v1/reviews/{id}", "get");
+        assertThat(parameterSchema(reviewDetail, "id"))
+            .containsEntry("type", "integer")
+            .containsEntry("format", "int64")
+            .containsEntry("minimum", 1L);
+
+        Map<String, Object> changedFiles = operation(paths, "/api/v1/reviews/{id}/changed-files", "get");
+        assertThat(parameterSchema(changedFiles, "hasFinding"))
+            .containsEntry("type", "boolean");
+    }
+
+    @Test
     void openApiDocumentUsesCodegenSafeUniqueOperationIds() {
         List<String> operationIds = OpenApiContractDocument.operationIds(OpenApiContractDocument.fromControllers(controllers()));
 
@@ -158,11 +189,24 @@ class OpenApiPathsContractTest {
     }
 
     private Map<String, Object> response(Map<String, Object> paths, String path, String method) {
-        return map(map(map(paths.get(path)).get(method)).get("responses")).entrySet().stream()
+        return map(operation(paths, path, method).get("responses")).entrySet().stream()
             .filter(entry -> "200".equals(entry.getKey()))
             .map(Map.Entry::getValue)
             .map(this::map)
             .findFirst()
+            .orElseThrow();
+    }
+
+    private Map<String, Object> operation(Map<String, Object> paths, String path, String method) {
+        return map(map(paths.get(path)).get(method));
+    }
+
+    private Map<String, Object> parameterSchema(Map<String, Object> operation, String name) {
+        return list(operation.get("parameters")).stream()
+            .map(this::map)
+            .filter(parameter -> name.equals(parameter.get("name")))
+            .findFirst()
+            .map(parameter -> map(parameter.get("schema")))
             .orElseThrow();
     }
 
