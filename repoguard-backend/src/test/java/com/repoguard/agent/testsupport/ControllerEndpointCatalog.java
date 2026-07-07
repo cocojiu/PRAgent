@@ -4,13 +4,18 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -20,6 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 public final class ControllerEndpointCatalog {
+
+    private static final Pattern PATH_VARIABLE_PATTERN = Pattern.compile("\\{([^}/]+)}");
 
     private ControllerEndpointCatalog() {
     }
@@ -84,6 +91,22 @@ public final class ControllerEndpointCatalog {
             .filter(parameter -> parameter.isAnnotationPresent(RequestParam.class))
             .map(ControllerEndpointCatalog::requestParamName)
             .toList();
+    }
+
+    public static List<String> pathVariableNames(Method method) {
+        return List.of(method.getParameters()).stream()
+            .filter(parameter -> parameter.isAnnotationPresent(PathVariable.class))
+            .map(ControllerEndpointCatalog::pathVariableName)
+            .toList();
+    }
+
+    public static List<String> pathTemplateVariableNames(String path) {
+        Set<String> names = new LinkedHashSet<>();
+        Matcher matcher = PATH_VARIABLE_PATTERN.matcher(path);
+        while (matcher.find()) {
+            names.add(matcher.group(1));
+        }
+        return List.copyOf(names);
     }
 
     public static String requestBodyType(Method method) {
@@ -167,6 +190,20 @@ public final class ControllerEndpointCatalog {
         }
         if (!requestParam.value().isBlank()) {
             return requestParam.value();
+        }
+        return parameter.getName();
+    }
+
+    private static String pathVariableName(Parameter parameter) {
+        PathVariable pathVariable = parameter.getAnnotation(PathVariable.class);
+        if (pathVariable == null) {
+            return parameter.getName();
+        }
+        if (!pathVariable.name().isBlank()) {
+            return pathVariable.name();
+        }
+        if (!pathVariable.value().isBlank()) {
+            return pathVariable.value();
         }
         return parameter.getName();
     }

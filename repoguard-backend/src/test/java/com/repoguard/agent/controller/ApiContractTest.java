@@ -111,6 +111,16 @@ class ApiContractTest {
     }
 
     @Test
+    void pathVariablesStayAlignedWithControllerParameters() {
+        controllers().stream()
+            .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
+            .forEach(endpoint -> assertThat(ControllerEndpointCatalog.pathVariableNames(endpoint.method()))
+                .as(ControllerEndpointCatalog.endpointId(endpoint.controller(), endpoint.method())
+                    + " path variables must match " + endpoint.path())
+                .containsExactlyElementsOf(ControllerEndpointCatalog.pathTemplateVariableNames(endpoint.path())));
+    }
+
+    @Test
     void apiSurfaceStaysAlignedWithBackendOwnedContract() throws Exception {
         assertThat(apiSurface())
             .as("Controller method/path/query/body contract changed. Update frontend contract coverage together with this backend-owned API surface.")
