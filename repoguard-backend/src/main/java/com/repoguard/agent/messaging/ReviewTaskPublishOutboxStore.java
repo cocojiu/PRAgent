@@ -24,7 +24,7 @@ public class ReviewTaskPublishOutboxStore {
         ReviewTimelineAppender reviewTimelineAppender,
         ReviewTaskStateMachine reviewTaskStateMachine
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTimelineAppender = Objects.requireNonNull(reviewTimelineAppender, "reviewTimelineAppender");
     }

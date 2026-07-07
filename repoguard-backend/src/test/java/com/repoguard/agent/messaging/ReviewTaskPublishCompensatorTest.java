@@ -46,18 +46,31 @@ class ReviewTaskPublishCompensatorTest {
         reviewTimelineAppender,
         reviewTaskStateMachine
     );
-    private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
-        reviewTaskMapper,
-        reviewTimelineMapper,
-        reviewTaskPublisher,
+    private final ReviewTaskPublishCompensationQuery compensationQuery = new ReviewTaskPublishCompensationQuery(
+        outboxStore,
         properties,
+        compensationPolicy
+    );
+    private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
+        reviewTaskPublisher,
         "test-instance",
         metrics,
         outboxStore,
+        compensationQuery,
         reviewTaskStateMachine,
-        failureClassifier,
-        compensationPolicy
+        failureClassifier
     );
+
+    @Test
+    void outboxStoreRejectsMissingTaskMapper() {
+        assertThatThrownBy(() -> new ReviewTaskPublishOutboxStore(
+            null,
+            reviewTimelineAppender,
+            reviewTaskStateMachine
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskMapper");
+    }
 
     @Test
     void outboxStoreRejectsMissingStateMachine() {
@@ -84,34 +97,43 @@ class ReviewTaskPublishCompensatorTest {
     @Test
     void compensatorRejectsMissingOutboxStore() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            properties,
             "test-instance",
             metrics,
             null,
+            compensationQuery,
             reviewTaskStateMachine,
-            failureClassifier,
-            compensationPolicy
+            failureClassifier
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("outboxStore");
     }
 
     @Test
-    void compensatorRejectsMissingStateMachine() {
+    void compensatorRejectsMissingCompensationQuery() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            properties,
             "test-instance",
             metrics,
             outboxStore,
             null,
-            failureClassifier,
-            compensationPolicy
+            reviewTaskStateMachine,
+            failureClassifier
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("compensationQuery");
+    }
+
+    @Test
+    void compensatorRejectsMissingStateMachine() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
+            reviewTaskPublisher,
+            "test-instance",
+            metrics,
+            outboxStore,
+            compensationQuery,
+            null,
+            failureClassifier
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -120,16 +142,13 @@ class ReviewTaskPublishCompensatorTest {
     @Test
     void compensatorRejectsMissingMetrics() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            properties,
             "test-instance",
             null,
             outboxStore,
+            compensationQuery,
             reviewTaskStateMachine,
-            failureClassifier,
-            compensationPolicy
+            failureClassifier
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
@@ -138,37 +157,32 @@ class ReviewTaskPublishCompensatorTest {
     @Test
     void compensatorRejectsMissingFailureClassifier() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
-            reviewTaskMapper,
-            reviewTimelineMapper,
             reviewTaskPublisher,
-            properties,
             "test-instance",
             metrics,
             outboxStore,
+            compensationQuery,
             reviewTaskStateMachine,
-            null,
-            compensationPolicy
+            null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("failureClassifier");
     }
 
     @Test
-    void compensatorRejectsMissingCompensationPolicy() {
-        assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
-            reviewTaskMapper,
-            reviewTimelineMapper,
-            reviewTaskPublisher,
-            properties,
-            "test-instance",
-            metrics,
-            outboxStore,
-            reviewTaskStateMachine,
-            failureClassifier,
-            null
-        ))
+    void compensationQueryRejectsMissingCompensationPolicy() {
+        assertThatThrownBy(() -> new ReviewTaskPublishCompensationQuery(outboxStore, properties, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("compensationPolicy");
+    }
+
+    @Test
+    void compensationQueryUsesMinimumLimitsForInvalidProperties() {
+        properties.setPublishCompensationMaxAttempts(0);
+        properties.setPublishCompensationBatchSize(0);
+
+        assertThat(compensationQuery.maxAttempts()).isOne();
+        assertThat(compensationQuery.batchSize()).isOne();
     }
 
     @Test
@@ -365,7 +379,7 @@ class ReviewTaskPublishCompensatorTest {
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
 
-        compensator.compensatePublishFailures();
+        compensationQuery.loadDueTasks(LocalDateTime.now());
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
