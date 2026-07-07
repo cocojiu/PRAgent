@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.ReviewTaskDirectPublishFailurePolicy;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -87,10 +88,7 @@ public class ReviewTaskAfterCommitPublisher {
             task,
             ex,
             failedAt,
-            60000,
-            "Message publish failed: ",
-            true,
-            false
+            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
         );
     }
 }

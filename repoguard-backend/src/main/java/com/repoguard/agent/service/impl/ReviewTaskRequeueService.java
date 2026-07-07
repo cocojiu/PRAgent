@@ -8,6 +8,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
+import com.repoguard.agent.messaging.ReviewTaskDirectPublishFailurePolicy;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -131,10 +132,7 @@ class ReviewTaskRequeueService {
             task,
             ex,
             failedAt,
-            Math.max(1000, properties.getPublishCompensationIntervalMs()),
-            "Message manual requeue failed: ",
-            false,
-            true
+            ReviewTaskDirectPublishFailurePolicy.manualRequeue(properties.getPublishCompensationIntervalMs())
         );
     }
 

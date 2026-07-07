@@ -99,6 +99,18 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void outboxStoreRejectsMissingDirectPublishFailurePolicy() {
+        assertThatThrownBy(() -> outboxStore.markDirectPublishFailed(
+            task(),
+            new MessagePublishException("publisher confirm timed out"),
+            LocalDateTime.now(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("policy");
+    }
+
+    @Test
     void compensatorRejectsMissingOutboxStore() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,

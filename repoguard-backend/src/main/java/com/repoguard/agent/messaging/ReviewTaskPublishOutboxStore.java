@@ -182,27 +182,25 @@ public class ReviewTaskPublishOutboxStore {
         ReviewTask task,
         MessagePublishException ex,
         LocalDateTime failedAt,
-        long retryDelayMs,
-        String timelinePrefix,
-        boolean clearLlmQuality,
-        boolean closeCurrentTimeline
+        ReviewTaskDirectPublishFailurePolicy policy
     ) {
+        Objects.requireNonNull(policy, "policy");
         String error = truncate(errorMessage(ex));
         task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
         task.setLlmStatus(LlmStatus.PENDING.code());
-        if (clearLlmQuality) {
+        if (policy.clearLlmQuality()) {
             clearLlmQuality(task);
         }
         task.setPublishAttempts(safeAttempts(task) + 1);
-        task.setNextPublishRetryAt(failedAt.plusNanos(Math.max(1000, retryDelayMs) * 1_000_000));
+        task.setNextPublishRetryAt(failedAt.plusNanos(policy.normalizedRetryDelayMs() * 1_000_000));
         task.setLastPublishError(error);
         task.setPublishClaimedAt(null);
         task.setPublishClaimedBy(null);
         reviewTaskMapper.updateById(task);
-        if (closeCurrentTimeline) {
+        if (policy.closeCurrentTimeline()) {
             markCurrentTimelinesDone(task.getId());
         }
-        appendTimeline(task.getId(), timelinePrefix + error, failedAt, ReviewTimelineStatus.FAILED);
+        appendTimeline(task.getId(), policy.timelinePrefix() + error, failedAt, ReviewTimelineStatus.FAILED);
     }
 
     public void markCurrentTimelinesDone(Long taskId) {
