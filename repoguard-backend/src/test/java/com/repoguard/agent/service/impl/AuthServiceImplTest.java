@@ -22,6 +22,7 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
@@ -46,6 +47,7 @@ class AuthServiceImplTest {
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
     private final UserAccountSessionInvalidator sessionInvalidator =
         new UserAccountSessionInvalidator(userRefreshTokenMapper);
+    private final RepoGuardMetrics metrics = Mockito.mock(RepoGuardMetrics.class);
     private final AuthServiceImpl authService = new AuthServiceImpl(
         userAccountMapper,
         userRefreshTokenMapper,
@@ -53,7 +55,8 @@ class AuthServiceImplTest {
         passwordHashService,
         authProperties,
         authTokenService,
-        sessionInvalidator
+        sessionInvalidator,
+        metrics
     );
 
     @AfterEach
@@ -311,6 +314,7 @@ class AuthServiceImplTest {
         verify(userAccountMapper).updateById(user);
         Mockito.verify(userRefreshTokenMapper, Mockito.times(2)).update(isNull(), any(Wrapper.class));
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
+        verify(metrics).refreshTokenReuseDetected();
         ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getFailureReason()).isEqualTo("refresh token reuse detected");
@@ -411,10 +415,27 @@ class AuthServiceImplTest {
             passwordHashService,
             authProperties,
             authTokenService,
-            null
+            null,
+            metrics
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("sessionInvalidator");
+    }
+
+    @Test
+    void constructorRequiresMetrics() {
+        assertThatThrownBy(() -> new AuthServiceImpl(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            userLoginAuditMapper,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("metrics");
     }
 
     private UserRefreshToken activeRefreshToken(String refreshToken, LocalDateTime expiresAt) {

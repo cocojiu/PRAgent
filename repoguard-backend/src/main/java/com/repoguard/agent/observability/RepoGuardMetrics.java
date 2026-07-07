@@ -70,6 +70,10 @@ public class RepoGuardMetrics {
         ).increment();
     }
 
+    public void refreshTokenReuseDetected() {
+        counter("repoguard.auth.refresh_token.reuse_detected").increment();
+    }
+
     public void githubApiRequest(Duration duration, String operation, String result, String category, String status) {
         timer(
             "repoguard.github.api.request.duration",

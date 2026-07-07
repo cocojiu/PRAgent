@@ -18,6 +18,7 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
@@ -54,6 +55,7 @@ public class AuthServiceImpl implements AuthService {
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
     private final UserAccountSessionInvalidator sessionInvalidator;
+    private final RepoGuardMetrics metrics;
 
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -62,7 +64,8 @@ public class AuthServiceImpl implements AuthService {
         PasswordHashService passwordHashService,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        UserAccountSessionInvalidator sessionInvalidator
+        UserAccountSessionInvalidator sessionInvalidator,
+        RepoGuardMetrics metrics
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
@@ -71,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
         this.authProperties = authProperties;
         this.authTokenService = authTokenService;
         this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
+        this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
     }
 
     @Override
@@ -295,6 +299,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void handleRefreshTokenReuse(UserRefreshToken storedToken, LocalDateTime now) {
+        metrics.refreshTokenReuseDetected();
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user != null && safeSessionVersion(storedToken) == safeSessionVersion(user)) {
             rotateSessionVersionAndPersist(user, now);
