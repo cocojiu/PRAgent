@@ -45,79 +45,6 @@ class ApiContractTest {
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
 
-    private static final List<String> EXPECTED_API_SURFACE = List.of(
-        "GET /api/v1/auth/me query=[] body=-",
-        "GET /api/v1/cache/stats query=[] body=-",
-        "GET /api/v1/config/integrations/github query=[] body=-",
-        "GET /api/v1/config/integrations/mysql query=[] body=-",
-        "GET /api/v1/config/integrations/rabbitmq query=[] body=-",
-        "GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=-",
-        "GET /api/v1/config/review-policy query=[] body=-",
-        "GET /api/v1/config/review-rules query=[] body=-",
-        "GET /api/v1/config/system-settings query=[] body=-",
-        "GET /api/v1/dashboard/high-risk-reviews query=[] body=-",
-        "GET /api/v1/dashboard/llm-quality query=[llmTrendDays] body=-",
-        "GET /api/v1/dashboard/overview query=[llmTrendDays] body=-",
-        "GET /api/v1/dashboard/review-trend query=[] body=-",
-        "GET /api/v1/dashboard/risk-distribution query=[] body=-",
-        "GET /api/v1/dashboard/rules query=[] body=-",
-        "GET /api/v1/dashboard/summary query=[] body=-",
-        "GET /api/v1/message-queue/health query=[] body=-",
-        "GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=-",
-        "GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=-",
-        "GET /api/v1/notifications query=[] body=-",
-        "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword] body=-",
-        "GET /api/v1/reviews/github/pull-requests query=[] body=-",
-        "GET /api/v1/reviews/repositories query=[] body=-",
-        "GET /api/v1/reviews/{id} query=[] body=-",
-        "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=-",
-        "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=-",
-        "GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=-",
-        "GET /api/v1/reviews/{id}/github-comments/publications query=[page, pageSize, status] body=-",
-        "GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=-",
-        "GET /api/v1/reviews/{id}/status query=[] body=-",
-        "GET /api/v1/reviews/{id}/timeline query=[limit] body=-",
-        "GET /api/v1/system/health/summary query=[] body=-",
-        "GET /api/v1/users query=[] body=-",
-        "GET /api/v1/users/audits query=[] body=-",
-        "POST /api/v1/auth/login query=[] body=AuthLoginRequest",
-        "POST /api/v1/auth/logout query=[] body=AuthLogoutRequest",
-        "POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest",
-        "POST /api/v1/auth/refresh-token/reset query=[] body=AuthRefreshTokenResetRequest",
-        "POST /api/v1/auth/register query=[] body=AuthRegisterRequest",
-        "POST /api/v1/config/data-retention/cleanup query=[] body=DataRetentionCleanupRequest",
-        "POST /api/v1/config/integrations/github/test query=[] body=GithubIntegrationConfigRequest",
-        "POST /api/v1/config/integrations/mysql/test query=[] body=ServiceIntegrationConfigRequest",
-        "POST /api/v1/config/integrations/rabbitmq/test query=[] body=ServiceIntegrationConfigRequest",
-        "POST /api/v1/config/notification-bindings query=[] body=NotificationBindingRequest",
-        "POST /api/v1/config/notification-bindings/{id}/test query=[] body=-",
-        "POST /api/v1/config/review-policy/test query=[] body=ReviewPolicyConfigRequest",
-        "POST /api/v1/config/review-rules query=[] body=ReviewRuleConfigRequest",
-        "POST /api/v1/config/secrets/re-encryption query=[] body=SecretReEncryptionRequest",
-        "POST /api/v1/github/webhooks query=[] body=byte[]",
-        "POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=-",
-        "POST /api/v1/notification-events/{id}/retry query=[] body=-",
-        "POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest",
-        "POST /api/v1/reviews/{id}/findings/{findingId}/feedback query=[] body=FindingFeedbackRequest",
-        "POST /api/v1/reviews/{id}/github-comments query=[] body=-",
-        "POST /api/v1/reviews/{id}/human-review query=[] body=HumanReviewRequest",
-        "POST /api/v1/reviews/{id}/retry query=[] body=-",
-        "POST /api/v1/reviews/manual query=[] body=ManualReviewRequest",
-        "POST /api/v1/users query=[] body=UserCreateRequest",
-        "PUT /api/v1/config/integrations/github query=[] body=GithubIntegrationConfigRequest",
-        "PUT /api/v1/config/integrations/mysql query=[] body=ServiceIntegrationConfigRequest",
-        "PUT /api/v1/config/integrations/rabbitmq query=[] body=ServiceIntegrationConfigRequest",
-        "PUT /api/v1/config/notification-bindings/{id} query=[] body=NotificationBindingRequest",
-        "PUT /api/v1/config/notification-bindings/{id}/status query=[] body=NotificationBindingStatusRequest",
-        "PUT /api/v1/config/review-policy query=[] body=ReviewPolicyConfigRequest",
-        "PUT /api/v1/config/review-rules/{id} query=[] body=ReviewRuleConfigRequest",
-        "PUT /api/v1/config/review-rules/{id}/status query=[] body=ReviewRuleStatusRequest",
-        "PUT /api/v1/config/system-settings query=[] body=SystemSettingsRequest",
-        "PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest",
-        "PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest",
-        "DELETE /api/v1/config/notification-bindings/{id} query=[] body=-"
-    );
-
     @Test
     void controllerBasePathsStayVersionedUnderApiV1() {
         controllers().forEach(controller -> {
@@ -179,10 +106,19 @@ class ApiContractTest {
     }
 
     @Test
-    void apiSurfaceStaysAlignedWithBackendOwnedContract() {
+    void apiSurfaceStaysAlignedWithBackendOwnedContract() throws Exception {
         assertThat(apiSurface())
             .as("Controller method/path/query/body contract changed. Update frontend contract coverage together with this backend-owned API surface.")
-            .containsExactlyElementsOf(EXPECTED_API_SURFACE.stream().sorted().toList());
+            .containsExactlyElementsOf(apiSurfaceSnapshot());
+    }
+
+    @Test
+    void apiSurfaceSnapshotStaysSortedAndUnique() throws Exception {
+        List<String> snapshot = apiSurfaceSnapshot();
+
+        assertThat(snapshot)
+            .as("API surface snapshot should stay sorted so endpoint diffs remain reviewable")
+            .containsExactlyElementsOf(snapshot.stream().sorted().distinct().toList());
     }
 
     @Test
@@ -322,6 +258,13 @@ class ApiContractTest {
             .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
             .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path())
             .sorted()
+            .toList();
+    }
+
+    private List<String> apiSurfaceSnapshot() throws Exception {
+        return Files.readAllLines(Path.of("src/test/resources/contracts/api-surface.snapshot")).stream()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty())
             .toList();
     }
 
