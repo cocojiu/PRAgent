@@ -4,9 +4,7 @@ import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,7 +50,6 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     @Override
     @Cacheable(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS)
     public List<GithubPullRequestSummary> listOpenPullRequests() {
-        LocalDateTime startedAt = LocalDateTime.now();
         GithubIntegrationSettings settings = loadGithubSettings();
         GithubRepositoryRef repositoryRef = configuredRepository(settings);
         String owner = repositoryRef.owner();
@@ -62,29 +59,21 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         }
         String baseUrl = baseUrl(settings);
 
-        try {
-            List<GithubPullRequestSummary> pullRequests = pullRequestReader.listOpenPullRequests(
+        return healthReporter.recordReadOperation(
+            settings,
+            "list_open_pull_requests",
+            () -> pullRequestReader.listOpenPullRequests(
                 settings,
                 baseUrl,
                 owner,
                 repository,
                 resilience
-            );
-            recordGithubApiRequest(startedAt, "list_open_pull_requests", "success", null, null);
-            healthReporter.markChecked(settings, null);
-            return pullRequests;
-        } catch (RuntimeException ex) {
-            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
-            recordGithubApiRequest(startedAt, "list_open_pull_requests", "failed", classified);
-            recordExternalFailure(classified);
-            healthReporter.markChecked(settings, healthReporter.conciseError(classified));
-            throw classified;
-        }
+            )
+        );
     }
 
     @Override
     public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
-        LocalDateTime startedAt = LocalDateTime.now();
         GithubIntegrationSettings settings = loadGithubSettings();
         String owner = choose(task.getOrganization(), settings.defaultOwner());
         String repository = choose(task.getRepository(), settings.defaultRepo());
@@ -94,7 +83,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
 
         String baseUrl = baseUrl(settings);
 
-        try {
+        return healthReporter.recordReadOperation(settings, "fetch_pull_request_diff", () -> {
             List<GithubChangedFile> changedFiles = changedFileReader.fetchChangedFiles(
                 settings,
                 baseUrl,
@@ -104,16 +93,8 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 resilience
             );
 
-            healthReporter.markChecked(settings, null);
-            recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "success", null, null);
             return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
-        } catch (RuntimeException ex) {
-            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
-            recordGithubApiRequest(startedAt, "fetch_pull_request_diff", "failed", classified);
-            recordExternalFailure(classified);
-            healthReporter.markChecked(settings, healthReporter.conciseError(classified));
-            throw classified;
-        }
+        });
     }
 
     @Override
@@ -133,29 +114,6 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             drafts,
             resilience
         );
-    }
-
-    private void recordExternalFailure(RuntimeException ex) {
-        healthReporter.recordExternalFailure(ex);
-    }
-
-    private void recordGithubApiRequest(
-        LocalDateTime startedAt,
-        String operation,
-        String result,
-        RuntimeException ex
-    ) {
-        healthReporter.recordGithubApiRequest(startedAt, operation, result, ex);
-    }
-
-    private void recordGithubApiRequest(
-        LocalDateTime startedAt,
-        String operation,
-        String result,
-        String category,
-        String status
-    ) {
-        healthReporter.recordGithubApiRequest(startedAt, operation, result, category, status);
     }
 
     private GithubIntegrationSettings loadGithubSettings() {

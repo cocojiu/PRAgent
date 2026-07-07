@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
@@ -75,6 +76,32 @@ class GithubPullRequestClientImplTest {
                 .counter();
             assertThat(counter).isNotNull();
             assertThat(counter.count()).isEqualTo(1.0);
+        }
+    }
+
+    @Test
+    void fetchPullRequestDiffRecordsClassifiedFailureThroughHealthReporter() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(30, 0)) {
+            server.failNextFilesRequestWithStatus(429);
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            assertThatThrownBy(() -> client.fetchPullRequestDiff(reviewTask()))
+                .isInstanceOf(ExternalCallException.class)
+                .hasMessageContaining("github_rate_limited")
+                .hasMessageContaining("status=429");
+
+            var counter = meterRegistry.find("repoguard.github.api.request")
+                .tag("operation", "fetch_pull_request_diff")
+                .tag("result", "failed")
+                .tag("category", "github_rate_limited")
+                .tag("status", "429")
+                .counter();
+            assertThat(counter).isNotNull();
+            assertThat(counter.count()).isEqualTo(1.0);
+            org.mockito.Mockito.verify(githubIntegrationProvider).markChecked(
+                org.mockito.ArgumentMatchers.any(GithubIntegrationSettings.class),
+                org.mockito.ArgumentMatchers.contains("github_rate_limited")
+            );
         }
     }
 
@@ -212,10 +239,21 @@ class GithubPullRequestClientImplTest {
         List<String> commentPaths = new ArrayList<>();
         List<String> commentBodies = new ArrayList<>();
         AtomicInteger lineCommentFailures = new AtomicInteger();
+        AtomicInteger filesFailureStatus = new AtomicInteger();
         server.createContext("/", exchange -> {
             URI uri = exchange.getRequestURI();
             String body;
             if ("/repos/octocat/api/pulls/7/files".equals(uri.getPath())) {
+                int failureStatus = filesFailureStatus.getAndSet(0);
+                if (failureStatus > 0) {
+                    body = "{\"message\":\"API rate limit exceeded\"}";
+                    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(failureStatus, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                    return;
+                }
                 int page = queryInt(uri, "page", 1);
                 int perPage = queryInt(uri, "per_page", 30);
                 filesPageRequests.add(page);
@@ -263,7 +301,8 @@ class GithubPullRequestClientImplTest {
             pullRequestPageRequests,
             commentPaths,
             commentBodies,
-            lineCommentFailures
+            lineCommentFailures,
+            filesFailureStatus
         );
     }
 
@@ -312,7 +351,8 @@ class GithubPullRequestClientImplTest {
         List<Integer> pullRequestPageRequests,
         List<String> commentPaths,
         List<String> commentBodies,
-        AtomicInteger lineCommentFailures
+        AtomicInteger lineCommentFailures,
+        AtomicInteger filesFailureStatus
     ) implements AutoCloseable {
 
         @Override
@@ -322,6 +362,10 @@ class GithubPullRequestClientImplTest {
 
         void failNextLineCommentAsUnresolvable() {
             lineCommentFailures.set(1);
+        }
+
+        void failNextFilesRequestWithStatus(int status) {
+            filesFailureStatus.set(status);
         }
     }
 }

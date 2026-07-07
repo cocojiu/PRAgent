@@ -2,11 +2,13 @@ package com.repoguard.agent.github;
 
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -31,6 +33,26 @@ public class GithubIntegrationHealthReporter {
     public void recordExternalFailure(RuntimeException ex) {
         if (ex instanceof ExternalCallException externalCallException) {
             metrics.externalCallFailed(externalCallException);
+        }
+    }
+
+    public <T> T recordReadOperation(
+        GithubIntegrationSettings settings,
+        String operation,
+        Supplier<T> supplier
+    ) {
+        LocalDateTime startedAt = LocalDateTime.now();
+        try {
+            T result = supplier.get();
+            recordGithubApiRequest(startedAt, operation, "success", null, null);
+            markChecked(settings, null);
+            return result;
+        } catch (RuntimeException ex) {
+            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            recordGithubApiRequest(startedAt, operation, "failed", classified);
+            recordExternalFailure(classified);
+            markChecked(settings, conciseError(classified));
+            throw classified;
         }
     }
 
