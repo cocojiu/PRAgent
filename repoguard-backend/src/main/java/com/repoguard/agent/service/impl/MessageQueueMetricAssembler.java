@@ -16,7 +16,7 @@ class MessageQueueMetricAssembler {
 
     MessageQueueMetricAssembler(RabbitReviewQueueProperties properties, RepoGuardMetrics metrics) {
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
     List<MessageQueueMetricDto> assemble(MessageQueueHealthSummary summary) {
@@ -44,9 +44,6 @@ class MessageQueueMetricAssembler {
     }
 
     private void recordQueueDepth(long publishFailed, long executionTimeout, long requeuePending, long claimed, long dlqBacklog) {
-        if (metrics == null) {
-            return;
-        }
         metrics.rabbitQueueDepth(properties.getQueue(), "publish_failed", publishFailed);
         metrics.rabbitQueueDepth(properties.getQueue(), "execution_timeout", executionTimeout);
         metrics.rabbitQueueDepth(properties.getQueue(), "requeue_pending", requeuePending);

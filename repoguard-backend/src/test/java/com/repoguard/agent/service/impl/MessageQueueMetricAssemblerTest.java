@@ -1,8 +1,8 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueMetricDto;
@@ -43,7 +43,8 @@ class MessageQueueMetricAssemblerTest {
 
     @Test
     void treatsMissingCountsAsZeroAndNeverShowsNegativeSuccessCount() {
-        MessageQueueMetricAssembler assembler = new MessageQueueMetricAssembler(properties, null);
+        RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+        MessageQueueMetricAssembler assembler = new MessageQueueMetricAssembler(properties, metrics);
 
         List<MessageQueueMetricDto> result = assembler.assemble(summary(1L, 4L, null, null, null, 2L));
         Map<String, MessageQueueMetricDto> byLabel = result.stream()
@@ -56,15 +57,26 @@ class MessageQueueMetricAssemblerTest {
     }
 
     @Test
-    void nullSummaryProducesZeroCardsWithoutRecordingWhenMetricsAbsent() {
-        RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
-        MessageQueueMetricAssembler assemblerWithoutMetrics = new MessageQueueMetricAssembler(properties, null);
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new MessageQueueMetricAssembler(properties, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
 
-        List<MessageQueueMetricDto> result = assemblerWithoutMetrics.assemble(null);
+    @Test
+    void nullSummaryProducesZeroCardsAndRecordsZeroQueueDepth() {
+        RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+        MessageQueueMetricAssembler assembler = new MessageQueueMetricAssembler(properties, metrics);
+
+        List<MessageQueueMetricDto> result = assembler.assemble(null);
 
         assertThat(result).hasSize(6);
         assertThat(result).allMatch(metric -> "0".equals(metric.value()));
-        verifyNoInteractions(metrics);
+        verify(metrics).rabbitQueueDepth(properties.getQueue(), "publish_failed", 0L);
+        verify(metrics).rabbitQueueDepth(properties.getQueue(), "execution_timeout", 0L);
+        verify(metrics).rabbitQueueDepth(properties.getQueue(), "requeue_pending", 0L);
+        verify(metrics).rabbitQueueDepth(properties.getQueue(), "claimed", 0L);
+        verify(metrics).rabbitQueueDepth(properties.getDeadLetterQueue(), "dlq", 0L);
     }
 
     private MessageQueueHealthSummary summary(

@@ -26,6 +26,7 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
@@ -48,6 +49,7 @@ class MessageQueueHealthServiceImplTest {
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final RabbitRuntimeHealthProbe runtimeHealthProbe = new RabbitRuntimeHealthProbe(rabbitTemplate, properties);
     private final MessageQueueRuntimeConfigAssembler runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(
@@ -57,7 +59,7 @@ class MessageQueueHealthServiceImplTest {
     private final MessageQueueExceptionTaskAssembler exceptionTaskAssembler = new MessageQueueExceptionTaskAssembler(
         reviewTaskStateMachine
     );
-    private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, null);
+    private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
     private final MessageQueueHealthServiceImpl service = createService(null);
 
     @Test
