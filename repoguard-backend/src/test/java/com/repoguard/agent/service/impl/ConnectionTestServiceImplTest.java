@@ -16,8 +16,8 @@ import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
-import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
@@ -45,7 +45,7 @@ class ConnectionTestServiceImplTest {
     private final GithubConnectionProbe githubConnectionProbe =
         new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
     private final LlmConnectionProbe llmConnectionProbe =
-        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new LlmHttpResponseReader());
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new ExternalHttpResponseReader());
     private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
     private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
         new RabbitMqProbeConnectionFactory(secretCryptoService);

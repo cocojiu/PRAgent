@@ -1,4 +1,4 @@
-package com.repoguard.agent.review;
+package com.repoguard.agent.external;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,9 +10,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.client.MockClientHttpResponse;
 import org.springframework.web.client.RestClientResponseException;
 
-class LlmHttpResponseReaderTest {
+class ExternalHttpResponseReaderTest {
 
-    private final LlmHttpResponseReader reader = new LlmHttpResponseReader();
+    private final ExternalHttpResponseReader reader = new ExternalHttpResponseReader();
 
     @Test
     void readSuccessfulBodyReturnsRawBody() throws IOException {
@@ -31,20 +31,20 @@ class LlmHttpResponseReaderTest {
         );
         response.getHeaders().add("Retry-After", "30");
 
-        assertThatThrownBy(() -> reader.readSuccessfulBody(response, "LLM request failed"))
+        assertThatThrownBy(() -> reader.readSuccessfulBody(response, "External request failed"))
             .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {
                 assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                 assertThat(ex.getStatusText()).isEqualTo("Too Many Requests");
                 assertThat(ex.getResponseHeaders()).isNotNull();
                 assertThat(ex.getResponseHeaders().getFirst("Retry-After")).isEqualTo("30");
                 assertThat(ex.getResponseBodyAsString()).isEqualTo("{\"error\":{\"message\":\"rate limited\"}}");
-                assertThat(ex.getMessage()).contains("LLM request failed with HTTP status 429");
+                assertThat(ex.getMessage()).contains("External request failed with HTTP status 429");
             });
     }
 
     @Test
     void readSuccessfulBodyRejectsMissingResponse() {
-        assertThatThrownBy(() -> reader.readSuccessfulBody(null, "LLM request failed"))
+        assertThatThrownBy(() -> reader.readSuccessfulBody(null, "External request failed"))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("response");
     }

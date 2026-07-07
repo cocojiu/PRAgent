@@ -31,8 +31,8 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
-import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
@@ -65,7 +65,7 @@ class SystemConfigServiceImplTest {
     private final GithubConnectionProbe githubConnectionProbe =
         new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
     private final LlmConnectionProbe llmConnectionProbe =
-        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new LlmHttpResponseReader());
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new ExternalHttpResponseReader());
     private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
     private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
         new RabbitMqProbeConnectionFactory(secretCryptoService);

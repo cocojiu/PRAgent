@@ -6,8 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
-import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
@@ -32,7 +32,7 @@ class LlmConnectionProbeTest {
         RestClient.builder(),
         responseParser(),
         secretCryptoService,
-        new LlmHttpResponseReader()
+        new ExternalHttpResponseReader()
     );
 
     @Test

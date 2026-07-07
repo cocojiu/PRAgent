@@ -8,6 +8,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +31,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final ExternalCallResilience resilience;
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmReviewPipeline reviewPipeline;
-    private final LlmHttpResponseReader responseReader;
+    private final ExternalHttpResponseReader responseReader;
 
     @Autowired
     public LlmPullRequestReviewer(
@@ -41,7 +42,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalCallResilience resilience,
         LlmReviewPromptBuilder promptBuilder,
         LlmReviewPipeline reviewPipeline,
-        LlmHttpResponseReader responseReader
+        ExternalHttpResponseReader responseReader
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");

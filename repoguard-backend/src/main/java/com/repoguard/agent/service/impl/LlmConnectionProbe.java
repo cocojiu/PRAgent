@@ -3,8 +3,8 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
-import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -30,13 +30,13 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
     private final RestClient.Builder restClientBuilder;
     private final LlmConnectionProbeResponseParser responseParser;
     private final SecretCryptoService secretCryptoService;
-    private final LlmHttpResponseReader responseReader;
+    private final ExternalHttpResponseReader responseReader;
 
     public LlmConnectionProbe(
         RestClient.Builder restClientBuilder,
         LlmConnectionProbeResponseParser responseParser,
         SecretCryptoService secretCryptoService,
-        LlmHttpResponseReader responseReader
+        ExternalHttpResponseReader responseReader
     ) {
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.responseParser = Objects.requireNonNull(responseParser, "responseParser");

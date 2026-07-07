@@ -1,4 +1,4 @@
-package com.repoguard.agent.review;
+package com.repoguard.agent.external;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class LlmHttpResponseReader {
+public class ExternalHttpResponseReader {
 
     public byte[] readSuccessfulBody(ClientHttpResponse response, String failureMessagePrefix) throws IOException {
         Objects.requireNonNull(response, "response");

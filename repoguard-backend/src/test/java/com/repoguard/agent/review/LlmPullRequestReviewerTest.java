@@ -13,6 +13,7 @@ import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -37,7 +38,7 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             null,
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new LlmHttpResponseReader()
+            new ExternalHttpResponseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("promptBuilder");
@@ -53,7 +54,7 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new LlmHttpResponseReader()
+            new ExternalHttpResponseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
@@ -69,7 +70,7 @@ class LlmPullRequestReviewerTest {
             null,
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new LlmHttpResponseReader()
+            new ExternalHttpResponseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("resilience");
@@ -480,7 +481,7 @@ class LlmPullRequestReviewerTest {
             effectiveResilience,
             promptBuilder,
             pipeline(ruleBasedReviewer, objectMapper, effectiveMetrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
-            new LlmHttpResponseReader()
+            new ExternalHttpResponseReader()
         );
     }
 
@@ -608,7 +609,7 @@ class LlmPullRequestReviewerTest {
                     DiffChunkingTestFixtures.chunker(),
                     new LlmReviewPromptBuilder()
                 ),
-                new LlmHttpResponseReader()
+                new ExternalHttpResponseReader()
             );
             this.reviewedChunks = reviewedChunks;
             this.failingFilePart = failingFilePart;
