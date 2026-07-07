@@ -59,6 +59,22 @@ class MessageQueueExceptionTaskAssemblerTest {
     }
 
     @Test
+    void normalizesHistoricalStatusValuesBeforeFilteringAndRendering() {
+        List<MessageQueueExceptionTaskDto> tasks = assembler.assemble(List.of(
+            task(1L, " publish_failed ", 1, null, null, "publish failed", LocalDateTime.of(2026, 6, 10, 21, 0)),
+            task(2L, " execution_timeout ", 0, null, null, "timeout", LocalDateTime.of(2026, 6, 10, 21, 1)),
+            task(3L, "requeue_pending", 0, null, null, "requeue", LocalDateTime.of(2026, 6, 10, 21, 2)),
+            task(4L, "dlq", 0, null, null, "dead", LocalDateTime.of(2026, 6, 10, 21, 3)),
+            task(5L, " queued ", 0, null, null, null, LocalDateTime.of(2026, 6, 10, 21, 4))
+        ), 3);
+
+        assertThat(tasks).extracting(MessageQueueExceptionTaskDto::taskId)
+            .containsExactly(4L, 3L, 2L, 1L);
+        assertThat(tasks).extracting(MessageQueueExceptionTaskDto::status)
+            .containsExactly("DLQ", "REQUEUE_PENDING", "EXECUTION_TIMEOUT", "PUBLISH_FAILED");
+    }
+
+    @Test
     void treatsNullOrEmptySourceAsEmptyResult() {
         assertThat(assembler.assemble(null, 3)).isEmpty();
         assertThat(assembler.assemble(List.of(), 3)).isEmpty();

@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -53,11 +54,11 @@ class MessageQueueExceptionTaskAssembler {
     private boolean isExceptionTask(ReviewTask task) {
         return task != null && (isPublishFailed(task) || reviewTaskStateMachine.isExecutionTimeout(task.getStatus())
             || reviewTaskStateMachine.isRequeuePending(task.getStatus())
-            || STATUS_DLQ.equals(task.getStatus()));
+            || isDlq(task));
     }
 
     private String exceptionStatus(ReviewTask task, int maxAttempts) {
-        if (STATUS_DLQ.equals(task.getStatus())) {
+        if (isDlq(task)) {
             return STATUS_DLQ;
         }
         if (isRetryExhausted(task, maxAttempts)) {
@@ -66,7 +67,7 @@ class MessageQueueExceptionTaskAssembler {
         if (task.getPublishClaimedAt() != null) {
             return "PUBLISH_CLAIMED";
         }
-        return task.getStatus();
+        return normalizedStatus(task);
     }
 
     private boolean isPublishFailed(ReviewTask task) {
@@ -75,6 +76,17 @@ class MessageQueueExceptionTaskAssembler {
 
     private boolean isRetryExhausted(ReviewTask task, int maxAttempts) {
         return isPublishFailed(task) && safeAttempts(task) >= maxAttempts;
+    }
+
+    private boolean isDlq(ReviewTask task) {
+        return STATUS_DLQ.equals(normalizedStatus(task));
+    }
+
+    private String normalizedStatus(ReviewTask task) {
+        if (task.getStatus() == null || task.getStatus().isBlank()) {
+            return null;
+        }
+        return task.getStatus().trim().toUpperCase(Locale.ROOT);
     }
 
     private int safeAttempts(ReviewTask task) {
