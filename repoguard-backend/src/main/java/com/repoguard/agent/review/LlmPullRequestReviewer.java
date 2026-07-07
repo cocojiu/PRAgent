@@ -1,17 +1,15 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
-import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -26,27 +24,24 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     private final ReviewPolicyProvider reviewPolicyProvider;
     private final RestClient.Builder restClientBuilder;
-    private final ObjectMapper objectMapper;
     private final RepoGuardMetrics metrics;
     private final ExternalCallResilience resilience;
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmReviewPipeline reviewPipeline;
-    private final ExternalHttpResponseReader responseReader;
+    private final ExternalHttpJsonResponseReader responseReader;
 
     @Autowired
     public LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
         RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
         RepoGuardMetrics metrics,
         ExternalCallResilience resilience,
         LlmReviewPromptBuilder promptBuilder,
         LlmReviewPipeline reviewPipeline,
-        ExternalHttpResponseReader responseReader
+        ExternalHttpJsonResponseReader responseReader
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
-        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.resilience = Objects.requireNonNull(resilience, "resilience");
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
@@ -85,18 +80,19 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         );
 
         try {
-            byte[] response = executeLlm("chat_completions", () -> restClient.post()
+            JsonNode response = executeLlm("chat_completions", () -> restClient.post()
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + apiKey.trim())
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .exchange((request, clientResponse) -> responseReader.readSuccessfulBody(
+                .exchange((request, clientResponse) -> responseReader.readSuccessfulJson(
                     clientResponse,
+                    JsonNode.class,
                     "LLM request failed"
                 )));
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
-            return extractLlmCallResult(response == null ? "" : new String(response, StandardCharsets.UTF_8));
+            return extractLlmCallResult(response);
         } catch (RuntimeException ex) {
             var classified = ExternalCallErrorClassifier.llm(ex);
             metrics.externalCallFailed(classified);
@@ -105,9 +101,11 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         }
     }
 
-    private LlmCallResult extractLlmCallResult(String response) {
+    private LlmCallResult extractLlmCallResult(JsonNode root) {
         try {
-            JsonNode root = objectMapper.readTree(response == null ? "" : response);
+            if (root == null) {
+                throw new IllegalStateException("Empty LLM HTTP response");
+            }
             return new LlmCallResult(
                 root.at("/choices/0/message/content").asText(""),
                 intValue(root.at("/usage/prompt_tokens")),

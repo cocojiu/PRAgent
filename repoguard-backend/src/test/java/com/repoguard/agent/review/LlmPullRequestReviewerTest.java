@@ -13,6 +13,7 @@ import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
@@ -33,12 +34,11 @@ class LlmPullRequestReviewerTest {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
-            new ObjectMapper(),
             org.mockito.Mockito.mock(RepoGuardMetrics.class),
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             null,
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new ExternalHttpResponseReader()
+            responseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("promptBuilder");
@@ -49,12 +49,11 @@ class LlmPullRequestReviewerTest {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
-            new ObjectMapper(),
             null,
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new ExternalHttpResponseReader()
+            responseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
@@ -65,12 +64,11 @@ class LlmPullRequestReviewerTest {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
-            new ObjectMapper(),
             org.mockito.Mockito.mock(RepoGuardMetrics.class),
             null,
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            new ExternalHttpResponseReader()
+            responseReader()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("resilience");
@@ -81,7 +79,6 @@ class LlmPullRequestReviewerTest {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
-            new ObjectMapper(),
             org.mockito.Mockito.mock(RepoGuardMetrics.class),
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
@@ -97,7 +94,6 @@ class LlmPullRequestReviewerTest {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
-            new ObjectMapper(),
             org.mockito.Mockito.mock(RepoGuardMetrics.class),
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
@@ -476,12 +472,11 @@ class LlmPullRequestReviewerTest {
         return new LlmPullRequestReviewer(
             reviewPolicyProvider,
             RestClient.builder(),
-            objectMapper,
             effectiveMetrics,
             effectiveResilience,
             promptBuilder,
             pipeline(ruleBasedReviewer, objectMapper, effectiveMetrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
-            new ExternalHttpResponseReader()
+            responseReader(objectMapper)
         );
     }
 
@@ -492,6 +487,14 @@ class LlmPullRequestReviewerTest {
             return supplier.get();
         });
         return resilience;
+    }
+
+    private static ExternalHttpJsonResponseReader responseReader() {
+        return responseReader(new ObjectMapper());
+    }
+
+    private static ExternalHttpJsonResponseReader responseReader(ObjectMapper objectMapper) {
+        return new ExternalHttpJsonResponseReader(objectMapper, new ExternalHttpResponseReader());
     }
 
     private static LlmReviewPipeline pipeline(
@@ -598,7 +601,6 @@ class LlmPullRequestReviewerTest {
             super(
                 reviewPolicyProvider,
                 RestClient.builder(),
-                new ObjectMapper(),
                 metrics,
                 passthroughResilience(),
                 new LlmReviewPromptBuilder(),
@@ -609,7 +611,7 @@ class LlmPullRequestReviewerTest {
                     DiffChunkingTestFixtures.chunker(),
                     new LlmReviewPromptBuilder()
                 ),
-                new ExternalHttpResponseReader()
+                responseReader()
             );
             this.reviewedChunks = reviewedChunks;
             this.failingFilePart = failingFilePart;
