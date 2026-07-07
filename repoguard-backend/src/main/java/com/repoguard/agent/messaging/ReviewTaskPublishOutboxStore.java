@@ -111,16 +111,16 @@ public class ReviewTaskPublishOutboxStore {
 
     public boolean markQueuedForPublish(
         ReviewTask task,
-        LocalDateTime claimedAt,
-        String instanceId,
+        RabbitPublishClaim claim,
         int nextAttempt
     ) {
+        Objects.requireNonNull(claim, "claim");
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
                 .in("status", reviewTaskStateMachine.publishQueueCandidateStatuses())
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
+                .eq("publish_claimed_at", claim.claimedAt())
+                .eq("publish_claimed_by", claim.instanceId())
                 .set("status", reviewTaskStateMachine.statusWhenQueued())
                 .set("llm_status", LlmStatus.PENDING.code())
                 .set("publish_attempts", nextAttempt)
@@ -138,13 +138,14 @@ public class ReviewTaskPublishOutboxStore {
         return true;
     }
 
-    public boolean clearPublishClaim(ReviewTask task, LocalDateTime claimedAt, String instanceId) {
+    public boolean clearPublishClaim(ReviewTask task, RabbitPublishClaim claim) {
+        Objects.requireNonNull(claim, "claim");
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
                 .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
+                .eq("publish_claimed_at", claim.claimedAt())
+                .eq("publish_claimed_by", claim.instanceId())
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
         );
@@ -158,17 +159,17 @@ public class ReviewTaskPublishOutboxStore {
 
     public boolean markClaimedPublishFailed(
         ReviewTask task,
-        LocalDateTime claimedAt,
-        String instanceId,
+        RabbitPublishClaim claim,
         LocalDateTime nextRetryAt,
         String error
     ) {
+        Objects.requireNonNull(claim, "claim");
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
                 .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                .eq("publish_claimed_at", claimedAt)
-                .eq("publish_claimed_by", instanceId)
+                .eq("publish_claimed_at", claim.claimedAt())
+                .eq("publish_claimed_by", claim.instanceId())
                 .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
                 .set("next_publish_retry_at", nextRetryAt)
                 .set("last_publish_error", error)

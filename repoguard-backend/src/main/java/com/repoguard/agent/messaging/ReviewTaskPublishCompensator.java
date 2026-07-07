@@ -79,8 +79,9 @@ public class ReviewTaskPublishCompensator {
     void compensate(ReviewTask task) {
         try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
             LocalDateTime claimedAt = LocalDateTime.now();
+            RabbitPublishClaim claim = compensationQuery.claim(claimedAt, instanceId);
             String recoverySource = recoverySource(task);
-            if (!claimTask(task, claimedAt)) {
+            if (!claimTask(task, claim)) {
                 LOGGER.info(
                     "Review task publish compensation skipped taskId={} repository={} prNumber={} operation=review_publish_compensation result=claim_failed status={} attempts={} maxAttempts={}",
                     task.getId(),
@@ -104,7 +105,7 @@ public class ReviewTaskPublishCompensator {
                 compensationQuery.maxAttempts(),
                 claimedAt
             );
-            if (!markQueuedBeforePublish(task, claimedAt, nextAttempt)) {
+            if (!markQueuedBeforePublish(task, claim, nextAttempt)) {
                 LOGGER.warn(
                     "Review task publish compensation skipped taskId={} repository={} prNumber={} operation=review_publish_compensation result=mark_queued_failed recoverySource={} claimedAt={}",
                     task.getId(),
@@ -117,7 +118,7 @@ public class ReviewTaskPublishCompensator {
             }
             try {
                 reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
-                outboxStore.clearPublishClaim(task, claimedAt, instanceId);
+                outboxStore.clearPublishClaim(task, claim);
                 outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
                 metrics.rabbitPublishCompensationSucceeded("publish");
                 LOGGER.info(
@@ -130,7 +131,7 @@ public class ReviewTaskPublishCompensator {
                 );
             } catch (MessagePublishException ex) {
                 String errorMessage = errorMessage(ex);
-                if (markPublishFailed(task, claimedAt, ex)) {
+                if (markPublishFailed(task, claim, ex)) {
                     outboxStore.appendTimeline(
                         task.getId(),
                         "Message publish retry failed: " + truncate(errorMessage),
@@ -162,8 +163,8 @@ public class ReviewTaskPublishCompensator {
         }
     }
 
-    private boolean claimTask(ReviewTask task, LocalDateTime claimedAt) {
-        return outboxStore.claimForPublish(task, compensationQuery.claim(claimedAt, instanceId));
+    private boolean claimTask(ReviewTask task, RabbitPublishClaim claim) {
+        return outboxStore.claimForPublish(task, claim);
     }
 
     private String recoverySource(ReviewTask task) {
@@ -178,14 +179,14 @@ public class ReviewTaskPublishCompensator {
             : "stale_queued_claim";
     }
 
-    private boolean markQueuedBeforePublish(ReviewTask task, LocalDateTime claimedAt, int nextAttempt) {
-        return outboxStore.markQueuedForPublish(task, claimedAt, instanceId, nextAttempt);
+    private boolean markQueuedBeforePublish(ReviewTask task, RabbitPublishClaim claim, int nextAttempt) {
+        return outboxStore.markQueuedForPublish(task, claim, nextAttempt);
     }
 
-    private boolean markPublishFailed(ReviewTask task, LocalDateTime claimedAt, MessagePublishException ex) {
+    private boolean markPublishFailed(ReviewTask task, RabbitPublishClaim claim, MessagePublishException ex) {
         LocalDateTime nextRetryAt = compensationQuery.nextRetryAt(LocalDateTime.now());
         String error = truncate(errorMessage(ex));
-        return outboxStore.markClaimedPublishFailed(task, claimedAt, instanceId, nextRetryAt, error);
+        return outboxStore.markClaimedPublishFailed(task, claim, nextRetryAt, error);
     }
 
     private ReviewTaskMessage toMessage(ReviewTask task, LocalDateTime queuedAt) {
