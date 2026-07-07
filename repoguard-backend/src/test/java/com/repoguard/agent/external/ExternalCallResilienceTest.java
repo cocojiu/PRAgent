@@ -44,7 +44,50 @@ class ExternalCallResilienceTest {
             });
     }
 
+    @Test
+    void constructorRejectsMissingLlmBulkhead() {
+        assertThatThrownBy(() -> new ExternalCallResilience(
+            circuitBreaker("github-test"),
+            retry("github-test"),
+            rateLimiter("github-test"),
+            circuitBreaker("llm-test"),
+            retry("llm-test"),
+            rateLimiter("llm-test"),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("llmBulkhead");
+    }
+
+    @Test
+    void llmBulkheadFullUsesStableExternalCallClassification() {
+        Bulkhead bulkhead = Bulkhead.of("llm-test", BulkheadConfig.custom().maxConcurrentCalls(1).build());
+        bulkhead.acquirePermission();
+        ExternalCallResilience resilience = resilience(circuitBreaker("github-test"), circuitBreaker("llm-test"), bulkhead);
+
+        assertThatThrownBy(() -> resilience.llm("chat_completions", () -> "ok"))
+            .isInstanceOfSatisfying(ExternalCallException.class, ex -> {
+                assertThat(ex.getSystem()).isEqualTo("LLM");
+                assertThat(ex.getCategory()).isEqualTo("llm_bulkhead_full");
+                assertThat(ex.isRetryable()).isTrue();
+            });
+
+        bulkhead.releasePermission();
+    }
+
     private ExternalCallResilience resilience(CircuitBreaker githubCircuitBreaker, CircuitBreaker llmCircuitBreaker) {
+        return resilience(
+            githubCircuitBreaker,
+            llmCircuitBreaker,
+            Bulkhead.of("llm-test", BulkheadConfig.custom().maxConcurrentCalls(1).build())
+        );
+    }
+
+    private ExternalCallResilience resilience(
+        CircuitBreaker githubCircuitBreaker,
+        CircuitBreaker llmCircuitBreaker,
+        Bulkhead llmBulkhead
+    ) {
         return new ExternalCallResilience(
             githubCircuitBreaker,
             retry("github-test"),
@@ -52,7 +95,7 @@ class ExternalCallResilienceTest {
             llmCircuitBreaker,
             retry("llm-test"),
             rateLimiter("llm-test"),
-            Bulkhead.of("llm-test", BulkheadConfig.custom().maxConcurrentCalls(1).build())
+            llmBulkhead
         );
     }
 

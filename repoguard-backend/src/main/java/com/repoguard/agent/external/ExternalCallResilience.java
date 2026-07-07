@@ -7,6 +7,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.retry.Retry;
+import java.util.Objects;
 import java.util.function.Supplier;
 
 public class ExternalCallResilience {
@@ -28,13 +29,13 @@ public class ExternalCallResilience {
         RateLimiter llmRateLimiter,
         Bulkhead llmBulkhead
     ) {
-        this.githubCircuitBreaker = githubCircuitBreaker;
-        this.githubRetry = githubRetry;
-        this.githubRateLimiter = githubRateLimiter;
-        this.llmCircuitBreaker = llmCircuitBreaker;
-        this.llmRetry = llmRetry;
-        this.llmRateLimiter = llmRateLimiter;
-        this.llmBulkhead = llmBulkhead;
+        this.githubCircuitBreaker = Objects.requireNonNull(githubCircuitBreaker, "githubCircuitBreaker");
+        this.githubRetry = Objects.requireNonNull(githubRetry, "githubRetry");
+        this.githubRateLimiter = Objects.requireNonNull(githubRateLimiter, "githubRateLimiter");
+        this.llmCircuitBreaker = Objects.requireNonNull(llmCircuitBreaker, "llmCircuitBreaker");
+        this.llmRetry = Objects.requireNonNull(llmRetry, "llmRetry");
+        this.llmRateLimiter = Objects.requireNonNull(llmRateLimiter, "llmRateLimiter");
+        this.llmBulkhead = Objects.requireNonNull(llmBulkhead, "llmBulkhead");
     }
 
     public <T> T github(String operation, Supplier<T> supplier) {
@@ -45,13 +46,12 @@ public class ExternalCallResilience {
             supplier,
             githubCircuitBreaker,
             githubRetry,
-            githubRateLimiter,
-            null
+            githubRateLimiter
         );
     }
 
     public <T> T llm(String operation, Supplier<T> supplier) {
-        return execute(
+        return executeWithBulkhead(
             "LLM",
             "llm",
             operation,
@@ -70,22 +70,39 @@ public class ExternalCallResilience {
         Supplier<T> supplier,
         CircuitBreaker circuitBreaker,
         Retry retry,
-        RateLimiter rateLimiter,
-        Bulkhead bulkhead
+        RateLimiter rateLimiter
     ) {
         Supplier<T> decorated = supplier;
         decorated = CircuitBreaker.decorateSupplier(circuitBreaker, decorated);
         decorated = Retry.decorateSupplier(retry, decorated);
         decorated = RateLimiter.decorateSupplier(rateLimiter, decorated);
-        if (bulkhead != null) {
-            decorated = Bulkhead.decorateSupplier(bulkhead, decorated);
-        }
         try {
             return decorated.get();
         } catch (RuntimeException ex) {
             RuntimeException mapped = mapInfrastructureException(system, categoryPrefix, operation, ex);
             throw mapped == null ? ex : mapped;
         }
+    }
+
+    private <T> T executeWithBulkhead(
+        String system,
+        String categoryPrefix,
+        String operation,
+        Supplier<T> supplier,
+        CircuitBreaker circuitBreaker,
+        Retry retry,
+        RateLimiter rateLimiter,
+        Bulkhead bulkhead
+    ) {
+        return execute(
+            system,
+            categoryPrefix,
+            operation,
+            Bulkhead.decorateSupplier(bulkhead, supplier),
+            circuitBreaker,
+            retry,
+            rateLimiter
+        );
     }
 
     private RuntimeException mapInfrastructureException(
