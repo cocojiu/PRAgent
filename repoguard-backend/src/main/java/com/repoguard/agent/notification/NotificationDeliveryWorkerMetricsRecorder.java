@@ -1,7 +1,8 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorder;
-import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -9,8 +10,12 @@ class NotificationDeliveryWorkerMetricsRecorder {
 
     private final RabbitConsumeMetricsRecorder recorder;
 
-    NotificationDeliveryWorkerMetricsRecorder(RepoGuardMetrics metrics, NotificationDeliveryWorkerClock clock) {
-        this.recorder = new RabbitConsumeMetricsRecorder(metrics, clock::nanoTime);
+    NotificationDeliveryWorkerMetricsRecorder(
+        RabbitConsumeMetricsRecorderFactory recorderFactory,
+        NotificationDeliveryWorkerClock clock
+    ) {
+        this.recorder = Objects.requireNonNull(recorderFactory, "recorderFactory")
+            .create(Objects.requireNonNull(clock, "clock")::nanoTime);
     }
 
     long startedAt() {

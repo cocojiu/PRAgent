@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
+import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,10 @@ class ReviewTaskWorkerMetricsRecorderTest {
 
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final TestReviewTaskWorkerClock clock = new TestReviewTaskWorkerClock();
-    private final ReviewTaskWorkerMetricsRecorder recorder = new ReviewTaskWorkerMetricsRecorder(metrics, clock);
+    private final RabbitConsumeMetricsRecorderFactory recorderFactory =
+        new RabbitConsumeMetricsRecorderFactory(metrics);
+    private final ReviewTaskWorkerMetricsRecorder recorder =
+        new ReviewTaskWorkerMetricsRecorder(recorderFactory, clock);
 
     @Test
     void recordsConsumedDurationWithResult() {
@@ -46,10 +50,17 @@ class ReviewTaskWorkerMetricsRecorderTest {
     }
 
     @Test
-    void constructorRejectsMissingMetrics() {
+    void constructorRejectsMissingRecorderFactory() {
         assertThatThrownBy(() -> new ReviewTaskWorkerMetricsRecorder(null, clock))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("metrics");
+            .hasMessage("recorderFactory");
+    }
+
+    @Test
+    void constructorRejectsMissingClock() {
+        assertThatThrownBy(() -> new ReviewTaskWorkerMetricsRecorder(recorderFactory, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("clock");
     }
 
     private static class TestReviewTaskWorkerClock extends ReviewTaskWorkerClock {

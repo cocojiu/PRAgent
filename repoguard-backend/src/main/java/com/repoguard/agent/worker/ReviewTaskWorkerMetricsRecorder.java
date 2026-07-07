@@ -1,7 +1,8 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorder;
-import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -9,8 +10,12 @@ class ReviewTaskWorkerMetricsRecorder {
 
     private final RabbitConsumeMetricsRecorder recorder;
 
-    ReviewTaskWorkerMetricsRecorder(RepoGuardMetrics metrics, ReviewTaskWorkerClock clock) {
-        this.recorder = new RabbitConsumeMetricsRecorder(metrics, clock::nanoTime);
+    ReviewTaskWorkerMetricsRecorder(
+        RabbitConsumeMetricsRecorderFactory recorderFactory,
+        ReviewTaskWorkerClock clock
+    ) {
+        this.recorder = Objects.requireNonNull(recorderFactory, "recorderFactory")
+            .create(Objects.requireNonNull(clock, "clock")::nanoTime);
     }
 
     long startedAt() {

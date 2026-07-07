@@ -14,6 +14,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,10 @@ class NotificationDeliveryWorkerTest {
     private final NotificationChannelAdapter adapter = org.mockito.Mockito.mock(NotificationChannelAdapter.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder =
-        new NotificationDeliveryWorkerMetricsRecorder(metrics, new NotificationDeliveryWorkerClock());
+        new NotificationDeliveryWorkerMetricsRecorder(
+            new RabbitConsumeMetricsRecorderFactory(metrics),
+            new NotificationDeliveryWorkerClock()
+        );
 
     @Test
     void handleAcknowledgesMessageAndRecordsSuccessMetricAfterDelivery() throws Exception {

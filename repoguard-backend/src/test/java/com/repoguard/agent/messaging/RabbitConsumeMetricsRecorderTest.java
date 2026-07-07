@@ -53,6 +53,13 @@ class RabbitConsumeMetricsRecorderTest {
     }
 
     @Test
+    void factoryRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new RabbitConsumeMetricsRecorderFactory(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
+
+    @Test
     void constructorRejectsMissingNanoTimeSupplier() {
         assertThatThrownBy(() -> new RabbitConsumeMetricsRecorder(metrics, null))
             .isInstanceOf(NullPointerException.class)
