@@ -22,6 +22,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.GithubCommentPreviewService;
@@ -48,6 +49,9 @@ class GithubCommentPublishServiceImplTest {
         GithubCommentPreviewService.class
     );
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final NotificationDispatchService notificationDispatchService = org.mockito.Mockito.mock(
+        NotificationDispatchService.class
+    );
     private final GithubCommentPublicationRecorder publicationRecorder = new GithubCommentPublicationRecorder(
         publicationMapper,
         batchMapper,
@@ -58,7 +62,7 @@ class GithubCommentPublishServiceImplTest {
     private final GithubCommentPublishServiceImpl service = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
         metrics,
-        null,
+        notificationDispatchService,
         previewService,
         new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
         new GithubCommentPublishPlanBuilder(),
@@ -100,6 +104,11 @@ class GithubCommentPublishServiceImplTest {
         verify(metrics, org.mockito.Mockito.times(2)).githubCommentPublished("success");
         verify(metrics).githubCommentPublished("skipped");
         verify(metrics).githubCommentPublishDuration(any(), org.mockito.Mockito.eq("success"));
+        verify(notificationDispatchService).githubCommentsPublished(
+            any(ReviewTask.class),
+            org.mockito.Mockito.eq(result),
+            org.mockito.Mockito.isNull()
+        );
     }
 
     @Test
@@ -129,7 +138,7 @@ class GithubCommentPublishServiceImplTest {
         assertThatThrownBy(() -> new GithubCommentPublishServiceImpl(
             reviewTaskMapper,
             null,
-            null,
+            notificationDispatchService,
             previewService,
             new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
             new GithubCommentPublishPlanBuilder(),
@@ -142,6 +151,26 @@ class GithubCommentPublishServiceImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
+    }
+
+    @Test
+    void constructorRejectsMissingNotificationDispatchService() {
+        assertThatThrownBy(() -> new GithubCommentPublishServiceImpl(
+            reviewTaskMapper,
+            metrics,
+            null,
+            previewService,
+            new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
+            new GithubCommentPublishPlanBuilder(),
+            new GithubCommentDraftPublisher(
+                githubPullRequestClient,
+                publicationRecorder,
+                writebackFailureClassifier
+            ),
+            publicationRecorder
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("notificationDispatchService");
     }
 
     @Test

@@ -44,7 +44,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
-        this.notificationDispatchService = notificationDispatchService;
+        this.notificationDispatchService = Objects.requireNonNull(notificationDispatchService, "notificationDispatchService");
         this.previewService = Objects.requireNonNull(previewService, "previewService");
         this.publishGuard = Objects.requireNonNull(publishGuard, "publishGuard");
         this.publishPlanBuilder = Objects.requireNonNull(publishPlanBuilder, "publishPlanBuilder");
@@ -107,9 +107,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     }
 
     private void publishGithubCommentNotification(ReviewTask task, GithubCommentPublishResponse response, Long batchId) {
-        if (notificationDispatchService != null) {
-            notificationDispatchService.githubCommentsPublished(task, response, batchId);
-        }
+        notificationDispatchService.githubCommentsPublished(task, response, batchId);
     }
 
 }
