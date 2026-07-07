@@ -1,0 +1,68 @@
+cleanupDataRetention -> dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
+createNotificationBinding -> notificationIntegrationControllerCreateBinding(input: { body: NotificationBindingRequest }): Promise<NotificationBinding>; // POST /api/v1/config/notification-bindings
+createReviewRule -> systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules
+createUser -> userManagementControllerCreateUser(input: { body: UserCreateRequest }): Promise<ManagedUser>; // POST /api/v1/users
+deleteNotificationBinding -> notificationIntegrationControllerDeleteBinding(input: { path: { id: number } }): Promise<void>; // DELETE /api/v1/config/notification-bindings/{id}
+fetchCacheStats -> cacheStatsControllerGetStats(): Promise<CacheStats>; // GET /api/v1/cache/stats
+fetchDashboardHighRiskReviews -> dashboardControllerGetHighRiskReviews(): Promise<HighRiskReview[]>; // GET /api/v1/dashboard/high-risk-reviews
+fetchDashboardLlmQuality -> dashboardControllerGetLlmQuality(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardLlmQuality>; // GET /api/v1/dashboard/llm-quality
+fetchDashboardOverview -> dashboardControllerGetOverview(input?: { query?: { llmTrendDays?: number } }): Promise<DashboardOverview>; // GET /api/v1/dashboard/overview
+fetchDashboardReviewTrend -> dashboardControllerGetReviewTrend(): Promise<ReviewTrendPoint[]>; // GET /api/v1/dashboard/review-trend
+fetchDashboardRiskDistribution -> dashboardControllerGetRiskDistribution(): Promise<ChartSlice[]>; // GET /api/v1/dashboard/risk-distribution
+fetchDashboardRules -> dashboardControllerGetRules(): Promise<DashboardRules>; // GET /api/v1/dashboard/rules
+fetchDashboardSummary -> dashboardControllerGetSummary(): Promise<DashboardMetric[]>; // GET /api/v1/dashboard/summary
+fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview
+fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications
+fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; // GET /api/v1/config/integrations/github
+fetchGithubPullRequestOptions -> reviewControllerListConfiguredGithubPullRequests(): Promise<GithubPullRequestOptions>; // GET /api/v1/reviews/github/pull-requests
+fetchMessageQueueHealth -> messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health
+fetchMysqlIntegrationConfig -> systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
+fetchNotificationBindings -> notificationIntegrationControllerListBindings(input?: { query?: { organization?: string; page?: number; pageSize?: number; provider?: string; repository?: string } }): Promise<PageResponse<NotificationBinding>>; // GET /api/v1/config/notification-bindings
+fetchNotificationDeliveries -> notificationIntegrationControllerListDeliveries(input?: { query?: { page?: number; pageSize?: number; status?: string; taskId?: number } }): Promise<PageResponse<NotificationDelivery>>; // GET /api/v1/notification-deliveries
+fetchNotificationEvents -> notificationIntegrationControllerListEvents(input?: { query?: { page?: number; pageSize?: number; status?: string; taskId?: number } }): Promise<PageResponse<NotificationEvent>>; // GET /api/v1/notification-events
+fetchNotifications -> notificationControllerGetNotifications(): Promise<NotificationCenter>; // GET /api/v1/notifications
+fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
+fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
+fetchReviewDetail -> reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskDetail>; // GET /api/v1/reviews/{id}
+fetchReviewFindings -> reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
+fetchReviewMissingTests -> reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<MissingTest>>; // GET /api/v1/reviews/{id}/missing-tests
+fetchReviewPolicyConfig -> systemConfigControllerGetReviewPolicy(): Promise<ReviewPolicyConfig>; // GET /api/v1/config/review-policy
+fetchReviewRepositories -> reviewControllerListRepositories(): Promise<string[]>; // GET /api/v1/reviews/repositories
+fetchReviewRules -> systemConfigControllerGetReviewRules(): Promise<ReviewRulesResponse>; // GET /api/v1/config/review-rules
+fetchReviewStatus -> reviewControllerGetReviewStatus(input: { path: { id: number } }): Promise<ReviewTaskStatus>; // GET /api/v1/reviews/{id}/status
+fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
+fetchReviews -> reviewControllerListReviews(input?: { query?: { keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
+fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
+fetchUserOperationAudits -> userManagementControllerListOperationAudits(): Promise<UserOperationAudit[]>; // GET /api/v1/users/audits
+fetchUsers -> userManagementControllerListUsers(): Promise<ManagedUser[]>; // GET /api/v1/users
+getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
+login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
+logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
+publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
+reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionResponse>; // POST /api/v1/config/secrets/re-encryption
+register -> authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
+reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
+requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
+resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
+retryNotificationEvent -> notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Promise<NotificationEvent>; // POST /api/v1/notification-events/{id}/retry
+retryReview -> reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
+submitHumanReview -> reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review
+testGithubIntegrationConnection -> systemConfigControllerTestGithubIntegration(input?: { body?: GithubIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/github/test
+testMysqlConnection -> systemConfigControllerTestMysqlConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/mysql/test
+testNotificationBinding -> notificationIntegrationControllerTestBinding(input: { path: { id: number } }): Promise<ConnectionTestResult>; // POST /api/v1/config/notification-bindings/{id}/test
+testRabbitMqConnection -> systemConfigControllerTestRabbitMqConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/rabbitmq/test
+testReviewPolicyConnection -> systemConfigControllerTestReviewPolicy(input?: { body?: ReviewPolicyConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/review-policy/test
+triggerManualReview -> reviewControllerTriggerManualReview(input: { body: ManualReviewRequest }): Promise<ManualReviewResponse>; // POST /api/v1/reviews/manual
+updateFindingFeedback -> reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback
+updateGithubIntegrationConfig -> systemConfigControllerUpdateGithubIntegration(input: { body: GithubIntegrationConfigRequest }): Promise<GithubIntegrationConfig>; // PUT /api/v1/config/integrations/github
+updateMysqlIntegrationConfig -> systemConfigControllerUpdateMysqlIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/mysql
+updateNotificationBinding -> notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; body: NotificationBindingRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}
+updateNotificationBindingStatus -> notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
+updateRabbitMqIntegrationConfig -> systemConfigControllerUpdateRabbitMqIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/rabbitmq
+updateReviewPolicyConfig -> systemConfigControllerUpdateReviewPolicy(input: { body: ReviewPolicyConfigRequest }): Promise<ReviewPolicyConfig>; // PUT /api/v1/config/review-policy
+updateReviewRule -> systemConfigControllerUpdateReviewRule(input: { path: { id: string }; body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}
+updateReviewRuleStatus -> systemConfigControllerUpdateReviewRuleStatus(input: { path: { id: string }; body: ReviewRuleStatusRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}/status
+updateSystemSettings -> systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings
+updateUserRole -> userManagementControllerUpdateRole(input: { path: { id: number }; body: UserRoleUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/role
+updateUserStatus -> userManagementControllerUpdateStatus(input: { path: { id: number }; body: UserStatusUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/status

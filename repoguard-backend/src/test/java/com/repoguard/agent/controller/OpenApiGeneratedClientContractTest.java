@@ -19,6 +19,8 @@ class OpenApiGeneratedClientContractTest {
         Path.of("src/test/resources/contracts/openapi-generated-client.surface.snapshot");
     private static final Path GENERATED_CLIENT_MIGRATION_SNAPSHOT =
         Path.of("src/test/resources/contracts/openapi-generated-client.migration.snapshot");
+    private static final Path GENERATED_CLIENT_FRONTEND_SIGNATURE_SNAPSHOT =
+        Path.of("src/test/resources/contracts/openapi-generated-client.frontend-signature.snapshot");
 
     private static final Set<String> SERVER_ONLY_ENDPOINTS = Set.of(
         "POST /api/v1/auth/refresh",
@@ -108,6 +110,13 @@ class OpenApiGeneratedClientContractTest {
             .containsExactlyElementsOf(generatedClientMigrationSnapshot());
     }
 
+    @Test
+    void frontendTypedOperationsMapToGeneratedClientSignaturesSnapshotStaysReviewed() throws Exception {
+        assertThat(generatedClientFrontendSignatureLines())
+            .as("Frontend typed operation to generated client signature mapping changed. Review wrapper migration impact before updating the snapshot.")
+            .containsExactlyElementsOf(generatedClientFrontendSignatureSnapshot());
+    }
+
     private Map<String, GeneratedOperation> generatedOperations() throws Exception {
         return OpenApiGeneratedClientDryRun.operations(openApiDocument());
     }
@@ -137,8 +146,29 @@ class OpenApiGeneratedClientContractTest {
             .toList();
     }
 
+    private List<String> generatedClientFrontendSignatureLines() throws Exception {
+        Map<String, GeneratedOperation> generatedOperations = generatedOperations();
+        return FrontendApiContractCatalog.endpointContracts().entrySet().stream()
+            .map(entry -> {
+                GeneratedOperation generatedOperation = generatedOperations.get(entry.getValue().endpointKey());
+                assertThat(generatedOperation)
+                    .as(entry.getKey() + " must map to a generated OpenAPI client operation")
+                    .isNotNull();
+                return entry.getKey() + " -> " + generatedOperation.clientSurfaceLine();
+            })
+            .sorted()
+            .toList();
+    }
+
     private List<String> generatedClientMigrationSnapshot() throws Exception {
         return Files.readAllLines(GENERATED_CLIENT_MIGRATION_SNAPSHOT).stream()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty())
+            .toList();
+    }
+
+    private List<String> generatedClientFrontendSignatureSnapshot() throws Exception {
+        return Files.readAllLines(GENERATED_CLIENT_FRONTEND_SIGNATURE_SNAPSHOT).stream()
             .map(String::trim)
             .filter(line -> !line.isEmpty())
             .toList();
