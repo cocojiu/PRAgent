@@ -24,12 +24,11 @@ class DiffChunkingDependencyBoundaryTest {
 
     @Test
     void pullRequestDiffChunkerRejectsMissingDependencies() {
-        assertMissing("riskClassifier", () -> chunker(null, segmenter, chunkPlanner, riskFilePrioritizer, budgetPolicy, chunkFactory));
-        assertMissing("segmenter", () -> chunker(riskClassifier, null, chunkPlanner, riskFilePrioritizer, budgetPolicy, chunkFactory));
-        assertMissing("chunkPlanner", () -> chunker(riskClassifier, segmenter, null, riskFilePrioritizer, budgetPolicy, chunkFactory));
-        assertMissing("riskFilePrioritizer", () -> chunker(riskClassifier, segmenter, chunkPlanner, null, budgetPolicy, chunkFactory));
-        assertMissing("budgetPolicy", () -> chunker(riskClassifier, segmenter, chunkPlanner, riskFilePrioritizer, null, chunkFactory));
-        assertMissing("chunkFactory", () -> chunker(riskClassifier, segmenter, chunkPlanner, riskFilePrioritizer, budgetPolicy, null));
+        assertMissing("segmenter", () -> chunker(null, chunkPlanner, riskFilePrioritizer, budgetPolicy, chunkFactory));
+        assertMissing("chunkPlanner", () -> chunker(segmenter, null, riskFilePrioritizer, budgetPolicy, chunkFactory));
+        assertMissing("riskFilePrioritizer", () -> chunker(segmenter, chunkPlanner, null, budgetPolicy, chunkFactory));
+        assertMissing("budgetPolicy", () -> chunker(segmenter, chunkPlanner, riskFilePrioritizer, null, chunkFactory));
+        assertMissing("chunkFactory", () -> chunker(segmenter, chunkPlanner, riskFilePrioritizer, budgetPolicy, null));
     }
 
     @Test
@@ -53,7 +52,6 @@ class DiffChunkingDependencyBoundaryTest {
     }
 
     private PullRequestDiffChunker chunker(
-        DiffRiskClassifier riskClassifier,
         SemanticDiffSegmenter segmenter,
         SemanticDiffChunkPlanner chunkPlanner,
         RiskFilePrioritizer riskFilePrioritizer,
@@ -61,7 +59,6 @@ class DiffChunkingDependencyBoundaryTest {
         PullRequestDiffChunkFactory chunkFactory
     ) {
         return new PullRequestDiffChunker(
-            riskClassifier,
             segmenter,
             chunkPlanner,
             riskFilePrioritizer,

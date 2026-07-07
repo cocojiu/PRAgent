@@ -9,7 +9,6 @@ final class DiffChunkingTestFixtures {
         DiffRiskClassifier riskClassifier = new DiffRiskClassifier();
         ChunkBudgetPolicy budgetPolicy = new ChunkBudgetPolicy(riskClassifier);
         return new PullRequestDiffChunker(
-            riskClassifier,
             segmenter(riskClassifier),
             new SemanticDiffChunkPlanner(budgetPolicy),
             new RiskFilePrioritizer(riskClassifier),

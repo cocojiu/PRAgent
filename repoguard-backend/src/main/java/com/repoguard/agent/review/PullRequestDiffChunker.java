@@ -12,7 +12,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class PullRequestDiffChunker {
 
-    private final DiffRiskClassifier riskClassifier;
     private final SemanticDiffSegmenter segmenter;
     private final SemanticDiffChunkPlanner chunkPlanner;
     private final RiskFilePrioritizer riskFilePrioritizer;
@@ -20,14 +19,12 @@ public class PullRequestDiffChunker {
     private final PullRequestDiffChunkFactory chunkFactory;
 
     PullRequestDiffChunker(
-        DiffRiskClassifier riskClassifier,
         SemanticDiffSegmenter segmenter,
         SemanticDiffChunkPlanner chunkPlanner,
         RiskFilePrioritizer riskFilePrioritizer,
         ChunkBudgetPolicy budgetPolicy,
         PullRequestDiffChunkFactory chunkFactory
     ) {
-        this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
         this.segmenter = Objects.requireNonNull(segmenter, "segmenter");
         this.chunkPlanner = Objects.requireNonNull(chunkPlanner, "chunkPlanner");
         this.riskFilePrioritizer = Objects.requireNonNull(riskFilePrioritizer, "riskFilePrioritizer");
