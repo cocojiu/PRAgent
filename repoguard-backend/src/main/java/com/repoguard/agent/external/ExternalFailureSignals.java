@@ -10,6 +10,8 @@ public final class ExternalFailureSignals {
     private static final String STATUS_MARKER = "status=";
     private static final String RETRY_AFTER_MARKER = "retryAfter=";
     private static final String RESPONSE_BODY_MARKER = " responseBody=";
+    private static final String RATE_LIMIT_REMAINING_MARKER = " rateLimitRemaining=";
+    private static final String RATE_LIMIT_RESET_MARKER = " rateLimitReset=";
 
     private ExternalFailureSignals() {
     }
@@ -56,10 +58,7 @@ public final class ExternalFailureSignals {
             return "";
         }
         int valueStart = markerIndex + RETRY_AFTER_MARKER.length();
-        int valueEnd = detail.indexOf(RESPONSE_BODY_MARKER, valueStart);
-        if (valueEnd < 0) {
-            valueEnd = detail.length();
-        }
+        int valueEnd = earliestMarkerIndex(detail, valueStart);
         return detail.substring(valueStart, valueEnd);
     }
 
@@ -89,5 +88,18 @@ public final class ExternalFailureSignals {
     private static boolean hasTimeoutText(String detail) {
         return StringUtils.hasText(detail)
             && detail.toLowerCase(Locale.ROOT).matches(".*(timeout|timed out|read timed out|connect timed out).*");
+    }
+
+    private static int earliestMarkerIndex(String detail, int start) {
+        int end = detail.length();
+        end = nearest(detail, RESPONSE_BODY_MARKER, start, end);
+        end = nearest(detail, RATE_LIMIT_REMAINING_MARKER, start, end);
+        end = nearest(detail, RATE_LIMIT_RESET_MARKER, start, end);
+        return end;
+    }
+
+    private static int nearest(String detail, String marker, int start, int currentEnd) {
+        int index = detail.indexOf(marker, start);
+        return index < 0 ? currentEnd : Math.min(currentEnd, index);
     }
 }

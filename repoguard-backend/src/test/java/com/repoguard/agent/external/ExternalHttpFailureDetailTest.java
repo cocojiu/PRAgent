@@ -14,6 +14,8 @@ class ExternalHttpFailureDetailTest {
     void appendToAddsRetryAfterAndSanitizedBodyForExternalCalls() {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.RETRY_AFTER, " 60\nunsafe ");
+        headers.add("X-RateLimit-Remaining", " 0 ");
+        headers.add("X-RateLimit-Reset", "1763456789");
         ExternalHttpFailureDetail detail = ExternalHttpFailureDetail.from(responseException(
             429,
             "Too Many Requests",
@@ -26,9 +28,32 @@ class ExternalHttpFailureDetailTest {
         assertThat(message).contains(
             "Too Many Requests",
             "retryAfter=60unsafe",
+            "rateLimitRemaining=0",
+            "rateLimitReset=1763456789",
             "responseBody={\"token\":\"***\",\"message\":\"bad sk-***\"}"
         );
         assertThat(message).doesNotContain("raw-token", "sk-secret123456789");
+    }
+
+    @Test
+    void rateLimitHeadersAreCleanedBeforeAppending() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("X-RateLimit-Remaining", " 12<script> ");
+        headers.add("X-RateLimit-Reset", "Wed, 21 Oct 2026 07:28:00 GMT\nunsafe");
+        ExternalHttpFailureDetail detail = ExternalHttpFailureDetail.from(responseException(
+            403,
+            "Forbidden",
+            "",
+            headers
+        ));
+
+        String message = detail.appendTo("Forbidden");
+
+        assertThat(message).contains(
+            "rateLimitRemaining=12script",
+            "rateLimitReset=Wed, 21 Oct 2026 07:28:00 GMTunsafe"
+        );
+        assertThat(message).doesNotContain("<", ">");
     }
 
     @Test

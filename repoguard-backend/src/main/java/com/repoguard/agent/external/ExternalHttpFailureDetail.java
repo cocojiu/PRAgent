@@ -3,25 +3,41 @@ package com.repoguard.agent.external;
 import com.repoguard.agent.common.SensitiveTextSanitizer;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
+import org.springframework.http.HttpHeaders;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClientResponseException;
 
 public final class ExternalHttpFailureDetail {
 
     private static final int MAX_RESPONSE_BODY_LENGTH = 240;
+    private static final int MAX_HEADER_VALUE_LENGTH = 64;
+    private static final String RATE_LIMIT_REMAINING_HEADER = "X-RateLimit-Remaining";
+    private static final String RATE_LIMIT_RESET_HEADER = "X-RateLimit-Reset";
 
     private final String retryAfter;
+    private final String rateLimitRemaining;
+    private final String rateLimitReset;
     private final String responseBody;
 
-    private ExternalHttpFailureDetail(String retryAfter, String responseBody) {
+    private ExternalHttpFailureDetail(
+        String retryAfter,
+        String rateLimitRemaining,
+        String rateLimitReset,
+        String responseBody
+    ) {
         this.retryAfter = retryAfter;
+        this.rateLimitRemaining = rateLimitRemaining;
+        this.rateLimitReset = rateLimitReset;
         this.responseBody = responseBody;
     }
 
     public static ExternalHttpFailureDetail from(RestClientResponseException ex) {
         Objects.requireNonNull(ex, "ex");
+        HttpHeaders headers = ex.getResponseHeaders();
         return new ExternalHttpFailureDetail(
-            ExternalRetryAfterHint.fromHeaders(ex.getResponseHeaders()),
+            ExternalRetryAfterHint.fromHeaders(headers),
+            cleanHeader(headers, RATE_LIMIT_REMAINING_HEADER),
+            cleanHeader(headers, RATE_LIMIT_RESET_HEADER),
             normalizeResponseBody(ex.getResponseBodyAsString())
         );
     }
@@ -38,6 +54,12 @@ public final class ExternalHttpFailureDetail {
         StringBuilder message = new StringBuilder(Objects.requireNonNull(baseMessage, "baseMessage"));
         if (StringUtils.hasText(retryAfter)) {
             message.append(" retryAfter=").append(retryAfter);
+        }
+        if (StringUtils.hasText(rateLimitRemaining)) {
+            message.append(" rateLimitRemaining=").append(rateLimitRemaining);
+        }
+        if (StringUtils.hasText(rateLimitReset)) {
+            message.append(" rateLimitReset=").append(rateLimitReset);
         }
         String safeBody = safeResponseBody(bodySanitizer);
         if (StringUtils.hasText(safeBody)) {
@@ -68,6 +90,21 @@ public final class ExternalHttpFailureDetail {
         return body.length() > MAX_RESPONSE_BODY_LENGTH
             ? body.substring(0, MAX_RESPONSE_BODY_LENGTH - 3) + "..."
             : body;
+    }
+
+    private static String cleanHeader(HttpHeaders headers, String name) {
+        if (headers == null) {
+            return "";
+        }
+        String value = headers.getFirst(name);
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        String safe = value
+            .replaceAll("[^A-Za-z0-9,: GMT+-]", "")
+            .replaceAll("\\s+", " ")
+            .trim();
+        return safe.length() > MAX_HEADER_VALUE_LENGTH ? safe.substring(0, MAX_HEADER_VALUE_LENGTH) : safe;
     }
 
     private static String sanitizeForExternalCall(String body) {
