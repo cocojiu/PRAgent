@@ -32,6 +32,7 @@ import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.review.LlmChatCompletionResponseExtractor;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
@@ -673,7 +674,10 @@ class SystemConfigServiceImplTest {
     }
 
     private LlmConnectionProbeResponseParser responseParser() {
-        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+        return new LlmConnectionProbeResponseParser(
+            new LlmChatCompletionResponseExtractor(objectMapper),
+            reviewResultParser()
+        );
     }
 
     private LlmReviewResultParser reviewResultParser() {

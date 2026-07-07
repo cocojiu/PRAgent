@@ -17,6 +17,7 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
+import com.repoguard.agent.review.LlmChatCompletionResponseExtractor;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
@@ -414,7 +415,10 @@ class ConnectionTestServiceImplTest {
     }
 
     private LlmConnectionProbeResponseParser responseParser() {
-        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+        return new LlmConnectionProbeResponseParser(
+            new LlmChatCompletionResponseExtractor(objectMapper),
+            reviewResultParser()
+        );
     }
 
     private LlmReviewResultParser reviewResultParser() {

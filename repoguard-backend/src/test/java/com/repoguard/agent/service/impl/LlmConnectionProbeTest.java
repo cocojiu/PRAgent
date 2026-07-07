@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.review.LlmChatCompletionResponseExtractor;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
@@ -205,7 +206,10 @@ class LlmConnectionProbeTest {
     }
 
     private LlmConnectionProbeResponseParser responseParser() {
-        return new LlmConnectionProbeResponseParser(objectMapper, reviewResultParser());
+        return new LlmConnectionProbeResponseParser(
+            new LlmChatCompletionResponseExtractor(objectMapper),
+            reviewResultParser()
+        );
     }
 
     private LlmReviewResultParser reviewResultParser() {

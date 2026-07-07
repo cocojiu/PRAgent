@@ -29,6 +29,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final LlmReviewPromptBuilder promptBuilder;
     private final LlmReviewPipeline reviewPipeline;
     private final ExternalHttpJsonResponseReader responseReader;
+    private final LlmChatCompletionResponseExtractor responseExtractor;
 
     @Autowired
     public LlmPullRequestReviewer(
@@ -38,7 +39,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         ExternalCallResilience resilience,
         LlmReviewPromptBuilder promptBuilder,
         LlmReviewPipeline reviewPipeline,
-        ExternalHttpJsonResponseReader responseReader
+        ExternalHttpJsonResponseReader responseReader,
+        LlmChatCompletionResponseExtractor responseExtractor
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
@@ -47,6 +49,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
+        this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
     }
 
     @Override
@@ -103,22 +106,16 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     private LlmCallResult extractLlmCallResult(JsonNode root) {
         try {
-            if (root == null) {
-                throw new IllegalStateException("Empty LLM HTTP response");
-            }
+            LlmChatCompletionResponse response = responseExtractor.extract(root);
             return new LlmCallResult(
-                root.at("/choices/0/message/content").asText(""),
-                intValue(root.at("/usage/prompt_tokens")),
-                intValue(root.at("/usage/completion_tokens")),
-                intValue(root.at("/usage/total_tokens"))
+                response.content(),
+                response.promptTokens(),
+                response.completionTokens(),
+                response.totalTokens()
             );
         } catch (Exception ex) {
             throw new IllegalStateException("Unable to parse LLM HTTP response", ex);
         }
-    }
-
-    private Integer intValue(JsonNode node) {
-        return node == null || node.isMissingNode() || node.isNull() || !node.canConvertToInt() ? null : node.asInt();
     }
 
     private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {

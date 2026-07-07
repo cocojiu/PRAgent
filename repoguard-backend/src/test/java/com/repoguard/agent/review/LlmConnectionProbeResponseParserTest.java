@@ -10,7 +10,7 @@ class LlmConnectionProbeResponseParserTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final LlmConnectionProbeResponseParser parser = new LlmConnectionProbeResponseParser(
-        objectMapper,
+        new LlmChatCompletionResponseExtractor(objectMapper),
         parser()
     );
 

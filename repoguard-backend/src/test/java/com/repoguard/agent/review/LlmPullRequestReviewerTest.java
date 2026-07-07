@@ -38,7 +38,8 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             null,
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            responseReader()
+            responseReader(),
+            responseExtractor()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("promptBuilder");
@@ -53,7 +54,8 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            responseReader()
+            responseReader(),
+            responseExtractor()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
@@ -68,7 +70,8 @@ class LlmPullRequestReviewerTest {
             null,
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            responseReader()
+            responseReader(),
+            responseExtractor()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("resilience");
@@ -83,7 +86,8 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
-            null
+            null,
+            responseExtractor()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("responseReader");
@@ -98,10 +102,27 @@ class LlmPullRequestReviewerTest {
             org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             null,
-            null
+            responseReader(),
+            responseExtractor()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewPipeline");
+    }
+
+    @Test
+    void constructorRejectsMissingResponseExtractor() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(ExternalCallResilience.class),
+            new LlmReviewPromptBuilder(),
+            org.mockito.Mockito.mock(LlmReviewPipeline.class),
+            responseReader(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("responseExtractor");
     }
 
     @Test
@@ -476,7 +497,8 @@ class LlmPullRequestReviewerTest {
             effectiveResilience,
             promptBuilder,
             pipeline(ruleBasedReviewer, objectMapper, effectiveMetrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
-            responseReader(objectMapper)
+            responseReader(objectMapper),
+            responseExtractor(objectMapper)
         );
     }
 
@@ -495,6 +517,14 @@ class LlmPullRequestReviewerTest {
 
     private static ExternalHttpJsonResponseReader responseReader(ObjectMapper objectMapper) {
         return new ExternalHttpJsonResponseReader(objectMapper, new ExternalHttpResponseReader());
+    }
+
+    private static LlmChatCompletionResponseExtractor responseExtractor() {
+        return responseExtractor(new ObjectMapper());
+    }
+
+    private static LlmChatCompletionResponseExtractor responseExtractor(ObjectMapper objectMapper) {
+        return new LlmChatCompletionResponseExtractor(objectMapper);
     }
 
     private static LlmReviewPipeline pipeline(
@@ -611,7 +641,8 @@ class LlmPullRequestReviewerTest {
                     DiffChunkingTestFixtures.chunker(),
                     new LlmReviewPromptBuilder()
                 ),
-                responseReader()
+                responseReader(),
+                responseExtractor()
             );
             this.reviewedChunks = reviewedChunks;
             this.failingFilePart = failingFilePart;
