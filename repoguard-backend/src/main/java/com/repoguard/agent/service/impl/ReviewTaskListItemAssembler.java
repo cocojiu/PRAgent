@@ -2,20 +2,18 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskSource;
 import com.repoguard.agent.service.impl.ReviewFailureSummaryResolver.ReviewFailureSummary;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 
 @Component
 public class ReviewTaskListItemAssembler {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final String HUMAN_REVIEW_PENDING = "PENDING";
-    private static final String HUMAN_REVIEW_NOT_REQUIRED = "NOT_REQUIRED";
 
     public ReviewTaskListItem assemble(ReviewTask task, ReviewFailureSummary failureSummary) {
         return new ReviewTaskListItem(
@@ -46,10 +44,10 @@ public class ReviewTaskListItemAssembler {
     }
 
     private String resolveHumanReviewStatus(ReviewTask task) {
-        if (!Boolean.TRUE.equals(task.getHumanReviewRequired())) {
-            return HUMAN_REVIEW_NOT_REQUIRED;
+        if (task.getHumanReviewStatus() != null && !task.getHumanReviewStatus().isBlank()) {
+            return HumanReviewStatus.from(task.getHumanReviewStatus()).code();
         }
-        return StringUtils.hasText(task.getHumanReviewStatus()) ? task.getHumanReviewStatus() : HUMAN_REVIEW_PENDING;
+        return HumanReviewStatus.defaultForRequired(Boolean.TRUE.equals(task.getHumanReviewRequired())).code();
     }
 
     private String formatDateTimeOrNull(LocalDateTime value) {

@@ -70,6 +70,29 @@ class ReviewTaskListItemAssemblerTest {
         assertThat(result.humanReviewStatus()).isEqualTo("not_required");
     }
 
+    @Test
+    void defaultsMissingRequiredHumanReviewStatusToPending() {
+        ReviewTask task = baseTask();
+        task.setHumanReviewRequired(true);
+        task.setHumanReviewStatus(" ");
+
+        var result = assembler.assemble(task, new ReviewFailureSummary(null, null, null));
+
+        assertThat(result.humanReviewRequired()).isTrue();
+        assertThat(result.humanReviewStatus()).isEqualTo("pending");
+    }
+
+    @Test
+    void normalizesUnexpectedHumanReviewStatusToUnknown() {
+        ReviewTask task = baseTask();
+        task.setHumanReviewRequired(true);
+        task.setHumanReviewStatus("legacy_done");
+
+        var result = assembler.assemble(task, new ReviewFailureSummary(null, null, null));
+
+        assertThat(result.humanReviewStatus()).isEqualTo("unknown");
+    }
+
     private ReviewTask baseTask() {
         ReviewTask task = new ReviewTask();
         task.setId(521L);
