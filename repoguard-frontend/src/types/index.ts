@@ -2,6 +2,7 @@ export * from "./dashboard";
 export * from "./integration";
 export * from "./messageQueue";
 export * from "./notification";
+export * from "./operations";
 export * from "./review";
 export * from "./ruleConfig";
 export * from "./shared";

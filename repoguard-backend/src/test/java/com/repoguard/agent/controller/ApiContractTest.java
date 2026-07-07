@@ -169,6 +169,17 @@ class ApiContractTest {
     }
 
     @Test
+    void backendApiSurfaceStaysCoveredByFrontendTypedContractsOrExplicitServerOnlyEntrypoints() throws Exception {
+        Set<String> coveredEndpoints = frontendCoveredOrServerOnlyEndpointKeys();
+
+        assertThat(apiSurfaceEndpointKeys())
+            .as("Backend-owned controller endpoints must be covered by frontend typed contracts unless explicitly server-only")
+            .allSatisfy(endpoint -> assertThat(coveredEndpoints)
+                .as(endpoint + " must be covered by frontend typed contract or server-only allowlist")
+                .contains(endpoint));
+    }
+
+    @Test
     void frontendTypedApiContractsKeepTransportShapeAlignedWithBackendApiSurface() throws Exception {
         Map<String, BackendEndpointContract> backendContracts = backendEndpointContracts();
 
@@ -286,6 +297,19 @@ class ApiContractTest {
             .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path())
             .sorted()
             .toList();
+    }
+
+    private Set<String> frontendCoveredOrServerOnlyEndpointKeys() throws Exception {
+        Set<String> endpoints = new java.util.LinkedHashSet<>(frontendApiContracts().values());
+        endpoints.addAll(serverOnlyApiEndpointKeys());
+        return endpoints;
+    }
+
+    private Set<String> serverOnlyApiEndpointKeys() {
+        return Set.of(
+            "POST /api/v1/auth/refresh",
+            "POST /api/v1/github/webhooks"
+        );
     }
 
     private Map<String, BackendEndpointContract> backendEndpointContracts() {

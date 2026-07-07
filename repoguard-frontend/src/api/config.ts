@@ -1,5 +1,6 @@
 import { apiRequest } from "@/api/contracts";
 import type {
+  DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
   ReviewPolicyConfigRequest,
   ReviewRuleConfigRequest,
@@ -38,6 +39,11 @@ export const fetchSystemSettings = () => apiRequest("fetchSystemSettings", undef
 
 export const updateSystemSettings = (payload: SystemSettingsRequest) =>
   apiRequest("updateSystemSettings", payload);
+
+export const fetchCacheStats = () => apiRequest("fetchCacheStats", undefined);
+
+export const cleanupDataRetention = (payload?: DataRetentionCleanupRequest) =>
+  apiRequest("cleanupDataRetention", payload);
 
 export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
   apiRequest("reEncryptSecrets", payload);

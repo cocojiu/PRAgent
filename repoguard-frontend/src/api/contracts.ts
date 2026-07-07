@@ -1,7 +1,7 @@
 import { request } from "@/api/client";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
-import type { AuthResponse, CurrentUser, LoginRequest, RegisterRequest } from "@/api/auth";
+import type { AuthResponse, CurrentUser, LoginRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import type {
   ConnectionTestResult,
@@ -10,8 +10,11 @@ import type {
   DashboardMetric,
   DashboardOverview,
   DashboardRules,
+  DataRetentionCleanupRequest,
+  DataRetentionCleanupResponse,
   FindingFeedbackRequest,
   FindingFeedbackResponse,
+  CacheStats,
   ChangedFile,
   GithubCommentPreview,
   GithubCommentPublicationHistory,
@@ -115,6 +118,7 @@ export type ApiContract = {
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
+  resetRefreshToken: ApiOperation<RefreshTokenResetRequest, AuthResponse>;
   logout: ApiOperation<undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
   fetchDashboardSummary: ApiOperation<undefined, DashboardMetric[]>;
@@ -124,6 +128,8 @@ export type ApiContract = {
   fetchDashboardHighRiskReviews: ApiOperation<undefined, HighRiskReview[]>;
   fetchDashboardLlmQuality: ApiOperation<{ llmTrendDays: number }, DashboardLlmQuality>;
   fetchSystemHealthSummary: ApiOperation<undefined, SystemHealthItem[]>;
+  fetchCacheStats: ApiOperation<undefined, CacheStats>;
+  cleanupDataRetention: ApiOperation<DataRetentionCleanupRequest | undefined, DataRetentionCleanupResponse>;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
@@ -215,6 +221,11 @@ const apiEndpoints: ApiEndpointMap = {
   getCurrentUser: {
     path: () => "/api/v1/auth/me"
   },
+  resetRefreshToken: {
+    method: "POST",
+    path: () => "/api/v1/auth/refresh-token/reset",
+    body: input => input
+  },
   logout: {
     method: "POST",
     path: () => "/api/v1/auth/logout",
@@ -245,6 +256,14 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchSystemHealthSummary: {
     path: () => "/api/v1/system/health/summary"
+  },
+  fetchCacheStats: {
+    path: () => "/api/v1/cache/stats"
+  },
+  cleanupDataRetention: {
+    method: "POST",
+    path: () => "/api/v1/config/data-retention/cleanup",
+    body: input => input
   },
   fetchReviews: {
     path: () => "/api/v1/reviews",

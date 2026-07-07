@@ -34,6 +34,12 @@ export interface RegisterRequest {
   confirmPassword: string;
 }
 
+export interface RefreshTokenResetRequest {
+  account: string;
+  password: string;
+  remember?: boolean;
+}
+
 export const login = async (payload: LoginRequest) => {
   const response = await apiRequest("login", payload);
   saveAuthTokens(response.accessToken, "", payload.remember);

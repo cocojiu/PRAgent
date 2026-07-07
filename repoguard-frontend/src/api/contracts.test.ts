@@ -132,6 +132,43 @@ describe("apiRequest", () => {
     }));
   });
 
+  it("keeps operational cache, data retention, and refresh reset endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchCacheStats", undefined);
+    await apiRequest("cleanupDataRetention", {
+      retentionDays: 90,
+      maxTasks: 500,
+      execute: false,
+      confirmText: "DRY_RUN"
+    });
+    await apiRequest("resetRefreshToken", {
+      account: "admin",
+      password: "password",
+      remember: true
+    });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/cache/stats");
+    expect(calls[0][1].method).toBeUndefined();
+    expect(calls[1][0]).toContain("/api/v1/config/data-retention/cleanup");
+    expect(calls[1][1].method).toBe("POST");
+    expect(calls[1][1].body).toBe(JSON.stringify({
+      retentionDays: 90,
+      maxTasks: 500,
+      execute: false,
+      confirmText: "DRY_RUN"
+    }));
+    expect(calls[2][0]).toContain("/api/v1/auth/refresh-token/reset");
+    expect(calls[2][1].method).toBe("POST");
+    expect(calls[2][1].body).toBe(JSON.stringify({
+      account: "admin",
+      password: "password",
+      remember: true
+    }));
+  });
+
   it("keeps review detail heavy sections on explicit paged endpoint queries", async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
     vi.stubGlobal("fetch", fetchMock);
