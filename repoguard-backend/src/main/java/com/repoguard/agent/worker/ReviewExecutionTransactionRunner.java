@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import java.util.concurrent.Callable;
+import java.util.Objects;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,7 +27,7 @@ class ReviewExecutionTransactionRunner {
     }
 
     ReviewExecutionTransactionRunner(PlatformTransactionManager transactionManager, int maxAttempts) {
-        this(transactionOperationsOrNoop(transactionManager), maxAttempts);
+        this(transactionOperations(transactionManager), maxAttempts);
     }
 
     private ReviewExecutionTransactionRunner(
@@ -63,13 +64,12 @@ class ReviewExecutionTransactionRunner {
         throw new IllegalStateException("Review transaction retry loop exited unexpectedly");
     }
 
-    private static ReviewExecutionTransactionOperations transactionOperationsOrNoop(
+    private static ReviewExecutionTransactionOperations transactionOperations(
         PlatformTransactionManager transactionManager
     ) {
-        if (transactionManager == null) {
-            return new NoopReviewExecutionTransactionOperations();
-        }
-        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        TransactionTemplate template = new TransactionTemplate(
+            Objects.requireNonNull(transactionManager, "transactionManager")
+        );
         template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         return new SpringReviewExecutionTransactionOperations(template);
     }
@@ -109,16 +109,4 @@ class ReviewExecutionTransactionRunner {
         }
     }
 
-    private static class NoopReviewExecutionTransactionOperations implements ReviewExecutionTransactionOperations {
-
-        @Override
-        public <T> T execute(Supplier<T> action) {
-            return action.get();
-        }
-
-        @Override
-        public boolean retryConcurrencyFailures() {
-            return false;
-        }
-    }
 }

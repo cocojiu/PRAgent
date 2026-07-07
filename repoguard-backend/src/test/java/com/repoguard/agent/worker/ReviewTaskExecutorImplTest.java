@@ -36,6 +36,8 @@ import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class ReviewTaskExecutorImplTest {
 
@@ -48,7 +50,7 @@ class ReviewTaskExecutorImplTest {
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTaskExecutorImpl executor = new ReviewTaskExecutorImpl(
         reviewTaskMapper,
-        createWorkflow(null)
+        createWorkflow(new RecordingTransactionManager())
     );
 
     @Test
@@ -460,5 +462,25 @@ class ReviewTaskExecutorImplTest {
             new ReviewExecutionLog(clock, logContextFormatter),
             clock
         );
+    }
+
+    private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+        }
     }
 }

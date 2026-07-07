@@ -18,25 +18,10 @@ import org.springframework.transaction.TransactionStatus;
 class ReviewExecutionTransactionRunnerTest {
 
     @Test
-    void executesWithoutTransactionManagerForUnitScope() {
-        ReviewExecutionTransactionRunner runner = new ReviewExecutionTransactionRunner(null, 3);
-
-        String result = runner.execute(() -> "completed");
-
-        assertThat(result).isEqualTo("completed");
-    }
-
-    @Test
-    void doesNotRetryConcurrencyFailureWithoutTransactionManager() {
-        ReviewExecutionTransactionRunner runner = new ReviewExecutionTransactionRunner(null, 3);
-        AtomicInteger attempts = new AtomicInteger();
-
-        assertThatThrownBy(() -> runner.execute(() -> {
-            attempts.incrementAndGet();
-            throw new CannotAcquireLockException("deadlock");
-        })).isInstanceOf(CannotAcquireLockException.class);
-
-        assertThat(attempts).hasValue(1);
+    void rejectsMissingTransactionManager() {
+        assertThatThrownBy(() -> new ReviewExecutionTransactionRunner(null, 3))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("transactionManager");
     }
 
     @Test
