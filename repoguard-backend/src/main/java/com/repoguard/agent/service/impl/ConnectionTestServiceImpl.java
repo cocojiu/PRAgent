@@ -26,6 +26,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
     private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner;
     private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner;
     private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner;
+    private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor;
     private final ConnectionTestConfigFactory configFactory;
     private final IntegrationConnectionCheckMarker connectionCheckMarker;
 
@@ -38,6 +39,7 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner,
         @Qualifier(ConnectionTestRunnerConfig.RABBITMQ_CONNECTION_TEST_RUNNER)
         ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner,
+        ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor,
         ConnectionTestConfigFactory configFactory,
         IntegrationConnectionCheckMarker connectionCheckMarker
     ) {
@@ -47,6 +49,10 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
         this.llmConnectionTestRunner = Objects.requireNonNull(llmConnectionTestRunner, "llmConnectionTestRunner");
         this.mysqlConnectionTestRunner = Objects.requireNonNull(mysqlConnectionTestRunner, "mysqlConnectionTestRunner");
         this.rabbitMqConnectionTestRunner = Objects.requireNonNull(rabbitMqConnectionTestRunner, "rabbitMqConnectionTestRunner");
+        this.serviceIntegrationConnectionTestExecutor = Objects.requireNonNull(
+            serviceIntegrationConnectionTestExecutor,
+            "serviceIntegrationConnectionTestExecutor"
+        );
         this.configFactory = Objects.requireNonNull(configFactory, "configFactory");
         this.connectionCheckMarker = Objects.requireNonNull(connectionCheckMarker, "connectionCheckMarker");
     }
@@ -70,33 +76,17 @@ public class ConnectionTestServiceImpl implements ConnectionTestService {
 
     @Override
     public ConnectionTestResultDto testMysqlConnection(ServiceIntegrationConfigRequest configRequest) {
-        IntegrationConfig savedConfig = findServiceIntegration(MYSQL_PROVIDER);
-        boolean transientConfig = configRequest != null;
-        IntegrationConfig config = transientConfig
-            ? configFactory.serviceIntegrationForTest(MYSQL_PROVIDER, configRequest, savedConfig)
-            : savedConfig;
-        return mysqlConnectionTestRunner.run(savedConfig, config, transientConfig, connectionCheckMarker::markChecked);
+        return serviceIntegrationConnectionTestExecutor.test(MYSQL_PROVIDER, configRequest, mysqlConnectionTestRunner);
     }
 
     @Override
     public ConnectionTestResultDto testRabbitMqConnection(ServiceIntegrationConfigRequest configRequest) {
-        IntegrationConfig savedConfig = findServiceIntegration(RABBITMQ_PROVIDER);
-        boolean transientConfig = configRequest != null;
-        IntegrationConfig config = transientConfig
-            ? configFactory.serviceIntegrationForTest(RABBITMQ_PROVIDER, configRequest, savedConfig)
-            : savedConfig;
-        return rabbitMqConnectionTestRunner.run(savedConfig, config, transientConfig, connectionCheckMarker::markChecked);
+        return serviceIntegrationConnectionTestExecutor.test(RABBITMQ_PROVIDER, configRequest, rabbitMqConnectionTestRunner);
     }
 
     private IntegrationConfig findGithubConfig() {
         return integrationConfigMapper.selectOne(
             new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, GITHUB_PROVIDER)
-        );
-    }
-
-    private IntegrationConfig findServiceIntegration(String provider) {
-        return integrationConfigMapper.selectOne(
-            new LambdaQueryWrapper<IntegrationConfig>().eq(IntegrationConfig::getProvider, provider)
         );
     }
 

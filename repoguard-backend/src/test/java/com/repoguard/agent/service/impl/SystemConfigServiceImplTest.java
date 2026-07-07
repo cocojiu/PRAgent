@@ -93,6 +93,12 @@ class SystemConfigServiceImplTest {
         new ConnectionTestConfigFactory(secretCryptoService);
     private final IntegrationConnectionCheckMarker connectionCheckMarker =
         new IntegrationConnectionCheckMarker(integrationConfigMapper);
+    private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor =
+        new ServiceIntegrationConnectionTestExecutor(
+            integrationConfigMapper,
+            connectionTestConfigFactory,
+            connectionCheckMarker
+        );
     private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -100,6 +106,7 @@ class SystemConfigServiceImplTest {
         llmConnectionTestRunner,
         mysqlConnectionTestRunner,
         rabbitMqConnectionTestRunner,
+        serviceIntegrationConnectionTestExecutor,
         connectionTestConfigFactory,
         connectionCheckMarker
     );

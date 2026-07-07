@@ -72,6 +72,8 @@ class ConnectionTestServiceImplTest {
     private final ConnectionTestConfigFactory configFactory = new ConnectionTestConfigFactory(secretCryptoService);
     private final IntegrationConnectionCheckMarker connectionCheckMarker =
         new IntegrationConnectionCheckMarker(integrationConfigMapper);
+    private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor =
+        new ServiceIntegrationConnectionTestExecutor(integrationConfigMapper, configFactory, connectionCheckMarker);
     private final ConnectionTestServiceImpl service = new ConnectionTestServiceImpl(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -79,12 +81,13 @@ class ConnectionTestServiceImplTest {
         llmConnectionTestRunner,
         mysqlConnectionTestRunner,
         rabbitMqConnectionTestRunner,
+        serviceIntegrationConnectionTestExecutor,
         configFactory,
         connectionCheckMarker
     );
 
     @Test
-    void constructorRejectsMissingConfigFactory() {
+    void constructorRejectsMissingServiceIntegrationConnectionTestExecutor() {
         assertThatThrownBy(() -> new ConnectionTestServiceImpl(
             integrationConfigMapper,
             reviewPolicyConfigMapper,
@@ -93,10 +96,11 @@ class ConnectionTestServiceImplTest {
             mysqlConnectionTestRunner,
             rabbitMqConnectionTestRunner,
             null,
+            configFactory,
             connectionCheckMarker
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("configFactory");
+            .hasMessage("serviceIntegrationConnectionTestExecutor");
     }
 
     @Test
