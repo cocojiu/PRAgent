@@ -23,8 +23,8 @@ class RuleBasedPullRequestReviewerTest {
         ReviewFindingFactory findingFactory = new ReviewFindingFactory();
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            findingFactory,
-            List.of(customRulePlugin(findingFactory))
+            List.of(customRulePlugin(findingFactory)),
+            List.of()
         );
 
         ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
@@ -51,7 +51,6 @@ class RuleBasedPullRequestReviewerTest {
         ReviewFindingFactory findingFactory = new ReviewFindingFactory();
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            findingFactory,
             ReviewRuleTestFixtures.defaultLineRules(findingFactory),
             List.of(
                 customPullRequestRule(findingFactory, "RG-PR-002", 20),
@@ -135,8 +134,8 @@ class RuleBasedPullRequestReviewerTest {
         ReviewFindingFactory findingFactory = new ReviewFindingFactory();
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            findingFactory,
-            List.of(customRulePlugin(findingFactory))
+            List.of(customRulePlugin(findingFactory)),
+            List.of()
         );
 
         ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(

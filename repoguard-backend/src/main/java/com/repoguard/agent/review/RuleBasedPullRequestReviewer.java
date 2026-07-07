@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -21,21 +22,12 @@ public class RuleBasedPullRequestReviewer {
     @Autowired
     public RuleBasedPullRequestReviewer(
         ReviewRuleProvider reviewRuleProvider,
-        ReviewFindingFactory findingFactory,
         List<ReviewRule> lineRules,
         List<PullRequestReviewRule> pullRequestRules
     ) {
-        this.reviewRuleProvider = reviewRuleProvider;
+        this.reviewRuleProvider = Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider");
         this.lineRules = sortedRules(lineRules);
         this.pullRequestRules = sortedPullRequestRules(pullRequestRules);
-    }
-
-    RuleBasedPullRequestReviewer(
-        ReviewRuleProvider reviewRuleProvider,
-        ReviewFindingFactory findingFactory,
-        List<ReviewRule> lineRules
-    ) {
-        this(reviewRuleProvider, findingFactory, lineRules, List.of(new ControllerApiTestCoverageRule(findingFactory)));
     }
 
     private static List<ReviewRule> sortedRules(List<ReviewRule> rules) {

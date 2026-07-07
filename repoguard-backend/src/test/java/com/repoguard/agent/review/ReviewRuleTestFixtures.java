@@ -12,8 +12,8 @@ final class ReviewRuleTestFixtures {
         ReviewFindingFactory findingFactory = new ReviewFindingFactory();
         return new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            findingFactory,
-            defaultLineRules(findingFactory)
+            defaultLineRules(findingFactory),
+            defaultPullRequestRules(findingFactory)
         );
     }
 
@@ -33,5 +33,9 @@ final class ReviewRuleTestFixtures {
             new GithubCommentDirectPublishRule(findingFactory),
             new ControllerAuthorizationGuardRule(findingFactory)
         );
+    }
+
+    static List<PullRequestReviewRule> defaultPullRequestRules(ReviewFindingFactory findingFactory) {
+        return List.of(new ControllerApiTestCoverageRule(findingFactory));
     }
 }
