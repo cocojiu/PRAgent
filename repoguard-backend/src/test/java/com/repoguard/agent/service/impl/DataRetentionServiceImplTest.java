@@ -189,6 +189,31 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
+    void cleanupExecuteRejectsMalformedBackupReferenceBeforeAcquiringLease() {
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
+            7,
+            50,
+            true,
+            "backup://mysql/../prod/2026-07-07T22:00:00",
+            "CLEANUP"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("backupReference");
+        verify(metricsRecorder).recordFailure(
+            org.mockito.Mockito.eq(true),
+            org.mockito.Mockito.any(BusinessException.class)
+        );
+        verify(auditRecorder, never()).start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        );
+        verify(leaseStore, never()).acquire();
+    }
+
+    @Test
     void cleanupFailureIsRecordedBeforeRethrow() {
         stubLeaseAcquired();
         stubAuditStart(103L);

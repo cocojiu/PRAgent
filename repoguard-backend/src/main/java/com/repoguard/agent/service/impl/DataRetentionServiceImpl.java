@@ -30,6 +30,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +41,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private static final String CONFIRM_TEXT = "CLEANUP";
     private static final int DEFAULT_RETENTION_DAYS = 90;
     private static final int DEFAULT_MAX_TASKS = 500;
+    private static final int BACKUP_REFERENCE_MAX_LENGTH = 128;
+    private static final Pattern BACKUP_REFERENCE_PATTERN = Pattern.compile(
+        "^backup://[A-Za-z0-9][A-Za-z0-9._-]{0,63}/[A-Za-z0-9._~:@%+/-]+$"
+    );
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -121,9 +126,11 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         if (request == null || request.confirmText() == null || !CONFIRM_TEXT.equals(request.confirmText().trim())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供确认短语 CLEANUP。");
         }
-        if (normalizeBlankToNull(request.backupReference()) == null) {
+        String backupReference = normalizeBlankToNull(request.backupReference());
+        if (backupReference == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供备份凭证 backupReference。");
         }
+        validateBackupReference(backupReference);
     }
 
     private DataRetentionCleanupLeaseStore.Lease acquireLease() {
@@ -249,6 +256,33 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供备份凭证 backupReference。");
         }
         return backupReference;
+    }
+
+    private void validateBackupReference(String backupReference) {
+        if (backupReference.length() > BACKUP_REFERENCE_MAX_LENGTH
+            || containsControlOrWhitespace(backupReference)
+            || !BACKUP_REFERENCE_PATTERN.matcher(backupReference).matches()
+            || containsUnsafePathSegment(backupReference)
+        ) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "备份凭证 backupReference 必须使用 backup://<provider>/<path> 格式，并指向已完成的生产备份。"
+            );
+        }
+    }
+
+    private boolean containsControlOrWhitespace(String value) {
+        return value.chars().anyMatch(character -> Character.isWhitespace(character) || Character.isISOControl(character));
+    }
+
+    private boolean containsUnsafePathSegment(String backupReference) {
+        String path = backupReference.substring(backupReference.indexOf('/', "backup://".length()));
+        for (String segment : path.split("/")) {
+            if (".".equals(segment) || "..".equals(segment)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String normalizeBlankToNull(String value) {
