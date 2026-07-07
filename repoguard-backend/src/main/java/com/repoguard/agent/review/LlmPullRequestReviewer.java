@@ -35,29 +35,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     @Autowired
     public LlmPullRequestReviewer(
         ReviewPolicyProvider reviewPolicyProvider,
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RestClient.Builder restClientBuilder,
-        ObjectMapper objectMapper,
-        RepoGuardMetrics metrics,
-        ExternalCallResilience resilience,
-        LlmReviewPromptBuilder promptBuilder,
-        LlmRuleReviewMerger reviewMerger,
-        LlmReviewPipeline reviewPipeline
-    ) {
-        this(
-            reviewPolicyProvider,
-            restClientBuilder,
-            objectMapper,
-            metrics,
-            resilience,
-            promptBuilder,
-            reviewPipeline,
-            new LlmHttpResponseReader()
-        );
-    }
-
-    LlmPullRequestReviewer(
-        ReviewPolicyProvider reviewPolicyProvider,
         RestClient.Builder restClientBuilder,
         ObjectMapper objectMapper,
         RepoGuardMetrics metrics,

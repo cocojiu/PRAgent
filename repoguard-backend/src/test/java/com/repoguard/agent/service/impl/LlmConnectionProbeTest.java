@@ -1,11 +1,13 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
+import com.repoguard.agent.review.LlmHttpResponseReader;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
@@ -29,12 +31,25 @@ class LlmConnectionProbeTest {
     private final LlmConnectionProbe probe = new LlmConnectionProbe(
         RestClient.builder(),
         responseParser(),
-        secretCryptoService
+        secretCryptoService,
+        new LlmHttpResponseReader()
     );
 
     @Test
     void providerReturnsLlmProviderCode() {
         assertThat(probe.provider()).isEqualTo("LLM");
+    }
+
+    @Test
+    void constructorRejectsMissingResponseReader() {
+        assertThatThrownBy(() -> new LlmConnectionProbe(
+            RestClient.builder(),
+            responseParser(),
+            secretCryptoService,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("responseReader");
     }
 
     @Test

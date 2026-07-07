@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -34,12 +35,13 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
     public LlmConnectionProbe(
         RestClient.Builder restClientBuilder,
         LlmConnectionProbeResponseParser responseParser,
-        SecretCryptoService secretCryptoService
+        SecretCryptoService secretCryptoService,
+        LlmHttpResponseReader responseReader
     ) {
-        this.restClientBuilder = restClientBuilder;
-        this.responseParser = responseParser;
-        this.secretCryptoService = secretCryptoService;
-        this.responseReader = new LlmHttpResponseReader();
+        this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
+        this.responseParser = Objects.requireNonNull(responseParser, "responseParser");
+        this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
     }
 
     @Override

@@ -60,6 +60,22 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
+    void constructorRejectsMissingResponseReader() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            new ObjectMapper(),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            null,
+            new LlmReviewPromptBuilder(),
+            org.mockito.Mockito.mock(LlmReviewPipeline.class),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("responseReader");
+    }
+
+    @Test
     void reviewFallsBackToRulesWhenLlmCircuitIsOpen() {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
