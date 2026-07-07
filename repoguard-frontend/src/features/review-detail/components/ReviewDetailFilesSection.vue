@@ -1,7 +1,22 @@
 <template>
   <article v-loading="missingTestsLoading" class="dashboard-card">
-    <h2>缺失测试</h2>
-    <el-table :data="missingTests" class="rg-table" size="large" aria-label="缺失测试列表">
+    <div class="card-title-row">
+      <h2>缺失测试</h2>
+      <span class="count-badge">{{ missingTestsTotal }} 条</span>
+    </div>
+    <div v-if="!missingTestsLoaded && missingTestsTotal > 0" class="lazy-section-actions">
+      <el-button type="primary" plain :loading="missingTestsLoading" @click="$emit('missingTestsLoad')">
+        <RefreshCw :size="16" />
+        加载缺失测试
+      </el-button>
+    </div>
+    <el-table
+      v-else
+      :data="missingTests"
+      class="rg-table"
+      size="large"
+      aria-label="缺失测试列表"
+    >
       <el-table-column prop="file" label="文件" min-width="320" />
       <el-table-column prop="method" label="涉及类/方法" min-width="220" />
       <el-table-column prop="type" label="缺失测试类型" width="160" />
@@ -11,7 +26,7 @@
       </template>
     </el-table>
     <el-pagination
-      v-if="missingTestsTotal > pageSize"
+      v-if="missingTestsLoaded && missingTestsTotal > pageSize"
       class="detail-pagination"
       layout="prev, pager, next"
       :current-page="missingTestsPage"
@@ -22,8 +37,23 @@
   </article>
 
   <article v-loading="changedFilesLoading" class="dashboard-card">
-    <h2>变更文件</h2>
-    <el-table :data="changedFiles" class="rg-table" size="large" aria-label="变更文件列表">
+    <div class="card-title-row">
+      <h2>变更文件</h2>
+      <span class="count-badge">{{ changedFilesTotal }} 个</span>
+    </div>
+    <div v-if="!changedFilesLoaded && changedFilesTotal > 0" class="lazy-section-actions">
+      <el-button type="primary" plain :loading="changedFilesLoading" @click="$emit('changedFilesLoad')">
+        <RefreshCw :size="16" />
+        加载变更文件
+      </el-button>
+    </div>
+    <el-table
+      v-else
+      :data="changedFiles"
+      class="rg-table"
+      size="large"
+      aria-label="变更文件列表"
+    >
       <el-table-column label="文件路径" min-width="420">
         <template #default="{ row }">
           <div class="changed-file-cell">
@@ -48,7 +78,7 @@
       </template>
     </el-table>
     <el-pagination
-      v-if="changedFilesTotal > pageSize"
+      v-if="changedFilesLoaded && changedFilesTotal > pageSize"
       class="detail-pagination"
       layout="prev, pager, next"
       :current-page="changedFilesPage"
@@ -60,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import { RefreshCw } from "lucide-vue-next";
 import type { ChangedFile, MissingTest } from "@/types";
 
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
@@ -67,6 +98,8 @@ type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 defineProps<{
   missingTests: MissingTest[];
   changedFiles: ChangedFileWithFindingCount[];
+  missingTestsLoaded: boolean;
+  changedFilesLoaded: boolean;
   missingTestsLoading: boolean;
   changedFilesLoading: boolean;
   missingTestsPage: number;
@@ -78,6 +111,8 @@ defineProps<{
 }>();
 
 defineEmits<{
+  missingTestsLoad: [];
+  changedFilesLoad: [];
   missingTestsPageChange: [page: number];
   changedFilesPageChange: [page: number];
 }>();

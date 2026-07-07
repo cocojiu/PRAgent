@@ -1044,6 +1044,13 @@
   color: #64748b;
 }
 
+.lazy-section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 88px;
+}
+
 .detail-pagination {
   justify-content: flex-end;
   margin-top: 16px;

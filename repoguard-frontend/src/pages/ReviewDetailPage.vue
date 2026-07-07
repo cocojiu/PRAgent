@@ -168,6 +168,8 @@
           <ReviewDetailFilesSection
             :missing-tests="missingTests"
             :changed-files="changedFilesWithFindingCounts"
+            :missing-tests-loaded="missingTestsLoaded"
+            :changed-files-loaded="changedFilesLoaded"
             :missing-tests-loading="missingTestsLoading"
             :changed-files-loading="changedFilesLoading"
             :missing-tests-page="missingTestsPage"
@@ -176,6 +178,8 @@
             :missing-tests-total="missingTestTotal"
             :changed-files-total="changedFileTotal"
             :change-type-text="changeTypeText"
+            @missing-tests-load="loadMissingTestsFirstPage"
+            @changed-files-load="loadChangedFilesFirstPage"
             @missing-tests-page-change="loadMissingTestsPage"
             @changed-files-page-change="loadChangedFilesPage"
           />
@@ -272,6 +276,8 @@ const missingTestsPage = ref(1);
 const findingsLoading = ref(false);
 const changedFilesLoading = ref(false);
 const missingTestsLoading = ref(false);
+const changedFilesLoaded = ref(false);
+const missingTestsLoaded = ref(false);
 
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
@@ -310,6 +316,8 @@ const resetDetailSectionPages = () => {
   findingsPage.value = 1;
   changedFilesPage.value = 1;
   missingTestsPage.value = 1;
+  changedFilesLoaded.value = false;
+  missingTestsLoaded.value = false;
 };
 
 function afterDetailSummaryLoaded(task: ReviewTaskDetail) {
@@ -538,6 +546,7 @@ const loadChangedFilesPage = async (page: number) => {
       changedFileTotal: result.total
     };
     changedFilesPage.value = page;
+    changedFilesLoaded.value = true;
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
@@ -565,6 +574,7 @@ const loadMissingTestsPage = async (page: number) => {
       missingTestTotal: result.total
     };
     missingTestsPage.value = page;
+    missingTestsLoaded.value = true;
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
@@ -591,16 +601,14 @@ const loadTimelineItems = async () => {
   }
 };
 
+const loadChangedFilesFirstPage = () => loadChangedFilesPage(1);
+
+const loadMissingTestsFirstPage = () => loadMissingTestsPage(1);
+
 function loadInitialDetailSections(task: ReviewTaskDetail) {
   const requests: Promise<void>[] = [loadTimelineItems()];
   if (task.findingTotal > 0) {
     requests.push(loadFindingsPage(1));
-  }
-  if (task.changedFileTotal > 0) {
-    requests.push(loadChangedFilesPage(1));
-  }
-  if (task.missingTestTotal > 0) {
-    requests.push(loadMissingTestsPage(1));
   }
   void Promise.allSettled(requests);
 }
