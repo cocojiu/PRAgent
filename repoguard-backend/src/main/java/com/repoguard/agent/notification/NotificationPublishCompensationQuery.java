@@ -3,6 +3,7 @@ package com.repoguard.agent.notification;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.messaging.RabbitPublishCompensationSettings;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -12,8 +13,7 @@ import org.springframework.stereotype.Component;
 class NotificationPublishCompensationQuery {
 
     private final NotificationOutboxEventStore outboxEventStore;
-    private final RabbitNotificationQueueProperties properties;
-    private final RabbitPublishCompensationPolicy compensationPolicy;
+    private final RabbitPublishCompensationSettings compensationSettings;
 
     NotificationPublishCompensationQuery(
         NotificationOutboxEventStore outboxEventStore,
@@ -21,8 +21,7 @@ class NotificationPublishCompensationQuery {
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this.outboxEventStore = Objects.requireNonNull(outboxEventStore, "outboxEventStore");
-        this.properties = Objects.requireNonNull(properties, "properties");
-        this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
+        this.compensationSettings = new RabbitPublishCompensationSettings(properties, compensationPolicy);
     }
 
     List<NotificationEvent> loadDueEvents(LocalDateTime now) {
@@ -35,14 +34,14 @@ class NotificationPublishCompensationQuery {
     }
 
     LocalDateTime expiredBefore(LocalDateTime now) {
-        return compensationPolicy.expiredBefore(now, properties.getPublishCompensationLeaseMs());
+        return compensationSettings.expiredBefore(now);
     }
 
     int maxAttempts() {
-        return compensationPolicy.maxAttempts(properties);
+        return compensationSettings.maxAttempts();
     }
 
     int batchSize() {
-        return compensationPolicy.batchSize(properties);
+        return compensationSettings.batchSize();
     }
 }

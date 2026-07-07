@@ -7,4 +7,6 @@ public interface RabbitPublishCompensationProperties {
     int getPublishCompensationBatchSize();
 
     long getPublishCompensationIntervalMs();
+
+    long getPublishCompensationLeaseMs();
 }

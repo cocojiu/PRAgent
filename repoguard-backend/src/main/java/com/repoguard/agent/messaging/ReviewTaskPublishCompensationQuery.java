@@ -11,8 +11,7 @@ import org.springframework.stereotype.Component;
 class ReviewTaskPublishCompensationQuery {
 
     private final ReviewTaskPublishOutboxStore outboxStore;
-    private final RabbitReviewQueueProperties properties;
-    private final RabbitPublishCompensationPolicy compensationPolicy;
+    private final RabbitPublishCompensationSettings compensationSettings;
 
     ReviewTaskPublishCompensationQuery(
         ReviewTaskPublishOutboxStore outboxStore,
@@ -20,8 +19,7 @@ class ReviewTaskPublishCompensationQuery {
         RabbitPublishCompensationPolicy compensationPolicy
     ) {
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
-        this.properties = Objects.requireNonNull(properties, "properties");
-        this.compensationPolicy = Objects.requireNonNull(compensationPolicy, "compensationPolicy");
+        this.compensationSettings = new RabbitPublishCompensationSettings(properties, compensationPolicy);
     }
 
     List<ReviewTask> loadDueTasks(LocalDateTime now) {
@@ -34,22 +32,22 @@ class ReviewTaskPublishCompensationQuery {
     }
 
     LocalDateTime expiredBefore(LocalDateTime now) {
-        return compensationPolicy.expiredBefore(now, properties.getPublishCompensationLeaseMs());
+        return compensationSettings.expiredBefore(now);
     }
 
     LocalDateTime nextRetryAt(LocalDateTime now) {
-        return compensationPolicy.nextRetryAt(now, properties);
+        return compensationSettings.nextRetryAt(now);
     }
 
     int nextAttempt(Integer currentAttempts) {
-        return compensationPolicy.nextAttempt(currentAttempts);
+        return compensationSettings.nextAttempt(currentAttempts);
     }
 
     int maxAttempts() {
-        return compensationPolicy.maxAttempts(properties);
+        return compensationSettings.maxAttempts();
     }
 
     int batchSize() {
-        return compensationPolicy.batchSize(properties);
+        return compensationSettings.batchSize();
     }
 }

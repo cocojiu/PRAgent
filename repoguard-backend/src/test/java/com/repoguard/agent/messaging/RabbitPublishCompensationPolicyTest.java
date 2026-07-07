@@ -55,11 +55,18 @@ class RabbitPublishCompensationPolicyTest {
             public long getPublishCompensationIntervalMs() {
                 return 2000;
             }
+
+            @Override
+            public long getPublishCompensationLeaseMs() {
+                return 3000;
+            }
         };
         LocalDateTime now = LocalDateTime.of(2026, 7, 6, 23, 30);
 
         assertThat(policy.maxAttempts(properties)).isEqualTo(4);
         assertThat(policy.batchSize(properties)).isEqualTo(7);
         assertThat(policy.nextRetryAt(now, properties)).isEqualTo(LocalDateTime.of(2026, 7, 6, 23, 30, 2));
+        assertThat(policy.expiredBefore(now, properties.getPublishCompensationLeaseMs()))
+            .isEqualTo(LocalDateTime.of(2026, 7, 6, 23, 29, 57));
     }
 }
