@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.DataRetentionProperties;
 import com.repoguard.agent.config.SystemSettings;
 import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
@@ -57,6 +58,7 @@ class DataRetentionServiceImplTest {
         DataRetentionCleanupAuditQueryService.class
     );
     private final DataRetentionCleanupLeaseStore leaseStore = org.mockito.Mockito.mock(DataRetentionCleanupLeaseStore.class);
+    private final DataRetentionProperties dataRetentionProperties = new DataRetentionProperties();
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -70,7 +72,8 @@ class DataRetentionServiceImplTest {
         metricsRecorder,
         auditRecorder,
         auditQueryService,
-        leaseStore
+        leaseStore,
+        dataRetentionProperties
     );
 
     @Test
@@ -214,6 +217,34 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
+    void cleanupExecuteRejectsMaxTasksAboveConfiguredLimitBeforeAcquiringLease() {
+        dataRetentionProperties.setCleanupMaxTasksPerRun(25);
+
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
+            7,
+            50,
+            true,
+            "backup://mysql/prod/2026-07-07T22:00:00",
+            "CLEANUP"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("maxTasks")
+            .hasMessageContaining("25");
+        verify(metricsRecorder).recordFailure(
+            org.mockito.Mockito.eq(true),
+            org.mockito.Mockito.any(BusinessException.class)
+        );
+        verify(auditRecorder, never()).start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        );
+        verify(leaseStore, never()).acquire();
+    }
+
+    @Test
     void cleanupFailureIsRecordedBeforeRethrow() {
         stubLeaseAcquired();
         stubAuditStart(103L);
@@ -342,7 +373,8 @@ class DataRetentionServiceImplTest {
             metricsRecorder,
             auditRecorder,
             auditQueryService,
-            leaseStore
+            leaseStore,
+            dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -363,7 +395,8 @@ class DataRetentionServiceImplTest {
             null,
             auditRecorder,
             auditQueryService,
-            leaseStore
+            leaseStore,
+            dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
@@ -384,7 +417,8 @@ class DataRetentionServiceImplTest {
             metricsRecorder,
             null,
             auditQueryService,
-            leaseStore
+            leaseStore,
+            dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("auditRecorder");
@@ -405,7 +439,8 @@ class DataRetentionServiceImplTest {
             metricsRecorder,
             auditRecorder,
             null,
-            leaseStore
+            leaseStore,
+            dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("auditQueryService");
@@ -426,10 +461,33 @@ class DataRetentionServiceImplTest {
             metricsRecorder,
             auditRecorder,
             auditQueryService,
-            null
+            null,
+            dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("leaseStore");
+    }
+
+    @Test
+    void constructorRejectsMissingDataRetentionProperties() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            new ReviewTaskStateMachine(),
+            metricsRecorder,
+            auditRecorder,
+            auditQueryService,
+            leaseStore,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("dataRetentionProperties");
     }
 
     private void stubLeaseAcquired() {

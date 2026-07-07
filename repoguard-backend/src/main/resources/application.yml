@@ -57,6 +57,7 @@ management:
 repoguard:
   data-retention:
     cleanup-lease-minutes: ${REPOGUARD_DATA_RETENTION_CLEANUP_LEASE_MINUTES:30}
+    cleanup-max-tasks-per-run: ${REPOGUARD_DATA_RETENTION_CLEANUP_MAX_TASKS_PER_RUN:500}
   observability:
     thresholds:
       enabled: ${REPOGUARD_OBSERVABILITY_THRESHOLDS_ENABLED:true}

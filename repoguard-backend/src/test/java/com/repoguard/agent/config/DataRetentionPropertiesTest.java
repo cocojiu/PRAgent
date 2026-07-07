@@ -15,18 +15,30 @@ class DataRetentionPropertiesTest {
 
         assertThat(properties.getCleanupLeaseMinutes()).isEqualTo(30);
         assertThat(properties.normalizedCleanupLeaseMinutes()).isEqualTo(30);
+        assertThat(properties.getCleanupMaxTasksPerRun()).isEqualTo(500);
+        assertThat(properties.normalizedCleanupMaxTasksPerRun()).isEqualTo(500);
     }
 
     @Test
-    void nonPositiveCleanupLeaseFallsBackToDefault() {
+    void nonPositiveCleanupSettingsFallBackToDefaults() {
         DataRetentionProperties properties = new DataRetentionProperties();
         properties.setCleanupLeaseMinutes(0);
+        properties.setCleanupMaxTasksPerRun(0);
 
         assertThat(properties.normalizedCleanupLeaseMinutes()).isEqualTo(30);
+        assertThat(properties.normalizedCleanupMaxTasksPerRun()).isEqualTo(500);
     }
 
     @Test
-    void applicationYamlDeclaresCleanupLeaseBudget() {
+    void cleanupMaxTasksDoesNotExceedRequestContractLimit() {
+        DataRetentionProperties properties = new DataRetentionProperties();
+        properties.setCleanupMaxTasksPerRun(6000);
+
+        assertThat(properties.normalizedCleanupMaxTasksPerRun()).isEqualTo(5000);
+    }
+
+    @Test
+    void applicationYamlDeclaresCleanupBudgets() {
         YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
         yaml.setResources(new ClassPathResource("application.yml"));
         Properties properties = yaml.getObject();
@@ -34,6 +46,8 @@ class DataRetentionPropertiesTest {
         assertThat(properties).isNotNull();
         assertThat(defaultValue(properties.getProperty("repoguard.data-retention.cleanup-lease-minutes")))
             .isEqualTo(30);
+        assertThat(defaultValue(properties.getProperty("repoguard.data-retention.cleanup-max-tasks-per-run")))
+            .isEqualTo(500);
     }
 
     private static long defaultValue(String placeholder) {

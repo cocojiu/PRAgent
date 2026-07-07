@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.DataRetentionProperties;
 import com.repoguard.agent.config.SystemSettings;
 import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
@@ -60,6 +61,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final DataRetentionCleanupAuditRecorder auditRecorder;
     private final DataRetentionCleanupAuditQueryService auditQueryService;
     private final DataRetentionCleanupLeaseStore leaseStore;
+    private final DataRetentionProperties dataRetentionProperties;
     private final ReentrantLock cleanupLock = new ReentrantLock();
 
     @Autowired
@@ -76,7 +78,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         DataRetentionMetricsRecorder metricsRecorder,
         DataRetentionCleanupAuditRecorder auditRecorder,
         DataRetentionCleanupAuditQueryService auditQueryService,
-        DataRetentionCleanupLeaseStore leaseStore
+        DataRetentionCleanupLeaseStore leaseStore,
+        DataRetentionProperties dataRetentionProperties
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -91,6 +94,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
         this.auditQueryService = Objects.requireNonNull(auditQueryService, "auditQueryService");
         this.leaseStore = Objects.requireNonNull(leaseStore, "leaseStore");
+        this.dataRetentionProperties = Objects.requireNonNull(dataRetentionProperties, "dataRetentionProperties");
     }
 
     @Override
@@ -131,6 +135,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供备份凭证 backupReference。");
         }
         validateBackupReference(backupReference);
+        validateExecutionMaxTasks(request);
     }
 
     private DataRetentionCleanupLeaseStore.Lease acquireLease() {
@@ -158,7 +163,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
 
     private DataRetentionCleanupResponse cleanupInternal(DataRetentionCleanupRequest request, boolean execute) {
         int retentionDays = resolveRetentionDays(request);
-        int maxTasks = request != null && request.maxTasks() != null ? request.maxTasks() : DEFAULT_MAX_TASKS;
+        int maxTasks = resolveMaxTasks(request, execute);
         if (execute && (request.confirmText() == null || !CONFIRM_TEXT.equals(request.confirmText().trim()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供确认短语 CLEANUP。");
         }
@@ -248,6 +253,29 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         SystemSettings settings = systemSettingsProvider.getSettings();
         Integer retentionDays = settings == null ? null : settings.retentionDays();
         return retentionDays == null || retentionDays <= 0 ? DEFAULT_RETENTION_DAYS : retentionDays;
+    }
+
+    private int resolveMaxTasks(DataRetentionCleanupRequest request, boolean execute) {
+        Integer requestedMaxTasks = request == null ? null : request.maxTasks();
+        if (!execute) {
+            return requestedMaxTasks == null ? DEFAULT_MAX_TASKS : requestedMaxTasks;
+        }
+        int cleanupMaxTasksPerRun = dataRetentionProperties.normalizedCleanupMaxTasksPerRun();
+        if (requestedMaxTasks == null) {
+            return Math.min(DEFAULT_MAX_TASKS, cleanupMaxTasksPerRun);
+        }
+        return requestedMaxTasks;
+    }
+
+    private void validateExecutionMaxTasks(DataRetentionCleanupRequest request) {
+        Integer requestedMaxTasks = request == null ? null : request.maxTasks();
+        int cleanupMaxTasksPerRun = dataRetentionProperties.normalizedCleanupMaxTasksPerRun();
+        if (requestedMaxTasks != null && requestedMaxTasks > cleanupMaxTasksPerRun) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "执行数据清理时 maxTasks 不能超过当前生产上限 " + cleanupMaxTasksPerRun + "。"
+            );
+        }
     }
 
     private String resolveBackupReference(DataRetentionCleanupRequest request, boolean execute) {
