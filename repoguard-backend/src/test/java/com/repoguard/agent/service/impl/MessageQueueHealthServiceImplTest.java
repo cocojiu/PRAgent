@@ -60,7 +60,7 @@ class MessageQueueHealthServiceImplTest {
         reviewTaskStateMachine
     );
     private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
-    private final MessageQueueHealthServiceImpl service = createService(null);
+    private final MessageQueueHealthServiceImpl service = createService(new RecordingTransactionManager());
 
     @Test
     void serviceRejectsMissingSubServices() {
@@ -116,6 +116,21 @@ class MessageQueueHealthServiceImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("outboxStore");
+    }
+
+    @Test
+    void requeueServiceRejectsMissingTransactionManager() {
+        assertThatThrownBy(() -> new ReviewTaskRequeueService(
+            reviewTaskMapper,
+            properties,
+            reviewTaskPublisher,
+            null,
+            reviewTaskStateMachine,
+            org.mockito.Mockito.mock(MessageQueueAuditRecorder.class),
+            org.mockito.Mockito.mock(com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore.class)
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("transactionManager");
     }
 
     @Test

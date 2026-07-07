@@ -46,7 +46,9 @@ class ReviewTaskRequeueService {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.auditRecorder = auditRecorder;
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
-        this.transactionTemplate = transactionManager == null ? null : new TransactionTemplate(transactionManager);
+        this.transactionTemplate = new TransactionTemplate(
+            Objects.requireNonNull(transactionManager, "transactionManager")
+        );
     }
 
     MessageQueueRequeueResponse requeueTask(Long taskId) {
@@ -120,9 +122,6 @@ class ReviewTaskRequeueService {
     }
 
     private <T> T executeInTransaction(TransactionCallback<T> callback) {
-        if (transactionTemplate == null) {
-            return callback.execute();
-        }
         return transactionTemplate.execute(status -> callback.execute());
     }
 
