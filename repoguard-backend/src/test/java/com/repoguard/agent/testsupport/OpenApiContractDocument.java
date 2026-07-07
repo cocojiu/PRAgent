@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.testsupport.ControllerEndpointCatalog.Endpoint;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
@@ -18,6 +19,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.TypeVariable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -32,6 +34,8 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Set;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -182,7 +186,8 @@ public final class OpenApiContractDocument {
         String responseEnvelope = method.getReturnType().getSimpleName();
         ok.put("description", "OK");
         ok.put("x-java-response-envelope", responseEnvelope);
-        ok.put("content", content(refSchema(responseEnvelope)));
+        responseDataType(method).ifPresent(dataType -> ok.put("x-java-response-data", typeName(dataType)));
+        ok.put("content", content(schemaForType(method.getGenericReturnType(), new LinkedHashSet<>())));
         responses.put("200", ok);
         return responses;
     }
@@ -194,9 +199,12 @@ public final class OpenApiContractDocument {
             .flatMap(Optional::stream)
             .filter(type -> type != byte[].class)
             .forEach(type -> collectSchemaTypes(type, schemaTypes));
+        endpoints.stream()
+            .map(endpoint -> endpoint.method().getGenericReturnType())
+            .forEach(type -> collectSchemaTypes(type, schemaTypes));
 
         Map<String, Object> schemas = new LinkedHashMap<>();
-        schemas.put("ApiResponse", objectSchema("ApiResponse"));
+        schemas.put("ApiResponse", apiResponseSchema(objectSchema("Object")));
         for (Class<?> schemaType : schemaTypes.stream().sorted(Comparator.comparing(Class::getSimpleName)).toList()) {
             schemas.put(schemaType.getSimpleName(), schemaForRecord(schemaType, schemaTypes));
         }
@@ -233,6 +241,31 @@ public final class OpenApiContractDocument {
             }
         }
         return Optional.empty();
+    }
+
+    private static Optional<Type> responseDataType(Method method) {
+        Type returnType = method.getGenericReturnType();
+        if (returnType instanceof ParameterizedType parameterizedType
+            && parameterizedType.getRawType() == ApiResponse.class) {
+            return Optional.of(parameterizedType.getActualTypeArguments()[0]);
+        }
+        return Optional.empty();
+    }
+
+    private static void collectSchemaTypes(Type type, Set<Class<?>> schemaTypes) {
+        if (type instanceof ParameterizedType parameterizedType) {
+            Type rawType = parameterizedType.getRawType();
+            if (rawType instanceof Class<?> rawClass && isSchemaRecord(rawClass)) {
+                collectSchemaTypes(rawClass, schemaTypes);
+            }
+            for (Type argument : parameterizedType.getActualTypeArguments()) {
+                collectSchemaTypes(argument, schemaTypes);
+            }
+            return;
+        }
+        if (type instanceof Class<?> typeClass) {
+            collectSchemaTypes(typeClass, schemaTypes);
+        }
     }
 
     private static void collectSchemaTypes(Class<?> type, Set<Class<?>> schemaTypes) {
@@ -282,7 +315,7 @@ public final class OpenApiContractDocument {
     }
 
     private static Map<String, Object> schemaForComponent(RecordComponent component, Set<Class<?>> schemaTypes) {
-        Map<String, Object> schema = schemaForType(component.getType(), component.getGenericType(), schemaTypes);
+        Map<String, Object> schema = schemaForType(component.getGenericType(), schemaTypes);
         applyValidationConstraints(component, schema);
         if (annotation(component, Valid.class).isPresent()) {
             schema.put("x-valid", true);
@@ -290,7 +323,34 @@ public final class OpenApiContractDocument {
         return schema;
     }
 
-    private static Map<String, Object> schemaForType(Class<?> type, Type genericType, Set<Class<?>> schemaTypes) {
+    private static Map<String, Object> schemaForType(Type type, Set<Class<?>> schemaTypes) {
+        if (type instanceof ParameterizedType parameterizedType) {
+            Type rawType = parameterizedType.getRawType();
+            if (rawType instanceof Class<?> rawClass) {
+                if (List.class.isAssignableFrom(rawClass)) {
+                    Map<String, Object> schema = scalarSchema("array");
+                    schema.put("items", schemaForType(parameterizedType.getActualTypeArguments()[0], schemaTypes));
+                    return schema;
+                }
+                if (rawClass == ApiResponse.class) {
+                    return apiResponseSchema(schemaForType(parameterizedType.getActualTypeArguments()[0], schemaTypes));
+                }
+                if (isSchemaRecord(rawClass)) {
+                    return schemaForParameterizedRecord(rawClass, parameterizedType, schemaTypes);
+                }
+            }
+            return objectSchema(typeName(type));
+        }
+        if (type instanceof TypeVariable<?>) {
+            return objectSchema(typeName(type));
+        }
+        if (!(type instanceof Class<?> typeClass)) {
+            return objectSchema(typeName(type));
+        }
+        return schemaForClass(typeClass, type, schemaTypes);
+    }
+
+    private static Map<String, Object> schemaForClass(Class<?> type, Type genericType, Set<Class<?>> schemaTypes) {
         if (type == String.class) {
             return scalarSchema("string");
         }
@@ -310,18 +370,127 @@ public final class OpenApiContractDocument {
         if (type == BigDecimal.class || type == Double.class || type == double.class || type == Float.class || type == float.class) {
             return scalarSchema("number");
         }
+        if (type == OffsetDateTime.class || type == LocalDateTime.class) {
+            Map<String, Object> schema = scalarSchema("string");
+            schema.put("format", "date-time");
+            return schema;
+        }
+        if (type == Void.class || type == void.class) {
+            return scalarSchema("null");
+        }
         if (List.class.isAssignableFrom(type)) {
             Map<String, Object> schema = scalarSchema("array");
             schema.put("items", listItemClass(genericType)
-                .map(itemType -> schemaForType(itemType, itemType, schemaTypes))
+                .map(itemType -> schemaForType(itemType, schemaTypes))
                 .orElseGet(() -> objectSchema("Object")));
             return schema;
+        }
+        if (type == ApiResponse.class) {
+            return apiResponseSchema(objectSchema("Object"));
         }
         if (isSchemaRecord(type)) {
             collectSchemaTypes(type, schemaTypes);
             return refSchema(type.getSimpleName());
         }
         return objectSchema(type.getSimpleName());
+    }
+
+    private static Map<String, Object> apiResponseSchema(Map<String, Object> dataSchema) {
+        Map<String, Object> schema = objectSchema("ApiResponse");
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("success", scalarSchema("boolean"));
+        properties.put("code", scalarSchema("string"));
+        properties.put("message", scalarSchema("string"));
+        properties.put("data", dataSchema);
+        properties.put("timestamp", schemaForType(OffsetDateTime.class, new LinkedHashSet<>()));
+        schema.put("properties", properties);
+        schema.put("required", List.of("success", "code", "message", "timestamp"));
+        return schema;
+    }
+
+    private static Map<String, Object> schemaForParameterizedRecord(
+        Class<?> rawClass,
+        ParameterizedType parameterizedType,
+        Set<Class<?>> schemaTypes
+    ) {
+        collectSchemaTypes(rawClass, schemaTypes);
+        Map<String, Type> typeArguments = typeArguments(rawClass, parameterizedType);
+        Map<String, Object> schema = objectSchema(typeName(parameterizedType));
+        Map<String, Object> properties = new LinkedHashMap<>();
+        List<String> required = new ArrayList<>();
+        for (RecordComponent component : rawClass.getRecordComponents()) {
+            Type resolvedType = resolveType(component.getGenericType(), typeArguments);
+            Map<String, Object> property = schemaForType(resolvedType, schemaTypes);
+            applyValidationConstraints(component, property);
+            properties.put(component.getName(), property);
+            if (isRequired(component)) {
+                required.add(component.getName());
+            }
+        }
+        schema.put("properties", properties);
+        if (!required.isEmpty()) {
+            schema.put("required", required);
+        }
+        return schema;
+    }
+
+    private static Map<String, Type> typeArguments(Class<?> rawClass, ParameterizedType parameterizedType) {
+        TypeVariable<?>[] variables = rawClass.getTypeParameters();
+        Type[] arguments = parameterizedType.getActualTypeArguments();
+        Map<String, Type> typeArguments = new LinkedHashMap<>();
+        for (int index = 0; index < variables.length; index++) {
+            typeArguments.put(variables[index].getName(), arguments[index]);
+        }
+        return typeArguments;
+    }
+
+    private static Type resolveType(Type type, Map<String, Type> typeArguments) {
+        if (type instanceof TypeVariable<?> typeVariable) {
+            return typeArguments.getOrDefault(typeVariable.getName(), type);
+        }
+        if (type instanceof ParameterizedType parameterizedType) {
+            Type[] arguments = parameterizedType.getActualTypeArguments();
+            Type[] resolvedArguments = new Type[arguments.length];
+            for (int index = 0; index < arguments.length; index++) {
+                resolvedArguments[index] = resolveType(arguments[index], typeArguments);
+            }
+            return new ResolvedParameterizedType(parameterizedType.getRawType(), resolvedArguments, parameterizedType.getOwnerType());
+        }
+        return type;
+    }
+
+    private static String typeName(Type type) {
+        if (type instanceof Class<?> typeClass) {
+            return typeClass.getSimpleName();
+        }
+        if (type instanceof ParameterizedType parameterizedType) {
+            Type rawType = parameterizedType.getRawType();
+            String rawName = rawType instanceof Class<?> rawClass ? rawClass.getSimpleName() : rawType.getTypeName();
+            return rawName + "<" + List.of(parameterizedType.getActualTypeArguments()).stream()
+                .map(OpenApiContractDocument::typeName)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("") + ">";
+        }
+        return type.getTypeName();
+    }
+
+    private record ResolvedParameterizedType(Type rawType, Type[] actualTypeArguments, Type ownerType)
+        implements ParameterizedType {
+
+        @Override
+        public Type[] getActualTypeArguments() {
+            return actualTypeArguments;
+        }
+
+        @Override
+        public Type getRawType() {
+            return rawType;
+        }
+
+        @Override
+        public Type getOwnerType() {
+            return ownerType;
+        }
     }
 
     private static Optional<Class<?>> listItemClass(Type genericType) {

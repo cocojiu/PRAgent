@@ -26,10 +26,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "AuthResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/AuthResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -58,10 +79,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -79,10 +121,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "AuthCurrentUserDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/AuthCurrentUserDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -111,10 +174,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "AuthResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/AuthResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -143,10 +227,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "AuthResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/AuthResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -175,10 +280,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "AuthResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/AuthResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -196,10 +322,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "CacheStatsResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/CacheStatsResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -228,10 +375,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DataRetentionCleanupResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DataRetentionCleanupResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -249,10 +417,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -279,10 +468,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -311,10 +521,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ConnectionTestResultDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ConnectionTestResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -332,10 +563,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ServiceIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ServiceIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -362,10 +614,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ServiceIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ServiceIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -394,10 +667,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ConnectionTestResultDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ConnectionTestResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -415,10 +709,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ServiceIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ServiceIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -445,10 +760,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ServiceIntegrationConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ServiceIntegrationConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -477,10 +813,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ConnectionTestResultDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ConnectionTestResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -533,10 +890,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<NotificationBindingDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<NotificationBindingDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/NotificationBindingDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -563,10 +955,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationBindingDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationBindingDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -591,10 +1004,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -628,10 +1062,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationBindingDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationBindingDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -667,10 +1122,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationBindingDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationBindingDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -695,10 +1171,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ConnectionTestResultDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ConnectionTestResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -716,10 +1213,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewPolicyConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewPolicyConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -746,10 +1264,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewPolicyConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewPolicyConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -778,10 +1317,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ConnectionTestResultDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ConnectionTestResultDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -799,10 +1359,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRulesResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRulesResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -829,10 +1410,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRuleConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRuleConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -868,10 +1470,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRuleConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRuleConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -907,10 +1530,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRuleConfigDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRuleConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -939,10 +1583,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SecretReEncryptionResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SecretReEncryptionResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -960,10 +1625,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SystemSettingsDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SystemSettingsDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -990,10 +1676,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SystemSettingsDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SystemSettingsDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1011,10 +1718,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<HighRiskReviewDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/HighRiskReviewDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1039,10 +1770,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DashboardLlmQualityResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DashboardLlmQualityResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1067,10 +1819,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DashboardOverviewResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DashboardOverviewResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1088,10 +1861,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewTrendPointDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewTrendPointDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1109,10 +1906,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ChartSliceDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ChartSliceDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1130,10 +1951,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "DashboardRulesResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/DashboardRulesResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1151,10 +1993,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<DashboardMetricDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/DashboardMetricDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1184,10 +2050,32 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubWebhookResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "GithubWebhookResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1205,10 +2093,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "MessageQueueHealthResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/MessageQueueHealthResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1233,10 +2142,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "MessageQueueRequeueResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/MessageQueueRequeueResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1282,10 +2212,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<NotificationDeliveryDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<NotificationDeliveryDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/NotificationDeliveryDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1331,10 +2296,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<NotificationEventDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<NotificationEventDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/NotificationEventDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1359,10 +2359,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationEventDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationEventDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1380,10 +2401,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "NotificationCenterDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/NotificationCenterDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1412,10 +2454,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1489,10 +2552,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<ReviewTaskListItem>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewTaskListItem>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewTaskListItem"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1510,10 +2608,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubPullRequestOptionsResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubPullRequestOptionsResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1542,10 +2661,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ManualReviewResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ManualReviewResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1563,10 +2703,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<String>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "type" : "string"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1591,10 +2755,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewTaskDetail",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewTaskDetail"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1640,10 +2825,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<ChangedFileDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ChangedFileDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ChangedFileDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1703,10 +2923,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<ReviewFindingDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewFindingDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewFindingDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1749,10 +3004,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "FindingFeedbackResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/FindingFeedbackResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1777,10 +3053,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubCommentPublishResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubCommentPublishResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1826,10 +3123,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubCommentPreviewResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubCommentPreviewResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1875,10 +3193,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "GithubCommentPublicationHistoryResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/GithubCommentPublicationHistoryResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1914,10 +3253,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "HumanReviewResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/HumanReviewResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1956,10 +3316,45 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<MissingTestDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<MissingTestDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/MissingTestDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -1984,10 +3379,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRetryResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRetryResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2012,10 +3428,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewTaskStatusResponse",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewTaskStatusResponse"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2047,10 +3484,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewTimelineItem>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewTimelineItem"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2068,10 +3529,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<SystemHealthItemDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/SystemHealthItemDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2089,10 +3574,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<UserManagementItemDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/UserManagementItemDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2119,10 +3628,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "UserManagementItemDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/UserManagementItemDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2140,10 +3670,34 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<UserOperationAuditDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/UserOperationAuditDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2179,10 +3733,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "UserManagementItemDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/UserManagementItemDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2218,10 +3793,31 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "UserManagementItemDto",
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/ApiResponse"
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/UserManagementItemDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
                 }
               }
             }
@@ -2234,7 +3830,92 @@
     "schemas" : {
       "ApiResponse" : {
         "type" : "object",
-        "x-java-type" : "ApiResponse"
+        "x-java-type" : "ApiResponse",
+        "properties" : {
+          "success" : {
+            "type" : "boolean"
+          },
+          "code" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "data" : {
+            "type" : "object",
+            "x-java-type" : "Object"
+          },
+          "timestamp" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        },
+        "required" : [ "success", "code", "message", "timestamp" ]
+      },
+      "ActiveRabbitMqConfigDto" : {
+        "type" : "object",
+        "x-java-type" : "ActiveRabbitMqConfigDto",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "runtimeConnectionStatus" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "virtualHost" : {
+            "type" : "string"
+          },
+          "lastCheckedAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "configVersion" : {
+            "type" : "string"
+          },
+          "switchNotice" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AuthCurrentUserDto" : {
+        "type" : "object",
+        "x-java-type" : "AuthCurrentUserDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "lastLoginAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
       },
       "AuthLoginRequest" : {
         "type" : "object",
@@ -2325,6 +4006,70 @@
         },
         "required" : [ "username", "email", "password", "confirmPassword" ]
       },
+      "AuthResponse" : {
+        "type" : "object",
+        "x-java-type" : "AuthResponse",
+        "properties" : {
+          "accessToken" : {
+            "type" : "string"
+          },
+          "refreshToken" : {
+            "type" : "string"
+          },
+          "tokenType" : {
+            "type" : "string"
+          },
+          "accessTokenExpiresInSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "refreshTokenExpiresInSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "user" : {
+            "$ref" : "#/components/schemas/AuthUserDto"
+          }
+        }
+      },
+      "AuthUserDto" : {
+        "type" : "object",
+        "x-java-type" : "AuthUserDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string"
+          }
+        }
+      },
+      "BaseSettingsDto" : {
+        "type" : "object",
+        "x-java-type" : "BaseSettingsDto",
+        "properties" : {
+          "systemName" : {
+            "type" : "string"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "timezone" : {
+            "type" : "string"
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
       "BaseSettingsRequest" : {
         "type" : "object",
         "x-java-type" : "BaseSettingsRequest",
@@ -2353,6 +4098,286 @@
         },
         "required" : [ "systemName", "language", "timezone", "retentionDays" ]
       },
+      "CacheStatsItemDto" : {
+        "type" : "object",
+        "x-java-type" : "CacheStatsItemDto",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "estimatedSize" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "requestCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "missCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "hitRate" : {
+            "type" : "number"
+          },
+          "evictionCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "estimatedSize", "requestCount", "hitCount", "missCount", "hitRate", "evictionCount" ]
+      },
+      "CacheStatsResponse" : {
+        "type" : "object",
+        "x-java-type" : "CacheStatsResponse",
+        "properties" : {
+          "caches" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/CacheStatsItemDto"
+            }
+          }
+        }
+      },
+      "ChangedFileDto" : {
+        "type" : "object",
+        "x-java-type" : "ChangedFileDto",
+        "properties" : {
+          "path" : {
+            "type" : "string"
+          },
+          "changeType" : {
+            "type" : "string"
+          },
+          "additions" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletions" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ChartSliceDto" : {
+        "type" : "object",
+        "x-java-type" : "ChartSliceDto",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "color" : {
+            "type" : "string"
+          },
+          "percent" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "value" ]
+      },
+      "ChunkedReviewDto" : {
+        "type" : "object",
+        "x-java-type" : "ChunkedReviewDto",
+        "properties" : {
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "chunkCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "aggregateRisk" : {
+            "type" : "string"
+          },
+          "aggregateFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedChunks" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "ConnectionTestResultDto" : {
+        "type" : "object",
+        "x-java-type" : "ConnectionTestResultDto",
+        "properties" : {
+          "success" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "checkedAt" : {
+            "type" : "string"
+          },
+          "testedConfigSource" : {
+            "type" : "string"
+          },
+          "runtimeHealthy" : {
+            "type" : "boolean"
+          },
+          "savedConfigHealthy" : {
+            "type" : "boolean"
+          },
+          "mismatch" : {
+            "type" : "boolean"
+          },
+          "runtimeConnectionStatus" : {
+            "type" : "string"
+          },
+          "savedConfigStatus" : {
+            "type" : "string"
+          }
+        }
+      },
+      "DashboardLlmQualityResponse" : {
+        "type" : "object",
+        "x-java-type" : "DashboardLlmQualityResponse",
+        "properties" : {
+          "byModel" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByModelDto"
+            }
+          },
+          "byRepository" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByRepositoryDto"
+            }
+          },
+          "trend" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityTrendPointDto"
+            }
+          }
+        }
+      },
+      "DashboardMetricDto" : {
+        "type" : "object",
+        "x-java-type" : "DashboardMetricDto",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "string"
+          },
+          "trend" : {
+            "type" : "string"
+          },
+          "trendType" : {
+            "type" : "string"
+          },
+          "color" : {
+            "type" : "string"
+          }
+        }
+      },
+      "DashboardOverviewResponse" : {
+        "type" : "object",
+        "x-java-type" : "DashboardOverviewResponse",
+        "properties" : {
+          "overviewMetrics" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/DashboardMetricDto"
+            }
+          },
+          "reviewTrend" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewTrendPointDto"
+            }
+          },
+          "riskDistribution" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChartSliceDto"
+            }
+          },
+          "ruleHits" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChartSliceDto"
+            }
+          },
+          "highRiskReviews" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/HighRiskReviewDto"
+            }
+          },
+          "failedRules" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FailedRuleStatDto"
+            }
+          },
+          "systemHealth" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SystemHealthItemDto"
+            }
+          },
+          "llmQualityByModel" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByModelDto"
+            }
+          },
+          "llmQualityByRepository" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityByRepositoryDto"
+            }
+          },
+          "llmQualityTrend" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/LlmQualityTrendPointDto"
+            }
+          }
+        }
+      },
+      "DashboardRulesResponse" : {
+        "type" : "object",
+        "x-java-type" : "DashboardRulesResponse",
+        "properties" : {
+          "ruleHits" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChartSliceDto"
+            }
+          },
+          "failedRules" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FailedRuleStatDto"
+            }
+          }
+        }
+      },
       "DataRetentionCleanupRequest" : {
         "type" : "object",
         "x-java-type" : "DataRetentionCleanupRequest",
@@ -2378,6 +4403,86 @@
           }
         }
       },
+      "DataRetentionCleanupResponse" : {
+        "type" : "object",
+        "x-java-type" : "DataRetentionCleanupResponse",
+        "properties" : {
+          "executed" : {
+            "type" : "boolean"
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "maxTasks" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "cutoffTime" : {
+            "type" : "string"
+          },
+          "candidateTasks" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "selectedTasks" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedBatchItems" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedPublications" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedBatches" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedChangedFiles" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedTimelines" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletedTasks" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        },
+        "required" : [ "executed", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
+      },
+      "FailedRuleStatDto" : {
+        "type" : "object",
+        "x-java-type" : "FailedRuleStatDto",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "count" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "trend" : {
+            "type" : "string"
+          },
+          "direction" : {
+            "type" : "string"
+          },
+          "percent" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "count" ]
+      },
       "FindingFeedbackRequest" : {
         "type" : "object",
         "x-java-type" : "FindingFeedbackRequest",
@@ -2393,6 +4498,32 @@
           }
         },
         "required" : [ "status" ]
+      },
+      "FindingFeedbackResponse" : {
+        "type" : "object",
+        "x-java-type" : "FindingFeedbackResponse",
+        "properties" : {
+          "findingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "feedbackStatus" : {
+            "type" : "string"
+          },
+          "feedbackNote" : {
+            "type" : "string"
+          },
+          "feedbackBy" : {
+            "type" : "string"
+          },
+          "feedbackAt" : {
+            "type" : "string"
+          }
+        }
       },
       "FrontendApiWaterfallItemDto" : {
         "type" : "object",
@@ -2459,6 +4590,406 @@
           }
         }
       },
+      "GithubCommentPreviewItem" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPreviewItem",
+        "properties" : {
+          "findingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "file" : {
+            "type" : "string"
+          },
+          "line" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "recommendation" : {
+            "type" : "string"
+          },
+          "commentBody" : {
+            "type" : "string"
+          },
+          "commentable" : {
+            "type" : "boolean"
+          },
+          "targetType" : {
+            "type" : "string"
+          },
+          "reason" : {
+            "type" : "string"
+          },
+          "published" : {
+            "type" : "boolean"
+          },
+          "publicationStatus" : {
+            "type" : "string"
+          },
+          "publicationUrl" : {
+            "type" : "string"
+          },
+          "publicationMessage" : {
+            "type" : "string"
+          },
+          "publishedAt" : {
+            "type" : "string"
+          },
+          "feedbackStatus" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GithubCommentPreviewResponse" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPreviewResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "prUrl" : {
+            "type" : "string"
+          },
+          "writebackCheck" : {
+            "$ref" : "#/components/schemas/GithubCommentWritebackCheck"
+          },
+          "totalFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commentableCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "blockedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "publishedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "itemTotal" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "commentableOnly" : {
+            "type" : "boolean"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubCommentPreviewItem"
+            }
+          }
+        }
+      },
+      "GithubCommentPublicationBatchDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPublicationBatchDto",
+        "properties" : {
+          "batchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "totalFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "attemptedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "succeededCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skippedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "completedAt" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubCommentPublicationHistoryItem"
+            }
+          }
+        }
+      },
+      "GithubCommentPublicationHistoryItem" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPublicationHistoryItem",
+        "properties" : {
+          "findingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "file" : {
+            "type" : "string"
+          },
+          "line" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "targetType" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "githubCommentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "publishedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GithubCommentPublicationHistoryResponse" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPublicationHistoryResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "page" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "pageSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "batches" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubCommentPublicationBatchDto"
+            }
+          }
+        },
+        "required" : [ "total", "page", "pageSize" ]
+      },
+      "GithubCommentPublishItem" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPublishItem",
+        "properties" : {
+          "findingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "file" : {
+            "type" : "string"
+          },
+          "line" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "targetType" : {
+            "type" : "string"
+          },
+          "success" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "githubCommentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "publishedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GithubCommentPublishResponse" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentPublishResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalFindings" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "attemptedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "succeededCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skippedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubCommentPublishItem"
+            }
+          }
+        }
+      },
+      "GithubCommentWritebackCheck" : {
+        "type" : "object",
+        "x-java-type" : "GithubCommentWritebackCheck",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "level" : {
+            "type" : "string"
+          },
+          "taskOwner" : {
+            "type" : "string"
+          },
+          "taskRepository" : {
+            "type" : "string"
+          },
+          "configuredOwner" : {
+            "type" : "string"
+          },
+          "configuredRepository" : {
+            "type" : "string"
+          },
+          "repositoryMatched" : {
+            "type" : "boolean"
+          },
+          "tokenConfigured" : {
+            "type" : "boolean"
+          },
+          "connectionHealthy" : {
+            "type" : "boolean"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "messages" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "GithubIntegrationConfigDto" : {
+        "type" : "object",
+        "x-java-type" : "GithubIntegrationConfigDto",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "token" : {
+            "type" : "string"
+          },
+          "defaultOwner" : {
+            "type" : "string"
+          },
+          "defaultRepo" : {
+            "type" : "string"
+          },
+          "lastCheckedAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "secretStatus" : {
+            "type" : "string"
+          }
+        }
+      },
       "GithubIntegrationConfigRequest" : {
         "type" : "object",
         "x-java-type" : "GithubIntegrationConfigRequest",
@@ -2483,6 +5014,81 @@
         },
         "required" : [ "baseUrl" ]
       },
+      "GithubPullRequestOption" : {
+        "type" : "object",
+        "x-java-type" : "GithubPullRequestOption",
+        "properties" : {
+          "number" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "branch" : {
+            "type" : "string"
+          },
+          "commit" : {
+            "type" : "string"
+          },
+          "headSha" : {
+            "type" : "string"
+          },
+          "author" : {
+            "type" : "string"
+          },
+          "url" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "GithubPullRequestOptionsResponse" : {
+        "type" : "object",
+        "x-java-type" : "GithubPullRequestOptionsResponse",
+        "properties" : {
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/GithubPullRequestOption"
+            }
+          }
+        }
+      },
+      "HighRiskReviewDto" : {
+        "type" : "object",
+        "x-java-type" : "HighRiskReviewDto",
+        "properties" : {
+          "title" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "ruleHits" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reviewedAt" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "ruleHits" ]
+      },
       "HumanReviewRequest" : {
         "type" : "object",
         "x-java-type" : "HumanReviewRequest",
@@ -2498,6 +5104,173 @@
           }
         },
         "required" : [ "action" ]
+      },
+      "HumanReviewResponse" : {
+        "type" : "object",
+        "x-java-type" : "HumanReviewResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
+      },
+      "LlmQualityByModelDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmQualityByModelDto",
+        "properties" : {
+          "model" : {
+            "type" : "string"
+          },
+          "taskCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageDuration" : {
+            "type" : "string"
+          },
+          "averageTokens" : {
+            "type" : "string"
+          },
+          "averageCost" : {
+            "type" : "string"
+          },
+          "parseSuccessRate" : {
+            "type" : "string"
+          },
+          "fallbackRate" : {
+            "type" : "string"
+          },
+          "partialFallbackRate" : {
+            "type" : "string"
+          },
+          "validRate" : {
+            "type" : "string"
+          },
+          "falsePositiveRate" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "taskCount" ]
+      },
+      "LlmQualityByRepositoryDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmQualityByRepositoryDto",
+        "properties" : {
+          "repository" : {
+            "type" : "string"
+          },
+          "taskCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "fallbackRate" : {
+            "type" : "string"
+          },
+          "partialFallbackRate" : {
+            "type" : "string"
+          },
+          "validRate" : {
+            "type" : "string"
+          },
+          "falsePositiveRate" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "taskCount" ]
+      },
+      "LlmQualityTrendPointDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmQualityTrendPointDto",
+        "properties" : {
+          "date" : {
+            "type" : "string"
+          },
+          "taskCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "parseSuccessRate" : {
+            "type" : "string"
+          },
+          "fallbackRate" : {
+            "type" : "string"
+          },
+          "partialFallbackRate" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "taskCount" ]
+      },
+      "LlmStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "LlmStatusDto",
+        "properties" : {
+          "status" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "model" : {
+            "type" : "string"
+          },
+          "durationMs" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "parseStatus" : {
+            "type" : "string"
+          },
+          "fallbackReason" : {
+            "type" : "string"
+          },
+          "promptSummary" : {
+            "type" : "string"
+          },
+          "promptTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "completionTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "estimatedCost" : {
+            "type" : "string"
+          }
+        }
       },
       "ManualReviewRequest" : {
         "type" : "object",
@@ -2536,6 +5309,226 @@
           }
         },
         "required" : [ "organization", "repository", "prNumber" ]
+      },
+      "ManualReviewResponse" : {
+        "type" : "object",
+        "x-java-type" : "ManualReviewResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "existing" : {
+            "type" : "boolean"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "triggerSource" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MessageQueueExceptionTaskDto" : {
+        "type" : "object",
+        "x-java-type" : "MessageQueueExceptionTaskDto",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "publishAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "nextRetryAt" : {
+            "type" : "string"
+          },
+          "claimedBy" : {
+            "type" : "string"
+          },
+          "claimedAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MessageQueueHealthResponse" : {
+        "type" : "object",
+        "x-java-type" : "MessageQueueHealthResponse",
+        "properties" : {
+          "activeConfig" : {
+            "$ref" : "#/components/schemas/ActiveRabbitMqConfigDto"
+          },
+          "topology" : {
+            "$ref" : "#/components/schemas/RabbitMqTopologyDto"
+          },
+          "metrics" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MessageQueueMetricDto"
+            }
+          },
+          "retryCompensation" : {
+            "$ref" : "#/components/schemas/RetryCompensationStatusDto"
+          },
+          "exceptionTasks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MessageQueueExceptionTaskDto"
+            }
+          },
+          "generatedAt" : {
+            "type" : "string"
+          },
+          "dataSource" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MessageQueueMetricDto" : {
+        "type" : "object",
+        "x-java-type" : "MessageQueueMetricDto",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "noteClass" : {
+            "type" : "string"
+          },
+          "color" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MessageQueueRequeueResponse" : {
+        "type" : "object",
+        "x-java-type" : "MessageQueueRequeueResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "publishAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "MissingTestDto" : {
+        "type" : "object",
+        "x-java-type" : "MissingTestDto",
+        "properties" : {
+          "file" : {
+            "type" : "string"
+          },
+          "method" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string"
+          },
+          "suggestion" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NotificationBindingDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationBindingDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "webhookUrl" : {
+            "type" : "string"
+          },
+          "secret" : {
+            "type" : "string"
+          },
+          "notifyReviewCompleted" : {
+            "type" : "boolean"
+          },
+          "notifyReviewFailed" : {
+            "type" : "boolean"
+          },
+          "notifyHumanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "notifyGithubComment" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "lastCheckedAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "webhookUrlStatus" : {
+            "type" : "string"
+          },
+          "secretStatus" : {
+            "type" : "string"
+          }
+        }
       },
       "NotificationBindingRequest" : {
         "type" : "object",
@@ -2597,6 +5590,184 @@
         },
         "required" : [ "enabled" ]
       },
+      "NotificationCenterDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationCenterDto",
+        "properties" : {
+          "total" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "generatedAt" : {
+            "type" : "string"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/NotificationItemDto"
+            }
+          }
+        },
+        "required" : [ "total" ]
+      },
+      "NotificationDeliveryDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationDeliveryDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "eventId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "bindingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "attemptCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "requestId" : {
+            "type" : "string"
+          },
+          "sentAt" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NotificationDeliverySummaryDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationDeliverySummaryDto",
+        "properties" : {
+          "providers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "deliveryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedDeliveryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "latestDeliveryStatus" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NotificationEventDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationEventDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "eventKey" : {
+            "type" : "string"
+          },
+          "eventType" : {
+            "type" : "string"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "batchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "retryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "nextRetryAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "deliverySummary" : {
+            "$ref" : "#/components/schemas/NotificationDeliverySummaryDto"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NotificationItemDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationItemDto",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "level" : {
+            "type" : "string"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "time" : {
+            "type" : "string"
+          },
+          "targetPath" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "NotificationSettingsDto" : {
+        "type" : "object",
+        "x-java-type" : "NotificationSettingsDto",
+        "properties" : {
+          "githubComment" : {
+            "type" : "boolean"
+          },
+          "highRiskPr" : {
+            "type" : "boolean"
+          },
+          "failedTask" : {
+            "type" : "boolean"
+          },
+          "email" : {
+            "type" : "string"
+          }
+        }
+      },
       "NotificationSettingsRequest" : {
         "type" : "object",
         "x-java-type" : "NotificationSettingsRequest",
@@ -2616,6 +5787,324 @@
           }
         },
         "required" : [ "githubComment", "highRiskPr", "failedTask" ]
+      },
+      "PageResponse" : {
+        "type" : "object",
+        "x-java-type" : "PageResponse",
+        "properties" : {
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "x-java-type" : "T"
+            }
+          },
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "total" ]
+      },
+      "PrReviewSummaryDto" : {
+        "type" : "object",
+        "x-java-type" : "PrReviewSummaryDto",
+        "properties" : {
+          "overallRisk" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "mergeRecommendation" : {
+            "type" : "string"
+          },
+          "recommendMerge" : {
+            "type" : "boolean"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "keyRisks" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "focusFiles" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "githubCommentBody" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PrRiskFileDto" : {
+        "type" : "object",
+        "x-java-type" : "PrRiskFileDto",
+        "properties" : {
+          "file" : {
+            "type" : "string"
+          },
+          "changeType" : {
+            "type" : "string"
+          },
+          "additions" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "deletions" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "findingCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "score" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reasons" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        }
+      },
+      "PrRiskProfileDto" : {
+        "type" : "object",
+        "x-java-type" : "PrRiskProfileDto",
+        "properties" : {
+          "score" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "level" : {
+            "type" : "string"
+          },
+          "summary" : {
+            "type" : "string"
+          },
+          "recommendHumanReview" : {
+            "type" : "boolean"
+          },
+          "humanReviewReason" : {
+            "type" : "string"
+          },
+          "signals" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "highRiskFiles" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PrRiskFileDto"
+            }
+          }
+        }
+      },
+      "RabbitMqStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "RabbitMqStatusDto",
+        "properties" : {
+          "deliveryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "retryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "consumeStatus" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RabbitMqTopologyDto" : {
+        "type" : "object",
+        "x-java-type" : "RabbitMqTopologyDto",
+        "properties" : {
+          "exchange" : {
+            "type" : "string"
+          },
+          "queue" : {
+            "type" : "string"
+          },
+          "routingKey" : {
+            "type" : "string"
+          },
+          "deadLetterExchange" : {
+            "type" : "string"
+          },
+          "deadLetterQueue" : {
+            "type" : "string"
+          },
+          "deadLetterRoutingKey" : {
+            "type" : "string"
+          }
+        }
+      },
+      "RetryCompensationStatusDto" : {
+        "type" : "object",
+        "x-java-type" : "RetryCompensationStatusDto",
+        "properties" : {
+          "maxAttempts" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "intervalMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "batchSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "leaseMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "claimedTaskCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latestSuccessAt" : {
+            "type" : "string"
+          },
+          "latestFailureReason" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewFindingDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewFindingDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "file" : {
+            "type" : "string"
+          },
+          "line" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "recommendation" : {
+            "type" : "string"
+          },
+          "confidence" : {
+            "type" : "string"
+          },
+          "evidence" : {
+            "type" : "string"
+          },
+          "impact" : {
+            "type" : "string"
+          },
+          "fixExample" : {
+            "type" : "string"
+          },
+          "isBlocking" : {
+            "type" : "boolean"
+          },
+          "reviewDimension" : {
+            "type" : "string"
+          },
+          "feedbackStatus" : {
+            "type" : "string"
+          },
+          "feedbackNote" : {
+            "type" : "string"
+          },
+          "feedbackBy" : {
+            "type" : "string"
+          },
+          "feedbackAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewPolicyConfigDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewPolicyConfigDto",
+        "properties" : {
+          "llmEnabled" : {
+            "type" : "boolean"
+          },
+          "llmProvider" : {
+            "type" : "string"
+          },
+          "modelName" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "apiKey" : {
+            "type" : "string"
+          },
+          "timeoutSeconds" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "temperature" : {
+            "type" : "number"
+          },
+          "maxTokens" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "fallbackToRules" : {
+            "type" : "boolean"
+          },
+          "workerConcurrency" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "chunkFileThreshold" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "chunkLineThreshold" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "chunkMaxFiles" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "chunkMaxLines" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "inputTokenPricePerMillion" : {
+            "type" : "number"
+          },
+          "outputTokenPricePerMillion" : {
+            "type" : "number"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "secretStatus" : {
+            "type" : "string"
+          }
+        }
       },
       "ReviewPolicyConfigRequest" : {
         "type" : "object",
@@ -2705,6 +6194,30 @@
         },
         "required" : [ "llmEnabled", "llmProvider", "modelName", "timeoutSeconds", "temperature", "maxTokens", "fallbackToRules", "workerConcurrency", "chunkFileThreshold", "chunkLineThreshold", "chunkMaxFiles", "chunkMaxLines", "inputTokenPricePerMillion", "outputTokenPricePerMillion" ]
       },
+      "ReviewPolicySettingsDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewPolicySettingsDto",
+        "properties" : {
+          "maxDiffLines" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "llmTimeoutSeconds" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "workerConcurrency" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "autoComment" : {
+            "type" : "boolean"
+          },
+          "autoRetry" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "ReviewPolicySettingsRequest" : {
         "type" : "object",
         "x-java-type" : "ReviewPolicySettingsRequest",
@@ -2735,6 +6248,73 @@
           }
         },
         "required" : [ "maxDiffLines", "llmTimeoutSeconds", "workerConcurrency", "autoComment", "autoRetry" ]
+      },
+      "ReviewRetryResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRetryResponse",
+        "properties" : {
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "retryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "ReviewRuleConfigDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleConfigDto",
+        "properties" : {
+          "id" : {
+            "type" : "string"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "scope" : {
+            "type" : "string"
+          },
+          "applicableLanguages" : {
+            "type" : "string"
+          },
+          "filePatterns" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "hitCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "confidence" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "description" : {
+            "type" : "string"
+          },
+          "positiveExample" : {
+            "type" : "string"
+          },
+          "falsePositiveGuidance" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "hitCount" ]
       },
       "ReviewRuleConfigRequest" : {
         "type" : "object",
@@ -2796,6 +6376,24 @@
         },
         "required" : [ "id", "name", "scope", "severity", "status", "description" ]
       },
+      "ReviewRuleMetricDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleMetricDto",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "string"
+          },
+          "note" : {
+            "type" : "string"
+          },
+          "color" : {
+            "type" : "string"
+          }
+        }
+      },
       "ReviewRuleStatusRequest" : {
         "type" : "object",
         "x-java-type" : "ReviewRuleStatusRequest",
@@ -2807,6 +6405,356 @@
           }
         },
         "required" : [ "status" ]
+      },
+      "ReviewRulesResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRulesResponse",
+        "properties" : {
+          "metrics" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewRuleMetricDto"
+            }
+          },
+          "rules" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewRuleConfigDto"
+            }
+          }
+        }
+      },
+      "ReviewTaskDetail" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskDetail",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "commit" : {
+            "type" : "string"
+          },
+          "branch" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "mqRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "llmStatus" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "triggerSource" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "prUrl" : {
+            "type" : "string"
+          },
+          "findings" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewFindingDto"
+            }
+          },
+          "missingTests" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/MissingTestDto"
+            }
+          },
+          "changedFiles" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChangedFileDto"
+            }
+          },
+          "timeline" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewTimelineItem"
+            }
+          },
+          "riskProfile" : {
+            "$ref" : "#/components/schemas/PrRiskProfileDto"
+          },
+          "prSummary" : {
+            "$ref" : "#/components/schemas/PrReviewSummaryDto"
+          },
+          "llm" : {
+            "$ref" : "#/components/schemas/LlmStatusDto"
+          },
+          "chunkedReview" : {
+            "$ref" : "#/components/schemas/ChunkedReviewDto"
+          },
+          "rabbitMq" : {
+            "$ref" : "#/components/schemas/RabbitMqStatusDto"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          },
+          "findingTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "missingTestTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "changedFileTotal" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "findingSeverityCounts" : {
+            "type" : "object",
+            "x-java-type" : "FindingSeverityCountsDto"
+          }
+        }
+      },
+      "ReviewTaskListItem" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskListItem",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "commit" : {
+            "type" : "string"
+          },
+          "branch" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "mqRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "llmStatus" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "triggerSource" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewTaskStatusResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskStatusResponse",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "llmStatus" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "latestTimeline" : {
+            "$ref" : "#/components/schemas/ReviewTimelineItem"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewTimelineItem" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTimelineItem",
+        "properties" : {
+          "label" : {
+            "type" : "string"
+          },
+          "time" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewTrendPointDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTrendPointDto",
+        "properties" : {
+          "date" : {
+            "type" : "string"
+          },
+          "value" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "value" ]
+      },
+      "SecretReEncryptionItemDto" : {
+        "type" : "object",
+        "x-java-type" : "SecretReEncryptionItemDto",
+        "properties" : {
+          "tableName" : {
+            "type" : "string"
+          },
+          "recordId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "fieldName" : {
+            "type" : "string"
+          },
+          "provider" : {
+            "type" : "string"
+          },
+          "sourceFormat" : {
+            "type" : "string"
+          },
+          "sourceKeyId" : {
+            "type" : "string"
+          },
+          "targetKeyId" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "message" : {
+            "type" : "string"
+          }
+        }
       },
       "SecretReEncryptionRequest" : {
         "type" : "object",
@@ -2841,6 +6789,57 @@
         },
         "required" : [ "sourceEncryptionKey", "targetEncryptionKey", "targetKeyId" ]
       },
+      "SecretReEncryptionResponse" : {
+        "type" : "object",
+        "x-java-type" : "SecretReEncryptionResponse",
+        "properties" : {
+          "executed" : {
+            "type" : "boolean"
+          },
+          "scannedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "reEncryptedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "skippedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "items" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SecretReEncryptionItemDto"
+            }
+          }
+        },
+        "required" : [ "executed", "scannedCount", "reEncryptedCount", "skippedCount", "failedCount" ]
+      },
+      "SecuritySettingsDto" : {
+        "type" : "object",
+        "x-java-type" : "SecuritySettingsDto",
+        "properties" : {
+          "webhookSignature" : {
+            "type" : "boolean"
+          },
+          "secretMasking" : {
+            "type" : "boolean"
+          },
+          "publicRepoAllowed" : {
+            "type" : "boolean"
+          },
+          "tokenTtlDays" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
       "SecuritySettingsRequest" : {
         "type" : "object",
         "x-java-type" : "SecuritySettingsRequest",
@@ -2862,6 +6861,42 @@
           }
         },
         "required" : [ "webhookSignature", "secretMasking", "publicRepoAllowed", "tokenTtlDays" ]
+      },
+      "ServiceIntegrationConfigDto" : {
+        "type" : "object",
+        "x-java-type" : "ServiceIntegrationConfigDto",
+        "properties" : {
+          "provider" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "baseUrl" : {
+            "type" : "string"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "secret" : {
+            "type" : "string"
+          },
+          "resource" : {
+            "type" : "string"
+          },
+          "lastCheckedAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "secretStatus" : {
+            "type" : "string"
+          }
+        }
       },
       "ServiceIntegrationConfigRequest" : {
         "type" : "object",
@@ -2886,6 +6921,60 @@
           }
         },
         "required" : [ "baseUrl" ]
+      },
+      "SettingLogDto" : {
+        "type" : "object",
+        "x-java-type" : "SettingLogDto",
+        "properties" : {
+          "time" : {
+            "type" : "string"
+          },
+          "operator" : {
+            "type" : "string"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
+      "SystemHealthItemDto" : {
+        "type" : "object",
+        "x-java-type" : "SystemHealthItemDto",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          }
+        }
+      },
+      "SystemSettingsDto" : {
+        "type" : "object",
+        "x-java-type" : "SystemSettingsDto",
+        "properties" : {
+          "base" : {
+            "$ref" : "#/components/schemas/BaseSettingsDto"
+          },
+          "policy" : {
+            "$ref" : "#/components/schemas/ReviewPolicySettingsDto"
+          },
+          "notification" : {
+            "$ref" : "#/components/schemas/NotificationSettingsDto"
+          },
+          "security" : {
+            "$ref" : "#/components/schemas/SecuritySettingsDto"
+          },
+          "logs" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/SettingLogDto"
+            }
+          }
+        }
       },
       "SystemSettingsRequest" : {
         "type" : "object",
@@ -2938,6 +7027,91 @@
           }
         },
         "required" : [ "username", "email", "password", "confirmPassword" ]
+      },
+      "UserManagementItemDto" : {
+        "type" : "object",
+        "x-java-type" : "UserManagementItemDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "username" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "role" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "failedLoginCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "lockedUntil" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "lastLoginAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "UserOperationAuditDto" : {
+        "type" : "object",
+        "x-java-type" : "UserOperationAuditDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "operatorUserId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "operatorUsername" : {
+            "type" : "string"
+          },
+          "targetUserId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "targetUsername" : {
+            "type" : "string"
+          },
+          "action" : {
+            "type" : "string"
+          },
+          "beforeValue" : {
+            "type" : "string"
+          },
+          "afterValue" : {
+            "type" : "string"
+          },
+          "clientIp" : {
+            "type" : "string"
+          },
+          "userAgent" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
       },
       "UserRoleUpdateRequest" : {
         "type" : "object",

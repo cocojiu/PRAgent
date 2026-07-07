@@ -82,6 +82,34 @@ class OpenApiPathsContractTest {
     }
 
     @Test
+    void openApiResponsesExposeDataDtoSchemas() {
+        Map<String, Object> paths = map(OpenApiContractDocument.fromControllers(controllers()).get("paths"));
+
+        Map<String, Object> loginResponse = response(paths, "/api/v1/auth/login", "post");
+        assertThat(loginResponse)
+            .containsEntry("x-java-response-envelope", "ApiResponse")
+            .containsEntry("x-java-response-data", "AuthResponse");
+        assertThat(dataSchema(loginResponse))
+            .containsEntry("$ref", "#/components/schemas/AuthResponse");
+
+        Map<String, Object> listReviewsResponse = response(paths, "/api/v1/reviews", "get");
+        assertThat(listReviewsResponse)
+            .containsEntry("x-java-response-data", "PageResponse<ReviewTaskListItem>");
+        Map<String, Object> pageProperties = map(dataSchema(listReviewsResponse).get("properties"));
+        assertThat(map(map(pageProperties.get("items")).get("items")))
+            .containsEntry("$ref", "#/components/schemas/ReviewTaskListItem");
+        assertThat(map(pageProperties.get("total")))
+            .containsEntry("type", "integer")
+            .containsEntry("format", "int64");
+
+        Map<String, Object> logoutResponse = response(paths, "/api/v1/auth/logout", "post");
+        assertThat(logoutResponse)
+            .containsEntry("x-java-response-data", "Void");
+        assertThat(dataSchema(logoutResponse))
+            .containsEntry("type", "null");
+    }
+
+    @Test
     void openApiDocumentUsesCodegenSafeUniqueOperationIds() {
         List<String> operationIds = OpenApiContractDocument.operationIds(OpenApiContractDocument.fromControllers(controllers()));
 
@@ -126,6 +154,20 @@ class OpenApiPathsContractTest {
         } catch (ClassNotFoundException ex) {
             throw new IllegalStateException("Failed to discover API controllers", ex);
         }
+    }
+
+    private Map<String, Object> response(Map<String, Object> paths, String path, String method) {
+        return map(map(map(paths.get(path)).get(method)).get("responses")).entrySet().stream()
+            .filter(entry -> "200".equals(entry.getKey()))
+            .map(Map.Entry::getValue)
+            .map(this::map)
+            .findFirst()
+            .orElseThrow();
+    }
+
+    private Map<String, Object> dataSchema(Map<String, Object> response) {
+        Map<String, Object> schema = map(map(map(response.get("content")).get("application/json")).get("schema"));
+        return map(map(schema.get("properties")).get("data"));
     }
 
     @SuppressWarnings("unchecked")
