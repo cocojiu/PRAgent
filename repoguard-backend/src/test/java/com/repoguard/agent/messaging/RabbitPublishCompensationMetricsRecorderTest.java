@@ -20,20 +20,6 @@ class RabbitPublishCompensationMetricsRecorderTest {
     }
 
     @Test
-    void recordsSucceededCompensationWithFailurePhase() {
-        recorder.recordSucceeded("notification");
-
-        verify(metrics).rabbitPublishCompensationSucceeded("notification");
-    }
-
-    @Test
-    void recordsFailedCompensationWithFailurePhaseAndReason() {
-        recorder.recordFailed("publish", "confirm_timeout");
-
-        verify(metrics).rabbitPublishCompensationFailed("publish", "confirm_timeout");
-    }
-
-    @Test
     void recordsSucceededOutcome() {
         recorder.record(RabbitPublishCompensationOutcome.succeeded(RabbitPublishFailurePhase.NOTIFICATION));
 

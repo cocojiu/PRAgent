@@ -13,14 +13,6 @@ public class RabbitPublishCompensationMetricsRecorder {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
-    public void recordSucceeded(String failurePhase) {
-        metrics.rabbitPublishCompensationSucceeded(failurePhase);
-    }
-
-    public void recordFailed(String failurePhase, String reason) {
-        metrics.rabbitPublishCompensationFailed(failurePhase, reason);
-    }
-
     public void record(RabbitPublishCompensationOutcome outcome) {
         Objects.requireNonNull(outcome, "outcome");
         if (outcome.success()) {
@@ -28,5 +20,13 @@ public class RabbitPublishCompensationMetricsRecorder {
             return;
         }
         recordFailed(outcome.failurePhase().code(), outcome.reason());
+    }
+
+    private void recordSucceeded(String failurePhase) {
+        metrics.rabbitPublishCompensationSucceeded(failurePhase);
+    }
+
+    private void recordFailed(String failurePhase, String reason) {
+        metrics.rabbitPublishCompensationFailed(failurePhase, reason);
     }
 }

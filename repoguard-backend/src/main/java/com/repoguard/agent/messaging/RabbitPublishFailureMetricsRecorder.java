@@ -13,12 +13,12 @@ public class RabbitPublishFailureMetricsRecorder {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
-    public void recordFailed(String failurePhase, String reason) {
-        metrics.rabbitPublishFailed(failurePhase, reason);
-    }
-
     public void recordFailed(RabbitPublishFailurePhase failurePhase, String reason) {
         Objects.requireNonNull(failurePhase, "failurePhase");
         recordFailed(failurePhase.code(), reason);
+    }
+
+    private void recordFailed(String failurePhase, String reason) {
+        metrics.rabbitPublishFailed(failurePhase, reason);
     }
 }

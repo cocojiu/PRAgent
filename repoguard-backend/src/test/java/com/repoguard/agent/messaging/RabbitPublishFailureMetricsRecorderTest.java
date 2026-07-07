@@ -19,13 +19,6 @@ class RabbitPublishFailureMetricsRecorderTest {
     }
 
     @Test
-    void recordsFailedPublishWithFailurePhaseAndReason() {
-        recorder.recordFailed("notification", "confirm_timeout");
-
-        verify(metrics).rabbitPublishFailed("notification", "confirm_timeout");
-    }
-
-    @Test
     void recordsFailedPublishWithTypedFailurePhase() {
         recorder.recordFailed(RabbitPublishFailurePhase.PUBLISH, "confirm_timeout");
 
