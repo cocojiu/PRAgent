@@ -140,7 +140,7 @@ class LlmReviewPipeline {
                 settings.llmProvider(),
                 settings.modelName(),
                 elapsedMillis(context.startedAtNanos()),
-                parsed.llmParseStatus() == null ? "parsed" : parsed.llmParseStatus(),
+                parsed.llmParseStatus() == null ? LlmParseStatus.PARSED.code() : parsed.llmParseStatus(),
                 reviewMerger.hybridPromptSummary(
                     parsed.llmPromptSummary() == null ? context.promptSummary() : parsed.llmPromptSummary(),
                     ruleReview,

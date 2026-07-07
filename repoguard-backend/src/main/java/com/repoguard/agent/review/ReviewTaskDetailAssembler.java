@@ -143,7 +143,7 @@ public class ReviewTaskDetailAssembler {
                 lower(task.getLlmProvider()),
                 task.getLlmModel(),
                 task.getLlmDurationMs(),
-                lower(task.getLlmParseStatus()),
+                LlmParseStatus.dtoCodeOrNull(task.getLlmParseStatus()),
                 task.getLlmFallbackReason(),
                 task.getLlmPromptSummary(),
                 task.getLlmPromptTokens(),

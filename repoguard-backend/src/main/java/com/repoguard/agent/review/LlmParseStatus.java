@@ -4,7 +4,10 @@ import java.util.Locale;
 
 public enum LlmParseStatus {
 
-    PARTIAL_FALLBACK("partial_fallback");
+    PARSED("parsed"),
+    FALLBACK("fallback"),
+    PARTIAL_FALLBACK("partial_fallback"),
+    UNKNOWN("unknown");
 
     private final String code;
 
@@ -17,9 +20,26 @@ public enum LlmParseStatus {
     }
 
     public boolean is(String status) {
+        return this == from(status);
+    }
+
+    public static LlmParseStatus from(String status) {
         if (status == null || status.isBlank()) {
-            return false;
+            return UNKNOWN;
         }
-        return code.equals(status.trim().toLowerCase(Locale.ROOT));
+        String normalizedStatus = status.trim().toLowerCase(Locale.ROOT);
+        for (LlmParseStatus parseStatus : values()) {
+            if (parseStatus.code.equals(normalizedStatus)) {
+                return parseStatus;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    public static String dtoCodeOrNull(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        return from(status).code();
     }
 }

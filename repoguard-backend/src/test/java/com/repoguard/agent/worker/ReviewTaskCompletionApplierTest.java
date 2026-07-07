@@ -53,7 +53,7 @@ class ReviewTaskCompletionApplierTest {
         assertThat(task.getLlmProvider()).isEqualTo("openai");
         assertThat(task.getLlmModel()).isEqualTo("gpt-test");
         assertThat(task.getLlmDurationMs()).isEqualTo(1234);
-        assertThat(task.getLlmParseStatus()).isEqualTo("PARSED");
+        assertThat(task.getLlmParseStatus()).isEqualTo("parsed");
         assertThat(task.getLlmPromptSummary()).isEqualTo("prompt summary");
         assertThat(task.getLlmPromptTokens()).isEqualTo(100);
         assertThat(task.getLlmCompletionTokens()).isEqualTo(50);

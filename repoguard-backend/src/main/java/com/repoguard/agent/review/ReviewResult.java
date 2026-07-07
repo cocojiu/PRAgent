@@ -64,7 +64,7 @@ public record ReviewResult(
             llmProvider,
             llmModel,
             llmDurationMs,
-            llmParseStatus,
+            normalizeLlmParseStatus(llmParseStatus),
             llmPromptSummary,
             llmPromptTokens,
             llmCompletionTokens,
@@ -94,12 +94,19 @@ public record ReviewResult(
             llmProvider,
             llmModel,
             llmDurationMs,
-            "fallback",
+            LlmParseStatus.FALLBACK.code(),
             llmPromptSummary,
             null,
             null,
             null,
             null
         );
+    }
+
+    private static String normalizeLlmParseStatus(String llmParseStatus) {
+        if (llmParseStatus == null || llmParseStatus.isBlank()) {
+            return null;
+        }
+        return LlmParseStatus.from(llmParseStatus).code();
     }
 }

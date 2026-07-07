@@ -141,6 +141,24 @@ class ReviewTaskDetailAssemblerTest {
         assertThat(result.prSummary().summary()).contains("8 个变更文件、30 条审查发现");
     }
 
+    @Test
+    void normalizesUnexpectedLlmParseStatusToUnknownInDetailDto() {
+        ReviewTask task = new ReviewTask();
+        task.setMqRetries(0);
+        task.setLlmParseStatus("legacy_ok");
+
+        var result = assembler.assemble(
+            task,
+            baseItem(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
+        );
+
+        assertThat(result.llm().parseStatus()).isEqualTo("unknown");
+    }
+
     private ReviewTaskListItem baseItem() {
         return new ReviewTaskListItem(
             521L,
