@@ -3,6 +3,7 @@ package com.repoguard.agent.external;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +38,24 @@ class ExternalHttpJsonResponseReaderTest {
     }
 
     @Test
+    void readSuccessfulTreeParsesJsonNodeBody() throws IOException {
+        MockClientHttpResponse response = response(HttpStatus.OK, "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
+
+        JsonNode result = reader.readSuccessfulTree(response, "LLM request failed");
+
+        assertThat(result.at("/choices/0/message/content").asText()).isEqualTo("ok");
+    }
+
+    @Test
+    void readSuccessfulTreeReturnsNullForEmptyBody() throws IOException {
+        MockClientHttpResponse response = response(HttpStatus.NO_CONTENT, "");
+
+        JsonNode result = reader.readSuccessfulTree(response, "LLM request failed");
+
+        assertThat(result).isNull();
+    }
+
+    @Test
     void readSuccessfulJsonPreservesHttpFailureContext() {
         MockClientHttpResponse response = response(HttpStatus.TOO_MANY_REQUESTS, "{\"message\":\"rate limited\"}");
         response.getHeaders().add("Retry-After", "30");
@@ -47,6 +66,20 @@ class ExternalHttpJsonResponseReaderTest {
                 assertThat(ex.getResponseHeaders()).isNotNull();
                 assertThat(ex.getResponseHeaders().getFirst("Retry-After")).isEqualTo("30");
                 assertThat(ex.getResponseBodyAsString()).isEqualTo("{\"message\":\"rate limited\"}");
+            });
+    }
+
+    @Test
+    void readSuccessfulTreePreservesHttpFailureContext() {
+        MockClientHttpResponse response = response(HttpStatus.UNAUTHORIZED, "{\"error\":\"bad token\"}");
+        response.getHeaders().add("X-Request-Id", "req-123");
+
+        assertThatThrownBy(() -> reader.readSuccessfulTree(response, "LLM request failed"))
+            .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+                assertThat(ex.getResponseHeaders()).isNotNull();
+                assertThat(ex.getResponseHeaders().getFirst("X-Request-Id")).isEqualTo("req-123");
+                assertThat(ex.getResponseBodyAsString()).isEqualTo("{\"error\":\"bad token\"}");
             });
     }
 

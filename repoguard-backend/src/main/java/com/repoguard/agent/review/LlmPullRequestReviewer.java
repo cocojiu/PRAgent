@@ -89,9 +89,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .exchange((request, clientResponse) -> responseReader.readSuccessfulJson(
+                .exchange((request, clientResponse) -> responseReader.readSuccessfulTree(
                     clientResponse,
-                    JsonNode.class,
                     "LLM request failed"
                 )));
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");

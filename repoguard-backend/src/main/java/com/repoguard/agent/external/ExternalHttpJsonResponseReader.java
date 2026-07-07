@@ -1,5 +1,6 @@
 package com.repoguard.agent.external;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.Objects;
@@ -25,5 +26,13 @@ public class ExternalHttpJsonResponseReader {
         Objects.requireNonNull(responseType, "responseType");
         byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix);
         return body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
+    }
+
+    public JsonNode readSuccessfulTree(
+        ClientHttpResponse response,
+        String failureMessagePrefix
+    ) throws IOException {
+        byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix);
+        return body == null || body.length == 0 ? null : objectMapper.readTree(body);
     }
 }
