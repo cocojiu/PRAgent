@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.config.DataRetentionProperties;
 import com.repoguard.agent.entity.DataRetentionCleanupLease;
 import com.repoguard.agent.mapper.DataRetentionCleanupLeaseMapper;
 import java.time.LocalDateTime;
@@ -14,12 +15,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class DataRetentionCleanupLeaseStore {
 
     private static final String LOCK_NAME = "data_retention_cleanup";
-    private static final long LEASE_MINUTES = 30;
 
     private final DataRetentionCleanupLeaseMapper leaseMapper;
+    private final DataRetentionProperties properties;
 
-    public DataRetentionCleanupLeaseStore(DataRetentionCleanupLeaseMapper leaseMapper) {
+    public DataRetentionCleanupLeaseStore(
+        DataRetentionCleanupLeaseMapper leaseMapper,
+        DataRetentionProperties properties
+    ) {
         this.leaseMapper = Objects.requireNonNull(leaseMapper, "leaseMapper");
+        this.properties = Objects.requireNonNull(properties, "properties");
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -31,7 +36,7 @@ public class DataRetentionCleanupLeaseStore {
                 .eq("lock_name", LOCK_NAME)
                 .le("locked_until", now)
                 .set("owner_id", ownerId)
-                .set("locked_until", now.plusMinutes(LEASE_MINUTES))
+                .set("locked_until", now.plusMinutes(properties.normalizedCleanupLeaseMinutes()))
                 .set("updated_at", now)
         );
         return updated > 0 ? new Lease(ownerId) : null;

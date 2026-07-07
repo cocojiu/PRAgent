@@ -8,8 +8,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.config.DataRetentionProperties;
 import com.repoguard.agent.entity.DataRetentionCleanupLease;
 import com.repoguard.agent.mapper.DataRetentionCleanupLeaseMapper;
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -18,17 +22,26 @@ class DataRetentionCleanupLeaseStoreTest {
     private final DataRetentionCleanupLeaseMapper leaseMapper = org.mockito.Mockito.mock(
         DataRetentionCleanupLeaseMapper.class
     );
-    private final DataRetentionCleanupLeaseStore store = new DataRetentionCleanupLeaseStore(leaseMapper);
+    private final DataRetentionProperties properties = new DataRetentionProperties();
+    private final DataRetentionCleanupLeaseStore store = new DataRetentionCleanupLeaseStore(leaseMapper, properties);
 
     @Test
     void constructorRejectsMissingMapper() {
-        assertThatThrownBy(() -> new DataRetentionCleanupLeaseStore(null))
+        assertThatThrownBy(() -> new DataRetentionCleanupLeaseStore(null, properties))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("leaseMapper");
     }
 
     @Test
+    void constructorRejectsMissingProperties() {
+        assertThatThrownBy(() -> new DataRetentionCleanupLeaseStore(leaseMapper, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("properties");
+    }
+
+    @Test
     void acquireClaimsExpiredLeaseWithFreshOwner() {
+        properties.setCleanupLeaseMinutes(7);
         when(leaseMapper.update(any(UpdateWrapper.class))).thenReturn(1);
 
         DataRetentionCleanupLeaseStore.Lease lease = store.acquire();
@@ -50,6 +63,7 @@ class DataRetentionCleanupLeaseStoreTest {
             .contains("updated_at");
         assertThat(wrapper.getParamNameValuePairs().values())
             .contains("data_retention_cleanup", lease.ownerId());
+        assertThat(leaseDurationMinutes(wrapper)).isGreaterThanOrEqualTo(7);
     }
 
     @Test
@@ -87,5 +101,15 @@ class DataRetentionCleanupLeaseStoreTest {
         store.release(null);
 
         verify(leaseMapper, never()).update(any(UpdateWrapper.class));
+    }
+
+    private long leaseDurationMinutes(UpdateWrapper<DataRetentionCleanupLease> wrapper) {
+        List<LocalDateTime> dateTimes = wrapper.getParamNameValuePairs().values().stream()
+            .filter(LocalDateTime.class::isInstance)
+            .map(LocalDateTime.class::cast)
+            .sorted(Comparator.naturalOrder())
+            .toList();
+        assertThat(dateTimes).hasSizeGreaterThanOrEqualTo(2);
+        return java.time.Duration.between(dateTimes.getFirst(), dateTimes.getLast()).toMinutes();
     }
 }

@@ -55,6 +55,8 @@ management:
         enabled: true
 
 repoguard:
+  data-retention:
+    cleanup-lease-minutes: ${REPOGUARD_DATA_RETENTION_CLEANUP_LEASE_MINUTES:30}
   observability:
     thresholds:
       enabled: ${REPOGUARD_OBSERVABILITY_THRESHOLDS_ENABLED:true}
