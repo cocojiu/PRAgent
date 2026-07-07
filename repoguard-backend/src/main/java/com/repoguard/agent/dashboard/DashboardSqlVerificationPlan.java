@@ -154,6 +154,146 @@ public class DashboardSqlVerificationPlan {
         );
     }
 
+    public List<ExplainTableExpectation> explainTableExpectations() {
+        return List.of(
+            new ExplainTableExpectation(
+                "selectLatestReviewTaskDate",
+                "review_task",
+                "",
+                List.of("idx_review_task_created_at"),
+                List.of("range", "ref", "const"),
+                "review_task rows should stay bounded by the created_at access path.",
+                List.of("review_task key should not be null", "review_task type should not be ALL")
+            ),
+            new ExplainTableExpectation(
+                "selectMetricStat",
+                "review_task",
+                "",
+                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk"),
+                List.of("range"),
+                "review_task rows should stay bounded by the dashboard time window.",
+                List.of("review_task key should not be null", "review_task type should not be ALL")
+            ),
+            new ExplainTableExpectation(
+                "selectRiskLevelCounts",
+                "review_task",
+                "",
+                List.of("idx_review_task_dashboard_created_risk"),
+                List.of("range"),
+                "review_task rows should stay bounded by created_at before grouping by risk_level.",
+                List.of("review_task key should prefer idx_review_task_dashboard_created_risk")
+            ),
+            new ExplainTableExpectation(
+                "selectReviewTrendCounts",
+                "review_task",
+                "",
+                List.of("idx_review_task_created_at"),
+                List.of("range"),
+                "review_task rows should stay bounded by created_at before date_format grouping.",
+                List.of("review_task type should not be ALL")
+            ),
+            new ExplainTableExpectation(
+                "selectRuleHitCounts",
+                "review_task",
+                "t",
+                List.of("idx_review_task_created_at"),
+                List.of("range", "ref", "eq_ref"),
+                "review_task rows should be filtered by created_at before joining findings.",
+                List.of("review_task key should include created_at")
+            ),
+            new ExplainTableExpectation(
+                "selectRuleHitCounts",
+                "review_finding",
+                "f",
+                List.of("idx_review_finding_task_category_rule"),
+                List.of("ref", "eq_ref"),
+                "review_finding rows should be reached by task_id/category rather than scanned.",
+                List.of("review_finding type should not be ALL", "review_finding key should include task_id/category")
+            ),
+            new ExplainTableExpectation(
+                "selectRecentHighRiskReviews",
+                "review_task",
+                "t",
+                List.of("idx_review_task_risk_created", "idx_review_task_dashboard_created_risk"),
+                List.of("range", "ref"),
+                "review_task rows should be bounded by risk_level and created_at before applying limit.",
+                List.of("review_task key should include risk_level or created_at")
+            ),
+            new ExplainTableExpectation(
+                "selectRecentHighRiskReviews",
+                "review_finding",
+                "f",
+                List.of("idx_review_finding_task_category_rule"),
+                List.of("ref", "eq_ref"),
+                "review_finding rows should be joined by task_id/category for high-risk rule counts.",
+                List.of("review_finding type should not be ALL")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityTrendCounts",
+                "review_task",
+                "",
+                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("range"),
+                "review_task rows should be bounded by created_at before LLM status filtering.",
+                List.of("review_task key should prefer the LLM model dashboard index")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByModelStats",
+                "review_task",
+                "",
+                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("range"),
+                "task_stats review_task rows should be window-bounded before model grouping.",
+                List.of("task_stats derived table should not start from a full review_task scan")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByModelStats",
+                "review_task",
+                "t",
+                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("range", "ref", "eq_ref"),
+                "feedback_stats review_task rows should be window-bounded before finding joins.",
+                List.of("feedback_stats review_task key should include created_at")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByModelStats",
+                "review_finding",
+                "f",
+                List.of("idx_review_finding_task_category_rule"),
+                List.of("ref", "eq_ref"),
+                "feedback_stats review_finding rows should be reached by task_id/category.",
+                List.of("review_finding type should not be ALL")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByRepositoryStats",
+                "review_task",
+                "",
+                List.of("idx_review_task_dashboard_created_llm_repo"),
+                List.of("range"),
+                "task_stats review_task rows should be window-bounded before repository grouping.",
+                List.of("task_stats derived table should not start from a full review_task scan")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByRepositoryStats",
+                "review_task",
+                "t",
+                List.of("idx_review_task_dashboard_created_llm_repo"),
+                List.of("range", "ref", "eq_ref"),
+                "feedback_stats review_task rows should be window-bounded before finding joins.",
+                List.of("feedback_stats review_task key should include created_at")
+            ),
+            new ExplainTableExpectation(
+                "selectLlmQualityByRepositoryStats",
+                "review_finding",
+                "f",
+                List.of("idx_review_finding_task_category_rule"),
+                List.of("ref", "eq_ref"),
+                "feedback_stats review_finding rows should be reached by task_id/category.",
+                List.of("review_finding type should not be ALL")
+            )
+        );
+    }
+
     public record QueryAssumption(
         String mapperMethod,
         String verificationScope,
@@ -170,6 +310,17 @@ public class DashboardSqlVerificationPlan {
 
     public record ExplainObservation(
         String mapperMethod,
+        List<String> keyCandidates,
+        List<String> acceptableAccessTypes,
+        String rowsExpectation,
+        List<String> extraWatchItems
+    ) {
+    }
+
+    public record ExplainTableExpectation(
+        String mapperMethod,
+        String tableName,
+        String tableAlias,
         List<String> keyCandidates,
         List<String> acceptableAccessTypes,
         String rowsExpectation,

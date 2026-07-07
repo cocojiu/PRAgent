@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
@@ -118,6 +120,79 @@ class DashboardSqlVerificationPlanTest {
                     .contains(keyCandidate.toLowerCase(Locale.ROOT));
             }
         }
+    }
+
+    @Test
+    void explainTableExpectationsPinKeyTablesAliasesAndIndexes() throws Exception {
+        Set<String> mapperMethods = plan.explainObservations().stream()
+            .map(DashboardSqlVerificationPlan.ExplainObservation::mapperMethod)
+            .collect(Collectors.toSet());
+        Map<String, DashboardSqlVerificationPlan.ExplainObservation> observations = plan.explainObservations().stream()
+            .collect(Collectors.toMap(
+                DashboardSqlVerificationPlan.ExplainObservation::mapperMethod,
+                Function.identity()
+            ));
+        String migrations = migrationSql();
+
+        assertThat(plan.explainTableExpectations())
+            .extracting(DashboardSqlVerificationPlan.ExplainTableExpectation::mapperMethod)
+            .containsAll(mapperMethods);
+
+        for (DashboardSqlVerificationPlan.ExplainTableExpectation expectation : plan.explainTableExpectations()) {
+            DashboardSqlVerificationPlan.ExplainObservation observation = observations.get(expectation.mapperMethod());
+            String mapperSql = mapperSql(expectation.mapperMethod()).toLowerCase(Locale.ROOT);
+
+            assertThat(observation)
+                .as(expectation.mapperMethod() + " table expectation must reference a known EXPLAIN observation")
+                .isNotNull();
+            assertThat(mapperSql)
+                .as(expectation.mapperMethod() + " must reference table " + expectation.tableName())
+                .contains(expectation.tableName());
+            if (!expectation.tableAlias().isBlank()) {
+                assertThat(mapperSql)
+                    .as(expectation.mapperMethod() + " must reference alias " + expectation.tableAlias())
+                    .contains(expectation.tableName() + " " + expectation.tableAlias());
+            }
+            assertThat(expectation.keyCandidates())
+                .as(expectation.mapperMethod() + " " + expectation.tableName() + " key candidates")
+                .isNotEmpty()
+                .allSatisfy(keyCandidate -> {
+                    assertThat(observation.keyCandidates())
+                        .as(expectation.mapperMethod() + " observation should include " + keyCandidate)
+                        .contains(keyCandidate);
+                    assertThat(migrations)
+                        .as(expectation.mapperMethod() + " table key candidate " + keyCandidate)
+                        .contains(keyCandidate.toLowerCase(Locale.ROOT));
+                });
+            assertThat(expectation.acceptableAccessTypes())
+                .as(expectation.mapperMethod() + " " + expectation.tableName() + " access types")
+                .isNotEmpty()
+                .allMatch(accessType -> List.of("range", "ref", "eq_ref", "const").contains(accessType));
+            assertThat(expectation.rowsExpectation())
+                .as(expectation.mapperMethod() + " " + expectation.tableName() + " rows expectation")
+                .containsIgnoringCase("rows");
+            assertThat(expectation.extraWatchItems())
+                .as(expectation.mapperMethod() + " " + expectation.tableName() + " watch items")
+                .isNotEmpty();
+        }
+    }
+
+    @Test
+    void explainTableExpectationsCoverEveryJoinedFindingQuery() {
+        assertThat(plan.explainTableExpectations().stream()
+            .filter(expectation -> "review_finding".equals(expectation.tableName()))
+            .map(DashboardSqlVerificationPlan.ExplainTableExpectation::mapperMethod)
+            .collect(Collectors.toSet()))
+            .containsExactlyInAnyOrder(
+                "selectRuleHitCounts",
+                "selectRecentHighRiskReviews",
+                "selectLlmQualityByModelStats",
+                "selectLlmQualityByRepositoryStats"
+            );
+    }
+
+    private String mapperSql(String methodName) throws NoSuchMethodException {
+        return String.join("\n", mapperMethod(methodName).getAnnotation(Select.class).value());
     }
 
     private String migrationSql() throws IOException {
