@@ -179,8 +179,4 @@ class LlmReviewPipeline {
         return elapsed > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) elapsed;
     }
 
-    private Integer zeroToNull(int value) {
-        return value <= 0 ? null : value;
-    }
-
 }
