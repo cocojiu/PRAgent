@@ -33,6 +33,9 @@ class ExternalFailureSignalsTest {
         assertThat(ExternalFailureSignals.retryAfterFromDetail(
             "request failed retryAfter=60 rateLimitRemaining=0 rateLimitReset=1763456789 responseBody={}"
         )).isEqualTo("60");
+        assertThat(ExternalFailureSignals.retryAfterFromDetail(
+            "request failed retryAfter=60 rateLimitLimit=5000 rateLimitUsed=4999 rateLimitResource=core"
+        )).isEqualTo("60");
         assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed retryAfter=Wed, 21 Oct 2026 07:28:00 GMT"))
             .isEqualTo("Wed, 21 Oct 2026 07:28:00 GMT");
         assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed")).isEmpty();

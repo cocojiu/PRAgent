@@ -14,8 +14,11 @@ class ExternalHttpFailureDetailTest {
     void appendToAddsRetryAfterAndSanitizedBodyForExternalCalls() {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.RETRY_AFTER, " 60\nunsafe ");
+        headers.add("X-RateLimit-Limit", "5000");
         headers.add("X-RateLimit-Remaining", " 0 ");
+        headers.add("X-RateLimit-Used", "5000");
         headers.add("X-RateLimit-Reset", "1763456789");
+        headers.add("X-RateLimit-Resource", "core");
         ExternalHttpFailureDetail detail = ExternalHttpFailureDetail.from(responseException(
             429,
             "Too Many Requests",
@@ -28,8 +31,11 @@ class ExternalHttpFailureDetailTest {
         assertThat(message).contains(
             "Too Many Requests",
             "retryAfter=60unsafe",
+            "rateLimitLimit=5000",
             "rateLimitRemaining=0",
+            "rateLimitUsed=5000",
             "rateLimitReset=1763456789",
+            "rateLimitResource=core",
             "responseBody={\"token\":\"***\",\"message\":\"bad sk-***\"}"
         );
         assertThat(message).doesNotContain("raw-token", "sk-secret123456789");

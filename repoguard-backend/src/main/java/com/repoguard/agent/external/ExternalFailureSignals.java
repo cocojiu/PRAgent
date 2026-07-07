@@ -10,8 +10,7 @@ public final class ExternalFailureSignals {
     private static final String STATUS_MARKER = "status=";
     private static final String RETRY_AFTER_MARKER = "retryAfter=";
     private static final String RESPONSE_BODY_MARKER = " responseBody=";
-    private static final String RATE_LIMIT_REMAINING_MARKER = " rateLimitRemaining=";
-    private static final String RATE_LIMIT_RESET_MARKER = " rateLimitReset=";
+    private static final String RATE_LIMIT_MARKER_PREFIX = " rateLimit";
 
     private ExternalFailureSignals() {
     }
@@ -93,8 +92,7 @@ public final class ExternalFailureSignals {
     private static int earliestMarkerIndex(String detail, int start) {
         int end = detail.length();
         end = nearest(detail, RESPONSE_BODY_MARKER, start, end);
-        end = nearest(detail, RATE_LIMIT_REMAINING_MARKER, start, end);
-        end = nearest(detail, RATE_LIMIT_RESET_MARKER, start, end);
+        end = nearest(detail, RATE_LIMIT_MARKER_PREFIX, start, end);
         return end;
     }
 
