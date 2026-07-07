@@ -58,6 +58,10 @@ public class ObservabilityThresholdMonitor {
     }
 
     public void frontendApiRequest(Duration duration, String route) {
+        frontendApiRequest(duration, route, null, null);
+    }
+
+    public void frontendApiRequest(Duration duration, String route, String operation, String path) {
         if (!properties.isEnabled()) {
             return;
         }
@@ -68,7 +72,13 @@ public class ObservabilityThresholdMonitor {
             properties.getFrontendApiDurationMs()
         );
         if (durationMs >= threshold) {
-            thresholdExceeded("frontend_api_duration", route, durationMs, threshold, "ms");
+            thresholdExceeded(
+                "frontend_api_duration",
+                frontendApiSubject(route, operation, path),
+                durationMs,
+                threshold,
+                "ms"
+            );
         }
     }
 
@@ -120,5 +130,20 @@ public class ObservabilityThresholdMonitor {
             return defaultValue;
         }
         return threshold;
+    }
+
+    private String frontendApiSubject(String route, String operation, String path) {
+        StringBuilder subject = new StringBuilder(safeSubject(route));
+        if (StringUtils.hasText(operation)) {
+            subject.append('|').append(operation.trim());
+        }
+        if (StringUtils.hasText(path)) {
+            subject.append('|').append(path.trim());
+        }
+        return subject.toString();
+    }
+
+    private String safeSubject(String subject) {
+        return StringUtils.hasText(subject) ? subject.trim() : "unknown";
     }
 }

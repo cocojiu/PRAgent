@@ -105,7 +105,7 @@ class FrontendPerformanceObservationServiceImplTest {
 
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
             .tag("signal", "frontend_api_duration")
-            .tag("subject", "overview")
+            .tag("subject", "overview_fetchdashboardsummary_api_v1_dashboard_summary")
             .counter()
             .count()).isEqualTo(1.0);
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
@@ -146,10 +146,10 @@ class FrontendPerformanceObservationServiceImplTest {
         recordSlowFrontendRoute(thresholdService, "message-queue", 1300L, 160L);
         recordSlowFrontendRoute(thresholdService, "notification-ops", 1300L, 160L);
 
-        assertFrontendThresholdExceeded("overview");
-        assertFrontendThresholdExceeded("task-detail");
-        assertFrontendThresholdExceeded("message-queue");
-        assertFrontendThresholdExceeded("notification-ops");
+        assertFrontendThresholdExceeded("overview", "overview_fetchroutedata_api_v1_overview");
+        assertFrontendThresholdExceeded("task-detail", "task-detail_fetchroutedata_api_v1_task-detail");
+        assertFrontendThresholdExceeded("message-queue", "message-queue_fetchroutedata_api_v1_message-queue");
+        assertFrontendThresholdExceeded("notification-ops", "notification-ops_fetchroutedata_api_v1_notification-ops");
     }
 
     private void recordSlowFrontendRoute(
@@ -173,10 +173,10 @@ class FrontendPerformanceObservationServiceImplTest {
         ));
     }
 
-    private void assertFrontendThresholdExceeded(String route) {
+    private void assertFrontendThresholdExceeded(String route, String apiSubject) {
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
             .tag("signal", "frontend_api_duration")
-            .tag("subject", route)
+            .tag("subject", apiSubject)
             .counter()
             .count()).isEqualTo(1.0);
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")

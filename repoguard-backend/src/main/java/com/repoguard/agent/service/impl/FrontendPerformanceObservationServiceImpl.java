@@ -56,7 +56,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 status(item.status()),
                 item.result()
             );
-            thresholdMonitor.frontendApiRequest(duration, route);
+            thresholdMonitor.frontendApiRequest(duration, route, item.operation(), item.path());
         });
         longTasks.forEach(item -> {
             Duration duration = duration(item.durationMs());

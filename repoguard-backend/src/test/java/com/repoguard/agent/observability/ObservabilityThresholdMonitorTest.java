@@ -94,6 +94,27 @@ class ObservabilityThresholdMonitorTest {
         )).isEqualTo(1.0);
     }
 
+    @Test
+    void frontendApiThresholdSubjectIncludesRouteOperationAndPath() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setFrontendApiDurationMs(2000);
+        properties.setFrontendApiDurationMsByRoute(Map.of("task-detail", 800L));
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.frontendApiRequest(
+            Duration.ofMillis(900),
+            "task-detail",
+            "fetchReviewFindings",
+            "/api/v1/reviews/{id}/findings"
+        );
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "frontend_api_duration",
+            "subject", "task-detail_fetchreviewfindings_api_v1_reviews_id_findings"
+        )).isEqualTo(1.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
     }
