@@ -293,6 +293,30 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void refreshDetectsReusedRevokedTokenAndInvalidatesSession() {
+        String refreshToken = "refresh-token";
+        UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        storedToken.setStatus("REVOKED");
+        storedToken.setSessionVersion(2);
+        UserAccount user = existingUser();
+        user.setSessionVersion(2);
+        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
+            .isInstanceOf(BusinessException.class);
+
+        assertThat(user.getSessionVersion()).isEqualTo(3);
+        assertThat(storedToken.getLastUsedAt()).isNotNull();
+        verify(userAccountMapper).updateById(user);
+        Mockito.verify(userRefreshTokenMapper, Mockito.times(2)).update(isNull(), any(Wrapper.class));
+        Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
+        ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
+        verify(userLoginAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getFailureReason()).isEqualTo("refresh token reuse detected");
+    }
+
+    @Test
     void refreshRejectsExpiredRefreshToken() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().minusSeconds(1));

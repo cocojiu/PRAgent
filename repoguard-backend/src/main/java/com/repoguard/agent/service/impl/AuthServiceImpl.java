@@ -144,11 +144,21 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse refresh(AuthRefreshRequest request) {
-        UserRefreshToken storedToken = findActiveRefreshToken(request.refreshToken());
+        UserRefreshToken storedToken = findRefreshToken(request.refreshToken());
         LocalDateTime now = LocalDateTime.now();
-        if (storedToken == null || !storedToken.getExpiresAt().isAfter(now)) {
+        if (storedToken == null) {
             revokeIfPresent(storedToken, now);
             recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token expired or invalid");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+        }
+
+        if (!STATUS_ACTIVE.equals(storedToken.getStatus())) {
+            handleRefreshTokenReuse(storedToken, now);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+        }
+        if (!storedToken.getExpiresAt().isAfter(now)) {
+            revokeIfPresent(storedToken, now);
+            recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token expired or invalid");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
         }
 
@@ -243,12 +253,19 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private UserRefreshToken findActiveRefreshToken(String refreshToken) {
+        UserRefreshToken storedToken = findRefreshToken(refreshToken);
+        if (storedToken == null || !STATUS_ACTIVE.equals(storedToken.getStatus())) {
+            return null;
+        }
+        return storedToken;
+    }
+
+    private UserRefreshToken findRefreshToken(String refreshToken) {
         if (!StringUtils.hasText(refreshToken)) {
             return null;
         }
         return userRefreshTokenMapper.selectOne(new LambdaQueryWrapper<UserRefreshToken>()
-            .eq(UserRefreshToken::getTokenHash, authTokenService.hashRefreshToken(refreshToken))
-            .eq(UserRefreshToken::getStatus, STATUS_ACTIVE));
+            .eq(UserRefreshToken::getTokenHash, authTokenService.hashRefreshToken(refreshToken)));
     }
 
     private void revokeIfPresent(UserRefreshToken storedToken, LocalDateTime now) {
@@ -275,6 +292,27 @@ public class AuthServiceImpl implements AuthService {
         storedToken.setStatus(STATUS_REVOKED);
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
+    }
+
+    private void handleRefreshTokenReuse(UserRefreshToken storedToken, LocalDateTime now) {
+        UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
+        if (user != null && safeSessionVersion(storedToken) == safeSessionVersion(user)) {
+            rotateSessionVersionAndPersist(user, now);
+        }
+        sessionInvalidator.revokeActiveRefreshTokens(storedToken.getUserId(), now);
+        storedToken.setLastUsedAt(now);
+        storedToken.setUpdatedAt(now);
+        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("id", storedToken.getId())
+            .set("last_used_at", now)
+            .set("updated_at", now));
+        recordAudit(
+            storedToken.getUserId(),
+            user == null ? null : user.getUsername(),
+            "TOKEN_REFRESH",
+            AUDIT_FAILURE,
+            "refresh token reuse detected"
+        );
     }
 
     private boolean revokeActiveRefreshToken(UserRefreshToken storedToken, LocalDateTime now) {
