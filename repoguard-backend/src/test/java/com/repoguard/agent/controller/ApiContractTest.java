@@ -146,20 +146,20 @@ class ApiContractTest {
 
         assertThat(apiSurface)
             .contains(
-                "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword] body=-",
-                "GET /api/v1/reviews/{id} query=[] body=-",
-                "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=-",
-                "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=-",
-                "GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=-",
-                "GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=-",
-                "GET /api/v1/reviews/repositories query=[] body=-",
-                "GET /api/v1/dashboard/summary query=[] body=-",
-                "GET /api/v1/dashboard/llm-quality query=[llmTrendDays] body=-",
-                "GET /api/v1/config/review-rules query=[] body=-",
-                "GET /api/v1/message-queue/health query=[] body=-",
-                "POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest",
-                "POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest",
-                "POST /api/v1/github/webhooks query=[] body=byte[]"
+                "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword] body=- bodyRequired=false",
+                "GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false",
+                "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false",
+                "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false",
+                "GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequired=false",
+                "GET /api/v1/reviews/{id}/github-comments/preview query=[page, pageSize, commentableOnly] body=- bodyRequired=false",
+                "GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false",
+                "GET /api/v1/dashboard/summary query=[] body=- bodyRequired=false",
+                "GET /api/v1/dashboard/llm-quality query=[llmTrendDays] body=- bodyRequired=false",
+                "GET /api/v1/config/review-rules query=[] body=- bodyRequired=false",
+                "GET /api/v1/message-queue/health query=[] body=- bodyRequired=false",
+                "POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest bodyRequired=false",
+                "POST /api/v1/observability/frontend/performance query=[] body=FrontendPerformanceReportRequest bodyRequired=true",
+                "POST /api/v1/github/webhooks query=[] body=byte[] bodyRequired=true"
             );
     }
 
@@ -303,7 +303,8 @@ class ApiContractTest {
             .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
             .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path()
                 + " query=" + ControllerEndpointCatalog.requestParamNames(endpoint.method())
-                + " body=" + ControllerEndpointCatalog.requestBodyType(endpoint.method()))
+                + " body=" + ControllerEndpointCatalog.requestBodyType(endpoint.method())
+                + " bodyRequired=" + ControllerEndpointCatalog.requestBodyRequired(endpoint.method()))
             .sorted()
             .toList();
     }
