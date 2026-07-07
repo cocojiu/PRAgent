@@ -34,4 +34,25 @@ class LlmReviewParseFailureSummarizerTest {
 
         assertThat(summary).isEqualTo("length=0, reason=unknown");
     }
+
+    @Test
+    void sanitizesSensitiveValuesFromExceptionMessage() {
+        String summary = summarizer.summarize(
+            "{}",
+            new IllegalArgumentException("parse failed token=raw-token Authorization: Bearer raw.bearer-token")
+        );
+
+        assertThat(summary).contains("token=****");
+        assertThat(summary).contains("Bearer ****");
+        assertThat(summary).doesNotContain("raw-token", "raw.bearer-token");
+    }
+
+    @Test
+    void truncatesLongExceptionMessage() {
+        String summary = summarizer.summarize("{}", new IllegalArgumentException("x".repeat(400)));
+
+        assertThat(summary).startsWith("length=2, reason=");
+        assertThat(summary).endsWith("...");
+        assertThat(summary.length()).isLessThan(270);
+    }
 }
