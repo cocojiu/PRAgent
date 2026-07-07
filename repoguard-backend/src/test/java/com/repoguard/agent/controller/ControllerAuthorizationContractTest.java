@@ -35,6 +35,7 @@ class ControllerAuthorizationContractTest {
         "NotificationIntegrationController#listBindings",
         "NotificationIntegrationController#listEvents",
         "NotificationIntegrationController#listDeliveries",
+        "DataRetentionController#listCleanupAudits",
         "MessageQueueHealthController#getHealth",
         "UserManagementController#listUsers",
         "UserManagementController#listOperationAudits"
