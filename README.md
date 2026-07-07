@@ -255,8 +255,8 @@ RepoGuard / RepoGuard Review Observability
 - 提交信息使用 `<type>(<scope>): <中文摘要>` 格式。
 - 提交前按影响范围运行后端测试、前端类型检查或前端构建。
 - 不提交本地日志、临时脚本、真实密钥、真实 token、真实连接信息。
-- 生产准出快速门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1`，覆盖空白、Flyway migration、敏感信息扫描和后端关键测试集合。
-- 生产准出完整门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -IncludeFrontendBuild`，在快速门禁基础上追加前端类型检查和构建。
+- 生产准出完整门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1`，覆盖空白、Flyway migration、敏感信息扫描、后端关键测试集合、前端质量门禁和前端生产构建。
+- 轻量仓库治理可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests`，用于只检查 tracked 文件治理、Flyway migration、demo data guard 和敏感信息扫描；旧参数 `-IncludeFrontendBuild` 仍兼容并等价于完整模式。
 - 准出门禁分层、失败处理和执行矩阵详见 [生产准出检查自动化说明](./docs/release/16-生产准出检查自动化说明.md)。
 
 ## License

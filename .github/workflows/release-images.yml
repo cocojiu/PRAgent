@@ -48,7 +48,7 @@ jobs:
 
       - name: Repository governance guard
         shell: pwsh
-        run: ./scripts/production-readiness-check.ps1 -SkipBackendTests
+        run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
 
       - name: Set up Java
         uses: actions/setup-java@v4

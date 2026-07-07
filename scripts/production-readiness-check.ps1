@@ -1,4 +1,6 @@
 param(
+    [ValidateSet("full", "quick")]
+    [string] $Mode = "full",
     [switch] $SkipBackendTests,
     [switch] $IncludeFrontendBuild
 )
@@ -10,6 +12,13 @@ $Root = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $Root "repoguard-backend"
 $FrontendDir = Join-Path $Root "repoguard-frontend"
 $MigrationDir = Join-Path $BackendDir "src/main/resources/db/migration"
+
+if ($IncludeFrontendBuild) {
+    $Mode = "full"
+}
+
+$RunFrontendGate = $Mode -eq "full"
+Write-Host "Production readiness mode: $Mode"
 
 function Invoke-Check {
     param(
@@ -235,7 +244,7 @@ if (-not $SkipBackendTests) {
     }
 }
 
-if ($IncludeFrontendBuild) {
+if ($RunFrontendGate) {
     Invoke-Check "frontend quality gate" {
         Invoke-CommandChecked -FilePath "npm" -Arguments @("run", "quality") -WorkingDirectory $FrontendDir
     }
@@ -244,7 +253,7 @@ if ($IncludeFrontendBuild) {
         Invoke-CommandChecked -FilePath "npm" -Arguments @("run", "build") -WorkingDirectory $FrontendDir
     }
 } else {
-    Write-Host "SKIP: frontend quality gate and build (pass -IncludeFrontendBuild to enable)"
+    Write-Host "SKIP: frontend quality gate and build (quick mode; pass -Mode full for production release readiness)"
 }
 
 Write-Host "Production readiness checks completed."
