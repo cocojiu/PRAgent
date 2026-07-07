@@ -84,20 +84,22 @@ public interface DashboardMapper {
             date_format(created_at, '%Y-%m-%d') as dayKey,
             count(*) as taskCount,
             sum(case
-                when (llm_parse_status = 'PARSED'
-                    or ((llm_parse_status is null or llm_parse_status = '') and llm_status = 'COMPLETED'))
-                    and llm_status <> 'FALLBACK'
+                when (lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'parsed'
+                    or (coalesce(nullif(trim(llm_parse_status), ''), '') = ''
+                        and lower(coalesce(nullif(trim(llm_status), ''), '')) = 'completed'))
+                    and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'fallback'
                 then 1 else 0 end) as parseSuccessCount,
             sum(case
-                when llm_status = 'FALLBACK' or llm_parse_status = 'FALLBACK'
+                when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
+                    or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
                 then 1 else 0 end) as fallbackCount,
             sum(case
-                when llm_parse_status = 'PARTIAL_FALLBACK'
+                when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
                 then 1 else 0 end) as partialFallbackCount
         from review_task
         where llm_status is not null
           and llm_status <> ''
-          and llm_status <> 'PENDING'
+          and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
           and created_at >= #{startDate}
         group by date_format(created_at, '%Y-%m-%d')
         """)
@@ -128,20 +130,22 @@ public interface DashboardMapper {
                 avg(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens end) as averageTokens,
                 avg(llm_estimated_cost) as averageCost,
                 sum(case
-                    when (llm_parse_status = 'PARSED'
-                        or ((llm_parse_status is null or llm_parse_status = '') and llm_status = 'COMPLETED'))
-                        and llm_status <> 'FALLBACK'
+                    when (lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'parsed'
+                        or (coalesce(nullif(trim(llm_parse_status), ''), '') = ''
+                            and lower(coalesce(nullif(trim(llm_status), ''), '')) = 'completed'))
+                        and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'fallback'
                     then 1 else 0 end) as parseSuccessCount,
                 sum(case
-                    when llm_status = 'FALLBACK' or llm_parse_status = 'FALLBACK'
+                    when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
+                        or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
                     then 1 else 0 end) as fallbackCount,
                 sum(case
-                    when llm_parse_status = 'PARTIAL_FALLBACK'
+                    when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
                     then 1 else 0 end) as partialFallbackCount
             from review_task
             where llm_status is not null
               and llm_status <> ''
-              and llm_status <> 'PENDING'
+              and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
               and created_at >= #{startDate}
             group by modelLabel
         ) task_stats
@@ -161,7 +165,7 @@ public interface DashboardMapper {
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
             where t.llm_status is not null
               and t.llm_status <> ''
-              and t.llm_status <> 'PENDING'
+              and lower(coalesce(nullif(trim(t.llm_status), ''), '')) <> 'pending'
               and t.created_at >= #{startDate}
             group by modelLabel
         ) feedback_stats on feedback_stats.modelLabel = task_stats.modelLabel
@@ -188,15 +192,16 @@ public interface DashboardMapper {
                 end as repositoryLabel,
                 count(*) as taskCount,
                 sum(case
-                    when llm_status = 'FALLBACK' or llm_parse_status = 'FALLBACK'
+                    when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
+                        or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
                     then 1 else 0 end) as fallbackCount,
                 sum(case
-                    when llm_parse_status = 'PARTIAL_FALLBACK'
+                    when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
                     then 1 else 0 end) as partialFallbackCount
             from review_task
             where llm_status is not null
               and llm_status <> ''
-              and llm_status <> 'PENDING'
+              and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
               and created_at >= #{startDate}
             group by repositoryLabel
         ) task_stats
@@ -216,7 +221,7 @@ public interface DashboardMapper {
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
             where t.llm_status is not null
               and t.llm_status <> ''
-              and t.llm_status <> 'PENDING'
+              and lower(coalesce(nullif(trim(t.llm_status), ''), '')) <> 'pending'
               and t.created_at >= #{startDate}
             group by repositoryLabel
         ) feedback_stats on feedback_stats.repositoryLabel = task_stats.repositoryLabel

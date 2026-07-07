@@ -43,10 +43,10 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("llm_status is not null")
             .contains("llm_status <> ''")
-            .contains("llm_status <> 'pending'")
             .contains("created_at >= #{startdate}")
             .contains("date_format(created_at, '%y-%m-%d') as daykey")
             .contains("group by date_format(created_at, '%y-%m-%d')");
+        assertLlmQualityStatusNormalization(sql);
     }
 
     @Test
@@ -107,7 +107,6 @@ class DashboardMapperSqlContractTest {
         assertThat(byModelSql)
             .contains("from review_task")
             .contains("llm_status is not null")
-            .contains("llm_status <> 'pending'")
             .contains("created_at >= #{startdate}")
             .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
@@ -117,13 +116,14 @@ class DashboardMapperSqlContractTest {
         assertThat(byRepositorySql)
             .contains("from review_task")
             .contains("llm_status is not null")
-            .contains("llm_status <> 'pending'")
             .contains("created_at >= #{startdate}")
             .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
             .contains("feedback_status")
             .contains("order by task_stats.taskcount desc")
             .contains("limit 6");
+        assertLlmQualityStatusNormalization(byModelSql);
+        assertLlmQualityStatusNormalization(byRepositorySql);
     }
 
     @Test
@@ -171,5 +171,13 @@ class DashboardMapperSqlContractTest {
 
     private String normalizeSql(String sql) {
         return sql.replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+
+    private void assertLlmQualityStatusNormalization(String sql) {
+        assertThat(sql)
+            .contains("lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'")
+            .contains("lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'")
+            .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'")
+            .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'");
     }
 }
