@@ -8,6 +8,8 @@ import org.springframework.util.StringUtils;
 public final class ExternalFailureSignals {
 
     private static final String STATUS_MARKER = "status=";
+    private static final String RETRY_AFTER_MARKER = "retryAfter=";
+    private static final String RESPONSE_BODY_MARKER = " responseBody=";
 
     private ExternalFailureSignals() {
     }
@@ -43,6 +45,22 @@ public final class ExternalFailureSignals {
     public static boolean hasRetryAfterSignal(String detail) {
         return StringUtils.hasText(detail)
             && (detail.contains("retryafter=") || detail.contains("retry-after"));
+    }
+
+    public static String retryAfterFromDetail(String detail) {
+        if (!StringUtils.hasText(detail)) {
+            return "";
+        }
+        int markerIndex = detail.indexOf(RETRY_AFTER_MARKER);
+        if (markerIndex < 0) {
+            return "";
+        }
+        int valueStart = markerIndex + RETRY_AFTER_MARKER.length();
+        int valueEnd = detail.indexOf(RESPONSE_BODY_MARKER, valueStart);
+        if (valueEnd < 0) {
+            valueEnd = detail.length();
+        }
+        return detail.substring(valueStart, valueEnd);
     }
 
     public static boolean hasTimeoutSignal(

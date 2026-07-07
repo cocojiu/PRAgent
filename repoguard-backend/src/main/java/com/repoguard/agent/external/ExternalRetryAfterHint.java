@@ -5,9 +5,6 @@ import org.springframework.util.StringUtils;
 
 public final class ExternalRetryAfterHint {
 
-    private static final String MARKER = "retryAfter=";
-    private static final String RESPONSE_BODY_MARKER = " responseBody=";
-
     private ExternalRetryAfterHint() {
     }
 
@@ -27,19 +24,7 @@ public final class ExternalRetryAfterHint {
     }
 
     static String retryAfter(String detail) {
-        if (!StringUtils.hasText(detail)) {
-            return "";
-        }
-        int markerIndex = detail.indexOf(MARKER);
-        if (markerIndex < 0) {
-            return "";
-        }
-        int valueStart = markerIndex + MARKER.length();
-        int valueEnd = detail.indexOf(RESPONSE_BODY_MARKER, valueStart);
-        if (valueEnd < 0) {
-            valueEnd = detail.length();
-        }
-        return clean(detail.substring(valueStart, valueEnd));
+        return clean(ExternalFailureSignals.retryAfterFromDetail(detail));
     }
 
     private static String clean(String value) {

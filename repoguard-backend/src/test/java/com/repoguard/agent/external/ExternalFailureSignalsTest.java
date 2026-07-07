@@ -26,6 +26,16 @@ class ExternalFailureSignalsTest {
     }
 
     @Test
+    void extractsRetryAfterValueBeforeResponseBody() {
+        assertThat(ExternalFailureSignals.retryAfterFromDetail(
+            "request failed status=429 retryAfter=60 responseBody={}"
+        )).isEqualTo("60");
+        assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed retryAfter=Wed, 21 Oct 2026 07:28:00 GMT"))
+            .isEqualTo("Wed, 21 Oct 2026 07:28:00 GMT");
+        assertThat(ExternalFailureSignals.retryAfterFromDetail("request failed")).isEmpty();
+    }
+
+    @Test
     void normalizesExceptionMessageForDetailScanning() {
         assertThat(ExternalFailureSignals.normalizedDetail(new IllegalStateException("HTTP Status=500\nFailed")))
             .isEqualTo("http status=500\nfailed");
