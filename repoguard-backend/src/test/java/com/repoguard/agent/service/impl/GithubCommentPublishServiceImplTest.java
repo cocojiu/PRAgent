@@ -78,7 +78,7 @@ class GithubCommentPublishServiceImplTest {
     @Test
     void publishGithubCommentsSendsCommentableDraftsAndRecordsBatchHistory() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(previewService.getPreview(521L)).thenReturn(preview(List.of(
+        when(previewService.getFullPreview(521L)).thenReturn(preview(List.of(
             item(null, "PR summary", null, "pull_request", true, false),
             item(1L, "Use logger", 8, "line", true, false),
             item(2L, "Already published", 9, "line", false, true)
@@ -114,7 +114,7 @@ class GithubCommentPublishServiceImplTest {
     @Test
     void publishGithubCommentsClassifiesGithubPermissionFailure() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(previewService.getPreview(521L)).thenReturn(preview(List.of(
+        when(previewService.getFullPreview(521L)).thenReturn(preview(List.of(
             item(1L, "Use logger", 8, "line", true, false)
         )));
         when(publicationMapper.selectOne(any())).thenReturn(null);
@@ -184,7 +184,7 @@ class GithubCommentPublishServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Human review");
 
-        verify(previewService, never()).getPreview(any());
+        verify(previewService, never()).getFullPreview(any());
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
     }
 

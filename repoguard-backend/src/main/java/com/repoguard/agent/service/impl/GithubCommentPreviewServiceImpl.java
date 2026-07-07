@@ -22,6 +22,8 @@ import org.springframework.util.StringUtils;
 @Service
 public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewService {
 
+    private static final int DEFAULT_PREVIEW_PAGE = 1;
+    private static final int DEFAULT_PREVIEW_PAGE_SIZE = 20;
     private static final ReviewFailureSummary NO_FAILURE_SUMMARY = new ReviewFailureSummary(null, null, null);
 
     private final ReviewTaskMapper reviewTaskMapper;
@@ -56,23 +58,22 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
 
     @Override
     public GithubCommentPreviewResponse getPreview(Long taskId) {
-        return buildPreview(taskId, null, null, false);
+        return getPreview(taskId, DEFAULT_PREVIEW_PAGE, DEFAULT_PREVIEW_PAGE_SIZE, false);
     }
 
     @Override
     public GithubCommentPreviewResponse getPreview(Long taskId, int page, int pageSize, boolean commentableOnly) {
-        return buildPreview(taskId, page, pageSize, commentableOnly);
+        ReviewTask task = loadTask(taskId);
+        return buildPagedPreview(taskId, task, page, pageSize, commentableOnly);
     }
 
-    private GithubCommentPreviewResponse buildPreview(Long taskId, Integer page, Integer pageSize, boolean commentableOnly) {
-        ReviewTask task = reviewTaskMapper.selectById(taskId);
-        if (task == null) {
-            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
-        }
-        if (page != null && pageSize != null) {
-            return buildPagedPreview(taskId, task, page, pageSize, commentableOnly);
-        }
+    @Override
+    public GithubCommentPreviewResponse getFullPreview(Long taskId) {
+        ReviewTask task = loadTask(taskId);
+        return buildFullPreview(taskId, task);
+    }
 
+    private GithubCommentPreviewResponse buildFullPreview(Long taskId, ReviewTask task) {
         var previewData = previewDataLoader.load(taskId);
         ReviewTaskListItem taskItem = listItemAssembler.assemble(task, NO_FAILURE_SUMMARY);
         PrRiskProfileDto riskProfile = riskProfileBuilder.build(taskItem, previewData.findings(), previewData.changedFiles());
@@ -95,6 +96,14 @@ public class GithubCommentPreviewServiceImpl implements GithubCommentPreviewServ
             prSummary,
             publicationData
         );
+    }
+
+    private ReviewTask loadTask(Long taskId) {
+        ReviewTask task = reviewTaskMapper.selectById(taskId);
+        if (task == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
+        }
+        return task;
     }
 
     private GithubCommentPreviewResponse buildPagedPreview(

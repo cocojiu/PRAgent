@@ -36,6 +36,7 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.notification.NotificationDispatchService;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
+import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -249,11 +250,9 @@ class ReviewServiceImplTest {
     @Test
     void getGithubCommentPreviewBuildsCommentDraftsAndBlocksMissingLine() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(githubIntegrationProvider.getSettings())
             .thenReturn(githubSettings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        stubGithubCommentPreviewPage(List.of(
             finding(1L, "LOW", "README", 2, "命令与描述未正确分隔", "添加空格或换行"),
             finding(2L, "LOW", "README", 3, "文档可读性不足", "补充分隔符"),
             finding(3L, "LOW", "README", 4, "可能导致误解", "调整格式"),
@@ -281,11 +280,9 @@ class ReviewServiceImplTest {
     @Test
     void getGithubCommentPreviewWarnsWhenConfiguredRepositoryDiffersFromTaskRepository() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(githubIntegrationProvider.getSettings())
             .thenReturn(githubSettings("other-owner", "other-repo", "CONFIGURED", "ghp_test", null));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        stubGithubCommentPreviewPage(List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
         ));
 
@@ -301,11 +298,9 @@ class ReviewServiceImplTest {
     @Test
     void getGithubCommentPreviewWarnsWhenGithubTokenIsMissing() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(githubIntegrationProvider.getSettings())
             .thenReturn(githubSettings("octocat", "Hello-World", "NOT_CONFIGURED", null, null));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
+        stubGithubCommentPreviewPage(List.of(
             finding(1L, "LOW", "README", 2, "Use logger", "Replace stdout with logger")
         ));
 
@@ -321,8 +316,6 @@ class ReviewServiceImplTest {
     @Test
     void getGithubCommentPreviewKeepsReadyWhenOnlyStaleGithubConnectionErrorExists() {
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(
             "octocat",
             "Hello-World",
@@ -330,7 +323,7 @@ class ReviewServiceImplTest {
             "ghp_test",
             "404 Not Found"
         ));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
+        stubGithubCommentPreviewPage(List.of());
 
         var preview = service.getGithubCommentPreview(521L);
 
@@ -513,11 +506,9 @@ class ReviewServiceImplTest {
         ReviewFinding falsePositive = finding(2L, "LOW", "README", 3, "Known safe", "No change needed");
         falsePositive.setFeedbackStatus("FALSE_POSITIVE");
         when(reviewTaskMapper.selectById(521L)).thenReturn(task());
-        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README", "MODIFY")));
-        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
         when(githubIntegrationProvider.getSettings())
             .thenReturn(githubSettings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
-        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(validFinding, falsePositive));
+        stubGithubCommentPreviewPage(List.of(validFinding, falsePositive));
 
         var preview = service.getGithubCommentPreview(521L);
 
@@ -1173,6 +1164,48 @@ class ReviewServiceImplTest {
         when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
         when(reviewFindingMapper.selectCount(any())).thenReturn((long) findings.size(), (long) missingTests.size());
         when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(findings));
+    }
+
+    private void stubGithubCommentPreviewPage(List<ReviewFinding> findings) {
+        List<ChangedFile> changedFiles = findings.stream()
+            .map(ReviewFinding::getFilePath)
+            .filter(path -> path != null && !path.isBlank())
+            .distinct()
+            .map(path -> changedFile(path, "MODIFY"))
+            .toList();
+        when(githubCommentPublicationMapper.selectOne(any())).thenReturn(null);
+        when(githubCommentPublicationMapper.selectList(any())).thenReturn(List.of());
+        when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(previewStat(
+            findings.size(),
+            commentablePreviewFindingCount(findings),
+            0L
+        ));
+        when(reviewFindingMapper.selectGithubCommentPreviewFindings(521L, 0L, 19)).thenReturn(findings);
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(findings));
+        when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
+        when(changedFileMapper.selectList(any())).thenReturn(changedFiles);
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3))
+            .thenReturn(changedFiles.stream().limit(3).toList());
+        when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
+    }
+
+    private long commentablePreviewFindingCount(List<ReviewFinding> findings) {
+        return findings.stream()
+            .filter(finding -> !"FALSE_POSITIVE".equalsIgnoreCase(finding.getFeedbackStatus()))
+            .filter(finding -> !"IGNORED".equalsIgnoreCase(finding.getFeedbackStatus()))
+            .count();
+    }
+
+    private GithubCommentPreviewFindingStat previewStat(
+        long totalFindings,
+        long commentableFindings,
+        long publishedFindings
+    ) {
+        GithubCommentPreviewFindingStat stat = new GithubCommentPreviewFindingStat();
+        stat.setTotalFindings(totalFindings);
+        stat.setCommentableFindings(commentableFindings);
+        stat.setPublishedFindings(publishedFindings);
+        return stat;
     }
 
     private FindingSeverityCountsDto severityCounts(List<ReviewFinding> findings) {

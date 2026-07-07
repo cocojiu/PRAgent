@@ -59,7 +59,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         }
         publishGuard.ensurePublishAllowed(task);
 
-        GithubCommentPreviewResponse preview = previewService.getPreview(taskId);
+        GithubCommentPreviewResponse preview = previewService.getFullPreview(taskId);
         GithubCommentPublishPlan publishPlan = publishPlanBuilder.build(preview);
         List<GithubReviewCommentDraft> drafts = publishPlan.drafts();
         List<GithubCommentPublishItem> skippedItems = publishPlan.skippedItems();

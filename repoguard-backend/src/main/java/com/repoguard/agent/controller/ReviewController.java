@@ -49,6 +49,9 @@ import org.springframework.web.bind.annotation.RestController;
 @ApiRuntimeEnabled
 public class ReviewController {
 
+    private static final int DEFAULT_GITHUB_COMMENT_PREVIEW_PAGE = 1;
+    private static final int DEFAULT_GITHUB_COMMENT_PREVIEW_PAGE_SIZE = 20;
+
     private final ReviewService reviewService;
 
     public ReviewController(ReviewService reviewService) {
@@ -155,13 +158,10 @@ public class ReviewController {
         @RequestParam(required = false) @Min(1) @Max(100) Integer pageSize,
         @RequestParam(defaultValue = "false") boolean commentableOnly
     ) {
-        if (page == null && pageSize == null && !commentableOnly) {
-            return ApiResponse.ok(reviewService.getGithubCommentPreview(id));
-        }
         return ApiResponse.ok(reviewService.getGithubCommentPreview(
             id,
-            page == null ? 1 : page,
-            pageSize == null ? 20 : pageSize,
+            page == null ? DEFAULT_GITHUB_COMMENT_PREVIEW_PAGE : page,
+            pageSize == null ? DEFAULT_GITHUB_COMMENT_PREVIEW_PAGE_SIZE : pageSize,
             commentableOnly
         ));
     }

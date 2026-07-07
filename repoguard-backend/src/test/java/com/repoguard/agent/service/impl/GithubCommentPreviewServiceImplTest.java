@@ -53,7 +53,7 @@ class GithubCommentPreviewServiceImplTest {
     );
 
     @Test
-    void getPreviewBuildsSummaryAndLineOrPullRequestComments() {
+    void getFullPreviewBuildsSummaryAndLineOrPullRequestComments() {
         stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README.md", "MODIFY")));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
@@ -62,7 +62,7 @@ class GithubCommentPreviewServiceImplTest {
         ));
         when(publicationMapper.selectList(any())).thenReturn(List.of());
 
-        var preview = service.getPreview(521L);
+        var preview = service.getFullPreview(521L);
 
         assertThat(preview.totalFindings()).isEqualTo(2);
         assertThat(preview.commentableCount()).isEqualTo(3);
@@ -76,6 +76,39 @@ class GithubCommentPreviewServiceImplTest {
             .contains("**建议**：Replace stdout");
         assertThat(preview.items().getLast().reason())
             .isEqualTo("Finding is missing a valid line number and will be posted as a PR comment");
+    }
+
+    @Test
+    void getPreviewUsesDefaultPaginationWithoutFullFindingScan() {
+        stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
+        when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(previewStat(2L, 2L, 0L));
+        when(reviewFindingMapper.selectGithubCommentPreviewFindings(521L, 0L, 19)).thenReturn(List.of(
+            finding(1L, "HIGH", "README.md", 8, "Use structured logging", "Replace stdout"),
+            finding(2L, "LOW", "README.md", null, "Missing line", "Add a line reference")
+        ));
+        when(reviewFindingMapper.selectFindingSeverityCounts(521L))
+            .thenReturn(new FindingSeverityCountsDto(0L, 1L, 0L, 1L, 0L));
+        when(reviewFindingMapper.selectCount(any())).thenReturn(0L);
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README.md", "MODIFY")));
+        when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3)).thenReturn(List.of(
+            changedFile("README.md", "MODIFY")
+        ));
+        when(changedFileMapper.selectCount(any())).thenReturn(1L);
+        when(publicationMapper.selectList(any())).thenReturn(List.of());
+
+        var preview = service.getPreview(521L);
+
+        assertThat(preview.totalFindings()).isEqualTo(2);
+        assertThat(preview.commentableCount()).isEqualTo(3);
+        assertThat(preview.blockedCount()).isZero();
+        assertThat(preview.itemTotal()).isEqualTo(3);
+        assertThat(preview.page()).isEqualTo(1);
+        assertThat(preview.pageSize()).isEqualTo(20);
+        assertThat(preview.commentableOnly()).isFalse();
+        assertThat(preview.items()).extracting("targetType")
+            .containsExactly("pull_request", "line", "pull_request");
+        verify(reviewFindingMapper, never()).selectList(any());
+        verify(reviewFindingMapper).selectGithubCommentPreviewFindings(eq(521L), eq(0L), eq(19));
     }
 
     @Test
@@ -114,12 +147,12 @@ class GithubCommentPreviewServiceImplTest {
     }
 
     @Test
-    void getPreviewReportsRepositoryMismatchWithoutBlockingDraftConstruction() {
+    void getFullPreviewReportsRepositoryMismatchWithoutBlockingDraftConstruction() {
         stubTaskAndSettings(settings("another-owner", "another-repo", "CONFIGURED", "ghp_test", null));
         when(changedFileMapper.selectList(any())).thenReturn(List.of());
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of());
 
-        var preview = service.getPreview(521L);
+        var preview = service.getFullPreview(521L);
 
         assertThat(preview.writebackCheck().status()).isEqualTo("repository_mismatch");
         assertThat(preview.writebackCheck().level()).isEqualTo("warning");
@@ -128,7 +161,7 @@ class GithubCommentPreviewServiceImplTest {
     }
 
     @Test
-    void getPreviewMarksExistingSummaryAndFindingPublicationsAsPublished() {
+    void getFullPreviewMarksExistingSummaryAndFindingPublicationsAsPublished() {
         stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README.md", "MODIFY")));
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(
@@ -137,7 +170,7 @@ class GithubCommentPreviewServiceImplTest {
         when(publicationMapper.selectList(any())).thenReturn(List.of(publication(1L, "line", "finding")));
         when(publicationMapper.selectOne(any())).thenReturn(publication(null, "pull_request", "summary"));
 
-        var preview = service.getPreview(521L);
+        var preview = service.getFullPreview(521L);
 
         assertThat(preview.commentableCount()).isZero();
         assertThat(preview.blockedCount()).isZero();
@@ -147,7 +180,7 @@ class GithubCommentPreviewServiceImplTest {
     }
 
     @Test
-    void getPreviewKeepsNonActionableFindingVisibleButNotCommentable() {
+    void getFullPreviewKeepsNonActionableFindingVisibleButNotCommentable() {
         stubTaskAndSettings(settings("octocat", "Hello-World", "CONFIGURED", "ghp_test", null));
         when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README.md", "MODIFY")));
         ReviewFinding finding = finding(1L, "LOW", "README.md", 8, "Known safe", "No change");
@@ -155,7 +188,7 @@ class GithubCommentPreviewServiceImplTest {
         when(reviewFindingMapper.selectList(any())).thenReturn(List.of(finding));
         when(publicationMapper.selectList(any())).thenReturn(List.of());
 
-        var preview = service.getPreview(521L);
+        var preview = service.getFullPreview(521L);
 
         assertThat(preview.commentableCount()).isEqualTo(1);
         assertThat(preview.blockedCount()).isEqualTo(1);

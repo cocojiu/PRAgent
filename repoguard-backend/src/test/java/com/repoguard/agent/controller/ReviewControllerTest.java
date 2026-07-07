@@ -69,6 +69,10 @@ class ReviewControllerTest {
     private int lastPublicationPage;
     private int lastPublicationPageSize;
     private String lastPublicationStatus;
+    private Long lastPreviewTaskId;
+    private int lastPreviewPage;
+    private int lastPreviewPageSize;
+    private boolean lastPreviewCommentableOnly;
 
     private final ReviewService reviewService = new ReviewService() {
         @Override
@@ -317,6 +321,10 @@ class ReviewControllerTest {
             int pageSize,
             boolean commentableOnly
         ) {
+            lastPreviewTaskId = id;
+            lastPreviewPage = page;
+            lastPreviewPageSize = pageSize;
+            lastPreviewCommentableOnly = commentableOnly;
             GithubCommentPreviewResponse preview = getGithubCommentPreview(id);
             return new GithubCommentPreviewResponse(
                 preview.taskId(),
@@ -690,9 +698,9 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.commentableCount").value(1))
             .andExpect(jsonPath("$.data.blockedCount").value(0))
             .andExpect(jsonPath("$.data.publishedCount").value(0))
-            .andExpect(jsonPath("$.data.itemTotal").value(1))
+            .andExpect(jsonPath("$.data.itemTotal").value(25))
             .andExpect(jsonPath("$.data.page").value(1))
-            .andExpect(jsonPath("$.data.pageSize").value(1))
+            .andExpect(jsonPath("$.data.pageSize").value(20))
             .andExpect(jsonPath("$.data.commentableOnly").value(false))
             .andExpect(jsonPath("$.data.writebackCheck.status").value("ready"))
             .andExpect(jsonPath("$.data.writebackCheck.level").value("success"))
@@ -716,6 +724,10 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.items[0].targetType").value("line"))
             .andExpect(jsonPath("$.data.items[0].published").value(false))
             .andExpect(jsonPath("$.data.items[0].feedbackStatus").value("unreviewed"));
+        assertThat(lastPreviewTaskId).isEqualTo(512L);
+        assertThat(lastPreviewPage).isEqualTo(1);
+        assertThat(lastPreviewPageSize).isEqualTo(20);
+        assertThat(lastPreviewCommentableOnly).isFalse();
     }
 
     @Test
@@ -730,6 +742,10 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.page").value(2))
             .andExpect(jsonPath("$.data.pageSize").value(1))
             .andExpect(jsonPath("$.data.commentableOnly").value(true));
+        assertThat(lastPreviewTaskId).isEqualTo(512L);
+        assertThat(lastPreviewPage).isEqualTo(2);
+        assertThat(lastPreviewPageSize).isEqualTo(1);
+        assertThat(lastPreviewCommentableOnly).isTrue();
     }
 
     @Test
