@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
@@ -32,9 +33,11 @@ class RabbitNotificationEventPublisherTest {
         meterRegistry,
         new ReviewExecutionFailureClassifier()
     );
+    private final RabbitPublishFailureMetricsRecorder metricsRecorder =
+        new RabbitPublishFailureMetricsRecorder(metrics);
 
     @Test
-    void constructorRejectsMissingMetrics() {
+    void constructorRejectsMissingMetricsRecorder() {
         RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
 
         assertThatThrownBy(() -> new RabbitNotificationEventPublisher(
@@ -43,7 +46,7 @@ class RabbitNotificationEventPublisherTest {
             null
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("metrics");
+            .hasMessage("metricsRecorder");
     }
 
     @Test
@@ -108,7 +111,7 @@ class RabbitNotificationEventPublisherTest {
         RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(
             reliablePublisher(rabbitTemplate),
             properties,
-            metrics
+            metricsRecorder
         );
 
         assertThatThrownBy(() -> publisher.publish(message))
@@ -180,7 +183,7 @@ class RabbitNotificationEventPublisherTest {
         RabbitTemplate rabbitTemplate,
         RabbitNotificationQueueProperties properties
     ) {
-        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, metrics);
+        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, metricsRecorder);
     }
 
     private RabbitReliableMessagePublisher reliablePublisher(RabbitTemplate rabbitTemplate) {

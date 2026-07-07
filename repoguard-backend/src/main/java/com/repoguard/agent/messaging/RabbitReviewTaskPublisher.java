@@ -2,7 +2,6 @@ package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
@@ -16,17 +15,17 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
 
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitReviewQueueProperties properties;
-    private final RepoGuardMetrics metrics;
+    private final RabbitPublishFailureMetricsRecorder metricsRecorder;
 
     @Autowired
     public RabbitReviewTaskPublisher(
         RabbitReliableMessagePublisher reliablePublisher,
         RabbitReviewQueueProperties properties,
-        RepoGuardMetrics metrics
+        RabbitPublishFailureMetricsRecorder metricsRecorder
     ) {
         this.reliablePublisher = Objects.requireNonNull(reliablePublisher, "reliablePublisher");
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
     }
 
     @Override
@@ -55,7 +54,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
                     Math.max(1, properties.getPublishMaxAttempts()),
                     failureReason
                 );
-                metrics.rabbitPublishFailed(failureReason);
+                metricsRecorder.recordFailed("publish", failureReason);
                 throw ex;
             }
         }

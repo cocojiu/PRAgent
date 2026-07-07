@@ -13,6 +13,7 @@ import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
@@ -30,6 +31,8 @@ class ReviewTaskRecoveryCompensatorTest {
         org.mockito.Mockito.mock(ReviewTaskRecoveryTimelineRecorder.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final RabbitPublishFailureMetricsRecorder metricsRecorder =
+        new RabbitPublishFailureMetricsRecorder(metrics);
     private final ReviewTaskRecoveryCompensator compensator = new ReviewTaskRecoveryCompensator(
         recoveryStore,
         timelineRecorder,
@@ -37,7 +40,7 @@ class ReviewTaskRecoveryCompensatorTest {
         new ReviewLogContextFormatter(),
         new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties()),
         reviewTaskPublisher,
-        metrics,
+        metricsRecorder,
         new RabbitPublishFailureClassifier()
     );
 
@@ -50,7 +53,7 @@ class ReviewTaskRecoveryCompensatorTest {
             new ReviewLogContextFormatter(),
             new ReviewTaskRecoveryPolicy(new RabbitReviewQueueProperties()),
             reviewTaskPublisher,
-            metrics,
+            metricsRecorder,
             null
         ))
             .isInstanceOf(NullPointerException.class)
@@ -58,7 +61,7 @@ class ReviewTaskRecoveryCompensatorTest {
     }
 
     @Test
-    void constructorRejectsMissingMetrics() {
+    void constructorRejectsMissingMetricsRecorder() {
         assertThatThrownBy(() -> new ReviewTaskRecoveryCompensator(
             recoveryStore,
             timelineRecorder,
@@ -70,7 +73,7 @@ class ReviewTaskRecoveryCompensatorTest {
             new RabbitPublishFailureClassifier()
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("metrics");
+            .hasMessage("metricsRecorder");
     }
 
     @Test

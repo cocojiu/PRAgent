@@ -4,8 +4,8 @@ import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishResult;
 import com.repoguard.agent.messaging.RabbitPublishSpec;
+import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
@@ -19,17 +19,17 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
 
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitNotificationQueueProperties properties;
-    private final RepoGuardMetrics metrics;
+    private final RabbitPublishFailureMetricsRecorder metricsRecorder;
 
     @Autowired
     public RabbitNotificationEventPublisher(
         RabbitReliableMessagePublisher reliablePublisher,
         RabbitNotificationQueueProperties properties,
-        RepoGuardMetrics metrics
+        RabbitPublishFailureMetricsRecorder metricsRecorder
     ) {
         this.reliablePublisher = Objects.requireNonNull(reliablePublisher, "reliablePublisher");
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
     }
 
     @Override
@@ -55,7 +55,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
                 Math.max(1, properties.getPublishMaxAttempts()),
                 failureReason
             );
-            metrics.rabbitPublishFailed("notification", failureReason);
+            metricsRecorder.recordFailed("notification", failureReason);
             throw ex;
         }
     }

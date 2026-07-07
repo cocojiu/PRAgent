@@ -5,10 +5,10 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -30,7 +30,7 @@ public class ReviewTaskRecoveryCompensator {
     private final ReviewLogContextFormatter logContextFormatter;
     private final ReviewTaskRecoveryPolicy recoveryPolicy;
     private final ReviewTaskPublisher reviewTaskPublisher;
-    private final RepoGuardMetrics metrics;
+    private final RabbitPublishFailureMetricsRecorder metricsRecorder;
     private final RabbitPublishFailureClassifier failureClassifier;
 
     public ReviewTaskRecoveryCompensator(
@@ -40,7 +40,7 @@ public class ReviewTaskRecoveryCompensator {
         ReviewLogContextFormatter logContextFormatter,
         ReviewTaskRecoveryPolicy recoveryPolicy,
         ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics,
+        RabbitPublishFailureMetricsRecorder metricsRecorder,
         RabbitPublishFailureClassifier failureClassifier
     ) {
         this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
@@ -49,7 +49,7 @@ public class ReviewTaskRecoveryCompensator {
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
         this.recoveryPolicy = Objects.requireNonNull(recoveryPolicy, "recoveryPolicy");
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
@@ -96,7 +96,7 @@ public class ReviewTaskRecoveryCompensator {
                 LocalDateTime nextRetryAt = recoveredAt.plusNanos(recoveryPolicy.publishRetryDelayMs() * 1_000_000);
                 if (recoveryStore.markRecoveryPublishFailed(task, recoveredAt, nextRetryAt, error)) {
                     timelineRecorder.recoveryPublishFailed(task, recoveredAt, error);
-                    metrics.rabbitPublishFailed("execute", failureClassifier.classify(ex));
+                    metricsRecorder.recordFailed("execute", failureClassifier.classify(ex));
                     LOGGER.warn(
                         "Review task recovery publish failed taskId={} repository={} prNumber={} operation=review_recovery result=publish_failed attempts={} nextRetryAt={} error={}",
                         task.getId(),
