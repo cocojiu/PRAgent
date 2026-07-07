@@ -108,17 +108,7 @@ public final class ExternalCallErrorClassifier {
         }
         String normalized = message.replaceAll("\\s+", " ").trim();
         if (ex instanceof RestClientResponseException responseException) {
-            String retryAfter = ExternalRetryAfterHint.fromHeaders(responseException.getResponseHeaders());
-            String responseBody = sanitizeResponseBody(responseException.getResponseBodyAsString());
-            if (StringUtils.hasText(retryAfter) && StringUtils.hasText(responseBody)) {
-                return normalized + " retryAfter=" + retryAfter + " responseBody=" + responseBody;
-            }
-            if (StringUtils.hasText(retryAfter)) {
-                return normalized + " retryAfter=" + retryAfter;
-            }
-            if (StringUtils.hasText(responseBody)) {
-                return normalized + " responseBody=" + responseBody;
-            }
+            return ExternalHttpFailureDetail.from(responseException).appendTo(normalized);
         }
         return normalized;
     }
@@ -130,18 +120,4 @@ public final class ExternalCallErrorClassifier {
         return value.length() > 300 ? value.substring(0, 297) + "..." : value;
     }
 
-    private static String sanitizeResponseBody(String body) {
-        if (!StringUtils.hasText(body)) {
-            return null;
-        }
-        return body
-            .replaceAll("\\s+", " ")
-            .replaceAll("(?i)(bearer\\s+)[A-Za-z0-9._~+\\-/=]+", "$1***")
-            .replaceAll("(?i)(api[_-]?key\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
-            .replaceAll("(?i)([\"']?(?:api[_-]?key|token|secret)[\"']?\\s*[:=]\\s*[\"']?)(?!bearer\\s)[^\"'\\s,}<>]+", "$1***")
-            .replaceAll("(?i)(token\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
-            .replaceAll("(?i)(secret\\s*[:=]\\s*[\"']?)[^\"'\\s,}<>]+", "$1***")
-            .replaceAll("sk-[A-Za-z0-9_-]{8,}", "sk-***")
-            .trim();
-    }
 }
