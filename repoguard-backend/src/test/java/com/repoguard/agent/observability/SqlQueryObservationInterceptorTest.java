@@ -85,7 +85,7 @@ class SqlQueryObservationInterceptorTest {
         assertThat(counter(
             "repoguard.observability.threshold.exceeded",
             "signal", "sql_rows",
-            "subject", "dashboardmapper.selectmetricstat"
+            "subject", "dashboardmapper.selectmetricstat_select_success"
         )).isEqualTo(1.0);
     }
 

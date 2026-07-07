@@ -67,7 +67,7 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
                 outcome,
                 responseBytes
             );
-            thresholdMonitor.apiRequest(duration, path, responseBytes);
+            thresholdMonitor.apiRequest(duration, request.getMethod(), path, responseBytes);
         }
     }
 

@@ -153,7 +153,7 @@ class ApiRequestObservationFilterTest {
         assertThat(counter(
             "repoguard.observability.threshold.exceeded",
             "signal", "api_response_bytes",
-            "subject", "_api_v1_reviews_id_"
+            "subject", "get_api_v1_reviews_id_"
         )).isEqualTo(1.0);
     }
 

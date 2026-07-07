@@ -22,6 +22,10 @@ public class ObservabilityThresholdMonitor {
     }
 
     public void apiRequest(Duration duration, String path, long responseBytes) {
+        apiRequest(duration, null, path, responseBytes);
+    }
+
+    public void apiRequest(Duration duration, String method, String path, long responseBytes) {
         if (!properties.isEnabled()) {
             return;
         }
@@ -36,24 +40,30 @@ public class ObservabilityThresholdMonitor {
             properties.getApiResponseBytesByPath(),
             properties.getApiResponseBytes()
         );
+        String subject = apiSubject(method, path);
         if (durationMs >= durationThreshold) {
-            thresholdExceeded("api_duration", path, durationMs, durationThreshold, "ms");
+            thresholdExceeded("api_duration", subject, durationMs, durationThreshold, "ms");
         }
         if (responseBytes >= responseBytesThreshold) {
-            thresholdExceeded("api_response_bytes", path, responseBytes, responseBytesThreshold, "bytes");
+            thresholdExceeded("api_response_bytes", subject, responseBytes, responseBytesThreshold, "bytes");
         }
     }
 
     public void sqlQuery(Duration duration, String statement, long rows) {
+        sqlQuery(duration, statement, null, null, rows);
+    }
+
+    public void sqlQuery(Duration duration, String statement, String command, String result, long rows) {
         if (!properties.isEnabled()) {
             return;
         }
         long durationMs = millis(duration);
+        String subject = sqlSubject(statement, command, result);
         if (durationMs >= properties.getSqlDurationMs()) {
-            thresholdExceeded("sql_duration", statement, durationMs, properties.getSqlDurationMs(), "ms");
+            thresholdExceeded("sql_duration", subject, durationMs, properties.getSqlDurationMs(), "ms");
         }
         if (rows >= properties.getSqlRows()) {
-            thresholdExceeded("sql_rows", statement, rows, properties.getSqlRows(), "rows");
+            thresholdExceeded("sql_rows", subject, rows, properties.getSqlRows(), "rows");
         }
     }
 
@@ -139,6 +149,24 @@ public class ObservabilityThresholdMonitor {
         }
         if (StringUtils.hasText(path)) {
             subject.append('|').append(path.trim());
+        }
+        return subject.toString();
+    }
+
+    private String apiSubject(String method, String path) {
+        if (!StringUtils.hasText(method)) {
+            return safeSubject(path);
+        }
+        return method.trim() + "|" + safeSubject(path);
+    }
+
+    private String sqlSubject(String statement, String command, String result) {
+        StringBuilder subject = new StringBuilder(safeSubject(statement));
+        if (StringUtils.hasText(command)) {
+            subject.append('|').append(command.trim());
+        }
+        if (StringUtils.hasText(result)) {
+            subject.append('|').append(result.trim());
         }
         return subject.toString();
     }

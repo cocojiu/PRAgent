@@ -81,7 +81,13 @@ public class SqlQueryObservationInterceptor implements Interceptor {
                 failure == null ? "success" : "failed",
                 rows
             );
-            thresholdMonitor.sqlQuery(duration, statement, rows);
+            thresholdMonitor.sqlQuery(
+                duration,
+                statement,
+                command(mappedStatement),
+                failure == null ? "success" : "failed",
+                rows
+            );
         }
     }
 

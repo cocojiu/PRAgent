@@ -71,6 +71,37 @@ class ObservabilityThresholdMonitorTest {
     }
 
     @Test
+    void apiThresholdSubjectIncludesMethodWhenProvided() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setApiDurationMs(500);
+        properties.setApiDurationMsByPath(Map.of("/api/v1/reviews/{id}", 200L));
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.apiRequest(Duration.ofMillis(250), "GET", "/api/v1/reviews/{id}", 128);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "api_duration",
+            "subject", "get_api_v1_reviews_id_"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
+    void sqlThresholdSubjectIncludesCommandAndResultWhenProvided() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setSqlRows(2);
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.sqlQuery(Duration.ofMillis(10), "DashboardMapper.selectMetricStat", "SELECT", "success", 3);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "sql_rows",
+            "subject", "dashboardmapper.selectmetricstat_select_success"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
     void frontendObservationUsesRouteSpecificApiAndLongTaskThresholds() {
         ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
         properties.setFrontendApiDurationMs(2000);
