@@ -11,6 +11,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -76,7 +77,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
             task.getId(),
             findingFeedbackTimelineLabel(finding, status),
             feedbackAt,
-            "DONE"
+            ReviewTimelineStatus.DONE
         );
         evictDashboardOverview();
         return findingFeedbackResponse(finding);

@@ -4,6 +4,7 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -118,7 +119,12 @@ public class ReviewTaskPublishCompensator {
             try {
                 reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
                 outboxStore.clearPublishClaim(task, claim);
-                outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
+                outboxStore.appendTimeline(
+                    task.getId(),
+                    "Message publish recovered",
+                    LocalDateTime.now(),
+                    ReviewTimelineStatus.CURRENT
+                );
                 metricsRecorder.recordSucceeded("publish");
                 LOGGER.info(
                     "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",
@@ -135,7 +141,7 @@ public class ReviewTaskPublishCompensator {
                         task.getId(),
                         "Message publish retry failed: " + truncate(errorMessage),
                         LocalDateTime.now(),
-                        "FAILED"
+                        ReviewTimelineStatus.FAILED
                     );
                     metricsRecorder.recordFailed("publish", failureClassifier.classify(ex));
                     LOGGER.warn(

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.verify;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class ReviewExecutionTimelineRecorderTest {
 
         recorder.reviewStarted(task(), eventTime);
 
-        verify(timelineAppender).append(42L, "Review started", eventTime, "CURRENT", 2);
+        verify(timelineAppender).append(42L, "Review started", eventTime, ReviewTimelineStatus.CURRENT, 2);
     }
 
     @Test
@@ -32,9 +33,9 @@ class ReviewExecutionTimelineRecorderTest {
         recorder.reviewGenerated(task(), reviewResult, eventTime);
         recorder.reviewTerminal(task(), false, eventTime);
 
-        verify(timelineAppender).append(42L, "GitHub diff fetched", eventTime, "DONE", 3);
-        verify(timelineAppender).append(42L, "Code review generated", eventTime, "DONE", 4);
-        verify(timelineAppender).append(42L, "Review completed", eventTime, "DONE", 5);
+        verify(timelineAppender).append(42L, "GitHub diff fetched", eventTime, ReviewTimelineStatus.DONE, 3);
+        verify(timelineAppender).append(42L, "Code review generated", eventTime, ReviewTimelineStatus.DONE, 4);
+        verify(timelineAppender).append(42L, "Review completed", eventTime, ReviewTimelineStatus.DONE, 5);
     }
 
     @Test
@@ -60,7 +61,7 @@ class ReviewExecutionTimelineRecorderTest {
             42L,
             "Code review generated with partial rule fallback",
             eventTime,
-            "DONE",
+            ReviewTimelineStatus.DONE,
             4
         );
     }
@@ -72,8 +73,8 @@ class ReviewExecutionTimelineRecorderTest {
         recorder.reviewTerminal(task(), true, eventTime);
         recorder.reviewFailed(task(), new IllegalStateException("github unavailable"), eventTime);
 
-        verify(timelineAppender).append(42L, "Human review required", eventTime, "CURRENT", 5);
-        verify(timelineAppender).append(42L, "Review failed: github unavailable", eventTime, "FAILED", 5);
+        verify(timelineAppender).append(42L, "Human review required", eventTime, ReviewTimelineStatus.CURRENT, 5);
+        verify(timelineAppender).append(42L, "Review failed: github unavailable", eventTime, ReviewTimelineStatus.FAILED, 5);
     }
 
     private ReviewTask task() {

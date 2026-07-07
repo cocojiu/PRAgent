@@ -5,6 +5,7 @@ import com.repoguard.agent.review.LlmParseStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
@@ -18,15 +19,15 @@ class ReviewExecutionTimelineRecorder {
     }
 
     void reviewStarted(ReviewTask task, LocalDateTime eventTime) {
-        timelineAppender.append(task.getId(), "Review started", eventTime, "CURRENT", 2);
+        timelineAppender.append(task.getId(), "Review started", eventTime, ReviewTimelineStatus.CURRENT, 2);
     }
 
     void diffFetched(ReviewTask task, LocalDateTime eventTime) {
-        timelineAppender.append(task.getId(), "GitHub diff fetched", eventTime, "DONE", 3);
+        timelineAppender.append(task.getId(), "GitHub diff fetched", eventTime, ReviewTimelineStatus.DONE, 3);
     }
 
     void reviewGenerated(ReviewTask task, ReviewResult reviewResult, LocalDateTime eventTime) {
-        timelineAppender.append(task.getId(), reviewGeneratedLabel(reviewResult), eventTime, "DONE", 4);
+        timelineAppender.append(task.getId(), reviewGeneratedLabel(reviewResult), eventTime, ReviewTimelineStatus.DONE, 4);
     }
 
     void reviewTerminal(ReviewTask task, boolean humanReviewRequired, LocalDateTime eventTime) {
@@ -34,13 +35,13 @@ class ReviewExecutionTimelineRecorder {
             task.getId(),
             humanReviewRequired ? "Human review required" : "Review completed",
             eventTime,
-            humanReviewRequired ? "CURRENT" : "DONE",
+            humanReviewRequired ? ReviewTimelineStatus.CURRENT : ReviewTimelineStatus.DONE,
             5
         );
     }
 
     void reviewFailed(ReviewTask task, RuntimeException ex, LocalDateTime eventTime) {
-        timelineAppender.append(task.getId(), failureLabel(ex), eventTime, "FAILED", 5);
+        timelineAppender.append(task.getId(), failureLabel(ex), eventTime, ReviewTimelineStatus.FAILED, 5);
     }
 
     private String reviewGeneratedLabel(ReviewResult reviewResult) {

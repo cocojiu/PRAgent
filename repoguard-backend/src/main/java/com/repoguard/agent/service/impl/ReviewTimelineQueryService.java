@@ -5,6 +5,7 @@ import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -106,12 +107,7 @@ public class ReviewTimelineQueryService {
         return new ReviewTimelineItem(
             timeline.getLabel(),
             timeline.getEventTime().format(TIME_FORMATTER),
-            switch (timeline.getStatus()) {
-                case "DONE" -> "done";
-                case "CURRENT" -> "current";
-                case "FAILED" -> "done";
-                default -> "pending";
-            }
+            ReviewTimelineStatus.from(timeline.getStatus()).displayStatus()
         );
     }
 }

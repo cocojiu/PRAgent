@@ -13,6 +13,7 @@ import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,7 +56,12 @@ public class ReviewTaskRetryService {
         reviewTaskMapper.updateById(task);
         evictDashboardOverview();
 
-        reviewTimelineAppender.completeCurrentAndAppend(task.getId(), "Retry queued", queuedAt, "CURRENT");
+        reviewTimelineAppender.completeCurrentAndAppend(
+            task.getId(),
+            "Retry queued",
+            queuedAt,
+            ReviewTimelineStatus.CURRENT
+        );
         ReviewTaskMessage message = new ReviewTaskMessage(
             task.getId(),
             task.getOrganization(),

@@ -14,6 +14,7 @@ import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -103,7 +104,7 @@ class ReviewTaskRequeueService {
         task.setPublishClaimedBy(null);
         reviewTaskMapper.updateById(task);
         outboxStore.markCurrentTimelinesDone(task.getId());
-        outboxStore.appendTimeline(task.getId(), "Message manually requeued", queuedAt, "CURRENT");
+        outboxStore.appendTimeline(task.getId(), "Message manually requeued", queuedAt, ReviewTimelineStatus.CURRENT);
 
         return new RequeuePublishContext(
             task.getId(),

@@ -17,11 +17,15 @@ public class ReviewTimelineAppender {
     }
 
     public void appendInitial(Long taskId, String label, LocalDateTime eventTime) {
-        insertTimeline(taskId, label, eventTime, "CURRENT", 1);
+        insertTimeline(taskId, label, eventTime, ReviewTimelineStatus.CURRENT.code(), 1);
     }
 
     public void append(Long taskId, String label, LocalDateTime eventTime, String status) {
         insertTimeline(taskId, label, eventTime, status, nextSortOrder(taskId));
+    }
+
+    public void append(Long taskId, String label, LocalDateTime eventTime, ReviewTimelineStatus status) {
+        append(taskId, label, eventTime, status.code());
     }
 
     public void completeCurrentAndAppend(Long taskId, String label, LocalDateTime eventTime, String status) {
@@ -29,17 +33,36 @@ public class ReviewTimelineAppender {
         insertTimeline(taskId, label, eventTime, status, nextSortOrder(taskId));
     }
 
+    public void completeCurrentAndAppend(
+        Long taskId,
+        String label,
+        LocalDateTime eventTime,
+        ReviewTimelineStatus status
+    ) {
+        completeCurrentAndAppend(taskId, label, eventTime, status.code());
+    }
+
     public void append(Long taskId, String label, LocalDateTime eventTime, String status, int minimumSortOrder) {
         completeCurrentTimelines(taskId);
         insertTimeline(taskId, label, eventTime, status, Math.max(minimumSortOrder, nextSortOrder(taskId)));
+    }
+
+    public void append(
+        Long taskId,
+        String label,
+        LocalDateTime eventTime,
+        ReviewTimelineStatus status,
+        int minimumSortOrder
+    ) {
+        append(taskId, label, eventTime, status.code(), minimumSortOrder);
     }
 
     public void completeCurrentTimelines(Long taskId) {
         reviewTimelineMapper.update(
             new UpdateWrapper<ReviewTimeline>()
                 .eq("task_id", taskId)
-                .eq("status", "CURRENT")
-                .set("status", "DONE")
+                .eq("status", ReviewTimelineStatus.CURRENT.code())
+                .set("status", ReviewTimelineStatus.DONE.code())
         );
     }
 

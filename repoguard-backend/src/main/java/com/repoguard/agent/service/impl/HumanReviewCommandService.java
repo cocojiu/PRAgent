@@ -10,6 +10,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -65,7 +66,7 @@ public class HumanReviewCommandService {
             task.getId(),
             humanReviewTimelineLabel(humanReviewStatus, note),
             reviewedAt,
-            "DONE"
+            ReviewTimelineStatus.DONE
         );
         evictDashboardOverview();
         return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));

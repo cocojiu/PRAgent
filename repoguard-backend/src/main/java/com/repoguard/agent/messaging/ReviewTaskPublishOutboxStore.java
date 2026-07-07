@@ -7,6 +7,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -201,15 +202,15 @@ public class ReviewTaskPublishOutboxStore {
         if (closeCurrentTimeline) {
             markCurrentTimelinesDone(task.getId());
         }
-        appendTimeline(task.getId(), timelinePrefix + error, failedAt, "FAILED");
+        appendTimeline(task.getId(), timelinePrefix + error, failedAt, ReviewTimelineStatus.FAILED);
     }
 
     public void markCurrentTimelinesDone(Long taskId) {
         reviewTimelineAppender.completeCurrentTimelines(taskId);
     }
 
-    public void appendTimeline(Long taskId, String label, LocalDateTime eventTime, String status) {
-        reviewTimelineAppender.append(taskId, truncate(label), eventTime, status);
+    public void appendTimeline(Long taskId, String label, LocalDateTime eventTime, ReviewTimelineStatus status) {
+        reviewTimelineAppender.append(taskId, truncate(label), eventTime, status.code());
     }
 
     private void clearLlmQuality(ReviewTask task) {

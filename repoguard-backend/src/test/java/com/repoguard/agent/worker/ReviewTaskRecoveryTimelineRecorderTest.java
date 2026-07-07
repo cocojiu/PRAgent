@@ -4,6 +4,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
@@ -22,7 +23,7 @@ class ReviewTaskRecoveryTimelineRecorderTest {
             42L,
             "Review execution timed out; requeue pending",
             eventTime,
-            "CURRENT",
+            ReviewTimelineStatus.CURRENT,
             5
         );
     }
@@ -37,7 +38,7 @@ class ReviewTaskRecoveryTimelineRecorderTest {
             42L,
             "Review execution timeout recovered; message requeued",
             eventTime,
-            "CURRENT",
+            ReviewTimelineStatus.CURRENT,
             5
         );
     }
@@ -52,7 +53,7 @@ class ReviewTaskRecoveryTimelineRecorderTest {
             42L,
             "Review execution recovery publish failed: publisher confirm timed out",
             eventTime,
-            "FAILED",
+            ReviewTimelineStatus.FAILED,
             5
         );
     }
