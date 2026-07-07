@@ -9,10 +9,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubReviewCommentDraft;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.GithubCommentPreviewService;
 import com.repoguard.agent.service.GithubCommentPublishService;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -23,7 +21,7 @@ import org.springframework.stereotype.Service;
 public class GithubCommentPublishServiceImpl implements GithubCommentPublishService {
 
     private final ReviewTaskMapper reviewTaskMapper;
-    private final RepoGuardMetrics metrics;
+    private final GithubCommentPublishMetricsRecorder metricsRecorder;
     private final NotificationDispatchService notificationDispatchService;
     private final GithubCommentPreviewService previewService;
     private final GithubCommentPublishGuard publishGuard;
@@ -34,7 +32,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     @Autowired
     public GithubCommentPublishServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
-        RepoGuardMetrics metrics,
+        GithubCommentPublishMetricsRecorder metricsRecorder,
         NotificationDispatchService notificationDispatchService,
         GithubCommentPreviewService previewService,
         GithubCommentPublishGuard publishGuard,
@@ -43,7 +41,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         GithubCommentPublicationRecorder publicationRecorder
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.notificationDispatchService = Objects.requireNonNull(notificationDispatchService, "notificationDispatchService");
         this.previewService = Objects.requireNonNull(previewService, "previewService");
         this.publishGuard = Objects.requireNonNull(publishGuard, "publishGuard");
@@ -74,7 +72,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
             .filter(item -> Boolean.TRUE.equals(item.success()))
             .count();
         int failedCount = publishedItems.size() - succeededCount;
-        recordGithubCommentPublishMetrics(succeededCount, failedCount, skippedItems.size());
+        metricsRecorder.recordItems(succeededCount, failedCount, skippedItems.size());
         GithubCommentPublishResponse response = new GithubCommentPublishResponse(
             task.getId(),
             preview.totalFindings(),
@@ -86,24 +84,8 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         );
         Long batchId = publicationRecorder.recordBatch(response);
         publishGithubCommentNotification(task, response, batchId);
-        recordGithubCommentPublishDuration(startedAt, failedCount > 0 ? "failed" : "success");
+        metricsRecorder.recordDuration(startedAt, failedCount > 0);
         return response;
-    }
-
-    private void recordGithubCommentPublishDuration(LocalDateTime startedAt, String result) {
-        metrics.githubCommentPublishDuration(Duration.between(startedAt, LocalDateTime.now()), result);
-    }
-
-    private void recordGithubCommentPublishMetrics(int succeededCount, int failedCount, int skippedCount) {
-        for (int i = 0; i < succeededCount; i++) {
-            metrics.githubCommentPublished("success");
-        }
-        for (int i = 0; i < failedCount; i++) {
-            metrics.githubCommentPublished("failed");
-        }
-        for (int i = 0; i < skippedCount; i++) {
-            metrics.githubCommentPublished("skipped");
-        }
     }
 
     private void publishGithubCommentNotification(ReviewTask task, GithubCommentPublishResponse response, Long batchId) {

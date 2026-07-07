@@ -142,6 +142,8 @@ class ReviewServiceImplTest {
             githubCommentPublicationBatchMapper,
             githubCommentPublicationBatchItemMapper
         );
+    private final GithubCommentPublishMetricsRecorder githubCommentPublishMetricsRecorder =
+        new GithubCommentPublishMetricsRecorder(metrics);
     private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
         githubIntegrationProvider,
@@ -157,7 +159,7 @@ class ReviewServiceImplTest {
     );
     private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
-        metrics,
+        githubCommentPublishMetricsRecorder,
         notificationDispatchService,
         githubCommentPreviewService,
         new GithubCommentPublishGuard(reviewTaskStateMachine),
