@@ -21,6 +21,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
@@ -417,7 +418,9 @@ class ReviewTaskExecutorImplTest {
             completionApplier,
             clock
         );
-        ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(null);
+        ReviewExecutionMetricsRecorder metricsRecorder = new ReviewExecutionMetricsRecorder(
+            org.mockito.Mockito.mock(RepoGuardMetrics.class)
+        );
         ReviewExecutionFailureClassifier failureClassifier = new ReviewExecutionFailureClassifier();
         ReviewExecutionCacheInvalidator cacheInvalidator = new ReviewExecutionCacheInvalidator(
             new ReviewExecutionNoopCacheEvictionService()

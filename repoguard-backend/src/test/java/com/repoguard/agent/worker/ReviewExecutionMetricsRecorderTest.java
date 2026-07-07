@@ -1,5 +1,6 @@
 package com.repoguard.agent.worker;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -46,12 +47,9 @@ class ReviewExecutionMetricsRecorderTest {
     }
 
     @Test
-    void noopsWhenMetricsAreUnavailable() {
-        ReviewExecutionMetricsRecorder disabledRecorder = new ReviewExecutionMetricsRecorder(null);
-        LocalDateTime startedAt = LocalDateTime.parse("2026-07-04T20:00:00");
-
-        disabledRecorder.recordCompleted(ReviewResult.completed("LOW", List.of()), startedAt, startedAt.plusSeconds(1));
-        disabledRecorder.recordFailed(new RuntimeException("ignored"), startedAt, startedAt.plusSeconds(1));
-        disabledRecorder.recordGithubDiffFetch(Duration.ofSeconds(1), "success");
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new ReviewExecutionMetricsRecorder(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
     }
 }
