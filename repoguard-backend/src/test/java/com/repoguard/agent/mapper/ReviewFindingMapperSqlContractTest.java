@@ -27,11 +27,13 @@ class ReviewFindingMapperSqlContractTest {
         assertThat(statSql)
             .contains("from review_finding finding")
             .contains("finding.category = 'finding'")
-            .contains("upper(finding.feedback_status) in ('unreviewed', 'valid')");
+            .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
         assertThat(commentableSql)
             .contains("from review_finding finding")
             .contains("finding.category = 'finding'")
-            .contains("upper(finding.feedback_status) in ('unreviewed', 'valid')");
+            .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
     }
 
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {

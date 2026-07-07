@@ -82,9 +82,8 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                       and trim(publication.github_url) <> ''
                 )
                 and (
-                    finding.feedback_status is null
-                    or trim(finding.feedback_status) = ''
-                    or upper(finding.feedback_status) in ('UNREVIEWED', 'VALID')
+                    upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
+                        in ('UNREVIEWED', 'VALID')
                 )
                 then 1 else 0 end
             ) as commentableFindings
@@ -123,9 +122,8 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and trim(publication.github_url) <> ''
           )
           and (
-              finding.feedback_status is null
-              or trim(finding.feedback_status) = ''
-              or upper(finding.feedback_status) in ('UNREVIEWED', 'VALID')
+              upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
+                  in ('UNREVIEWED', 'VALID')
           )
         order by finding.id asc
         limit #{limit} offset #{offset}
