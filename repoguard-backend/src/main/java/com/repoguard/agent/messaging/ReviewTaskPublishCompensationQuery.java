@@ -35,6 +35,15 @@ class ReviewTaskPublishCompensationQuery {
         return compensationSettings.expiredBefore(now);
     }
 
+    RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
+        return new RabbitPublishClaim(
+            claimedAt,
+            instanceId,
+            expiredBefore(claimedAt),
+            maxAttempts()
+        );
+    }
+
     LocalDateTime nextRetryAt(LocalDateTime now) {
         return compensationSettings.nextRetryAt(now);
     }

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitPublishClaim;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -76,32 +77,30 @@ class NotificationOutboxEventStore {
 
     boolean claimForPublish(
         NotificationEvent event,
-        LocalDateTime claimedAt,
-        String instanceId,
-        LocalDateTime expiredBefore,
-        int maxAttempts
+        RabbitPublishClaim claim
     ) {
+        Objects.requireNonNull(claim, "claim");
         int updated = eventMapper.update(
             new UpdateWrapper<NotificationEvent>()
                 .eq("id", event.getId())
                 .in("status", publishRecoveryStatuses())
-                .le("next_retry_at", claimedAt)
-                .lt("retry_count", maxAttempts)
-                .and(claim -> claim
+                .le("next_retry_at", claim.claimedAt())
+                .lt("retry_count", claim.maxAttempts())
+                .and(claimWindow -> claimWindow
                     .isNull("publish_claimed_at")
                     .or()
-                    .le("publish_claimed_at", expiredBefore)
+                    .le("publish_claimed_at", claim.expiredBefore())
                 )
-                .set("publish_claimed_at", claimedAt)
-                .set("publish_claimed_by", instanceId)
-                .set("updated_at", claimedAt)
+                .set("publish_claimed_at", claim.claimedAt())
+                .set("publish_claimed_by", claim.instanceId())
+                .set("updated_at", claim.claimedAt())
         );
         if (updated <= 0) {
             return false;
         }
-        event.setPublishClaimedAt(claimedAt);
-        event.setPublishClaimedBy(instanceId);
-        event.setUpdatedAt(claimedAt);
+        event.setPublishClaimedAt(claim.claimedAt());
+        event.setPublishClaimedBy(claim.instanceId());
+        event.setUpdatedAt(claim.claimedAt());
         return true;
     }
 

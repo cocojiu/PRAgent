@@ -56,13 +56,7 @@ public class NotificationEventPublishCompensator {
 
     void compensate(NotificationEvent event) {
         LocalDateTime claimedAt = LocalDateTime.now();
-        if (!outboxEventStore.claimForPublish(
-            event,
-            claimedAt,
-            instanceId,
-            compensationQuery.expiredBefore(claimedAt),
-            compensationQuery.maxAttempts()
-        )) {
+        if (!outboxEventStore.claimForPublish(event, compensationQuery.claim(claimedAt, instanceId))) {
             return;
         }
         publishCoordinator.publish(event);

@@ -66,23 +66,21 @@ public class ReviewTaskPublishOutboxStore {
 
     public boolean claimForPublish(
         ReviewTask task,
-        LocalDateTime claimedAt,
-        String instanceId,
-        LocalDateTime expiredBefore,
-        int maxAttempts
+        RabbitPublishClaim claim
     ) {
+        Objects.requireNonNull(claim, "claim");
         int updated = reviewTaskMapper.update(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
                 .and(wrapper -> wrapper
                     .and(failed -> failed
                         .in("status", reviewTaskStateMachine.publishRecoveryCandidateStatuses())
-                        .le("next_publish_retry_at", claimedAt)
-                        .lt("publish_attempts", maxAttempts)
-                        .and(claim -> claim
+                        .le("next_publish_retry_at", claim.claimedAt())
+                        .lt("publish_attempts", claim.maxAttempts())
+                        .and(claimWindow -> claimWindow
                             .isNull("publish_claimed_at")
                             .or()
-                            .le("publish_claimed_at", expiredBefore)
+                            .le("publish_claimed_at", claim.expiredBefore())
                         )
                     )
                     .or(staleQueued -> staleQueued
@@ -90,24 +88,24 @@ public class ReviewTaskPublishOutboxStore {
                         .and(queued -> queued
                             .and(claimed -> claimed
                                 .isNotNull("publish_claimed_at")
-                                .le("publish_claimed_at", expiredBefore)
+                                .le("publish_claimed_at", claim.expiredBefore())
                             )
                             .or(unclaimed -> unclaimed
                                 .isNull("publish_claimed_at")
-                                .le("created_at", expiredBefore)
+                                .le("created_at", claim.expiredBefore())
                             )
                         )
-                        .lt("publish_attempts", maxAttempts)
+                        .lt("publish_attempts", claim.maxAttempts())
                     )
                 )
-                .set("publish_claimed_at", claimedAt)
-                .set("publish_claimed_by", instanceId)
+                .set("publish_claimed_at", claim.claimedAt())
+                .set("publish_claimed_by", claim.instanceId())
         );
         if (updated <= 0) {
             return false;
         }
-        task.setPublishClaimedAt(claimedAt);
-        task.setPublishClaimedBy(instanceId);
+        task.setPublishClaimedAt(claim.claimedAt());
+        task.setPublishClaimedBy(claim.instanceId());
         return true;
     }
 

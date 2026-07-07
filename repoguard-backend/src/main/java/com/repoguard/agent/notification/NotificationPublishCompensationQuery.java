@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.messaging.RabbitPublishClaim;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import com.repoguard.agent.messaging.RabbitPublishCompensationSettings;
 import java.time.LocalDateTime;
@@ -35,6 +36,15 @@ class NotificationPublishCompensationQuery {
 
     LocalDateTime expiredBefore(LocalDateTime now) {
         return compensationSettings.expiredBefore(now);
+    }
+
+    RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
+        return new RabbitPublishClaim(
+            claimedAt,
+            instanceId,
+            expiredBefore(claimedAt),
+            maxAttempts()
+        );
     }
 
     int maxAttempts() {

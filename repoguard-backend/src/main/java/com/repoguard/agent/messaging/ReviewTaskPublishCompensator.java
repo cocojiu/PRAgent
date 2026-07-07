@@ -163,13 +163,7 @@ public class ReviewTaskPublishCompensator {
     }
 
     private boolean claimTask(ReviewTask task, LocalDateTime claimedAt) {
-        return outboxStore.claimForPublish(
-            task,
-            claimedAt,
-            instanceId,
-            compensationQuery.expiredBefore(claimedAt),
-            compensationQuery.maxAttempts()
-        );
+        return outboxStore.claimForPublish(task, compensationQuery.claim(claimedAt, instanceId));
     }
 
     private String recoverySource(ReviewTask task) {

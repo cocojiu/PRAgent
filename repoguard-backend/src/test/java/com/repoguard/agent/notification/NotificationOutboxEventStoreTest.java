@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.messaging.RabbitPublishClaim;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -107,10 +108,7 @@ class NotificationOutboxEventStoreTest {
 
         boolean claimed = store.claimForPublish(
             event,
-            claimedAt,
-            "node-a",
-            claimedAt.minusMinutes(2),
-            5
+            new RabbitPublishClaim(claimedAt, "node-a", claimedAt.minusMinutes(2), 5)
         );
 
         assertThat(claimed).isTrue();
@@ -125,7 +123,7 @@ class NotificationOutboxEventStoreTest {
         LocalDateTime claimedAt = LocalDateTime.now();
         when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(0);
 
-        assertThat(store.claimForPublish(event, claimedAt, "node-a", claimedAt.minusMinutes(2), 5))
+        assertThat(store.claimForPublish(event, new RabbitPublishClaim(claimedAt, "node-a", claimedAt.minusMinutes(2), 5)))
             .isFalse();
         assertThat(event.getPublishClaimedAt()).isNull();
         assertThat(event.getPublishClaimedBy()).isNull();
