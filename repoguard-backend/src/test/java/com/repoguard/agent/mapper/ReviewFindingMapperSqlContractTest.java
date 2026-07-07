@@ -36,6 +36,17 @@ class ReviewFindingMapperSqlContractTest {
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
     }
 
+    @Test
+    void findingSeverityCountsNormalizeSeverityBeforeAggregation() throws Exception {
+        String sql = sql("selectFindingSeverityCounts", Long.class);
+
+        assertThat(sql)
+            .contains("from review_finding")
+            .contains("where task_id = #{taskid}")
+            .contains("category = 'finding'");
+        assertSeverityNormalization(sql);
+    }
+
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {
         Method method = ReviewFindingMapper.class.getMethod(methodName, parameterTypes);
         Select select = method.getAnnotation(Select.class);
@@ -52,5 +63,15 @@ class ReviewFindingMapperSqlContractTest {
             .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) = 'valid'")
             .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) = 'false_positive'")
             .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) <> 'unreviewed'");
+    }
+
+    private void assertSeverityNormalization(String sql) {
+        assertThat(sql)
+            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'critical'")
+            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'high'")
+            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'medium'")
+            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'low'")
+            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) not in ('critical', 'high', 'medium', 'low')")
+            .doesNotContain("lower(severity)");
     }
 }
