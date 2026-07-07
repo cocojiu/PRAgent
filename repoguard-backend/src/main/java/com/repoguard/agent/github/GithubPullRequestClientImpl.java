@@ -34,7 +34,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         GithubIntegrationHealthReporter healthReporter
     ) {
         this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
-        this.resilience = resilience;
+        this.resilience = Objects.requireNonNull(resilience, "resilience");
         this.pullRequestReader = Objects.requireNonNull(pullRequestReader, "pullRequestReader");
         this.changedFileReader = Objects.requireNonNull(changedFileReader, "changedFileReader");
         this.commentWriter = Objects.requireNonNull(commentWriter, "commentWriter");

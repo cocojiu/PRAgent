@@ -2,8 +2,10 @@ package com.repoguard.agent.github;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.external.ExternalCallResilience;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -26,7 +28,7 @@ class GithubPaginatorTest {
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
                 GithubChangedFile[].class,
-                null
+                passthroughResilience()
             ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("GitHub pagination limit reached")
@@ -47,7 +49,7 @@ class GithubPaginatorTest {
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
                 GithubChangedFile[].class,
-                null
+                passthroughResilience()
             );
 
             assertThat(result).hasSize(101);
@@ -66,7 +68,7 @@ class GithubPaginatorTest {
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
                 GithubChangedFile[].class,
-                null
+                passthroughResilience()
             );
 
             assertThat(result).hasSize(200);
@@ -85,13 +87,38 @@ class GithubPaginatorTest {
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
                 GithubChangedFile[].class,
-                null
+                passthroughResilience()
             );
 
             assertThat(result).hasSize(150);
             assertThat(server.pageRequests()).containsExactly(1, 2);
             assertThat(server.markerRequests()).containsExactly("", "from-link");
         }
+    }
+
+    @Test
+    void rejectsMissingResilience() {
+        GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+
+        assertThatThrownBy(() -> paginator.fetchPages(
+            "fetch_pull_request_diff",
+            page -> "http://127.0.0.1/items?page=" + page,
+            settings(),
+            GithubChangedFile[].class,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("resilience");
+    }
+
+    private ExternalCallResilience passthroughResilience() {
+        ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
+        when(resilience.github(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> {
+                java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+                return supplier.get();
+            });
+        return resilience;
     }
 
     private PagedGithubServer startServer(int total) throws IOException {

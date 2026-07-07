@@ -8,6 +8,7 @@ import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
@@ -37,6 +38,22 @@ class GithubPullRequestClientImplTest {
         assertThatThrownBy(() -> new GithubIntegrationHealthReporter(githubIntegrationProvider, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
+    }
+
+    @Test
+    void constructorRejectsMissingResilience() {
+        GithubPaginator paginator = new GithubPaginator(RestClient.builder());
+
+        assertThatThrownBy(() -> new GithubPullRequestClientImpl(
+            githubIntegrationProvider,
+            null,
+            new GithubPullRequestReader(paginator),
+            new GithubChangedFileReader(paginator),
+            new GithubCommentWriter(RestClient.builder(), healthReporter),
+            healthReporter
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("resilience");
     }
 
     @Test
@@ -215,12 +232,22 @@ class GithubPullRequestClientImplTest {
         GithubPaginator paginator = new GithubPaginator(restClientBuilder);
         return new GithubPullRequestClientImpl(
             githubIntegrationProvider,
-            null,
+            passthroughResilience(),
             new GithubPullRequestReader(paginator),
             new GithubChangedFileReader(paginator),
             new GithubCommentWriter(restClientBuilder, healthReporter),
             healthReporter
         );
+    }
+
+    private ExternalCallResilience passthroughResilience() {
+        ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
+        when(resilience.github(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+            .thenAnswer(invocation -> {
+                java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+                return supplier.get();
+            });
+        return resilience;
     }
 
     private ReviewTask reviewTask() {

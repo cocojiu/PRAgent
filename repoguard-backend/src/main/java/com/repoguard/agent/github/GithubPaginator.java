@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,11 +42,12 @@ public class GithubPaginator {
         Class<T[]> responseType,
         ExternalCallResilience resilience
     ) {
+        ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
         List<T> items = new ArrayList<>();
         String nextUrl = pageUrlBuilder.apply(1);
         for (int page = 1; page <= maxPages; page++) {
             String url = nextUrl;
-            ResponseEntity<T[]> response = executeGithub(operation, resilience, () -> restClient.get()
+            ResponseEntity<T[]> response = executeGithub(operation, effectiveResilience, () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, settings))
                 .retrieve()
@@ -113,7 +115,7 @@ public class GithubPaginator {
         ExternalCallResilience resilience,
         java.util.function.Supplier<T> supplier
     ) {
-        return resilience == null ? supplier.get() : resilience.github(operation, supplier);
+        return resilience.github(operation, supplier);
     }
 
     private void applyGithubHeaders(HttpHeaders headers, GithubIntegrationSettings settings) {

@@ -40,6 +40,7 @@ public class GithubCommentWriter {
         List<GithubReviewCommentDraft> drafts,
         ExternalCallResilience resilience
     ) {
+        ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
         if (!StringUtils.hasText(settings.token())) {
             throw new IllegalStateException("GitHub token is not configured");
         }
@@ -66,19 +67,19 @@ public class GithubCommentWriter {
                 GithubCommentTargetType draftTargetType = GithubCommentTargetType.from(draft.targetType());
                 GithubCommentTargetType actualTargetType = draftTargetType;
                 if (draftTargetType.isPullRequest()) {
-                    response = publishPullRequestComment(prCommentUrl, draft.body(), settings, resilience);
+                    response = publishPullRequestComment(prCommentUrl, draft.body(), settings, effectiveResilience);
                 } else {
                     if (!StringUtils.hasText(commitSha)) {
-                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings, resilience);
+                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings, effectiveResilience);
                     }
                     try {
-                        response = publishLineComment(lineCommentUrl, draft, commitSha, settings, resilience);
+                        response = publishLineComment(lineCommentUrl, draft, commitSha, settings, effectiveResilience);
                     } catch (RuntimeException ex) {
                         if (!isUnresolvableLineComment(ex)) {
                             throw ex;
                         }
                         actualTargetType = GithubCommentTargetType.PULL_REQUEST;
-                        response = publishPullRequestComment(prCommentUrl, draft.body(), settings, resilience);
+                        response = publishPullRequestComment(prCommentUrl, draft.body(), settings, effectiveResilience);
                     }
                 }
                 boolean downgradedToPrComment = actualTargetType.isPullRequest() && !draftTargetType.isPullRequest();
@@ -211,7 +212,7 @@ public class GithubCommentWriter {
         ExternalCallResilience resilience,
         java.util.function.Supplier<T> supplier
     ) {
-        return resilience == null ? supplier.get() : resilience.github(operation, supplier);
+        return resilience.github(operation, supplier);
     }
 
     private record GithubReviewCommentResponse(
