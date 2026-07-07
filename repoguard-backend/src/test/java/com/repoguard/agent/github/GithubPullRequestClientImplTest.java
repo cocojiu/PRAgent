@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
@@ -25,6 +27,8 @@ import org.springframework.web.client.RestClient;
 
 class GithubPullRequestClientImplTest {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final GithubIntegrationHealthReporter healthReporter = new GithubIntegrationHealthReporter(
@@ -42,7 +46,7 @@ class GithubPullRequestClientImplTest {
 
     @Test
     void constructorRejectsMissingResilience() {
-        GithubPaginator paginator = new GithubPaginator(RestClient.builder());
+        GithubPaginator paginator = paginator(RestClient.builder());
 
         assertThatThrownBy(() -> new GithubPullRequestClientImpl(
             githubIntegrationProvider,
@@ -229,7 +233,7 @@ class GithubPullRequestClientImplTest {
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter
     ) {
-        GithubPaginator paginator = new GithubPaginator(restClientBuilder);
+        GithubPaginator paginator = paginator(restClientBuilder);
         return new GithubPullRequestClientImpl(
             githubIntegrationProvider,
             passthroughResilience(),
@@ -238,6 +242,10 @@ class GithubPullRequestClientImplTest {
             new GithubCommentWriter(restClientBuilder, healthReporter),
             healthReporter
         );
+    }
+
+    private GithubPaginator paginator(RestClient.Builder restClientBuilder) {
+        return new GithubPaginator(restClientBuilder, objectMapper, responseReader, 100);
     }
 
     private ExternalCallResilience passthroughResilience() {

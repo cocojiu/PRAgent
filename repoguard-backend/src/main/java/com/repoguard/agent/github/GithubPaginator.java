@@ -1,12 +1,16 @@
 package com.repoguard.agent.github;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,14 +25,28 @@ public class GithubPaginator {
     private static final int MAX_PAGES = 100;
 
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
+    private final ExternalHttpResponseReader responseReader;
     private final int maxPages;
 
-    public GithubPaginator(RestClient.Builder restClientBuilder) {
-        this(restClientBuilder, MAX_PAGES);
+    @Autowired
+    public GithubPaginator(
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        ExternalHttpResponseReader responseReader
+    ) {
+        this(restClientBuilder, objectMapper, responseReader, MAX_PAGES);
     }
 
-    GithubPaginator(RestClient.Builder restClientBuilder, int maxPages) {
-        this.restClient = GithubRestClientFactory.build(restClientBuilder);
+    GithubPaginator(
+        RestClient.Builder restClientBuilder,
+        ObjectMapper objectMapper,
+        ExternalHttpResponseReader responseReader,
+        int maxPages
+    ) {
+        this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
         if (maxPages < 1) {
             throw new IllegalArgumentException("maxPages must be positive");
         }
@@ -50,8 +68,7 @@ public class GithubPaginator {
             ResponseEntity<T[]> response = executeGithub(operation, effectiveResilience, () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, settings))
-                .retrieve()
-                .toEntity(responseType));
+                .exchange((request, clientResponse) -> readPage(clientResponse, responseType, operation)));
             T[] pageItems = response.getBody();
             if (pageItems == null || pageItems.length == 0) {
                 break;
@@ -77,6 +94,18 @@ public class GithubPaginator {
             }
         }
         return items;
+    }
+
+    private <T> ResponseEntity<T[]> readPage(
+        org.springframework.http.client.ClientHttpResponse response,
+        Class<T[]> responseType,
+        String operation
+    ) throws IOException {
+        byte[] body = responseReader.readSuccessfulBody(response, "GitHub " + operation + " failed");
+        T[] parsedBody = body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
+        HttpHeaders headers = new HttpHeaders();
+        headers.putAll(response.getHeaders());
+        return new ResponseEntity<>(parsedBody, headers, response.getStatusCode());
     }
 
     private NextPageLink nextPageLink(HttpHeaders headers) {

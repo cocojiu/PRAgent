@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
+import com.repoguard.agent.github.GithubPaginator;
 import com.repoguard.agent.github.GithubPullRequestClientImpl;
 import com.repoguard.agent.messaging.RabbitReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
@@ -42,6 +43,7 @@ class SpringBeanConstructorSelectionTest {
     void springManagedBeansWithMultipleConstructorsDeclareSingleAutowiredConstructor() throws ClassNotFoundException {
         List<Class<?>> springManagedTypes = List.of(
             GithubPullRequestClientImpl.class,
+            GithubPaginator.class,
             NotificationEventPublishCompensator.class,
             RabbitReviewTaskPublisher.class,
             ReviewTaskPublishCompensator.class,

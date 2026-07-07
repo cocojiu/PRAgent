@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -14,14 +16,19 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 class GithubPaginatorTest {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
 
     @Test
     void failsWhenMaxPageStillLooksTruncated() throws Exception {
         try (PagedGithubServer server = startServer(250)) {
-            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+            GithubPaginator paginator = paginator();
 
             assertThatThrownBy(() -> paginator.fetchPages(
                 "fetch_pull_request_diff",
@@ -42,7 +49,7 @@ class GithubPaginatorTest {
     @Test
     void returnsItemsWhenLastPageIsPartialBeforeLimit() throws Exception {
         try (PagedGithubServer server = startServer(101)) {
-            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+            GithubPaginator paginator = paginator();
 
             List<GithubChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
@@ -61,7 +68,7 @@ class GithubPaginatorTest {
     @Test
     void stopsOnFullLastPageWhenLinkHeaderHasNoNextPage() throws Exception {
         try (PagedGithubServer server = startServer(200, true)) {
-            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+            GithubPaginator paginator = paginator();
 
             List<GithubChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
@@ -80,7 +87,7 @@ class GithubPaginatorTest {
     @Test
     void followsNextUrlFromLinkHeader() throws Exception {
         try (PagedGithubServer server = startServer(150, true)) {
-            GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+            GithubPaginator paginator = paginator();
 
             List<GithubChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
@@ -98,7 +105,7 @@ class GithubPaginatorTest {
 
     @Test
     void rejectsMissingResilience() {
-        GithubPaginator paginator = new GithubPaginator(RestClient.builder(), 2);
+        GithubPaginator paginator = paginator();
 
         assertThatThrownBy(() -> paginator.fetchPages(
             "fetch_pull_request_diff",
@@ -109,6 +116,39 @@ class GithubPaginatorTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("resilience");
+    }
+
+    @Test
+    void usesSharedResponseReaderForHttpFailures() throws Exception {
+        try (PagedGithubServer server = startServer(
+            0,
+            false,
+            429,
+            "{\"message\":\"rate limited\",\"token\":\"raw-token-value\"}",
+            "60"
+        )) {
+            GithubPaginator paginator = paginator();
+
+            assertThatThrownBy(() -> paginator.fetchPages(
+                "fetch_pull_request_diff",
+                page -> server.baseUrl() + "/items?per_page=100&page=" + page,
+                settings(),
+                GithubChangedFile[].class,
+                passthroughResilience()
+            ))
+                .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {
+                    assertThat(ex.getStatusCode().value()).isEqualTo(429);
+                    assertThat(ex.getResponseHeaders()).isNotNull();
+                    assertThat(ex.getResponseHeaders().getFirst(HttpHeaders.RETRY_AFTER)).isEqualTo("60");
+                    assertThat(ex.getResponseBodyAsString())
+                        .isEqualTo("{\"message\":\"rate limited\",\"token\":\"raw-token-value\"}");
+                    assertThat(ex.getMessage()).contains("GitHub fetch_pull_request_diff failed with HTTP status 429");
+                });
+        }
+    }
+
+    private GithubPaginator paginator() {
+        return new GithubPaginator(RestClient.builder(), objectMapper, responseReader, 2);
     }
 
     private ExternalCallResilience passthroughResilience() {
@@ -126,6 +166,16 @@ class GithubPaginatorTest {
     }
 
     private PagedGithubServer startServer(int total, boolean includeLinkHeader) throws IOException {
+        return startServer(total, includeLinkHeader, 200, null, null);
+    }
+
+    private PagedGithubServer startServer(
+        int total,
+        boolean includeLinkHeader,
+        int status,
+        String responseBody,
+        String retryAfter
+    ) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
         List<Integer> pageRequests = new ArrayList<>();
@@ -136,15 +186,19 @@ class GithubPaginatorTest {
             int perPage = queryInt(uri, "per_page", 30);
             pageRequests.add(page);
             markerRequests.add(queryParam(uri, "marker"));
-            byte[] bytes = changedFilesJson(total, page, perPage).getBytes(StandardCharsets.UTF_8);
+            byte[] bytes = (responseBody == null ? changedFilesJson(total, page, perPage) : responseBody)
+                .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
+            if (retryAfter != null) {
+                exchange.getResponseHeaders().set(HttpHeaders.RETRY_AFTER, retryAfter);
+            }
             if (includeLinkHeader) {
                 String linkHeader = linkHeader(baseUrl, total, page, perPage);
                 if (!linkHeader.isBlank()) {
                     exchange.getResponseHeaders().set("Link", linkHeader);
                 }
             }
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(status, bytes.length);
             exchange.getResponseBody().write(bytes);
             exchange.close();
         });
