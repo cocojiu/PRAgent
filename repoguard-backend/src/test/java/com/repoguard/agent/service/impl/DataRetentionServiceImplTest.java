@@ -12,7 +12,9 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.config.SystemSettings;
 import com.repoguard.agent.config.SystemSettingsProvider;
+import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -45,6 +47,9 @@ class DataRetentionServiceImplTest {
     private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
     private final DataRetentionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(DataRetentionMetricsRecorder.class);
     private final DataRetentionCleanupAuditRecorder auditRecorder = org.mockito.Mockito.mock(DataRetentionCleanupAuditRecorder.class);
+    private final DataRetentionCleanupAuditQueryService auditQueryService = org.mockito.Mockito.mock(
+        DataRetentionCleanupAuditQueryService.class
+    );
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -56,7 +61,8 @@ class DataRetentionServiceImplTest {
         systemSettingsProvider,
         new ReviewTaskStateMachine(),
         metricsRecorder,
-        auditRecorder
+        auditRecorder,
+        auditQueryService
     );
 
     @Test
@@ -184,6 +190,30 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
+    void listCleanupAuditsDelegatesToQueryService() {
+        PageResponse<DataRetentionCleanupAuditDto> expected = new PageResponse<>(List.of(), 0);
+        when(auditQueryService.listAudits(2, 50, "execute", "completed", "backup://mysql/prod/2026-07-07T22:00:00"))
+            .thenReturn(expected);
+
+        var response = service.listCleanupAudits(
+            2,
+            50,
+            "execute",
+            "completed",
+            "backup://mysql/prod/2026-07-07T22:00:00"
+        );
+
+        assertThat(response).isSameAs(expected);
+        verify(auditQueryService).listAudits(
+            2,
+            50,
+            "execute",
+            "completed",
+            "backup://mysql/prod/2026-07-07T22:00:00"
+        );
+    }
+
+    @Test
     void constructorRejectsMissingStateMachine() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             reviewTaskMapper,
@@ -196,7 +226,8 @@ class DataRetentionServiceImplTest {
             systemSettingsProvider,
             null,
             metricsRecorder,
-            auditRecorder
+            auditRecorder,
+            auditQueryService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -215,7 +246,8 @@ class DataRetentionServiceImplTest {
             systemSettingsProvider,
             new ReviewTaskStateMachine(),
             null,
-            auditRecorder
+            auditRecorder,
+            auditQueryService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
@@ -234,10 +266,31 @@ class DataRetentionServiceImplTest {
             systemSettingsProvider,
             new ReviewTaskStateMachine(),
             metricsRecorder,
-            null
+            null,
+            auditQueryService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("auditRecorder");
+    }
+
+    @Test
+    void constructorRejectsMissingAuditQueryService() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            new ReviewTaskStateMachine(),
+            metricsRecorder,
+            auditRecorder,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("auditQueryService");
     }
 
     private void stubAuditStart(Long cleanupBatchId) {

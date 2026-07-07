@@ -3,13 +3,17 @@ package com.repoguard.agent.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.repoguard.agent.common.GlobalExceptionHandler;
+import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.service.DataRetentionService;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
@@ -98,5 +102,59 @@ class DataRetentionControllerTest {
             .andExpect(jsonPath("$.data.retentionDays").value(30))
             .andExpect(jsonPath("$.data.maxTasks").value(100))
             .andExpect(jsonPath("$.data.backupReference").value("backup://mysql/prod/2026-07-07T22:00:00"));
+    }
+
+    @Test
+    void listCleanupAuditsReturnsPagedAuditRecords() throws Exception {
+        Mockito.when(dataRetentionService.listCleanupAudits(
+            2,
+            50,
+            "execute",
+            "completed",
+            "backup://mysql/prod/2026-07-07T22:00:00"
+        )).thenReturn(new PageResponse<>(List.of(new DataRetentionCleanupAuditDto(
+            77L,
+            "execute",
+            "COMPLETED",
+            30,
+            100,
+            "backup://mysql/prod/2026-07-07T22:00:00",
+            "2026-07-03 12:00:00",
+            3L,
+            2,
+            1,
+            1,
+            1,
+            2,
+            2,
+            2,
+            2,
+            null,
+            null,
+            "2026-07-07 22:00:00",
+            "2026-07-07 22:00:02",
+            "2026-07-07 22:00:02"
+        )), 1));
+
+        mockMvc.perform(get("/api/v1/config/data-retention/cleanup-audits")
+                .param("page", "2")
+                .param("pageSize", "50")
+                .param("mode", "execute")
+                .param("status", "completed")
+                .param("backupReference", "backup://mysql/prod/2026-07-07T22:00:00"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items[0].id").value(77))
+            .andExpect(jsonPath("$.data.items[0].mode").value("execute"))
+            .andExpect(jsonPath("$.data.items[0].status").value("COMPLETED"))
+            .andExpect(jsonPath("$.data.items[0].backupReference").value("backup://mysql/prod/2026-07-07T22:00:00"));
+
+        verify(dataRetentionService).listCleanupAudits(
+            2,
+            50,
+            "execute",
+            "completed",
+            "backup://mysql/prod/2026-07-07T22:00:00"
+        );
     }
 }

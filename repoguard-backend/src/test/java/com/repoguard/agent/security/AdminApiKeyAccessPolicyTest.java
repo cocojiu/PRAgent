@@ -48,6 +48,7 @@ class AdminApiKeyAccessPolicyTest {
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/config/review-policy")).isTrue();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("PUT", "/api/v1/config/system-settings")).isTrue();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/config/data-retention/cleanup")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/config/data-retention/cleanup-audits")).isTrue();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/reviews/42")).isFalse();
     }
 

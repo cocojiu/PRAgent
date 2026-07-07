@@ -5,8 +5,10 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.SystemSettings;
 import com.repoguard.agent.config.SystemSettingsProvider;
+import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -50,6 +52,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final DataRetentionMetricsRecorder metricsRecorder;
     private final DataRetentionCleanupAuditRecorder auditRecorder;
+    private final DataRetentionCleanupAuditQueryService auditQueryService;
 
     @Autowired
     public DataRetentionServiceImpl(
@@ -63,7 +66,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         SystemSettingsProvider systemSettingsProvider,
         ReviewTaskStateMachine reviewTaskStateMachine,
         DataRetentionMetricsRecorder metricsRecorder,
-        DataRetentionCleanupAuditRecorder auditRecorder
+        DataRetentionCleanupAuditRecorder auditRecorder,
+        DataRetentionCleanupAuditQueryService auditQueryService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -76,6 +80,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
+        this.auditQueryService = Objects.requireNonNull(auditQueryService, "auditQueryService");
     }
 
     @Override
@@ -88,6 +93,17 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         }
+    }
+
+    @Override
+    public PageResponse<DataRetentionCleanupAuditDto> listCleanupAudits(
+        int page,
+        int pageSize,
+        String mode,
+        String status,
+        String backupReference
+    ) {
+        return auditQueryService.listAudits(page, pageSize, mode, status, backupReference);
     }
 
     private DataRetentionCleanupResponse cleanupInternal(DataRetentionCleanupRequest request, boolean execute) {

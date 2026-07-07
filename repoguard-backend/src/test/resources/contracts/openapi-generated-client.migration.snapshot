@@ -11,6 +11,7 @@ fetchDashboardReviewTrend -> dashboardControllerGetReviewTrend // GET /api/v1/da
 fetchDashboardRiskDistribution -> dashboardControllerGetRiskDistribution // GET /api/v1/dashboard/risk-distribution
 fetchDashboardRules -> dashboardControllerGetRules // GET /api/v1/dashboard/rules
 fetchDashboardSummary -> dashboardControllerGetSummary // GET /api/v1/dashboard/summary
+fetchDataRetentionCleanupAudits -> dataRetentionControllerListCleanupAudits // GET /api/v1/config/data-retention/cleanup-audits
 fetchGithubCommentPreview -> reviewControllerGetGithubCommentPreview // GET /api/v1/reviews/{id}/github-comments/preview
 fetchGithubCommentPublicationHistory -> reviewControllerGetGithubCommentPublicationHistory // GET /api/v1/reviews/{id}/github-comments/publications
 fetchGithubIntegrationConfig -> systemConfigControllerGetGithubIntegration // GET /api/v1/config/integrations/github

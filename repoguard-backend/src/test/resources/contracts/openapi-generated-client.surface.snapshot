@@ -13,6 +13,7 @@ dashboardControllerGetRiskDistribution(): Promise<ChartSlice[]>; // GET /api/v1/
 dashboardControllerGetRules(): Promise<DashboardRules>; // GET /api/v1/dashboard/rules
 dashboardControllerGetSummary(): Promise<DashboardMetric[]>; // GET /api/v1/dashboard/summary
 dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
+dataRetentionControllerListCleanupAudits(input?: { query?: { backupReference?: string; mode?: string; page?: number; pageSize?: number; status?: string } }): Promise<PageResponse<DataRetentionCleanupAudit>>; // GET /api/v1/config/data-retention/cleanup-audits
 frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
 githubWebhookControllerReceive(input: { body: Uint8Array }): Promise<GithubWebhookResponse>; // POST /api/v1/github/webhooks
 messageQueueHealthControllerGetHealth(): Promise<MessageQueueHealth>; // GET /api/v1/message-queue/health

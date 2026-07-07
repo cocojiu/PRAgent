@@ -10,6 +10,7 @@ import type {
   DashboardMetric,
   DashboardOverview,
   DashboardRules,
+  DataRetentionCleanupAudit,
   DataRetentionCleanupRequest,
   DataRetentionCleanupResponse,
   FindingFeedbackRequest,
@@ -114,6 +115,14 @@ type UserStatusInput = {
   status: UserStatus;
 };
 
+type DataRetentionCleanupAuditInput = {
+  page?: number;
+  pageSize?: number;
+  mode?: string;
+  status?: string;
+  backupReference?: string;
+};
+
 export type ApiContract = {
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
@@ -130,6 +139,10 @@ export type ApiContract = {
   fetchSystemHealthSummary: ApiOperation<undefined, SystemHealthItem[]>;
   fetchCacheStats: ApiOperation<undefined, CacheStats>;
   cleanupDataRetention: ApiOperation<DataRetentionCleanupRequest | undefined, DataRetentionCleanupResponse>;
+  fetchDataRetentionCleanupAudits: ApiOperation<
+    DataRetentionCleanupAuditInput,
+    PageResponse<DataRetentionCleanupAudit>
+  >;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
@@ -264,6 +277,16 @@ const apiEndpoints: ApiEndpointMap = {
     method: "POST",
     path: () => "/api/v1/config/data-retention/cleanup",
     body: input => input
+  },
+  fetchDataRetentionCleanupAudits: {
+    path: () => "/api/v1/config/data-retention/cleanup-audits",
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      mode: input.mode,
+      status: input.status,
+      backupReference: input.backupReference
+    })
   },
   fetchReviews: {
     path: () => "/api/v1/reviews",

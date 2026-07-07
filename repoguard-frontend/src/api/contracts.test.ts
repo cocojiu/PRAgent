@@ -144,6 +144,13 @@ describe("apiRequest", () => {
       backupReference: "backup://mysql/prod/2026-07-07T22:00:00",
       confirmText: "DRY_RUN"
     });
+    await apiRequest("fetchDataRetentionCleanupAudits", {
+      page: 2,
+      pageSize: 50,
+      mode: "execute",
+      status: "completed",
+      backupReference: "backup://mysql/prod/2026-07-07T22:00:00"
+    });
     await apiRequest("resetRefreshToken", {
       account: "admin",
       password: "password",
@@ -162,9 +169,16 @@ describe("apiRequest", () => {
       backupReference: "backup://mysql/prod/2026-07-07T22:00:00",
       confirmText: "DRY_RUN"
     }));
-    expect(calls[2][0]).toContain("/api/v1/auth/refresh-token/reset");
-    expect(calls[2][1].method).toBe("POST");
-    expect(calls[2][1].body).toBe(JSON.stringify({
+    expect(calls[2][0]).toContain("/api/v1/config/data-retention/cleanup-audits");
+    expect(calls[2][0]).toContain("page=2");
+    expect(calls[2][0]).toContain("pageSize=50");
+    expect(calls[2][0]).toContain("mode=execute");
+    expect(calls[2][0]).toContain("status=completed");
+    expect(calls[2][0]).toContain("backupReference=backup%3A%2F%2Fmysql%2Fprod%2F2026-07-07T22%3A00%3A00");
+    expect(calls[2][1].method).toBeUndefined();
+    expect(calls[3][0]).toContain("/api/v1/auth/refresh-token/reset");
+    expect(calls[3][1].method).toBe("POST");
+    expect(calls[3][1].body).toBe(JSON.stringify({
       account: "admin",
       password: "password",
       remember: true

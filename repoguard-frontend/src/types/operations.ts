@@ -37,3 +37,27 @@ export interface DataRetentionCleanupResponse {
   deletedFindings: number;
   deletedTasks: number;
 }
+
+export interface DataRetentionCleanupAudit {
+  id: number;
+  mode: string;
+  status: string;
+  retentionDays?: number;
+  maxTasks?: number;
+  backupReference?: string;
+  cutoffTime?: string;
+  candidateTasks?: number;
+  selectedTasks?: number;
+  deletedBatchItems?: number;
+  deletedPublications?: number;
+  deletedBatches?: number;
+  deletedChangedFiles?: number;
+  deletedTimelines?: number;
+  deletedFindings?: number;
+  deletedTasks?: number;
+  failureReason?: string;
+  failureMessage?: string;
+  createdAt?: string;
+  completedAt?: string;
+  updatedAt?: string;
+}

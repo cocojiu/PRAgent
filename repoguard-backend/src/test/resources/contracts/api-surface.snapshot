@@ -1,6 +1,7 @@
 DELETE /api/v1/config/notification-bindings/{id} query=[] body=- bodyRequired=false
 GET /api/v1/auth/me query=[] body=- bodyRequired=false
 GET /api/v1/cache/stats query=[] body=- bodyRequired=false
+GET /api/v1/config/data-retention/cleanup-audits query=[page, pageSize, mode, status, backupReference] body=- bodyRequired=false
 GET /api/v1/config/integrations/github query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
