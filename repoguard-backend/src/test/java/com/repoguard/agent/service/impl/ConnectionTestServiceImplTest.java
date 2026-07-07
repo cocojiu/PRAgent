@@ -14,9 +14,9 @@ import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
-import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
@@ -42,10 +42,11 @@ class ConnectionTestServiceImplTest {
         org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
     private final GithubConnectionProbe githubConnectionProbe =
-        new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
+        new GithubConnectionProbe(RestClient.builder(), secretCryptoService, responseReader);
     private final LlmConnectionProbe llmConnectionProbe =
-        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new ExternalHttpResponseReader());
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, responseReader);
     private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
     private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
         new RabbitMqProbeConnectionFactory(secretCryptoService);

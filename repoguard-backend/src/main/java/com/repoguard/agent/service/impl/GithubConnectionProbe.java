@@ -1,8 +1,10 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.github.GithubRestClientFactory;
 import com.repoguard.agent.security.SecretCryptoService;
+import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -19,10 +21,16 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
 
     private final RestClient.Builder restClientBuilder;
     private final SecretCryptoService secretCryptoService;
+    private final ExternalHttpResponseReader responseReader;
 
-    public GithubConnectionProbe(RestClient.Builder restClientBuilder, SecretCryptoService secretCryptoService) {
-        this.restClientBuilder = restClientBuilder;
-        this.secretCryptoService = secretCryptoService;
+    public GithubConnectionProbe(
+        RestClient.Builder restClientBuilder,
+        SecretCryptoService secretCryptoService,
+        ExternalHttpResponseReader responseReader
+    ) {
+        this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
+        this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
     }
 
     @Override
@@ -42,7 +50,11 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
             .uri(url)
             .accept(MediaType.APPLICATION_JSON);
         request.header("Authorization", "Bearer " + token.trim());
-        request.header("X-GitHub-Api-Version", "2022-11-28").retrieve().toBodilessEntity();
+        request.header("X-GitHub-Api-Version", "2022-11-28")
+            .exchange((httpRequest, httpResponse) -> responseReader.readSuccessfulBody(
+                httpResponse,
+                "GitHub connection test failed"
+            ));
         return new ConnectionProbeResult(true, "connected", "GitHub connection test succeeded");
     }
 

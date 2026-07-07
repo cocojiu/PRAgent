@@ -25,13 +25,13 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.entity.SystemSettingsConfig;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
-import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
 import com.repoguard.agent.review.LlmReviewJsonExtractor;
@@ -61,11 +61,12 @@ class SystemConfigServiceImplTest {
     private final SystemSettingLogMapper systemSettingLogMapper = org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final GithubConnectionProbe githubConnectionProbe =
-        new GithubConnectionProbe(RestClient.builder(), secretCryptoService);
+        new GithubConnectionProbe(RestClient.builder(), secretCryptoService, responseReader);
     private final LlmConnectionProbe llmConnectionProbe =
-        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, new ExternalHttpResponseReader());
+        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, responseReader);
     private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
     private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
         new RabbitMqProbeConnectionFactory(secretCryptoService);
