@@ -64,6 +64,7 @@ repoguard:
       sql-rows: ${REPOGUARD_OBSERVABILITY_SQL_ROWS:1000}
       frontend-api-duration-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_API_DURATION_MS:2000}
       frontend-long-task-ms: ${REPOGUARD_OBSERVABILITY_FRONTEND_LONG_TASK_MS:200}
+      external-call-retry-attempt: ${REPOGUARD_OBSERVABILITY_EXTERNAL_CALL_RETRY_ATTEMPT:1}
       frontend-api-duration-ms-by-route:
         "[overview]": ${REPOGUARD_OBSERVABILITY_FRONTEND_OVERVIEW_API_DURATION_MS:1200}
         "[task-detail]": ${REPOGUARD_OBSERVABILITY_FRONTEND_TASK_DETAIL_API_DURATION_MS:1500}
@@ -74,6 +75,9 @@ repoguard:
         "[task-detail]": ${REPOGUARD_OBSERVABILITY_FRONTEND_TASK_DETAIL_LONG_TASK_MS:150}
         "[message-queue]": ${REPOGUARD_OBSERVABILITY_FRONTEND_MESSAGE_QUEUE_LONG_TASK_MS:150}
         "[notification-ops]": ${REPOGUARD_OBSERVABILITY_FRONTEND_NOTIFICATION_OPS_LONG_TASK_MS:150}
+      external-call-retry-attempt-by-system:
+        "[github]": ${REPOGUARD_OBSERVABILITY_GITHUB_RETRY_ATTEMPT:1}
+        "[llm]": ${REPOGUARD_OBSERVABILITY_LLM_RETRY_ATTEMPT:1}
       api-duration-ms-by-path:
         "[/api/v1/dashboard/overview]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_OVERVIEW_API_DURATION_MS:1000}
         "[/api/v1/dashboard/summary]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_SUMMARY_API_DURATION_MS:500}

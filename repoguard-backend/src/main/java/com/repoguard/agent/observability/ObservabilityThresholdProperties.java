@@ -16,10 +16,12 @@ public class ObservabilityThresholdProperties {
     private long sqlRows = 1000;
     private long frontendApiDurationMs = 2000;
     private long frontendLongTaskMs = 200;
+    private long externalCallRetryAttempt = 1;
     private Map<String, Long> apiDurationMsByPath = new HashMap<>();
     private Map<String, Long> apiResponseBytesByPath = new HashMap<>();
     private Map<String, Long> frontendApiDurationMsByRoute = new HashMap<>();
     private Map<String, Long> frontendLongTaskMsByRoute = new HashMap<>();
+    private Map<String, Long> externalCallRetryAttemptBySystem = new HashMap<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -77,6 +79,14 @@ public class ObservabilityThresholdProperties {
         this.frontendLongTaskMs = frontendLongTaskMs;
     }
 
+    public long getExternalCallRetryAttempt() {
+        return externalCallRetryAttempt;
+    }
+
+    public void setExternalCallRetryAttempt(long externalCallRetryAttempt) {
+        this.externalCallRetryAttempt = externalCallRetryAttempt;
+    }
+
     public Map<String, Long> getApiDurationMsByPath() {
         return apiDurationMsByPath;
     }
@@ -113,5 +123,15 @@ public class ObservabilityThresholdProperties {
         this.frontendLongTaskMsByRoute = frontendLongTaskMsByRoute == null
             ? new HashMap<>()
             : new HashMap<>(frontendLongTaskMsByRoute);
+    }
+
+    public Map<String, Long> getExternalCallRetryAttemptBySystem() {
+        return externalCallRetryAttemptBySystem;
+    }
+
+    public void setExternalCallRetryAttemptBySystem(Map<String, Long> externalCallRetryAttemptBySystem) {
+        this.externalCallRetryAttemptBySystem = externalCallRetryAttemptBySystem == null
+            ? new HashMap<>()
+            : new HashMap<>(externalCallRetryAttemptBySystem);
     }
 }

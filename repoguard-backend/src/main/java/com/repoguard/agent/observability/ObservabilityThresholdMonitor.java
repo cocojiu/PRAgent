@@ -1,6 +1,8 @@
 package com.repoguard.agent.observability;
 
+import com.repoguard.agent.external.ExternalCallException;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -107,6 +109,28 @@ public class ObservabilityThresholdMonitor {
         }
     }
 
+    public void externalCallRetry(ExternalCallException ex, int attempt) {
+        if (!properties.isEnabled()) {
+            return;
+        }
+        Objects.requireNonNull(ex, "ex");
+        long normalizedAttempt = Math.max(1, attempt);
+        long threshold = thresholdForSubject(
+            externalCallSystem(ex),
+            properties.getExternalCallRetryAttemptBySystem(),
+            properties.getExternalCallRetryAttempt()
+        );
+        if (normalizedAttempt >= threshold) {
+            thresholdExceeded(
+                "external_call_retry_attempt",
+                externalCallSubject(ex),
+                normalizedAttempt,
+                threshold,
+                "attempts"
+            );
+        }
+    }
+
     private void thresholdExceeded(String signal, String subject, long value, long threshold, String unit) {
         metrics.observabilityThresholdExceeded(signal, subject);
         LOGGER.warn(
@@ -169,6 +193,17 @@ public class ObservabilityThresholdMonitor {
             subject.append('|').append(result.trim());
         }
         return subject.toString();
+    }
+
+    private String externalCallSubject(ExternalCallException ex) {
+        StringBuilder subject = new StringBuilder(externalCallSystem(ex));
+        subject.append('|').append(safeSubject(ex.getCategory()));
+        subject.append('|').append(ex.getStatusCode() == null ? "none" : ex.getStatusCode());
+        return subject.toString();
+    }
+
+    private String externalCallSystem(ExternalCallException ex) {
+        return safeSubject(ex.getSystem()).toLowerCase(Locale.ROOT);
     }
 
     private String safeSubject(String subject) {

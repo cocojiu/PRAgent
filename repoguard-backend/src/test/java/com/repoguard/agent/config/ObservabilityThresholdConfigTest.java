@@ -14,6 +14,8 @@ class ObservabilityThresholdConfigTest {
         "repoguard.observability.thresholds.api-duration-ms-by-path";
     private static final String RESPONSE_BYTES_PREFIX =
         "repoguard.observability.thresholds.api-response-bytes-by-path";
+    private static final String RETRY_ATTEMPT_PREFIX =
+        "repoguard.observability.thresholds.external-call-retry-attempt-by-system";
     private static final List<String> REVIEW_PERFORMANCE_PATHS = List.of(
         "/api/v1/reviews",
         "/api/v1/reviews/repositories",
@@ -48,6 +50,18 @@ class ObservabilityThresholdConfigTest {
                 .as(path + " response bytes default")
                 .isPositive();
         }
+    }
+
+    @Test
+    void externalCallRetryThresholdsDeclareProviderBudgets() {
+        Properties properties = applicationProperties();
+
+        assertThat(defaultValue(properties.getProperty("repoguard.observability.thresholds.external-call-retry-attempt")))
+            .isPositive();
+        assertThat(defaultValue(properties.getProperty(mapKey(RETRY_ATTEMPT_PREFIX, "github"))))
+            .isPositive();
+        assertThat(defaultValue(properties.getProperty(mapKey(RETRY_ATTEMPT_PREFIX, "llm"))))
+            .isPositive();
     }
 
     private Properties applicationProperties() {

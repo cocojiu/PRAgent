@@ -3,6 +3,7 @@ package com.repoguard.agent.observability;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.repoguard.agent.external.ExternalCallException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.Map;
@@ -146,7 +147,50 @@ class ObservabilityThresholdMonitorTest {
         )).isEqualTo(1.0);
     }
 
+    @Test
+    void externalCallRetryUsesSystemSpecificAttemptThreshold() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setExternalCallRetryAttempt(3);
+        properties.setExternalCallRetryAttemptBySystem(Map.of("github", 2L));
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.externalCallRetry(externalCall("GitHub", "github_service_unavailable", 502), 1);
+        monitor.externalCallRetry(externalCall("GitHub", "github_service_unavailable", 502), 2);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "external_call_retry_attempt",
+            "subject", "github_github_service_unavailable_502"
+        )).isEqualTo(1.0);
+    }
+
+    @Test
+    void externalCallRetryFallsBackToGlobalAttemptThreshold() {
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setExternalCallRetryAttempt(2);
+        ObservabilityThresholdMonitor monitor = new ObservabilityThresholdMonitor(metrics, properties);
+
+        monitor.externalCallRetry(externalCall("LLM", "llm_timeout", null), 2);
+
+        assertThat(counter(
+            "repoguard.observability.threshold.exceeded",
+            "signal", "external_call_retry_attempt",
+            "subject", "llm_llm_timeout_none"
+        )).isEqualTo(1.0);
+    }
+
     private double counter(String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
+    }
+
+    private ExternalCallException externalCall(String system, String category, Integer statusCode) {
+        return new ExternalCallException(
+            system,
+            category,
+            true,
+            statusCode,
+            "retry",
+            new RuntimeException("retry")
+        );
     }
 }
