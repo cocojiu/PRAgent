@@ -41,4 +41,15 @@ class SensitiveTextSanitizerTest {
             .contains("\"apiKey\": '****'")
             .doesNotContain("raw-refresh", "raw-secret", "raw-key");
     }
+
+    @Test
+    void masksOpenAiStyleApiKeysWithoutExplicitFieldName() {
+        String sanitized = SensitiveTextSanitizer.sanitize(
+            "LLM returned invalid api key sk-secret123456789 in response body"
+        );
+
+        assertThat(sanitized)
+            .contains("sk-****")
+            .doesNotContain("sk-secret123456789");
+    }
 }
