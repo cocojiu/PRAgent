@@ -82,6 +82,16 @@ repoguard:
         "[/api/v1/dashboard/rules]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_RULES_API_DURATION_MS:800}
         "[/api/v1/dashboard/high-risk-reviews]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_HIGH_RISK_REVIEWS_API_DURATION_MS:800}
         "[/api/v1/dashboard/llm-quality]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_LLM_QUALITY_API_DURATION_MS:1000}
+        "[/api/v1/reviews]": ${REPOGUARD_OBSERVABILITY_REVIEWS_LIST_API_DURATION_MS:800}
+        "[/api/v1/reviews/repositories]": ${REPOGUARD_OBSERVABILITY_REVIEW_REPOSITORIES_API_DURATION_MS:500}
+        "[/api/v1/reviews/{id}]": ${REPOGUARD_OBSERVABILITY_REVIEW_DETAIL_API_DURATION_MS:800}
+        "[/api/v1/reviews/{id}/findings]": ${REPOGUARD_OBSERVABILITY_REVIEW_FINDINGS_API_DURATION_MS:800}
+        "[/api/v1/reviews/{id}/changed-files]": ${REPOGUARD_OBSERVABILITY_REVIEW_CHANGED_FILES_API_DURATION_MS:800}
+        "[/api/v1/reviews/{id}/missing-tests]": ${REPOGUARD_OBSERVABILITY_REVIEW_MISSING_TESTS_API_DURATION_MS:500}
+        "[/api/v1/reviews/{id}/timeline]": ${REPOGUARD_OBSERVABILITY_REVIEW_TIMELINE_API_DURATION_MS:500}
+        "[/api/v1/reviews/{id}/status]": ${REPOGUARD_OBSERVABILITY_REVIEW_STATUS_API_DURATION_MS:300}
+        "[/api/v1/reviews/{id}/github-comments/preview]": ${REPOGUARD_OBSERVABILITY_REVIEW_COMMENT_PREVIEW_API_DURATION_MS:1000}
+        "[/api/v1/reviews/{id}/github-comments/publications]": ${REPOGUARD_OBSERVABILITY_REVIEW_COMMENT_PUBLICATIONS_API_DURATION_MS:800}
       api-response-bytes-by-path:
         "[/api/v1/dashboard/overview]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_OVERVIEW_RESPONSE_BYTES:196608}
         "[/api/v1/dashboard/summary]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_SUMMARY_RESPONSE_BYTES:8192}
@@ -90,6 +100,16 @@ repoguard:
         "[/api/v1/dashboard/rules]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_RULES_RESPONSE_BYTES:32768}
         "[/api/v1/dashboard/high-risk-reviews]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_HIGH_RISK_REVIEWS_RESPONSE_BYTES:32768}
         "[/api/v1/dashboard/llm-quality]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_LLM_QUALITY_RESPONSE_BYTES:131072}
+        "[/api/v1/reviews]": ${REPOGUARD_OBSERVABILITY_REVIEWS_LIST_RESPONSE_BYTES:65536}
+        "[/api/v1/reviews/repositories]": ${REPOGUARD_OBSERVABILITY_REVIEW_REPOSITORIES_RESPONSE_BYTES:16384}
+        "[/api/v1/reviews/{id}]": ${REPOGUARD_OBSERVABILITY_REVIEW_DETAIL_RESPONSE_BYTES:131072}
+        "[/api/v1/reviews/{id}/findings]": ${REPOGUARD_OBSERVABILITY_REVIEW_FINDINGS_RESPONSE_BYTES:65536}
+        "[/api/v1/reviews/{id}/changed-files]": ${REPOGUARD_OBSERVABILITY_REVIEW_CHANGED_FILES_RESPONSE_BYTES:65536}
+        "[/api/v1/reviews/{id}/missing-tests]": ${REPOGUARD_OBSERVABILITY_REVIEW_MISSING_TESTS_RESPONSE_BYTES:32768}
+        "[/api/v1/reviews/{id}/timeline]": ${REPOGUARD_OBSERVABILITY_REVIEW_TIMELINE_RESPONSE_BYTES:16384}
+        "[/api/v1/reviews/{id}/status]": ${REPOGUARD_OBSERVABILITY_REVIEW_STATUS_RESPONSE_BYTES:8192}
+        "[/api/v1/reviews/{id}/github-comments/preview]": ${REPOGUARD_OBSERVABILITY_REVIEW_COMMENT_PREVIEW_RESPONSE_BYTES:131072}
+        "[/api/v1/reviews/{id}/github-comments/publications]": ${REPOGUARD_OBSERVABILITY_REVIEW_COMMENT_PUBLICATIONS_RESPONSE_BYTES:65536}
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
