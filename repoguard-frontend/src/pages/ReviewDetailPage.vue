@@ -83,7 +83,7 @@
 
       <ReviewDetailKpiGrid
         :task="selectedTask"
-        :started-at="reviewTimeline[0]?.time ?? '-'"
+        :started-at="reviewTimeline[0]?.time ?? selectedTask.createdAt"
         :finding-count="findingTotal"
         :changed-file-count="changedFileTotal"
       />
@@ -190,6 +190,8 @@
         <ReviewDetailSidePanel
           :task="selectedTask"
           :timeline="localizedTimeline"
+          :timeline-loaded="timelineLoaded || localizedTimeline.length > 0"
+          :timeline-loading="timelineLoading"
           :llm-model-text="llmModelText"
           :llm-parse-status-text="llmParseStatusText"
           :llm-parse-status-class="llmParseStatusClass"
@@ -203,6 +205,7 @@
           :chunk-aggregate-risk-text="chunkAggregateRiskText"
           :chunk-reason-text="chunkReasonText"
           :consume-status-text="consumeStatusText"
+          @timeline-load="loadTimelineItems"
         />
       </div>
     </template>
@@ -278,9 +281,11 @@ const missingTestsPage = ref(1);
 const findingsLoading = ref(false);
 const changedFilesLoading = ref(false);
 const missingTestsLoading = ref(false);
+const timelineLoading = ref(false);
 const findingsLoaded = ref(false);
 const changedFilesLoaded = ref(false);
 const missingTestsLoaded = ref(false);
+const timelineLoaded = ref(false);
 
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
@@ -322,11 +327,11 @@ const resetDetailSectionPages = () => {
   findingsLoaded.value = false;
   changedFilesLoaded.value = false;
   missingTestsLoaded.value = false;
+  timelineLoaded.value = false;
 };
 
 function afterDetailSummaryLoaded() {
   resetDetailSectionPages();
-  void loadInitialDetailSections();
 }
 
 const {
@@ -588,10 +593,11 @@ const loadMissingTestsPage = async (page: number) => {
 };
 
 const loadTimelineItems = async () => {
-  if (!selectedTask.value) {
+  if (!selectedTask.value || timelineLoading.value) {
     return;
   }
   const taskId = selectedTask.value.id;
+  timelineLoading.value = true;
   try {
     const timeline = await fetchReviewTimeline(taskId, { limit: 20 });
     if (!selectedTask.value || selectedTask.value.id !== taskId) {
@@ -601,8 +607,11 @@ const loadTimelineItems = async () => {
       ...selectedTask.value,
       timeline
     };
+    timelineLoaded.value = true;
   } catch (error) {
     ElMessage.warning(getErrorMessage(error, "时间线加载失败"));
+  } finally {
+    timelineLoading.value = false;
   }
 };
 
@@ -611,11 +620,6 @@ const loadFindingsFirstPage = () => loadFindingsPage(1);
 const loadChangedFilesFirstPage = () => loadChangedFilesPage(1);
 
 const loadMissingTestsFirstPage = () => loadMissingTestsPage(1);
-
-function loadInitialDetailSections() {
-  const requests: Promise<void>[] = [loadTimelineItems()];
-  void Promise.allSettled(requests);
-}
 
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
   canManage,

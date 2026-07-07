@@ -2,13 +2,20 @@
   <aside class="detail-side">
     <article class="dashboard-card">
       <h2>任务时间线</h2>
-      <ol class="timeline">
+      <div v-if="!timelineLoaded" class="lazy-section-actions">
+        <el-button type="primary" plain :loading="timelineLoading" @click="$emit('timelineLoad')">
+          <RefreshCw :size="16" />
+          加载时间线
+        </el-button>
+      </div>
+      <ol v-else-if="timeline.length" class="timeline">
         <li v-for="item in timeline" :key="`${item.label}-${item.time}`" :class="`timeline-${item.status}`">
           <span></span>
           <b>{{ item.label }}</b>
           <em>{{ item.time }}</em>
         </li>
       </ol>
+      <el-empty v-else description="暂无任务时间线" />
     </article>
 
     <article class="dashboard-card side-card">
@@ -49,11 +56,14 @@
 </template>
 
 <script setup lang="ts">
+import { RefreshCw } from "lucide-vue-next";
 import type { ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItem } from "@/types";
 
 defineProps<{
   task: ReviewTaskDetail;
   timeline: TimelineItem[];
+  timelineLoaded: boolean;
+  timelineLoading: boolean;
   llmModelText: string;
   llmParseStatusText: string;
   llmParseStatusClass: string;
@@ -67,6 +77,10 @@ defineProps<{
   chunkAggregateRiskText: (risk?: RiskLevel | string) => string;
   chunkReasonText: (reason: string) => string;
   consumeStatusText: (status: string) => string;
+}>();
+
+defineEmits<{
+  timelineLoad: [];
 }>();
 
 const ruleFallbackText = (task: ReviewTaskDetail) => {
