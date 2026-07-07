@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.testsupport.FrontendApiContractCatalog;
 import com.repoguard.agent.testsupport.OpenApiContractDocument;
+import com.repoguard.agent.testsupport.OpenApiGeneratedClientDryRun;
+import com.repoguard.agent.testsupport.OpenApiGeneratedClientDryRun.GeneratedOperation;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -69,72 +69,31 @@ class OpenApiGeneratedClientContractTest {
             .containsAll(SERVER_ONLY_ENDPOINTS);
     }
 
+    @Test
+    void generatedClientDryRunProducesCodegenFriendlyTypescriptSurface() throws Exception {
+        List<String> surface = OpenApiGeneratedClientDryRun.clientSurfaceLines(openApiDocument());
+
+        assertThat(surface)
+            .as("Generated client dry-run surface should stay sorted and unique for reviewable diffs")
+            .isNotEmpty()
+            .containsExactlyElementsOf(surface.stream().sorted().distinct().toList())
+            .allMatch(line -> line.matches("[a-zA-Z][a-zA-Z0-9]*\\(.*\\): Promise<[^>]+(>[^>]*)?>; // (GET|POST|PUT|DELETE) /api/v1/.*"))
+            .noneMatch(line -> line.contains("unknown"));
+        assertThat(surface)
+            .contains(
+                "authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout",
+                "reviewControllerListReviews(input?: { query?: { keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews",
+                "reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files",
+                "reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback"
+            );
+    }
+
     private Map<String, GeneratedOperation> generatedOperations() throws Exception {
-        Map<String, Object> document = OpenApiContractDocument.fromJson(
-            Files.readString(Path.of("src/test/resources/contracts/openapi.json"))
-        );
-        Map<String, Object> paths = map(document.get("paths"));
-        Map<String, GeneratedOperation> operations = new LinkedHashMap<>();
-
-        for (Map.Entry<String, Object> pathEntry : paths.entrySet()) {
-            String path = pathEntry.getKey();
-            for (Map.Entry<String, Object> operationEntry : map(pathEntry.getValue()).entrySet()) {
-                String method = operationEntry.getKey().toUpperCase(Locale.ROOT);
-                Map<String, Object> operation = map(operationEntry.getValue());
-                String endpointKey = method + " " + path;
-                operations.put(endpointKey, new GeneratedOperation(
-                    method,
-                    path,
-                    queryParamNames(operation),
-                    operation.containsKey("requestBody"),
-                    requestBodyRequired(operation),
-                    responseDataType(operation)
-                ));
-            }
-        }
-        return operations;
+        return OpenApiGeneratedClientDryRun.operations(openApiDocument());
     }
 
-    private List<String> queryParamNames(Map<String, Object> operation) {
-        return list(operation.get("parameters")).stream()
-            .map(this::map)
-            .filter(parameter -> "query".equals(parameter.get("in")))
-            .map(parameter -> (String) parameter.get("name"))
-            .toList();
-    }
-
-    private boolean requestBodyRequired(Map<String, Object> operation) {
-        if (!operation.containsKey("requestBody")) {
-            return false;
-        }
-        Object required = map(operation.get("requestBody")).get("required");
-        return required instanceof Boolean value && value;
-    }
-
-    private String responseDataType(Map<String, Object> operation) {
-        Map<String, Object> responses = map(operation.get("responses"));
-        Object responseData = map(responses.get("200")).get("x-java-response-data");
-        return responseData instanceof String value ? value : "-";
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> map(Object value) {
-        return (Map<String, Object>) value;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Object> list(Object value) {
-        return value instanceof List<?> values ? (List<Object>) values : List.of();
-    }
-
-    record GeneratedOperation(
-        String method,
-        String path,
-        List<String> queryParamNames,
-        boolean hasRequestBody,
-        boolean requestBodyRequired,
-        String responseDataType
-    ) {
+    private Map<String, Object> openApiDocument() throws Exception {
+        return OpenApiContractDocument.fromJson(Files.readString(Path.of("src/test/resources/contracts/openapi.json")));
     }
 
 }
