@@ -4,7 +4,13 @@
       <h2>LLM Findings</h2>
       <span class="count-badge">{{ total }} 条</span>
     </div>
-    <div v-if="findings.length" class="finding-list">
+    <div v-if="!loaded && total > 0" class="lazy-section-actions">
+      <el-button type="primary" plain :loading="loading" @click="$emit('load')">
+        <RefreshCw :size="16" />
+        加载 Findings
+      </el-button>
+    </div>
+    <div v-else-if="findings.length" class="finding-list">
       <section v-for="(finding, index) in findings" :key="`${finding.file}-${finding.line}-${index}`" class="finding-item">
         <div class="finding-head">
           <span :class="`risk-pill ${finding.severity}`">{{ riskText(finding.severity) }}</span>
@@ -96,7 +102,7 @@
     </div>
     <el-empty v-else description="暂无审查问题" />
     <el-pagination
-      v-if="total > pageSize"
+      v-if="loaded && total > pageSize"
       class="detail-pagination"
       layout="prev, pager, next"
       :current-page="currentPage"
@@ -108,12 +114,14 @@
 </template>
 
 <script setup lang="ts">
+import { RefreshCw } from "lucide-vue-next";
 import type { FindingFeedbackStatus, ReviewFinding, RiskLevel } from "@/types";
 
 defineProps<{
   canManage: boolean;
   feedbackSavingId: number | null;
   findings: ReviewFinding[];
+  loaded: boolean;
   loading: boolean;
   currentPage: number;
   pageSize: number;
@@ -124,6 +132,7 @@ defineProps<{
 }>();
 
 defineEmits<{
+  load: [];
   feedback: [findingId: number, status: FindingFeedbackStatus];
   pageChange: [page: number];
 }>();

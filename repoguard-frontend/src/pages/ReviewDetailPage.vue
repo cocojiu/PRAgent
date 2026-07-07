@@ -114,6 +114,7 @@
             :can-manage="canManage"
             :feedback-saving-id="feedbackSavingId"
             :findings="reviewFindings"
+            :loaded="findingsLoaded"
             :loading="findingsLoading"
             :current-page="findingsPage"
             :page-size="DETAIL_SECTION_PAGE_SIZE"
@@ -121,6 +122,7 @@
             :risk-text="riskText"
             :finding-feedback-status-class="findingFeedbackStatusClass"
             :finding-feedback-status-text="findingFeedbackStatusText"
+            @load="loadFindingsFirstPage"
             @feedback="submitFindingFeedback"
             @page-change="loadFindingsPage"
           />
@@ -257,7 +259,7 @@ import {
   useReviewDetailRetry,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
-import type { ReviewStatus, ReviewTaskDetail } from "@/types";
+import type { ReviewStatus } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
@@ -276,6 +278,7 @@ const missingTestsPage = ref(1);
 const findingsLoading = ref(false);
 const changedFilesLoading = ref(false);
 const missingTestsLoading = ref(false);
+const findingsLoaded = ref(false);
 const changedFilesLoaded = ref(false);
 const missingTestsLoaded = ref(false);
 
@@ -316,13 +319,14 @@ const resetDetailSectionPages = () => {
   findingsPage.value = 1;
   changedFilesPage.value = 1;
   missingTestsPage.value = 1;
+  findingsLoaded.value = false;
   changedFilesLoaded.value = false;
   missingTestsLoaded.value = false;
 };
 
-function afterDetailSummaryLoaded(task: ReviewTaskDetail) {
+function afterDetailSummaryLoaded() {
   resetDetailSectionPages();
-  void loadInitialDetailSections(task);
+  void loadInitialDetailSections();
 }
 
 const {
@@ -519,6 +523,7 @@ const loadFindingsPage = async (page: number) => {
       findingTotal: result.total
     };
     findingsPage.value = page;
+    findingsLoaded.value = true;
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "请求失败"));
   } finally {
@@ -601,15 +606,14 @@ const loadTimelineItems = async () => {
   }
 };
 
+const loadFindingsFirstPage = () => loadFindingsPage(1);
+
 const loadChangedFilesFirstPage = () => loadChangedFilesPage(1);
 
 const loadMissingTestsFirstPage = () => loadMissingTestsPage(1);
 
-function loadInitialDetailSections(task: ReviewTaskDetail) {
+function loadInitialDetailSections() {
   const requests: Promise<void>[] = [loadTimelineItems()];
-  if (task.findingTotal > 0) {
-    requests.push(loadFindingsPage(1));
-  }
   void Promise.allSettled(requests);
 }
 
