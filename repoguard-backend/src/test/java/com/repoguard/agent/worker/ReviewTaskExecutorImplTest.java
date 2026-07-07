@@ -396,7 +396,8 @@ class ReviewTaskExecutorImplTest {
             new ReviewFindingMergeService(riskLevelRanker)
         );
         ReviewExecutionTimelineRecorder timelineRecorder = new ReviewExecutionTimelineRecorder(
-            new ReviewTimelineAppender(reviewTimelineMapper)
+            new ReviewTimelineAppender(reviewTimelineMapper),
+            new ReviewExecutionTimelineLabelFormatter()
         );
         ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
             changedFileMapper,

@@ -100,6 +100,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.worker.ReviewExecutionDiffStats"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionFailureClassifier"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionMetricsRecorder"),
+            Class.forName("com.repoguard.agent.worker.ReviewExecutionTimelineLabelFormatter"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionTimelineRecorder"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionTransactionRunner"),
             Class.forName("com.repoguard.agent.worker.ReviewExecutionWorkflow"),

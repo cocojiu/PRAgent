@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test;
 class ReviewExecutionTimelineRecorderTest {
 
     private final ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
-    private final ReviewExecutionTimelineRecorder recorder = new ReviewExecutionTimelineRecorder(timelineAppender);
+    private final ReviewExecutionTimelineRecorder recorder = new ReviewExecutionTimelineRecorder(
+        timelineAppender,
+        new ReviewExecutionTimelineLabelFormatter()
+    );
 
     @Test
     void recordsReviewStartedTimeline() {
