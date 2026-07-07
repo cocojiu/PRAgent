@@ -12,6 +12,14 @@ import type {
   SystemSettingsRequest
 } from "@/types";
 
+export type DataRetentionCleanupAuditQuery = {
+  page?: number;
+  pageSize?: number;
+  mode?: string;
+  status?: string;
+  backupReference?: string;
+};
+
 export const fetchGithubIntegrationConfig = () =>
   apiRequest("fetchGithubIntegrationConfig", undefined);
 
@@ -44,6 +52,10 @@ export const fetchCacheStats = () => apiRequest("fetchCacheStats", undefined);
 
 export const cleanupDataRetention = (payload?: DataRetentionCleanupRequest) =>
   apiRequest("cleanupDataRetention", payload);
+
+export const fetchDataRetentionCleanupAudits = (
+  params: DataRetentionCleanupAuditQuery = {}
+) => apiRequest("fetchDataRetentionCleanupAudits", params);
 
 export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
   apiRequest("reEncryptSecrets", payload);

@@ -107,6 +107,33 @@
   width: 100%;
 }
 
+.data-retention-audit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.data-retention-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.data-retention-audit-head h2 {
+  margin: 0;
+}
+
+.data-retention-audit-filter {
+  grid-template-columns: 150px 150px minmax(220px, 1fr) auto;
+  padding: 0;
+  border-bottom: 0;
+}
+
+.data-retention-audit-table {
+  width: 100%;
+}
+
 @media (max-width: 1280px) {
   .settings-grid,
   .settings-bottom-grid {
@@ -114,6 +141,10 @@
   }
 
   .secret-re-encryption-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .data-retention-audit-filter {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -131,6 +162,15 @@
   }
 
   .secret-re-encryption-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .data-retention-audit-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .data-retention-audit-filter {
     grid-template-columns: minmax(0, 1fr);
   }
 }

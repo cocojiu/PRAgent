@@ -110,6 +110,7 @@
     </section>
 
     <SecretReEncryptionPanel :can-manage="canManage" />
+    <DataRetentionCleanupAuditsPanel />
 
     <section class="settings-bottom-grid">
       <article class="dashboard-card preview-card">
@@ -150,6 +151,7 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { canManage } from "@/stores/authState";
 import { fetchSystemSettings, updateSystemSettings } from "@/api/config";
 import { useFormSnapshot } from "@/composables/useFormSnapshot";
+import DataRetentionCleanupAuditsPanel from "@/features/system-settings/components/DataRetentionCleanupAuditsPanel.vue";
 import SecretReEncryptionPanel from "@/features/system-settings/components/SecretReEncryptionPanel.vue";
 import { routeNames } from "@/router/names";
 import { getErrorMessage } from "@/utils/errors";
