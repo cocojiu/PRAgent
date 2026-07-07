@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -15,9 +16,10 @@ public class WeComNotificationAdapter extends AbstractWebhookNotificationAdapter
         WebhookNotificationContentBuilder contentBuilder,
         WebhookNotificationResponseEvaluator responseEvaluator,
         WebhookNotificationPayloadFactory payloadFactory,
-        WebhookNotificationRequestFactory requestFactory
+        WebhookNotificationRequestFactory requestFactory,
+        ExternalHttpResponseReader responseReader
     ) {
-        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory);
+        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory, responseReader);
         this.payloadFactory = payloadFactory;
     }
 

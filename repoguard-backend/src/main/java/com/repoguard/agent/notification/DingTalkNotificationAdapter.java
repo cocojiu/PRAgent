@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -17,9 +18,10 @@ public class DingTalkNotificationAdapter extends AbstractWebhookNotificationAdap
         WebhookNotificationResponseEvaluator responseEvaluator,
         WebhookNotificationPayloadFactory payloadFactory,
         DingTalkWebhookSigner webhookSigner,
-        WebhookNotificationRequestFactory requestFactory
+        WebhookNotificationRequestFactory requestFactory,
+        ExternalHttpResponseReader responseReader
     ) {
-        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory);
+        super(restClientBuilder, contentBuilder, responseEvaluator, requestFactory, responseReader);
         this.payloadFactory = payloadFactory;
         this.webhookSigner = webhookSigner;
     }

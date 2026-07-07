@@ -2,8 +2,10 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
 
@@ -16,20 +18,23 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
     private final WebhookNotificationContentBuilder contentBuilder;
     private final WebhookNotificationResponseEvaluator responseEvaluator;
     private final WebhookNotificationRequestFactory requestFactory;
+    private final ExternalHttpResponseReader responseReader;
 
     AbstractWebhookNotificationAdapter(
         RestClient.Builder restClientBuilder,
         WebhookNotificationContentBuilder contentBuilder,
         WebhookNotificationResponseEvaluator responseEvaluator,
-        WebhookNotificationRequestFactory requestFactory
+        WebhookNotificationRequestFactory requestFactory,
+        ExternalHttpResponseReader responseReader
     ) {
         this.restClient = restClientBuilder
             .clone()
             .requestFactory(ExternalHttpRequestFactory.simple(CONNECT_TIMEOUT, READ_TIMEOUT))
             .build();
-        this.contentBuilder = contentBuilder;
-        this.responseEvaluator = responseEvaluator;
-        this.requestFactory = requestFactory;
+        this.contentBuilder = Objects.requireNonNull(contentBuilder, "contentBuilder");
+        this.responseEvaluator = Objects.requireNonNull(responseEvaluator, "responseEvaluator");
+        this.requestFactory = Objects.requireNonNull(requestFactory, "requestFactory");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
     }
 
     @Override
@@ -52,14 +57,16 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
             return NotificationSendResult.failed(null, request.failureMessage());
         }
         try {
-            Object response = restClient.post()
+            byte[] response = restClient.post()
                 .uri(signedWebhookUrl(request.webhookUrl(), request.secret()))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(payload)
-                .retrieve()
-                .body(Object.class);
-            return responseEvaluator.evaluate(response);
+                .exchange((httpRequest, httpResponse) -> responseReader.readSuccessfulBody(
+                    httpResponse,
+                    "Webhook HTTP request failed"
+                ));
+            return responseEvaluator.evaluate(response == null ? "" : new String(response, StandardCharsets.UTF_8));
         } catch (RuntimeException ex) {
             return responseEvaluator.failure(ex);
         }
