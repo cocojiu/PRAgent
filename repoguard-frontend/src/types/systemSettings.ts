@@ -61,6 +61,7 @@ export interface SecretReEncryptionItem {
   sourceKeyId?: string;
   targetKeyId?: string;
   status: SecretReEncryptionStatus;
+  failureReason?: string;
   message?: string;
 }
 

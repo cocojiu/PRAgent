@@ -28,7 +28,20 @@ describe("secretReEncryptionDisplayMappers", () => {
         sourceKeyId: "unexpected-key",
         targetKeyId: "new-key",
         status: "KEY_MISMATCH",
+        failureReason: "source_key_mismatch",
         message: "Encrypted secret key id does not match source encryption key id"
+      },
+      {
+        tableName: "integration_config",
+        recordId: 9,
+        fieldName: "token_value",
+        provider: "GITHUB",
+        sourceFormat: "enc:v2",
+        sourceKeyId: "old-key",
+        targetKeyId: "new-key",
+        status: "DECRYPT_FAILED",
+        failureReason: "source_decrypt_failed",
+        message: "low-level crypto detail"
       }
     ]);
 
@@ -47,6 +60,12 @@ describe("secretReEncryptionDisplayMappers", () => {
       keyText: "unexpected-key -> new-key"
     });
     expect(items[1].hint).toContain("源 key id 不一致");
+    expect(items[2]).toMatchObject({
+      fieldText: "连接密钥",
+      statusText: "解密失败",
+      statusTone: "danger"
+    });
+    expect(items[2].hint).toBe("源密钥无法解密该字段，请重新填写密钥或修复密文。");
   });
 
   it("summarizes dry-run and execution results with stable counts", () => {

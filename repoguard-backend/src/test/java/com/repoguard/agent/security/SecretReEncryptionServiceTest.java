@@ -127,6 +127,7 @@ class SecretReEncryptionServiceTest {
         assertThat(result.failedCount()).isEqualTo(2);
         assertThat(result.items()).extracting("fieldName").containsExactly("webhook_url_value", "secret_value");
         assertThat(result.items()).extracting("status").containsExactly("KEY_MISMATCH", "DECRYPT_FAILED");
+        assertThat(result.items()).extracting("failureReason").containsExactly("source_key_mismatch", "source_decrypt_failed");
         assertThat(result.items().getFirst().sourceKeyId()).isEqualTo("legacy-key");
         assertThat(result.items().get(1).sourceKeyId()).isEqualTo(OLD_KEY_ID);
         verify(notificationChannelBindingMapper, never()).updateById(Mockito.any(NotificationChannelBinding.class));
@@ -187,6 +188,12 @@ class SecretReEncryptionServiceTest {
 
         assertThat(result.failedCount()).isEqualTo(2);
         assertThat(result.items()).extracting("status").containsExactly("KEY_MISMATCH", "DECRYPT_FAILED");
+        assertThat(result.items()).extracting("failureReason").containsExactly("source_key_mismatch", "source_decrypt_failed");
+        assertThat(result.items()).extracting("message")
+            .containsExactly(
+                "Encrypted secret key id does not match source encryption key id",
+                "Secret cannot be decrypted with source encryption key"
+            );
         assertThat(result.items().getFirst().sourceKeyId()).isEqualTo("legacy-key");
         assertThat(result.items().getFirst().targetKeyId()).isEqualTo(NEW_KEY_ID);
         assertThat(result.items().get(1).sourceKeyId()).isEqualTo(OLD_KEY_ID);

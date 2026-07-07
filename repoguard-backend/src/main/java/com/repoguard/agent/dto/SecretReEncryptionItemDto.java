@@ -9,6 +9,7 @@ public record SecretReEncryptionItemDto(
     String sourceKeyId,
     String targetKeyId,
     String status,
+    String failureReason,
     String message
 ) {
 }

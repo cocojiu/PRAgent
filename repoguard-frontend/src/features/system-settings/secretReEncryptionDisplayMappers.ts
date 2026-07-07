@@ -104,8 +104,14 @@ const statusHint = (item: SecretReEncryptionItem) => {
     case "KEY_MISMATCH":
       return "字段密文携带的 key id 与源 key id 不一致，请确认源密钥或单独修复该记录。";
     case "DECRYPT_FAILED":
+      if (item.failureReason === "source_decrypt_failed") {
+        return "源密钥无法解密该字段，请重新填写密钥或修复密文。";
+      }
       return item.message ? `解密失败：${item.message}` : "源密钥无法解密该字段，请重新填写密钥或修复密文。";
     case "FAILED":
+      if (item.failureReason) {
+        return `处理失败：${item.failureReason}`;
+      }
       return item.message ? `处理失败：${item.message}` : "字段处理失败，请查看后端日志。";
     default:
       return item.message || "该字段返回了未知状态，请结合后端日志确认。";

@@ -338,6 +338,7 @@ class SystemConfigControllerTest {
                     "old-2026",
                     "new-2026",
                     "WOULD_RE_ENCRYPT",
+                    null,
                     "Secret can be re-encrypted"
                 ))
             ));
@@ -356,7 +357,8 @@ class SystemConfigControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.executed").value(false))
-            .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"));
+            .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"))
+            .andExpect(jsonPath("$.data.items[0].failureReason").doesNotExist());
     }
 
     @Test
