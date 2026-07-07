@@ -32,4 +32,25 @@ class RabbitPublishCompensationMetricsRecorderTest {
 
         verify(metrics).rabbitPublishCompensationFailed("publish", "confirm_timeout");
     }
+
+    @Test
+    void recordsSucceededOutcome() {
+        recorder.record(RabbitPublishCompensationOutcome.succeeded(RabbitPublishFailurePhase.NOTIFICATION));
+
+        verify(metrics).rabbitPublishCompensationSucceeded("notification");
+    }
+
+    @Test
+    void recordsFailedOutcome() {
+        recorder.record(RabbitPublishCompensationOutcome.failed(RabbitPublishFailurePhase.PUBLISH, "confirm_timeout"));
+
+        verify(metrics).rabbitPublishCompensationFailed("publish", "confirm_timeout");
+    }
+
+    @Test
+    void rejectsMissingOutcome() {
+        assertThatThrownBy(() -> recorder.record(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("outcome");
+    }
 }

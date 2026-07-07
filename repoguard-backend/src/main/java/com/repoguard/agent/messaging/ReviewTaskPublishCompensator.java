@@ -125,7 +125,7 @@ public class ReviewTaskPublishCompensator {
                     LocalDateTime.now(),
                     ReviewTimelineStatus.CURRENT
                 );
-                metricsRecorder.recordSucceeded("publish");
+                metricsRecorder.record(RabbitPublishCompensationOutcome.succeeded(RabbitPublishFailurePhase.PUBLISH));
                 LOGGER.info(
                     "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",
                     task.getId(),
@@ -143,7 +143,10 @@ public class ReviewTaskPublishCompensator {
                         LocalDateTime.now(),
                         ReviewTimelineStatus.FAILED
                     );
-                    metricsRecorder.recordFailed("publish", failureClassifier.classify(ex));
+                    metricsRecorder.record(RabbitPublishCompensationOutcome.failed(
+                        RabbitPublishFailurePhase.PUBLISH,
+                        failureClassifier.classify(ex)
+                    ));
                     LOGGER.warn(
                         "Review task publish compensation failed taskId={} repository={} prNumber={} operation=review_publish_compensation result=publish_failed recoverySource={} attempts={} nextRetryAt={} error={}",
                         task.getId(),

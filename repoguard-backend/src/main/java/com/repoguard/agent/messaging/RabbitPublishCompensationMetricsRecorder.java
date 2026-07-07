@@ -20,4 +20,13 @@ public class RabbitPublishCompensationMetricsRecorder {
     public void recordFailed(String failurePhase, String reason) {
         metrics.rabbitPublishCompensationFailed(failurePhase, reason);
     }
+
+    public void record(RabbitPublishCompensationOutcome outcome) {
+        Objects.requireNonNull(outcome, "outcome");
+        if (outcome.success()) {
+            recordSucceeded(outcome.failurePhase().code());
+            return;
+        }
+        recordFailed(outcome.failurePhase().code(), outcome.reason());
+    }
 }

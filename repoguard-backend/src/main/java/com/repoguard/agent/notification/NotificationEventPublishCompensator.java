@@ -3,6 +3,8 @@ package com.repoguard.agent.notification;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
+import com.repoguard.agent.messaging.RabbitPublishCompensationOutcome;
+import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -79,7 +81,7 @@ public class NotificationEventPublishCompensator {
         }
         NotificationPublishResult result = publishCoordinator.publish(event);
         if (result.success()) {
-            metricsRecorder.recordSucceeded("notification");
+            metricsRecorder.record(RabbitPublishCompensationOutcome.succeeded(RabbitPublishFailurePhase.NOTIFICATION));
             LOGGER.info(
                 "Notification publish compensation completed eventId={} eventKey={} operation=notification_publish_compensation result=published retryCount={}",
                 event.getId(),
@@ -88,7 +90,10 @@ public class NotificationEventPublishCompensator {
             );
             return;
         }
-        metricsRecorder.recordFailed("notification", result.failureReason());
+        metricsRecorder.record(RabbitPublishCompensationOutcome.failed(
+            RabbitPublishFailurePhase.NOTIFICATION,
+            result.failureReason()
+        ));
         LOGGER.warn(
             "Notification publish compensation failed eventId={} eventKey={} operation=notification_publish_compensation result=publish_failed retryCount={} reason={}",
             event.getId(),
