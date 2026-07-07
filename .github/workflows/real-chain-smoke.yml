@@ -55,7 +55,7 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
-      - name: Upload smoke runner
+      - name: Verify remote smoke runner
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -63,11 +63,13 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
+          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH"; exit 1; }
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}/performance'"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
-            performance/remote/run-real-chain-smoke.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/"
+            "test -x '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' || {
+               echo 'Missing executable remote smoke runner: ${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' >&2
+               exit 1
+             }"
 
       - name: Run three sequential real tasks
         shell: bash
@@ -80,8 +82,7 @@ jobs:
           MAX_TOTAL_TOKENS: ${{ inputs.max_total_tokens }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod +x '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' && \
-             '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' \
+            "'${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' \
              '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' 'http://127.0.0.1'"
 
       - name: Verify service health

@@ -63,7 +63,7 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
-      - name: Upload retest helpers
+      - name: Verify remote retest assets
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -71,12 +71,21 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
+          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH"; exit 1; }
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}/performance'"
-          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
-            performance/remote/set-review-worker-concurrency.sh \
-            performance/remote/verify-worker-comparison.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/"
+            "test -x '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' || {
+               echo 'Missing executable remote helper: ${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' >&2
+               exit 1
+             }
+             test -x '${DEPLOY_PATH}/performance/verify-worker-comparison.sh' || {
+               echo 'Missing executable remote helper: ${DEPLOY_PATH}/performance/verify-worker-comparison.sh' >&2
+               exit 1
+             }
+             test -r '${DEPLOY_PATH}/performance/k6/review-burst-100.js' || {
+               echo 'Missing readable remote k6 script: ${DEPLOY_PATH}/performance/k6/review-burst-100.js' >&2
+               exit 1
+             }"
 
       - name: Switch Worker concurrency
         shell: bash
@@ -88,9 +97,7 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod +x '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' \
-             '${DEPLOY_PATH}/performance/verify-worker-comparison.sh' && \
-             '${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' '${CONCURRENCY}'"
+            "'${DEPLOY_PATH}/performance/set-review-worker-concurrency.sh' '${CONCURRENCY}'"
 
       - name: Load admin key
         shell: bash
@@ -112,21 +119,27 @@ jobs:
         env:
           CONCURRENCY: ${{ inputs.task_count }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
           START_PR_NUMBER: ${{ inputs.start_pr_number }}
         run: |
           mkdir -p performance/reports/worker-retest
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/k6/review-burst-100.js" \
+            "${RUNNER_TEMP}/review-burst-100.js"
           docker run --rm \
             --user "$(id -u):$(id -g)" \
-            -v "${GITHUB_WORKSPACE}:/work" \
-            -w /work \
+            -v "${RUNNER_TEMP}:/scripts:ro" \
+            -v "${GITHUB_WORKSPACE}/performance/reports/worker-retest:/reports" \
             grafana/k6:0.54.0 run \
             -e BASE_URL="http://${DEPLOY_HOST}" \
             -e ADMIN_API_KEY="${ADMIN_API_KEY}" \
             -e CONCURRENCY="${CONCURRENCY}" \
             -e START_PR_NUMBER="${START_PR_NUMBER}" \
             -e RUN_SUFFIX="worker-c${{ inputs.concurrency }}-${GITHUB_RUN_ID}" \
-            -e SUMMARY_FILE="performance/reports/worker-retest/worker-c${{ inputs.concurrency }}-${GITHUB_RUN_ID}.json" \
-            performance/k6/review-burst-100.js
+            -e SUMMARY_FILE="/reports/worker-c${{ inputs.concurrency }}-${GITHUB_RUN_ID}.json" \
+            /scripts/review-burst-100.js
 
       - name: Verify database, queue, and logs
         shell: bash
