@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 
 class LlmReviewResultParserTest {
@@ -16,6 +17,45 @@ class LlmReviewResultParserTest {
         new LlmReviewFindingMapper(),
         new LlmReviewParseFailureSummarizer()
     );
+
+    @Test
+    void constructorRejectsMissingExplicitDependencies() {
+        assertMissing("objectMapper", () -> parser(
+            null,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
+        ));
+        assertMissing("jsonExtractor", () -> parser(
+            objectMapper,
+            null,
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
+        ));
+        assertMissing("schemaRepairer", () -> parser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            null,
+            new LlmReviewFindingMapper(),
+            new LlmReviewParseFailureSummarizer()
+        ));
+        assertMissing("findingMapper", () -> parser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            null,
+            new LlmReviewParseFailureSummarizer()
+        ));
+        assertMissing("failureSummarizer", () -> parser(
+            objectMapper,
+            new LlmReviewJsonExtractor(),
+            new LlmReviewSchemaRepairer(objectMapper),
+            new LlmReviewFindingMapper(),
+            null
+        ));
+    }
 
     @Test
     void parsesStrictJsonResult() {
@@ -164,5 +204,27 @@ class LlmReviewResultParserTest {
             .hasMessageContaining("Unable to parse LLM review result")
             .hasMessageContaining("length=")
             .satisfies(error -> assertThat(error.getMessage()).doesNotContain("模型回答"));
+    }
+
+    private void assertMissing(String dependencyName, ThrowingCallable callable) {
+        assertThatThrownBy(callable)
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage(dependencyName);
+    }
+
+    private LlmReviewResultParser parser(
+        ObjectMapper objectMapper,
+        LlmReviewJsonExtractor jsonExtractor,
+        LlmReviewSchemaRepairer schemaRepairer,
+        LlmReviewFindingMapper findingMapper,
+        LlmReviewParseFailureSummarizer failureSummarizer
+    ) {
+        return new LlmReviewResultParser(
+            objectMapper,
+            jsonExtractor,
+            schemaRepairer,
+            findingMapper,
+            failureSummarizer
+        );
     }
 }
