@@ -74,46 +74,60 @@ class ConnectionTestServiceImplTest {
         new IntegrationConnectionCheckMarker(integrationConfigMapper);
     private final GithubIntegrationConnectionTestExecutor githubIntegrationConnectionTestExecutor =
         new GithubIntegrationConnectionTestExecutor(integrationConfigMapper, configFactory, connectionCheckMarker);
+    private final ReviewPolicyConnectionTestExecutor reviewPolicyConnectionTestExecutor =
+        new ReviewPolicyConnectionTestExecutor(reviewPolicyConfigMapper, configFactory);
     private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor =
         new ServiceIntegrationConnectionTestExecutor(integrationConfigMapper, configFactory, connectionCheckMarker);
     private final ConnectionTestServiceImpl service = new ConnectionTestServiceImpl(
-        reviewPolicyConfigMapper,
         githubConnectionTestRunner,
         githubIntegrationConnectionTestExecutor,
         llmConnectionTestRunner,
+        reviewPolicyConnectionTestExecutor,
         mysqlConnectionTestRunner,
         rabbitMqConnectionTestRunner,
-        serviceIntegrationConnectionTestExecutor,
-        configFactory
+        serviceIntegrationConnectionTestExecutor
     );
 
     @Test
     void constructorRejectsMissingGithubIntegrationConnectionTestExecutor() {
         assertThatThrownBy(() -> new ConnectionTestServiceImpl(
-            reviewPolicyConfigMapper,
             githubConnectionTestRunner,
             null,
             llmConnectionTestRunner,
+            reviewPolicyConnectionTestExecutor,
             mysqlConnectionTestRunner,
             rabbitMqConnectionTestRunner,
-            serviceIntegrationConnectionTestExecutor,
-            configFactory
+            serviceIntegrationConnectionTestExecutor
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("githubIntegrationConnectionTestExecutor");
     }
 
     @Test
-    void constructorRejectsMissingServiceIntegrationConnectionTestExecutor() {
+    void constructorRejectsMissingReviewPolicyConnectionTestExecutor() {
         assertThatThrownBy(() -> new ConnectionTestServiceImpl(
-            reviewPolicyConfigMapper,
             githubConnectionTestRunner,
             githubIntegrationConnectionTestExecutor,
             llmConnectionTestRunner,
+            null,
             mysqlConnectionTestRunner,
             rabbitMqConnectionTestRunner,
-            null,
-            configFactory
+            serviceIntegrationConnectionTestExecutor
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewPolicyConnectionTestExecutor");
+    }
+
+    @Test
+    void constructorRejectsMissingServiceIntegrationConnectionTestExecutor() {
+        assertThatThrownBy(() -> new ConnectionTestServiceImpl(
+            githubConnectionTestRunner,
+            githubIntegrationConnectionTestExecutor,
+            llmConnectionTestRunner,
+            reviewPolicyConnectionTestExecutor,
+            mysqlConnectionTestRunner,
+            rabbitMqConnectionTestRunner,
+            null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("serviceIntegrationConnectionTestExecutor");

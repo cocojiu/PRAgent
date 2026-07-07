@@ -105,15 +105,16 @@ class SystemConfigServiceImplTest {
             connectionTestConfigFactory,
             connectionCheckMarker
     );
+    private final ReviewPolicyConnectionTestExecutor reviewPolicyConnectionTestExecutor =
+        new ReviewPolicyConnectionTestExecutor(reviewPolicyConfigMapper, connectionTestConfigFactory);
     private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
-        reviewPolicyConfigMapper,
         githubConnectionTestRunner,
         githubIntegrationConnectionTestExecutor,
         llmConnectionTestRunner,
+        reviewPolicyConnectionTestExecutor,
         mysqlConnectionTestRunner,
         rabbitMqConnectionTestRunner,
-        serviceIntegrationConnectionTestExecutor,
-        connectionTestConfigFactory
+        serviceIntegrationConnectionTestExecutor
     );
     private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
         new SystemIntegrationConfigServiceImpl(
