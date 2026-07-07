@@ -12,6 +12,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.messaging.RabbitPublishCompensationSettingsFactory;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
@@ -25,11 +26,13 @@ class NotificationEventPublishCompensatorTest {
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
     private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
+    private final RabbitPublishCompensationSettingsFactory settingsFactory =
+        new RabbitPublishCompensationSettingsFactory(compensationPolicy);
     private final NotificationOutboxEventStore outboxEventStore = new NotificationOutboxEventStore(eventMapper);
     private final NotificationPublishCompensationQuery compensationQuery = new NotificationPublishCompensationQuery(
         outboxEventStore,
         properties,
-        compensationPolicy
+        settingsFactory
     );
     private final NotificationEventPublishCoordinator publishCoordinator = new NotificationEventPublishCoordinator(
         eventPublisher,

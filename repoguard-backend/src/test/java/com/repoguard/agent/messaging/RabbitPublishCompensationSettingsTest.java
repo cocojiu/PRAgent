@@ -27,6 +27,13 @@ class RabbitPublishCompensationSettingsTest {
     }
 
     @Test
+    void factoryRejectsMissingCompensationPolicy() {
+        assertThatThrownBy(() -> new RabbitPublishCompensationSettingsFactory(null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("compensationPolicy");
+    }
+
+    @Test
     void normalizesCompensationPropertiesThroughSharedPolicy() {
         properties.setPublishCompensationMaxAttempts(0);
         properties.setPublishCompensationBatchSize(0);
@@ -42,5 +49,21 @@ class RabbitPublishCompensationSettingsTest {
         assertThat(settings.nextAttempt(2)).isEqualTo(3);
         assertThat(settings.nextRetryAt(now)).isEqualTo(now.plusSeconds(1));
         assertThat(settings.expiredBefore(now)).isEqualTo(now.minusSeconds(1));
+    }
+
+    @Test
+    void createsLeaseAwareClaim() {
+        properties.setPublishCompensationLeaseMs(120000);
+        properties.setPublishCompensationMaxAttempts(7);
+        RabbitPublishCompensationSettings settings =
+            new RabbitPublishCompensationSettingsFactory(compensationPolicy).create(properties);
+        LocalDateTime claimedAt = LocalDateTime.of(2026, 7, 7, 11, 20);
+
+        RabbitPublishClaim claim = settings.claim(claimedAt, "node-a");
+
+        assertThat(claim.claimedAt()).isEqualTo(claimedAt);
+        assertThat(claim.instanceId()).isEqualTo("node-a");
+        assertThat(claim.expiredBefore()).isEqualTo(claimedAt.minusMinutes(2));
+        assertThat(claim.maxAttempts()).isEqualTo(7);
     }
 }

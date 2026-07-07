@@ -41,6 +41,8 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTimelineAppender reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
     private final RabbitPublishFailureClassifier failureClassifier = new RabbitPublishFailureClassifier();
     private final RabbitPublishCompensationPolicy compensationPolicy = new RabbitPublishCompensationPolicy();
+    private final RabbitPublishCompensationSettingsFactory settingsFactory =
+        new RabbitPublishCompensationSettingsFactory(compensationPolicy);
     private final ReviewTaskPublishOutboxStore outboxStore = new ReviewTaskPublishOutboxStore(
         reviewTaskMapper,
         reviewTimelineAppender,
@@ -49,7 +51,7 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTaskPublishCompensationQuery compensationQuery = new ReviewTaskPublishCompensationQuery(
         outboxStore,
         properties,
-        compensationPolicy
+        settingsFactory
     );
     private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
         reviewTaskPublisher,
@@ -170,10 +172,10 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
-    void compensationQueryRejectsMissingCompensationPolicy() {
+    void compensationQueryRejectsMissingSettingsFactory() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensationQuery(outboxStore, properties, null))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("compensationPolicy");
+            .hasMessage("settingsFactory");
     }
 
     @Test

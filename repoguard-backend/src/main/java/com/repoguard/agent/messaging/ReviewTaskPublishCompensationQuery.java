@@ -16,10 +16,10 @@ class ReviewTaskPublishCompensationQuery {
     ReviewTaskPublishCompensationQuery(
         ReviewTaskPublishOutboxStore outboxStore,
         RabbitReviewQueueProperties properties,
-        RabbitPublishCompensationPolicy compensationPolicy
+        RabbitPublishCompensationSettingsFactory settingsFactory
     ) {
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
-        this.compensationSettings = new RabbitPublishCompensationSettings(properties, compensationPolicy);
+        this.compensationSettings = Objects.requireNonNull(settingsFactory, "settingsFactory").create(properties);
     }
 
     List<ReviewTask> loadDueTasks(LocalDateTime now) {
@@ -36,12 +36,7 @@ class ReviewTaskPublishCompensationQuery {
     }
 
     RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
-        return new RabbitPublishClaim(
-            claimedAt,
-            instanceId,
-            expiredBefore(claimedAt),
-            maxAttempts()
-        );
+        return compensationSettings.claim(claimedAt, instanceId);
     }
 
     LocalDateTime nextRetryAt(LocalDateTime now) {

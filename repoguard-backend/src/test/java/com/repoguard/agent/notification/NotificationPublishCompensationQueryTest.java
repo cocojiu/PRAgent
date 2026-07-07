@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.messaging.RabbitPublishCompensationSettingsFactory;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -19,14 +20,16 @@ class NotificationPublishCompensationQueryTest {
     private final NotificationOutboxEventStore outboxEventStore =
         org.mockito.Mockito.mock(NotificationOutboxEventStore.class);
     private final RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
+    private final RabbitPublishCompensationSettingsFactory settingsFactory =
+        new RabbitPublishCompensationSettingsFactory(new RabbitPublishCompensationPolicy());
     private final NotificationPublishCompensationQuery query =
-        new NotificationPublishCompensationQuery(outboxEventStore, properties, new RabbitPublishCompensationPolicy());
+        new NotificationPublishCompensationQuery(outboxEventStore, properties, settingsFactory);
 
     @Test
-    void constructorRejectsMissingCompensationPolicy() {
+    void constructorRejectsMissingSettingsFactory() {
         assertThatThrownBy(() -> new NotificationPublishCompensationQuery(outboxEventStore, properties, null))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("compensationPolicy");
+            .hasMessage("settingsFactory");
     }
 
     @Test

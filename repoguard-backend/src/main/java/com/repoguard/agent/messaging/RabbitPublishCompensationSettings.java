@@ -20,6 +20,15 @@ public class RabbitPublishCompensationSettings {
         return compensationPolicy.expiredBefore(now, properties.getPublishCompensationLeaseMs());
     }
 
+    public RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
+        return new RabbitPublishClaim(
+            claimedAt,
+            instanceId,
+            expiredBefore(claimedAt),
+            maxAttempts()
+        );
+    }
+
     public LocalDateTime nextRetryAt(LocalDateTime now) {
         return compensationPolicy.nextRetryAt(now, properties);
     }
