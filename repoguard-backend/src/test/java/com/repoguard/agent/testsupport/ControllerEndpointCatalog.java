@@ -117,6 +117,19 @@ public final class ControllerEndpointCatalog {
             .orElse("-");
     }
 
+    public static boolean hasRequestBody(Method method) {
+        return List.of(method.getParameters()).stream()
+            .anyMatch(parameter -> parameter.isAnnotationPresent(RequestBody.class));
+    }
+
+    public static boolean requestBodyRequired(Method method) {
+        return List.of(method.getParameters()).stream()
+            .filter(parameter -> parameter.isAnnotationPresent(RequestBody.class))
+            .map(parameter -> parameter.getAnnotation(RequestBody.class).required())
+            .findFirst()
+            .orElse(false);
+    }
+
     public static String endpointId(Class<?> controller, Method method) {
         return controller.getSimpleName() + "#" + method.getName();
     }

@@ -40,6 +40,10 @@ class ApiContractTest {
         "^\\s{2}([a-zA-Z0-9]+): \\{\\R(?<body>.*?)^\\s{2}},?",
         Pattern.MULTILINE | Pattern.DOTALL
     );
+    private static final Pattern FRONTEND_API_TYPE_OPERATION_PATTERN = Pattern.compile(
+        "^\\s{2}([a-zA-Z0-9]+): ApiOperation<(?<input>.*?),",
+        Pattern.MULTILINE
+    );
     private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
@@ -208,6 +212,9 @@ class ApiContractTest {
                 assertThat(frontendContract.hasRequestBody())
                     .as(operation + " frontend body usage must match backend @RequestBody contract")
                     .isEqualTo(backendContract.hasRequestBody());
+                assertThat(frontendContract.requestBodyRequired())
+                    .as(operation + " frontend input optionality must match backend @RequestBody(required=...)")
+                    .isEqualTo(backendContract.requestBodyRequired());
             });
     }
 
@@ -331,7 +338,8 @@ class ApiContractTest {
                 endpoint.httpMethod() + " " + endpoint.path(),
                 new BackendEndpointContract(
                     ControllerEndpointCatalog.requestParamNames(endpoint.method()),
-                    !"-".equals(ControllerEndpointCatalog.requestBodyType(endpoint.method()))
+                    ControllerEndpointCatalog.hasRequestBody(endpoint.method()),
+                    ControllerEndpointCatalog.requestBodyRequired(endpoint.method())
                 )
             ));
         return contracts;
@@ -361,21 +369,37 @@ class ApiContractTest {
     private Map<String, FrontendEndpointContract> frontendEndpointContracts() throws Exception {
         String source = Files.readString(frontendContractsPath());
         Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
+        Map<String, String> operationInputTypes = frontendApiOperationInputTypes(source);
         Map<String, FrontendEndpointContract> contracts = new LinkedHashMap<>();
         while (operationMatcher.find()) {
             String operation = operationMatcher.group(1);
             String body = operationMatcher.group("body");
+            String inputType = operationInputTypes.getOrDefault(operation, "");
             extractFrontendPath(body).ifPresent(path -> contracts.put(
                 operation,
                 new FrontendEndpointContract(
                     frontendHttpMethod(body),
                     path,
                     frontendQueryParamNames(body),
-                    body.contains("body:")
+                    body.contains("body:"),
+                    body.contains("body:") && !frontendInputTypeAllowsUndefined(inputType)
                 )
             ));
         }
         return contracts;
+    }
+
+    private Map<String, String> frontendApiOperationInputTypes(String source) {
+        Matcher matcher = FRONTEND_API_TYPE_OPERATION_PATTERN.matcher(source);
+        Map<String, String> inputTypes = new LinkedHashMap<>();
+        while (matcher.find()) {
+            inputTypes.put(matcher.group(1), matcher.group("input").trim());
+        }
+        return inputTypes;
+    }
+
+    private boolean frontendInputTypeAllowsUndefined(String inputType) {
+        return "undefined".equals(inputType) || inputType.contains("| undefined");
     }
 
     private Map<String, Class<?>> recordComponentTypes(Class<?> recordType) {
@@ -526,14 +550,15 @@ class ApiContractTest {
     record ContractPayload(String value) {
     }
 
-    record BackendEndpointContract(List<String> queryParamNames, boolean hasRequestBody) {
+    record BackendEndpointContract(List<String> queryParamNames, boolean hasRequestBody, boolean requestBodyRequired) {
     }
 
     record FrontendEndpointContract(
         String httpMethod,
         String path,
         List<String> queryParamNames,
-        boolean hasRequestBody
+        boolean hasRequestBody,
+        boolean requestBodyRequired
     ) {
 
         String endpointKey() {
