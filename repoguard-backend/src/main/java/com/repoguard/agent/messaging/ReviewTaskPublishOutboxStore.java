@@ -45,15 +45,11 @@ public class ReviewTaskPublishOutboxStore {
                     )
                     .or(staleQueued -> staleQueued
                         .eq(ReviewTask::getStatus, reviewTaskStateMachine.statusWhenQueued())
-                        .and(queued -> queued
-                            .and(claimed -> claimed
-                                .isNotNull(ReviewTask::getPublishClaimedAt)
-                                .le(ReviewTask::getPublishClaimedAt, expiredBefore)
-                            )
-                            .or(unclaimed -> unclaimed
-                                .isNull(ReviewTask::getPublishClaimedAt)
-                                .le(ReviewTask::getCreatedAt, expiredBefore)
-                            )
+                        .and(RabbitPublishClaimConditions.staleQueuedLambda(
+                            ReviewTask::getPublishClaimedAt,
+                            ReviewTask::getCreatedAt,
+                            expiredBefore
+                        )
                         )
                         .lt(ReviewTask::getPublishAttempts, maxAttempts)
                     )
@@ -77,24 +73,18 @@ public class ReviewTaskPublishOutboxStore {
                         .in("status", reviewTaskStateMachine.publishRecoveryCandidateStatuses())
                         .le("next_publish_retry_at", claim.claimedAt())
                         .lt("publish_attempts", claim.maxAttempts())
-                        .and(claimWindow -> claimWindow
-                            .isNull("publish_claimed_at")
-                            .or()
-                            .le("publish_claimed_at", claim.expiredBefore())
-                        )
+                        .and(RabbitPublishClaimConditions.availableColumn(
+                            "publish_claimed_at",
+                            claim.expiredBefore()
+                        ))
                     )
                     .or(staleQueued -> staleQueued
                         .eq("status", reviewTaskStateMachine.statusWhenQueued())
-                        .and(queued -> queued
-                            .and(claimed -> claimed
-                                .isNotNull("publish_claimed_at")
-                                .le("publish_claimed_at", claim.expiredBefore())
-                            )
-                            .or(unclaimed -> unclaimed
-                                .isNull("publish_claimed_at")
-                                .le("created_at", claim.expiredBefore())
-                            )
-                        )
+                        .and(RabbitPublishClaimConditions.staleQueuedColumn(
+                            "publish_claimed_at",
+                            "created_at",
+                            claim.expiredBefore()
+                        ))
                         .lt("publish_attempts", claim.maxAttempts())
                     )
                 )

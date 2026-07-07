@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
+import com.repoguard.agent.messaging.RabbitPublishClaimConditions;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -65,11 +66,10 @@ class NotificationOutboxEventStore {
                 .in(NotificationEvent::getStatus, publishRecoveryStatuses())
                 .le(NotificationEvent::getNextRetryAt, now)
                 .lt(NotificationEvent::getRetryCount, maxAttempts)
-                .and(claim -> claim
-                    .isNull(NotificationEvent::getPublishClaimedAt)
-                    .or()
-                    .le(NotificationEvent::getPublishClaimedAt, expiredBefore)
-                )
+                .and(RabbitPublishClaimConditions.availableLambda(
+                    NotificationEvent::getPublishClaimedAt,
+                    expiredBefore
+                ))
                 .orderByAsc(NotificationEvent::getNextRetryAt)
                 .last("limit " + batchSize)
         );
@@ -86,11 +86,10 @@ class NotificationOutboxEventStore {
                 .in("status", publishRecoveryStatuses())
                 .le("next_retry_at", claim.claimedAt())
                 .lt("retry_count", claim.maxAttempts())
-                .and(claimWindow -> claimWindow
-                    .isNull("publish_claimed_at")
-                    .or()
-                    .le("publish_claimed_at", claim.expiredBefore())
-                )
+                .and(RabbitPublishClaimConditions.availableColumn(
+                    "publish_claimed_at",
+                    claim.expiredBefore()
+                ))
                 .set("publish_claimed_at", claim.claimedAt())
                 .set("publish_claimed_by", claim.instanceId())
                 .set("updated_at", claim.claimedAt())
