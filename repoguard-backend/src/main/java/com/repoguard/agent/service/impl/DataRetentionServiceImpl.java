@@ -54,6 +54,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final DataRetentionMetricsRecorder metricsRecorder;
     private final DataRetentionCleanupAuditRecorder auditRecorder;
     private final DataRetentionCleanupAuditQueryService auditQueryService;
+    private final DataRetentionCleanupLeaseStore leaseStore;
     private final ReentrantLock cleanupLock = new ReentrantLock();
 
     @Autowired
@@ -69,7 +70,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         ReviewTaskStateMachine reviewTaskStateMachine,
         DataRetentionMetricsRecorder metricsRecorder,
         DataRetentionCleanupAuditRecorder auditRecorder,
-        DataRetentionCleanupAuditQueryService auditQueryService
+        DataRetentionCleanupAuditQueryService auditQueryService,
+        DataRetentionCleanupLeaseStore leaseStore
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -83,6 +85,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
         this.auditQueryService = Objects.requireNonNull(auditQueryService, "auditQueryService");
+        this.leaseStore = Objects.requireNonNull(leaseStore, "leaseStore");
     }
 
     @Override
@@ -97,14 +100,42 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         }
+        DataRetentionCleanupLeaseStore.Lease lease = null;
         try {
+            validateExecutionGuards(request, execute);
+            lease = acquireLease();
             return cleanupInternal(request, execute);
         } catch (RuntimeException ex) {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         } finally {
+            leaseStore.release(lease);
             cleanupLock.unlock();
         }
+    }
+
+    private void validateExecutionGuards(DataRetentionCleanupRequest request, boolean execute) {
+        if (!execute) {
+            return;
+        }
+        if (request == null || request.confirmText() == null || !CONFIRM_TEXT.equals(request.confirmText().trim())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供确认短语 CLEANUP。");
+        }
+        if (normalizeBlankToNull(request.backupReference()) == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供备份凭证 backupReference。");
+        }
+    }
+
+    private DataRetentionCleanupLeaseStore.Lease acquireLease() {
+        DataRetentionCleanupLeaseStore.Lease lease = leaseStore.acquire();
+        if (lease != null) {
+            return lease;
+        }
+        BusinessException ex = new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "已有数据保留清理任务正在其它实例执行，请稍后再试。"
+        );
+        throw ex;
     }
 
     @Override

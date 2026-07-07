@@ -56,6 +56,7 @@ class DataRetentionServiceImplTest {
     private final DataRetentionCleanupAuditQueryService auditQueryService = org.mockito.Mockito.mock(
         DataRetentionCleanupAuditQueryService.class
     );
+    private final DataRetentionCleanupLeaseStore leaseStore = org.mockito.Mockito.mock(DataRetentionCleanupLeaseStore.class);
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -68,11 +69,13 @@ class DataRetentionServiceImplTest {
         new ReviewTaskStateMachine(),
         metricsRecorder,
         auditRecorder,
-        auditQueryService
+        auditQueryService,
+        leaseStore
     );
 
     @Test
     void cleanupDryRunUsesSavedRetentionDaysAndDoesNotDelete() {
+        stubLeaseAcquired();
         stubAuditStart(101L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(reviewTaskMapper.selectCount(any())).thenReturn(2L);
@@ -88,12 +91,14 @@ class DataRetentionServiceImplTest {
         assertThat(response.selectedTasks()).isEqualTo(2);
         verify(auditRecorder).complete(101L, response);
         verify(metricsRecorder).record(response);
+        verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
         verify(changedFileMapper, never()).delete(any(Wrapper.class));
         verify(reviewTaskMapper, never()).delete(any(Wrapper.class));
     }
 
     @Test
     void cleanupExecuteDeletesChildrenBeforeTasks() {
+        stubLeaseAcquired();
         stubAuditStart(102L);
         when(reviewTaskMapper.selectCount(any())).thenReturn(1L);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(9L)));
@@ -120,6 +125,7 @@ class DataRetentionServiceImplTest {
         assertThat(response.deletedTasks()).isEqualTo(1);
         verify(auditRecorder).complete(102L, response);
         verify(metricsRecorder).record(response);
+        verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
         InOrder order = inOrder(
             githubCommentPublicationBatchItemMapper,
             githubCommentPublicationMapper,
@@ -160,6 +166,7 @@ class DataRetentionServiceImplTest {
             org.mockito.Mockito.any(),
             org.mockito.Mockito.any()
         );
+        verify(leaseStore, never()).acquire();
     }
 
     @Test
@@ -178,10 +185,12 @@ class DataRetentionServiceImplTest {
             org.mockito.Mockito.any(),
             org.mockito.Mockito.any()
         );
+        verify(leaseStore, never()).acquire();
     }
 
     @Test
     void cleanupFailureIsRecordedBeforeRethrow() {
+        stubLeaseAcquired();
         stubAuditStart(103L);
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
@@ -193,10 +202,34 @@ class DataRetentionServiceImplTest {
         verify(auditRecorder).fail(103L, failure);
         verify(metricsRecorder).recordFailure(false, failure);
         verify(metricsRecorder, never()).record(any());
+        verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
+    }
+
+    @Test
+    void cleanupRejectsWhenDatabaseLeaseIsOwnedByAnotherInstance() {
+        when(leaseStore.acquire()).thenReturn(null);
+
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("其它实例");
+
+        verify(metricsRecorder).recordFailure(
+            org.mockito.Mockito.eq(false),
+            org.mockito.Mockito.any(BusinessException.class)
+        );
+        verify(auditRecorder, never()).start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        );
+        verify(leaseStore).release(null);
     }
 
     @Test
     void cleanupRejectsConcurrentRunBeforeStartingAnotherAudit() throws Exception {
+        stubLeaseAcquired();
         stubAuditStart(104L);
         CountDownLatch firstCleanupEnteredQuery = new CountDownLatch(1);
         CountDownLatch releaseFirstCleanup = new CountDownLatch(1);
@@ -283,7 +316,8 @@ class DataRetentionServiceImplTest {
             null,
             metricsRecorder,
             auditRecorder,
-            auditQueryService
+            auditQueryService,
+            leaseStore
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -303,7 +337,8 @@ class DataRetentionServiceImplTest {
             new ReviewTaskStateMachine(),
             null,
             auditRecorder,
-            auditQueryService
+            auditQueryService,
+            leaseStore
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
@@ -323,7 +358,8 @@ class DataRetentionServiceImplTest {
             new ReviewTaskStateMachine(),
             metricsRecorder,
             null,
-            auditQueryService
+            auditQueryService,
+            leaseStore
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("auditRecorder");
@@ -343,10 +379,36 @@ class DataRetentionServiceImplTest {
             new ReviewTaskStateMachine(),
             metricsRecorder,
             auditRecorder,
-            null
+            null,
+            leaseStore
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("auditQueryService");
+    }
+
+    @Test
+    void constructorRejectsMissingLeaseStore() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            new ReviewTaskStateMachine(),
+            metricsRecorder,
+            auditRecorder,
+            auditQueryService,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("leaseStore");
+    }
+
+    private void stubLeaseAcquired() {
+        when(leaseStore.acquire()).thenReturn(new DataRetentionCleanupLeaseStore.Lease("owner-1"));
     }
 
     private void stubAuditStart(Long cleanupBatchId) {
