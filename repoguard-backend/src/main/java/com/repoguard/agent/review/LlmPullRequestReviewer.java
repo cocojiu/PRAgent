@@ -47,7 +47,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must be provided");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
-        this.resilience = resilience;
+        this.resilience = Objects.requireNonNull(resilience, "resilience");
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
@@ -123,6 +123,6 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {
-        return resilience == null ? supplier.get() : resilience.llm(operation, supplier);
+        return resilience.llm(operation, supplier);
     }
 }

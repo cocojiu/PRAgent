@@ -34,7 +34,7 @@ class LlmPullRequestReviewerTest {
             RestClient.builder(),
             new ObjectMapper(),
             org.mockito.Mockito.mock(RepoGuardMetrics.class),
-            null,
+            org.mockito.Mockito.mock(ExternalCallResilience.class),
             null,
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
             new LlmHttpResponseReader()
@@ -50,7 +50,7 @@ class LlmPullRequestReviewerTest {
             RestClient.builder(),
             new ObjectMapper(),
             null,
-            null,
+            org.mockito.Mockito.mock(ExternalCallResilience.class),
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
             new LlmHttpResponseReader()
@@ -60,7 +60,7 @@ class LlmPullRequestReviewerTest {
     }
 
     @Test
-    void constructorRejectsMissingResponseReader() {
+    void constructorRejectsMissingResilience() {
         assertThatThrownBy(() -> new LlmPullRequestReviewer(
             org.mockito.Mockito.mock(ReviewPolicyProvider.class),
             RestClient.builder(),
@@ -69,10 +69,42 @@ class LlmPullRequestReviewerTest {
             null,
             new LlmReviewPromptBuilder(),
             org.mockito.Mockito.mock(LlmReviewPipeline.class),
+            new LlmHttpResponseReader()
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("resilience");
+    }
+
+    @Test
+    void constructorRejectsMissingResponseReader() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            new ObjectMapper(),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(ExternalCallResilience.class),
+            new LlmReviewPromptBuilder(),
+            org.mockito.Mockito.mock(LlmReviewPipeline.class),
             null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("responseReader");
+    }
+
+    @Test
+    void constructorRejectsMissingReviewPipeline() {
+        assertThatThrownBy(() -> new LlmPullRequestReviewer(
+            org.mockito.Mockito.mock(ReviewPolicyProvider.class),
+            RestClient.builder(),
+            new ObjectMapper(),
+            org.mockito.Mockito.mock(RepoGuardMetrics.class),
+            org.mockito.Mockito.mock(ExternalCallResilience.class),
+            new LlmReviewPromptBuilder(),
+            null,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewPipeline");
     }
 
     @Test
@@ -437,16 +469,28 @@ class LlmPullRequestReviewerTest {
         RepoGuardMetrics effectiveMetrics = metrics == null
             ? org.mockito.Mockito.mock(RepoGuardMetrics.class)
             : metrics;
+        ExternalCallResilience effectiveResilience = resilience == null
+            ? passthroughResilience()
+            : resilience;
         return new LlmPullRequestReviewer(
             reviewPolicyProvider,
             RestClient.builder(),
             objectMapper,
             effectiveMetrics,
-            resilience,
+            effectiveResilience,
             promptBuilder,
             pipeline(ruleBasedReviewer, objectMapper, effectiveMetrics, DiffChunkingTestFixtures.chunker(), promptBuilder),
             new LlmHttpResponseReader()
         );
+    }
+
+    private static ExternalCallResilience passthroughResilience() {
+        ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
+        when(resilience.llm(any(), any())).thenAnswer(invocation -> {
+            java.util.function.Supplier<?> supplier = invocation.getArgument(1);
+            return supplier.get();
+        });
+        return resilience;
     }
 
     private static LlmReviewPipeline pipeline(
@@ -555,7 +599,7 @@ class LlmPullRequestReviewerTest {
                 RestClient.builder(),
                 new ObjectMapper(),
                 metrics,
-                null,
+                passthroughResilience(),
                 new LlmReviewPromptBuilder(),
                 pipeline(
                     ruleBasedReviewer,
