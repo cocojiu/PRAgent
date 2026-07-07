@@ -93,22 +93,27 @@ class SystemConfigServiceImplTest {
         new ConnectionTestConfigFactory(secretCryptoService);
     private final IntegrationConnectionCheckMarker connectionCheckMarker =
         new IntegrationConnectionCheckMarker(integrationConfigMapper);
+    private final GithubIntegrationConnectionTestExecutor githubIntegrationConnectionTestExecutor =
+        new GithubIntegrationConnectionTestExecutor(
+            integrationConfigMapper,
+            connectionTestConfigFactory,
+            connectionCheckMarker
+        );
     private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor =
         new ServiceIntegrationConnectionTestExecutor(
             integrationConfigMapper,
             connectionTestConfigFactory,
             connectionCheckMarker
-        );
+    );
     private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
-        integrationConfigMapper,
         reviewPolicyConfigMapper,
         githubConnectionTestRunner,
+        githubIntegrationConnectionTestExecutor,
         llmConnectionTestRunner,
         mysqlConnectionTestRunner,
         rabbitMqConnectionTestRunner,
         serviceIntegrationConnectionTestExecutor,
-        connectionTestConfigFactory,
-        connectionCheckMarker
+        connectionTestConfigFactory
     );
     private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
         new SystemIntegrationConfigServiceImpl(
