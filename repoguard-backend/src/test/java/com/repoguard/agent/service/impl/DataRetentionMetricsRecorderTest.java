@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 class DataRetentionMetricsRecorderTest {
 
@@ -51,5 +54,16 @@ class DataRetentionMetricsRecorderTest {
             org.mockito.Mockito.anyInt(),
             org.mockito.Mockito.anyInt()
         );
+    }
+
+    @Test
+    void recordsStableFailureReasons() {
+        recorder.recordFailure(true, new BusinessException(ErrorCode.BAD_REQUEST, "bad confirm"));
+        recorder.recordFailure(false, new DataAccessResourceFailureException("database unavailable"));
+        recorder.recordFailure(true, new IllegalStateException("boom"));
+
+        verify(metrics).dataRetentionCleanupFailed(true, "bad_request");
+        verify(metrics).dataRetentionCleanupFailed(false, "database_error");
+        verify(metrics).dataRetentionCleanupFailed(true, "cleanup_failed");
     }
 }

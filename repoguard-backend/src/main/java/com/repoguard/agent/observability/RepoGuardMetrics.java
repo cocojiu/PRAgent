@@ -137,6 +137,14 @@ public class RepoGuardMetrics {
         dataRetentionCleanupTasks(mode, "deleted", deletedTasks);
     }
 
+    public void dataRetentionCleanupFailed(boolean executed, String reason) {
+        counter(
+            "repoguard.data_retention.cleanup.failed",
+            "mode", executed ? "execute" : "dry_run",
+            "reason", normalize(reason)
+        ).increment();
+    }
+
     public void apiRequest(
         Duration duration,
         String method,

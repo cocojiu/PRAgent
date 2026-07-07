@@ -120,6 +120,7 @@ class RepoGuardMetricsTest {
     void recordsDataRetentionCleanupMetrics() {
         metrics.dataRetentionCleanup(false, 12, 5, 0);
         metrics.dataRetentionCleanup(true, 9, 4, 4);
+        metrics.dataRetentionCleanupFailed(true, "database_error");
 
         assertThat(counter(
             "repoguard.data_retention.cleanup",
@@ -147,6 +148,11 @@ class RepoGuardMetricsTest {
             .summary()
             .getId()
             .getBaseUnit()).isEqualTo("tasks");
+        assertThat(counter(
+            "repoguard.data_retention.cleanup.failed",
+            "mode", "execute",
+            "reason", "database_error"
+        )).isEqualTo(1.0);
     }
 
     @Test

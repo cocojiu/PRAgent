@@ -31,6 +31,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+import org.springframework.dao.DataAccessResourceFailureException;
 
 class DataRetentionServiceImplTest {
 
@@ -114,6 +115,23 @@ class DataRetentionServiceImplTest {
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(7, 50, true, null)))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("CLEANUP");
+        verify(metricsRecorder).recordFailure(
+            org.mockito.Mockito.eq(true),
+            org.mockito.Mockito.any(BusinessException.class)
+        );
+    }
+
+    @Test
+    void cleanupFailureIsRecordedBeforeRethrow() {
+        DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
+        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
+        when(reviewTaskMapper.selectCount(any())).thenThrow(failure);
+
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null)))
+            .isSameAs(failure);
+
+        verify(metricsRecorder).recordFailure(false, failure);
+        verify(metricsRecorder, never()).record(any());
     }
 
     @Test

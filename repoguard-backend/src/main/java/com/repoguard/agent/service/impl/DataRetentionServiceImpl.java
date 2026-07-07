@@ -78,9 +78,18 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     @Override
     @Transactional
     public DataRetentionCleanupResponse cleanup(DataRetentionCleanupRequest request) {
+        boolean execute = request != null && Boolean.TRUE.equals(request.execute());
+        try {
+            return cleanupInternal(request, execute);
+        } catch (RuntimeException ex) {
+            metricsRecorder.recordFailure(execute, ex);
+            throw ex;
+        }
+    }
+
+    private DataRetentionCleanupResponse cleanupInternal(DataRetentionCleanupRequest request, boolean execute) {
         int retentionDays = resolveRetentionDays(request);
         int maxTasks = request != null && request.maxTasks() != null ? request.maxTasks() : DEFAULT_MAX_TASKS;
-        boolean execute = request != null && Boolean.TRUE.equals(request.execute());
         if (execute && (request.confirmText() == null || !CONFIRM_TEXT.equals(request.confirmText().trim()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "执行数据清理时必须提供确认短语 CLEANUP。");
         }

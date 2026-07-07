@@ -1,8 +1,10 @@
 package com.repoguard.agent.service.impl;
 
+import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.Objects;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -24,5 +26,19 @@ public class DataRetentionMetricsRecorder {
             response.selectedTasks(),
             response.deletedTasks()
         );
+    }
+
+    public void recordFailure(boolean executed, RuntimeException ex) {
+        metrics.dataRetentionCleanupFailed(executed, failureReason(ex));
+    }
+
+    private String failureReason(RuntimeException ex) {
+        if (ex instanceof BusinessException) {
+            return "bad_request";
+        }
+        if (ex instanceof DataAccessException) {
+            return "database_error";
+        }
+        return "cleanup_failed";
     }
 }
