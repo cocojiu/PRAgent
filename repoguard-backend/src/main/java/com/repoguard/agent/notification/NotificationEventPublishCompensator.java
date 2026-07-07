@@ -2,7 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -22,7 +22,7 @@ public class NotificationEventPublishCompensator {
     private final NotificationOutboxEventStore outboxEventStore;
     private final NotificationPublishCompensationQuery compensationQuery;
     private final NotificationEventPublishCoordinator publishCoordinator;
-    private final RepoGuardMetrics metrics;
+    private final RabbitPublishCompensationMetricsRecorder metricsRecorder;
     private final String instanceId;
 
     @Autowired
@@ -30,13 +30,13 @@ public class NotificationEventPublishCompensator {
         NotificationOutboxEventStore outboxEventStore,
         NotificationPublishCompensationQuery compensationQuery,
         NotificationEventPublishCoordinator publishCoordinator,
-        RepoGuardMetrics metrics
+        RabbitPublishCompensationMetricsRecorder metricsRecorder
     ) {
         this(
             outboxEventStore,
             compensationQuery,
             publishCoordinator,
-            metrics,
+            metricsRecorder,
             "repoguard-notification-" + UUID.randomUUID()
         );
     }
@@ -45,13 +45,13 @@ public class NotificationEventPublishCompensator {
         NotificationOutboxEventStore outboxEventStore,
         NotificationPublishCompensationQuery compensationQuery,
         NotificationEventPublishCoordinator publishCoordinator,
-        RepoGuardMetrics metrics,
+        RabbitPublishCompensationMetricsRecorder metricsRecorder,
         String instanceId
     ) {
         this.outboxEventStore = Objects.requireNonNull(outboxEventStore, "outboxEventStore");
         this.compensationQuery = Objects.requireNonNull(compensationQuery, "compensationQuery");
         this.publishCoordinator = Objects.requireNonNull(publishCoordinator, "publishCoordinator");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     }
 
@@ -79,7 +79,7 @@ public class NotificationEventPublishCompensator {
         }
         NotificationPublishResult result = publishCoordinator.publish(event);
         if (result.success()) {
-            metrics.rabbitPublishCompensationSucceeded("notification");
+            metricsRecorder.recordSucceeded("notification");
             LOGGER.info(
                 "Notification publish compensation completed eventId={} eventKey={} operation=notification_publish_compensation result=published retryCount={}",
                 event.getId(),
@@ -88,7 +88,7 @@ public class NotificationEventPublishCompensator {
             );
             return;
         }
-        metrics.rabbitPublishCompensationFailed("notification", result.failureReason());
+        metricsRecorder.recordFailed("notification", result.failureReason());
         LOGGER.warn(
             "Notification publish compensation failed eventId={} eventKey={} operation=notification_publish_compensation result=publish_failed retryCount={} reason={}",
             event.getId(),

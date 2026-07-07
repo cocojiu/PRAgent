@@ -36,6 +36,8 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final RabbitPublishCompensationMetricsRecorder metricsRecorder =
+        new RabbitPublishCompensationMetricsRecorder(metrics);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTimelineAppender reviewTimelineAppender = new ReviewTimelineAppender(reviewTimelineMapper);
@@ -56,7 +58,7 @@ class ReviewTaskPublishCompensatorTest {
     private final ReviewTaskPublishCompensator compensator = new ReviewTaskPublishCompensator(
         reviewTaskPublisher,
         "test-instance",
-        metrics,
+        metricsRecorder,
         outboxStore,
         compensationQuery,
         reviewTaskStateMachine,
@@ -101,7 +103,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,
             "test-instance",
-            metrics,
+            metricsRecorder,
             null,
             compensationQuery,
             reviewTaskStateMachine,
@@ -116,7 +118,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,
             "test-instance",
-            metrics,
+            metricsRecorder,
             outboxStore,
             null,
             reviewTaskStateMachine,
@@ -131,7 +133,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,
             "test-instance",
-            metrics,
+            metricsRecorder,
             outboxStore,
             compensationQuery,
             null,
@@ -142,7 +144,7 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
-    void compensatorRejectsMissingMetrics() {
+    void compensatorRejectsMissingMetricsRecorder() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,
             "test-instance",
@@ -153,7 +155,7 @@ class ReviewTaskPublishCompensatorTest {
             failureClassifier
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("metrics");
+            .hasMessage("metricsRecorder");
     }
 
     @Test
@@ -161,7 +163,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,
             "test-instance",
-            metrics,
+            metricsRecorder,
             outboxStore,
             compensationQuery,
             reviewTaskStateMachine,
@@ -257,7 +259,7 @@ class ReviewTaskPublishCompensatorTest {
         assertThat(timelineCaptor.getValue().getLabel()).contains("password=****", "token=****");
         assertThat(timelineCaptor.getValue().getLabel()).doesNotContain("raw-password", "raw-token");
         assertThat(timelineCaptor.getValue().getStatus()).isEqualTo("FAILED");
-        verify(metrics).rabbitPublishCompensationFailed("confirm_timeout");
+        verify(metrics).rabbitPublishCompensationFailed("publish", "confirm_timeout");
     }
 
     @Test

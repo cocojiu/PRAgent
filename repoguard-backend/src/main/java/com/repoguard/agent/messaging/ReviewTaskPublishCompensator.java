@@ -3,7 +3,6 @@ package com.repoguard.agent.messaging;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -25,14 +24,14 @@ public class ReviewTaskPublishCompensator {
     private final ReviewTaskPublishOutboxStore outboxStore;
     private final ReviewTaskPublishCompensationQuery compensationQuery;
     private final String instanceId;
-    private final RepoGuardMetrics metrics;
+    private final RabbitPublishCompensationMetricsRecorder metricsRecorder;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final RabbitPublishFailureClassifier failureClassifier;
 
     @Autowired
     public ReviewTaskPublishCompensator(
         ReviewTaskPublisher reviewTaskPublisher,
-        RepoGuardMetrics metrics,
+        RabbitPublishCompensationMetricsRecorder metricsRecorder,
         ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskPublishCompensationQuery compensationQuery,
         ReviewTaskStateMachine reviewTaskStateMachine,
@@ -41,7 +40,7 @@ public class ReviewTaskPublishCompensator {
         this(
             reviewTaskPublisher,
             "repoguard-" + UUID.randomUUID(),
-            metrics,
+            metricsRecorder,
             outboxStore,
             compensationQuery,
             reviewTaskStateMachine,
@@ -52,7 +51,7 @@ public class ReviewTaskPublishCompensator {
     ReviewTaskPublishCompensator(
         ReviewTaskPublisher reviewTaskPublisher,
         String instanceId,
-        RepoGuardMetrics metrics,
+        RabbitPublishCompensationMetricsRecorder metricsRecorder,
         ReviewTaskPublishOutboxStore outboxStore,
         ReviewTaskPublishCompensationQuery compensationQuery,
         ReviewTaskStateMachine reviewTaskStateMachine,
@@ -62,7 +61,7 @@ public class ReviewTaskPublishCompensator {
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
         this.compensationQuery = Objects.requireNonNull(compensationQuery, "compensationQuery");
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
@@ -120,7 +119,7 @@ public class ReviewTaskPublishCompensator {
                 reviewTaskPublisher.publish(toMessage(task, LocalDateTime.now()));
                 outboxStore.clearPublishClaim(task, claim);
                 outboxStore.appendTimeline(task.getId(), "Message publish recovered", LocalDateTime.now(), "CURRENT");
-                metrics.rabbitPublishCompensationSucceeded("publish");
+                metricsRecorder.recordSucceeded("publish");
                 LOGGER.info(
                     "Review task publish compensation completed taskId={} repository={} prNumber={} operation=review_publish_compensation result=published recoverySource={} attempts={}",
                     task.getId(),
@@ -138,7 +137,7 @@ public class ReviewTaskPublishCompensator {
                         LocalDateTime.now(),
                         "FAILED"
                     );
-                    metrics.rabbitPublishCompensationFailed(failureClassifier.classify(ex));
+                    metricsRecorder.recordFailed("publish", failureClassifier.classify(ex));
                     LOGGER.warn(
                         "Review task publish compensation failed taskId={} repository={} prNumber={} operation=review_publish_compensation result=publish_failed recoverySource={} attempts={} nextRetryAt={} error={}",
                         task.getId(),
