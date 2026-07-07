@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +54,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final DataRetentionMetricsRecorder metricsRecorder;
     private final DataRetentionCleanupAuditRecorder auditRecorder;
     private final DataRetentionCleanupAuditQueryService auditQueryService;
+    private final ReentrantLock cleanupLock = new ReentrantLock();
 
     @Autowired
     public DataRetentionServiceImpl(
@@ -87,11 +89,21 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     @Transactional
     public DataRetentionCleanupResponse cleanup(DataRetentionCleanupRequest request) {
         boolean execute = request != null && Boolean.TRUE.equals(request.execute());
+        if (!cleanupLock.tryLock()) {
+            BusinessException ex = new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "已有数据保留清理任务正在执行，请稍后再试。"
+            );
+            metricsRecorder.recordFailure(execute, ex);
+            throw ex;
+        }
         try {
             return cleanupInternal(request, execute);
         } catch (RuntimeException ex) {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
+        } finally {
+            cleanupLock.unlock();
         }
     }
 

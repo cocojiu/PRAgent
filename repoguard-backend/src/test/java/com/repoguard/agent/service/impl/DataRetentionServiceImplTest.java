@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +32,11 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -187,6 +193,56 @@ class DataRetentionServiceImplTest {
         verify(auditRecorder).fail(103L, failure);
         verify(metricsRecorder).recordFailure(false, failure);
         verify(metricsRecorder, never()).record(any());
+    }
+
+    @Test
+    void cleanupRejectsConcurrentRunBeforeStartingAnotherAudit() throws Exception {
+        stubAuditStart(104L);
+        CountDownLatch firstCleanupEnteredQuery = new CountDownLatch(1);
+        CountDownLatch releaseFirstCleanup = new CountDownLatch(1);
+        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
+        when(reviewTaskMapper.selectCount(any())).thenAnswer(invocation -> {
+            firstCleanupEnteredQuery.countDown();
+            assertThat(releaseFirstCleanup.await(5, TimeUnit.SECONDS)).isTrue();
+            return 0L;
+        });
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> firstCleanup = executor.submit(() ->
+                service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null))
+            );
+
+            assertThat(firstCleanupEnteredQuery.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
+                7,
+                50,
+                true,
+                "backup://mysql/prod/2026-07-07T22:00:00",
+                "CLEANUP"
+            )))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("正在执行");
+
+            verify(metricsRecorder).recordFailure(
+                org.mockito.Mockito.eq(true),
+                org.mockito.Mockito.any(BusinessException.class)
+            );
+            verify(auditRecorder, times(1)).start(
+                org.mockito.Mockito.anyBoolean(),
+                org.mockito.Mockito.anyInt(),
+                org.mockito.Mockito.anyInt(),
+                org.mockito.Mockito.any(),
+                org.mockito.Mockito.any()
+            );
+
+            releaseFirstCleanup.countDown();
+            assertThat(firstCleanup.get(5, TimeUnit.SECONDS)).isNotNull();
+        } finally {
+            releaseFirstCleanup.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test
