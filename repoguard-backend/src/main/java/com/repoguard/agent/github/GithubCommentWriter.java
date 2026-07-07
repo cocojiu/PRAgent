@@ -1,20 +1,25 @@
 package com.repoguard.agent.github;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.ExternalHttpResponseReader;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
@@ -22,13 +27,20 @@ public class GithubCommentWriter {
 
     private final RestClient restClient;
     private final GithubIntegrationHealthReporter healthReporter;
+    private final ObjectMapper objectMapper;
+    private final ExternalHttpResponseReader responseReader;
 
+    @Autowired
     public GithubCommentWriter(
         RestClient.Builder restClientBuilder,
-        GithubIntegrationHealthReporter healthReporter
+        GithubIntegrationHealthReporter healthReporter,
+        ObjectMapper objectMapper,
+        ExternalHttpResponseReader responseReader
     ) {
-        this.restClient = GithubRestClientFactory.build(restClientBuilder);
+        this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
     }
 
     public List<GithubReviewCommentResult> publishPullRequestComments(
@@ -139,8 +151,11 @@ public class GithubCommentWriter {
             .uri(prCommentUrl)
             .headers(headers -> applyGithubHeaders(headers, settings))
             .body(Map.of("body", body))
-            .retrieve()
-            .body(GithubReviewCommentResponse.class));
+            .exchange((request, response) -> readJsonResponse(
+                response,
+                GithubReviewCommentResponse.class,
+                "publish_pull_request_comment"
+            )));
     }
 
     private GithubReviewCommentResponse publishLineComment(
@@ -160,15 +175,22 @@ public class GithubCommentWriter {
                 "line", draft.line(),
                 "side", "RIGHT"
             ))
-            .retrieve()
-            .body(GithubReviewCommentResponse.class));
+            .exchange((request, response) -> readJsonResponse(
+                response,
+                GithubReviewCommentResponse.class,
+                "publish_line_comment"
+            )));
     }
 
     private boolean isUnresolvableLineComment(RuntimeException ex) {
+        if (ex instanceof RestClientResponseException responseException) {
+            return responseException.getStatusCode().value() == 422
+                && containsUnresolvableLineSignal(responseException.getResponseBodyAsString());
+        }
         String message = ex.getMessage();
         return StringUtils.hasText(message)
             && message.contains("422")
-            && message.contains("could not be resolved");
+            && containsUnresolvableLineSignal(message);
     }
 
     private String resolvePullRequestHeadSha(
@@ -190,13 +212,29 @@ public class GithubCommentWriter {
         GithubPullRequestResponse response = executeGithub("resolve_pull_request_head", resilience, () -> restClient.get()
             .uri(url)
             .headers(headers -> applyGithubHeaders(headers, settings))
-            .retrieve()
-            .body(GithubPullRequestResponse.class));
+            .exchange((request, clientResponse) -> readJsonResponse(
+                clientResponse,
+                GithubPullRequestResponse.class,
+                "resolve_pull_request_head"
+            )));
         String sha = response == null || response.head() == null ? null : response.head().sha();
         if (!StringUtils.hasText(sha)) {
             throw new IllegalStateException("GitHub pull request head SHA is unavailable");
         }
         return sha.trim();
+    }
+
+    private <T> T readJsonResponse(
+        org.springframework.http.client.ClientHttpResponse response,
+        Class<T> responseType,
+        String operation
+    ) throws IOException {
+        byte[] body = responseReader.readSuccessfulBody(response, "GitHub " + operation + " failed");
+        return body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
+    }
+
+    private boolean containsUnresolvableLineSignal(String value) {
+        return StringUtils.hasText(value) && value.contains("could not be resolved");
     }
 
     private void applyGithubHeaders(HttpHeaders headers, GithubIntegrationSettings settings) {

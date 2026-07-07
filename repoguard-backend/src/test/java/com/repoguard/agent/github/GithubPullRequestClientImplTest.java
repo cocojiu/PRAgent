@@ -22,7 +22,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.web.client.RestClient;
 
 class GithubPullRequestClientImplTest {
@@ -53,7 +55,7 @@ class GithubPullRequestClientImplTest {
             null,
             new GithubPullRequestReader(paginator),
             new GithubChangedFileReader(paginator),
-            new GithubCommentWriter(RestClient.builder(), healthReporter),
+            commentWriter(RestClient.builder(), healthReporter),
             healthReporter
         ))
             .isInstanceOf(NullPointerException.class)
@@ -216,6 +218,37 @@ class GithubPullRequestClientImplTest {
         }
     }
 
+    @Test
+    void publishPullRequestCommentsKeepsSharedReaderFailureDetail() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextPrCommentWithStatus(
+                429,
+                "60",
+                "{\"message\":\"rate limited\",\"token\":\"raw-token-value\"}"
+            );
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            GithubReviewCommentDraft draft = new GithubReviewCommentDraft(
+                12L,
+                null,
+                null,
+                "PR summary",
+                "pull_request"
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), List.of(draft));
+
+            assertThat(results).hasSize(1);
+            assertThat(results.get(0).success()).isFalse();
+            assertThat(results.get(0).status()).isEqualTo("failed");
+            assertThat(results.get(0).message())
+                .contains("github_rate_limited")
+                .contains("status=429")
+                .contains("retryAfter=60")
+                .doesNotContain("raw-token-value");
+            assertThat(server.commentPaths()).containsExactly("/repos/octocat/api/issues/7/comments");
+        }
+    }
+
     private GithubIntegrationSettings githubSettings(String baseUrl) {
         return new GithubIntegrationSettings(
             "GITHUB",
@@ -239,13 +272,20 @@ class GithubPullRequestClientImplTest {
             passthroughResilience(),
             new GithubPullRequestReader(paginator),
             new GithubChangedFileReader(paginator),
-            new GithubCommentWriter(restClientBuilder, healthReporter),
+            commentWriter(restClientBuilder, healthReporter),
             healthReporter
         );
     }
 
     private GithubPaginator paginator(RestClient.Builder restClientBuilder) {
         return new GithubPaginator(restClientBuilder, objectMapper, responseReader, 100);
+    }
+
+    private GithubCommentWriter commentWriter(
+        RestClient.Builder restClientBuilder,
+        GithubIntegrationHealthReporter healthReporter
+    ) {
+        return new GithubCommentWriter(restClientBuilder, healthReporter, objectMapper, responseReader);
     }
 
     private ExternalCallResilience passthroughResilience() {
@@ -275,6 +315,9 @@ class GithubPullRequestClientImplTest {
         List<String> commentBodies = new ArrayList<>();
         AtomicInteger lineCommentFailures = new AtomicInteger();
         AtomicInteger filesFailureStatus = new AtomicInteger();
+        AtomicInteger prCommentFailureStatus = new AtomicInteger();
+        AtomicReference<String> prCommentFailureRetryAfter = new AtomicReference<>();
+        AtomicReference<String> prCommentFailureBody = new AtomicReference<>();
         server.createContext("/", exchange -> {
             URI uri = exchange.getRequestURI();
             String body;
@@ -316,6 +359,20 @@ class GithubPullRequestClientImplTest {
                 && "/repos/octocat/api/issues/7/comments".equals(uri.getPath())) {
                 commentPaths.add(uri.getPath());
                 commentBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                int failureStatus = prCommentFailureStatus.getAndSet(0);
+                if (failureStatus > 0) {
+                    body = prCommentFailureBody.get();
+                    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    String retryAfter = prCommentFailureRetryAfter.get();
+                    if (retryAfter != null) {
+                        exchange.getResponseHeaders().set(HttpHeaders.RETRY_AFTER, retryAfter);
+                    }
+                    exchange.sendResponseHeaders(failureStatus, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                    return;
+                }
                 body = "{\"id\":9001,\"html_url\":\"https://github.com/octocat/api/pull/7#issuecomment-9001\"}";
             } else {
                 exchange.sendResponseHeaders(404, 0);
@@ -337,7 +394,10 @@ class GithubPullRequestClientImplTest {
             commentPaths,
             commentBodies,
             lineCommentFailures,
-            filesFailureStatus
+            filesFailureStatus,
+            prCommentFailureStatus,
+            prCommentFailureRetryAfter,
+            prCommentFailureBody
         );
     }
 
@@ -387,7 +447,10 @@ class GithubPullRequestClientImplTest {
         List<String> commentPaths,
         List<String> commentBodies,
         AtomicInteger lineCommentFailures,
-        AtomicInteger filesFailureStatus
+        AtomicInteger filesFailureStatus,
+        AtomicInteger prCommentFailureStatus,
+        AtomicReference<String> prCommentFailureRetryAfter,
+        AtomicReference<String> prCommentFailureBody
     ) implements AutoCloseable {
 
         @Override
@@ -401,6 +464,12 @@ class GithubPullRequestClientImplTest {
 
         void failNextFilesRequestWithStatus(int status) {
             filesFailureStatus.set(status);
+        }
+
+        void failNextPrCommentWithStatus(int status, String retryAfter, String body) {
+            prCommentFailureStatus.set(status);
+            prCommentFailureRetryAfter.set(retryAfter);
+            prCommentFailureBody.set(body);
         }
     }
 }
