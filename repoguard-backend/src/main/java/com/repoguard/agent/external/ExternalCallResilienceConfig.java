@@ -9,6 +9,7 @@ import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 import java.time.Duration;
+import java.util.function.Function;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -19,10 +20,10 @@ public class ExternalCallResilienceConfig {
     public ExternalCallResilience externalCallResilience(ExternalCallResilienceProperties properties) {
         return new ExternalCallResilience(
             circuitBreaker("github", properties.getGithub()),
-            retry("github", properties.getGithub()),
+            retry("github", properties.getGithub(), ExternalCallErrorClassifier::github),
             rateLimiter("github", properties.getGithub()),
             circuitBreaker("llm", properties.getLlm()),
-            retry("llm", properties.getLlm()),
+            retry("llm", properties.getLlm(), ExternalCallErrorClassifier::llm),
             rateLimiter("llm", properties.getLlm()),
             bulkhead("llm", properties.getLlm())
         );
@@ -39,13 +40,27 @@ public class ExternalCallResilienceConfig {
         return CircuitBreaker.of("repoguard-" + name, config);
     }
 
-    private Retry retry(String name, ExternalCallResilienceProperties.Instance properties) {
+    private Retry retry(
+        String name,
+        ExternalCallResilienceProperties.Instance properties,
+        Function<RuntimeException, ExternalCallException> classifier
+    ) {
         RetryConfig config = RetryConfig.custom()
             .maxAttempts(Math.max(1, properties.getRetryMaxAttempts()))
             .waitDuration(Duration.ofMillis(Math.max(0, properties.getRetryWaitMillis())))
-            .retryExceptions(RuntimeException.class)
+            .retryOnException(throwable -> isRetryable(classifier, throwable))
             .build();
         return Retry.of("repoguard-" + name, config);
+    }
+
+    private boolean isRetryable(
+        Function<RuntimeException, ExternalCallException> classifier,
+        Throwable throwable
+    ) {
+        if (!(throwable instanceof RuntimeException runtimeException)) {
+            return false;
+        }
+        return classifier.apply(runtimeException).isRetryable();
     }
 
     private RateLimiter rateLimiter(String name, ExternalCallResilienceProperties.Instance properties) {

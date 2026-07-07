@@ -11,8 +11,11 @@ import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClientResponseException;
 
 class ExternalCallResilienceTest {
 
@@ -75,6 +78,50 @@ class ExternalCallResilienceTest {
         bulkhead.releasePermission();
     }
 
+    @Test
+    void configuredGithubRetrySkipsNonRetryableHttpFailures() {
+        ExternalCallResilience resilience = configuredResilience(3);
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> resilience.github("list_open_pull_requests", () -> {
+            attempts.incrementAndGet();
+            throw responseException(401, "Bad credentials");
+        }))
+            .isInstanceOf(RestClientResponseException.class);
+
+        assertThat(attempts).hasValue(1);
+    }
+
+    @Test
+    void configuredGithubRetryRetriesRetryableHttpFailures() {
+        ExternalCallResilience resilience = configuredResilience(3);
+        AtomicInteger attempts = new AtomicInteger();
+
+        String result = resilience.github("fetch_pull_request_diff", () -> {
+            if (attempts.incrementAndGet() < 3) {
+                throw responseException(502, "Bad gateway");
+            }
+            return "ok";
+        });
+
+        assertThat(result).isEqualTo("ok");
+        assertThat(attempts).hasValue(3);
+    }
+
+    @Test
+    void configuredLlmRetrySkipsInvalidRequestFailures() {
+        ExternalCallResilience resilience = configuredResilience(3);
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThatThrownBy(() -> resilience.llm("chat_completions", () -> {
+            attempts.incrementAndGet();
+            throw responseException(422, "Invalid request");
+        }))
+            .isInstanceOf(RestClientResponseException.class);
+
+        assertThat(attempts).hasValue(1);
+    }
+
     private ExternalCallResilience resilience(CircuitBreaker githubCircuitBreaker, CircuitBreaker llmCircuitBreaker) {
         return resilience(
             githubCircuitBreaker,
@@ -113,5 +160,25 @@ class ExternalCallResilienceTest {
             .limitRefreshPeriod(Duration.ofSeconds(1))
             .timeoutDuration(Duration.ZERO)
             .build());
+    }
+
+    private ExternalCallResilience configuredResilience(int retryMaxAttempts) {
+        ExternalCallResilienceProperties properties = new ExternalCallResilienceProperties();
+        properties.getGithub().setRetryMaxAttempts(retryMaxAttempts);
+        properties.getGithub().setRetryWaitMillis(0);
+        properties.getLlm().setRetryMaxAttempts(retryMaxAttempts);
+        properties.getLlm().setRetryWaitMillis(0);
+        return new ExternalCallResilienceConfig().externalCallResilience(properties);
+    }
+
+    private RestClientResponseException responseException(int statusCode, String statusText) {
+        return new RestClientResponseException(
+            statusText,
+            statusCode,
+            statusText,
+            null,
+            new byte[0],
+            StandardCharsets.UTF_8
+        );
     }
 }
