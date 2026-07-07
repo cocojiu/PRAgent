@@ -22,6 +22,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.GithubCommentPreviewService;
 import java.time.LocalDateTime;
@@ -46,6 +47,7 @@ class GithubCommentPublishServiceImplTest {
     private final GithubCommentPreviewService previewService = org.mockito.Mockito.mock(
         GithubCommentPreviewService.class
     );
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final GithubCommentPublicationRecorder publicationRecorder = new GithubCommentPublicationRecorder(
         publicationMapper,
         batchMapper,
@@ -55,7 +57,7 @@ class GithubCommentPublishServiceImplTest {
         new GithubWritebackFailureClassifier();
     private final GithubCommentPublishServiceImpl service = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
-        null,
+        metrics,
         null,
         previewService,
         new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
@@ -95,6 +97,9 @@ class GithubCommentPublishServiceImplTest {
         verify(publicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
         verify(batchMapper).insert(any(GithubCommentPublicationBatch.class));
         verify(batchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
+        verify(metrics, org.mockito.Mockito.times(2)).githubCommentPublished("success");
+        verify(metrics).githubCommentPublished("skipped");
+        verify(metrics).githubCommentPublishDuration(any(), org.mockito.Mockito.eq("success"));
     }
 
     @Test
@@ -115,6 +120,28 @@ class GithubCommentPublishServiceImplTest {
         assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_permission_denied");
         assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 权限不足");
         assertThat(result.items().getFirst().failureSuggestion()).contains("评论权限");
+        verify(metrics).githubCommentPublished("failed");
+        verify(metrics).githubCommentPublishDuration(any(), org.mockito.Mockito.eq("failed"));
+    }
+
+    @Test
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new GithubCommentPublishServiceImpl(
+            reviewTaskMapper,
+            null,
+            null,
+            previewService,
+            new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
+            new GithubCommentPublishPlanBuilder(),
+            new GithubCommentDraftPublisher(
+                githubPullRequestClient,
+                publicationRecorder,
+                writebackFailureClassifier
+            ),
+            publicationRecorder
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
     }
 
     @Test

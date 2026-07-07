@@ -42,6 +42,7 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
+import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
@@ -87,6 +88,7 @@ class ReviewServiceImplTest {
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+    private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
     private final ReviewTimelineQueryService reviewTimelineQueryService =
         new ReviewTimelineQueryService(reviewTimelineMapper);
@@ -149,7 +151,7 @@ class ReviewServiceImplTest {
     );
     private final GithubCommentPublishService githubCommentPublishService = new GithubCommentPublishServiceImpl(
         reviewTaskMapper,
-        null,
+        metrics,
         null,
         githubCommentPreviewService,
         new GithubCommentPublishGuard(reviewTaskStateMachine),

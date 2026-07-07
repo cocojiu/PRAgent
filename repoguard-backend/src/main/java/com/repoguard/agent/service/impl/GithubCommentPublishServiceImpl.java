@@ -43,7 +43,7 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
         GithubCommentPublicationRecorder publicationRecorder
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper");
-        this.metrics = metrics;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.notificationDispatchService = notificationDispatchService;
         this.previewService = Objects.requireNonNull(previewService, "previewService");
         this.publishGuard = Objects.requireNonNull(publishGuard, "publishGuard");
@@ -91,15 +91,10 @@ public class GithubCommentPublishServiceImpl implements GithubCommentPublishServ
     }
 
     private void recordGithubCommentPublishDuration(LocalDateTime startedAt, String result) {
-        if (metrics != null) {
-            metrics.githubCommentPublishDuration(Duration.between(startedAt, LocalDateTime.now()), result);
-        }
+        metrics.githubCommentPublishDuration(Duration.between(startedAt, LocalDateTime.now()), result);
     }
 
     private void recordGithubCommentPublishMetrics(int succeededCount, int failedCount, int skippedCount) {
-        if (metrics == null) {
-            return;
-        }
         for (int i = 0; i < succeededCount; i++) {
             metrics.githubCommentPublished("success");
         }
