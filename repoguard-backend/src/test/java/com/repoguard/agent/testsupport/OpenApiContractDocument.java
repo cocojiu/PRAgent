@@ -78,10 +78,15 @@ public final class OpenApiContractDocument {
                     + " queryParams=" + parameterNames(operation, "query")
                     + " requestBody=" + requestBodyType(operation)
                     + " requestBodyRequired=" + requestBodyRequired(operation)
-                    + " responseEnvelope=" + responseEnvelope(operation));
+                    + " responseEnvelope=" + responseEnvelope(operation)
+                    + " responseData=" + responseData(operation));
             }
         }
         return lines.stream().sorted().toList();
+    }
+
+    public static String responseDataTypeName(Method method) {
+        return responseDataType(method).map(OpenApiContractDocument::typeName).orElse("-");
     }
 
     public static List<String> operationIds(Map<String, Object> document) {
@@ -604,6 +609,12 @@ public final class OpenApiContractDocument {
     private static String responseEnvelope(Map<String, Object> operation) {
         Map<String, Object> responses = mapValue(operation, "responses");
         return (String) castMap(responses.get("200")).get("x-java-response-envelope");
+    }
+
+    private static String responseData(Map<String, Object> operation) {
+        Map<String, Object> responses = mapValue(operation, "responses");
+        Object responseData = castMap(responses.get("200")).get("x-java-response-data");
+        return responseData instanceof String value ? value : "-";
     }
 
     @SuppressWarnings("unchecked")

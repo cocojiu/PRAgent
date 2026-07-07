@@ -136,7 +136,8 @@ class OpenApiPathsContractTest {
                 + " queryParams=" + ControllerEndpointCatalog.requestParamNames(endpoint.method())
                 + " requestBody=" + ControllerEndpointCatalog.requestBodyType(endpoint.method())
                 + " requestBodyRequired=" + ControllerEndpointCatalog.requestBodyRequired(endpoint.method())
-                + " responseEnvelope=" + endpoint.method().getReturnType().getSimpleName())
+                + " responseEnvelope=" + endpoint.method().getReturnType().getSimpleName()
+                + " responseData=" + OpenApiContractDocument.responseDataTypeName(endpoint.method()))
             .sorted()
             .toList();
     }
