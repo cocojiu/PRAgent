@@ -40,8 +40,6 @@ public class AuthController {
     static final String REFRESH_TOKEN_COOKIE_NAME = "repoguard_refresh_token";
     static final String CSRF_TOKEN_COOKIE_NAME = "repoguard_csrf_token";
     static final String CSRF_TOKEN_HEADER_NAME = "X-RepoGuard-CSRF";
-    static final String LEGACY_REFRESH_TOKEN_FALLBACK_HEADER = "X-RepoGuard-Legacy-Refresh-Token-Fallback";
-    private static final String LEGACY_REFRESH_TOKEN_FALLBACK_VALUE = "body-refresh-token";
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
     private static final String CSRF_TOKEN_COOKIE_PATH = "/";
     private static final SecureRandom CSRF_TOKEN_RANDOM = new SecureRandom();
@@ -89,10 +87,10 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
-        validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
+        rejectBodyRefreshToken(request);
+        validateCookieTokenCsrf(cookieRefreshToken, csrfCookieToken, httpRequest);
         try {
-            AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken(request, cookieRefreshToken)));
-            markLegacyRefreshTokenFallbackIfNeeded(requestRefreshToken(request), cookieRefreshToken, httpResponse);
+            AuthResponse response = authService.refresh(new AuthRefreshRequest(cookieRefreshToken));
             return authResponse(response, httpRequest, httpResponse);
         } catch (RuntimeException ex) {
             clearAuthCookies(httpRequest, httpResponse);
@@ -118,42 +116,22 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
-        validateCookieTokenCsrf(request, cookieRefreshToken, csrfCookieToken, httpRequest);
-        authService.logout(new AuthLogoutRequest(refreshToken(request, cookieRefreshToken)));
-        markLegacyRefreshTokenFallbackIfNeeded(requestRefreshToken(request), cookieRefreshToken, httpResponse);
+        rejectBodyRefreshToken(request);
+        validateCookieTokenCsrf(cookieRefreshToken, csrfCookieToken, httpRequest);
+        authService.logout(new AuthLogoutRequest(cookieRefreshToken));
         clearAuthCookies(httpRequest, httpResponse);
         return ApiResponse.ok(null);
     }
 
-    private String refreshToken(AuthRefreshRequest request, String cookieRefreshToken) {
+    private void rejectBodyRefreshToken(AuthRefreshRequest request) {
         if (request != null && StringUtils.hasText(request.refreshToken())) {
-            return request.refreshToken();
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Request body refresh token is no longer supported");
         }
-        return cookieRefreshToken;
     }
 
-    private String refreshToken(AuthLogoutRequest request, String cookieRefreshToken) {
+    private void rejectBodyRefreshToken(AuthLogoutRequest request) {
         if (request != null && StringUtils.hasText(request.refreshToken())) {
-            return request.refreshToken();
-        }
-        return cookieRefreshToken;
-    }
-
-    private String requestRefreshToken(AuthRefreshRequest request) {
-        return request == null ? null : request.refreshToken();
-    }
-
-    private String requestRefreshToken(AuthLogoutRequest request) {
-        return request == null ? null : request.refreshToken();
-    }
-
-    private void markLegacyRefreshTokenFallbackIfNeeded(
-        String requestRefreshToken,
-        String cookieRefreshToken,
-        HttpServletResponse response
-    ) {
-        if (StringUtils.hasText(requestRefreshToken) && !StringUtils.hasText(cookieRefreshToken)) {
-            response.addHeader(LEGACY_REFRESH_TOKEN_FALLBACK_HEADER, LEGACY_REFRESH_TOKEN_FALLBACK_VALUE);
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Request body refresh token is no longer supported");
         }
     }
 
@@ -226,39 +204,12 @@ public class AuthController {
     }
 
     private void validateCookieTokenCsrf(
-        AuthRefreshRequest request,
-        String cookieRefreshToken,
-        String csrfCookieToken,
-        HttpServletRequest httpRequest
-    ) {
-        String requestRefreshToken = request == null ? null : request.refreshToken();
-        validateCookieTokenCsrf(requestRefreshToken, cookieRefreshToken, csrfCookieToken, httpRequest);
-    }
-
-    private void validateCookieTokenCsrf(
-        AuthLogoutRequest request,
-        String cookieRefreshToken,
-        String csrfCookieToken,
-        HttpServletRequest httpRequest
-    ) {
-        String requestRefreshToken = request == null ? null : request.refreshToken();
-        validateCookieTokenCsrf(requestRefreshToken, cookieRefreshToken, csrfCookieToken, httpRequest);
-    }
-
-    private void validateCookieTokenCsrf(
-        String requestRefreshToken,
         String cookieRefreshToken,
         String csrfCookieToken,
         HttpServletRequest httpRequest
     ) {
         if (!StringUtils.hasText(cookieRefreshToken)) {
             return;
-        }
-        if (StringUtils.hasText(requestRefreshToken) && !secureEquals(cookieRefreshToken, requestRefreshToken)) {
-            throw new BusinessException(
-                ErrorCode.BAD_REQUEST,
-                "Request refresh token must match cookie refresh token"
-            );
         }
         String headerToken = httpRequest == null ? null : httpRequest.getHeader(CSRF_TOKEN_HEADER_NAME);
         if (!StringUtils.hasText(csrfCookieToken)

@@ -155,7 +155,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshReturnsNewAccessTokenWithoutRefreshTokenBody() throws Exception {
+    void refreshRejectsBodyRefreshTokenFallback() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -163,15 +163,9 @@ class AuthControllerTest {
                       "refreshToken": "refresh-token-value"
                     }
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
-            .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-            .andExpect(header().string(
-                AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER,
-                "body-refresh-token"
-            ))
-            .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
-            .andExpect(AuthControllerTest::expectReadableCsrfCookie);
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
@@ -182,7 +176,6 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
             .andExpect(jsonPath("$.data.refreshToken").doesNotExist())
-            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")))
             .andExpect(AuthControllerTest::expectReadableCsrfCookie);
     }
@@ -196,7 +189,6 @@ class AuthControllerTest {
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.accessToken").value("access-token-value"))
-            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=refresh-token-value")));
     }
 
@@ -210,7 +202,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshWithCookieAndBodyTokenRequiresCsrfHeader() throws Exception {
+    void refreshWithCookieAndBodyTokenReturns400() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -219,9 +211,9 @@ class AuthControllerTest {
                     }
                     """)
                 .cookie(refreshCookie(), csrfCookie()))
-            .andExpect(status().isForbidden())
+            .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.success").value(false))
-            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
@@ -251,14 +243,10 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshWithInvalidTokenReturns401() throws Exception {
+    void refreshWithoutCookieReturns401() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {
-                      "refreshToken": "invalid-refresh-token"
-                    }
-                    """))
+                .content("{}"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.success").value(false))
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
@@ -334,7 +322,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void logoutReturnsOk() throws Exception {
+    void logoutRejectsBodyRefreshTokenFallback() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -342,21 +330,17 @@ class AuthControllerTest {
                       "refreshToken": "refresh-token-value"
                     }
                     """))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.success").value(true))
-            .andExpect(header().string(
-                AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER,
-                "body-refresh-token"
-            ));
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test
     void logoutClearsHttpOnlyCookieToken() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
-                .cookie(refreshCookie(), csrfCookie())
-                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .cookie(refreshCookie(), csrfCookie())
+            .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
-            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")))
             .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="));
@@ -370,7 +354,6 @@ class AuthControllerTest {
                 .cookie(refreshCookie(), csrfCookie())
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isOk())
-            .andExpect(header().doesNotExist(AuthController.LEGACY_REFRESH_TOKEN_FALLBACK_HEADER))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("repoguard_refresh_token=")))
             .andExpect(header().string(HttpHeaders.SET_COOKIE, containsString("Max-Age=0")));
     }
@@ -385,7 +368,7 @@ class AuthControllerTest {
     }
 
     @Test
-    void logoutWithCookieAndBodyTokenRequiresCsrfHeader() throws Exception {
+    void logoutWithCookieAndBodyTokenReturns400() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -394,9 +377,9 @@ class AuthControllerTest {
                     }
                     """)
                 .cookie(refreshCookie(), csrfCookie()))
-            .andExpect(status().isForbidden())
+            .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.success").value(false))
-            .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test

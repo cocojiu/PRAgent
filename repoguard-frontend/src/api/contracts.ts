@@ -115,7 +115,7 @@ export type ApiContract = {
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
-  logout: ApiOperation<{ refreshToken?: string } | undefined, void>;
+  logout: ApiOperation<undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
   fetchDashboardSummary: ApiOperation<undefined, DashboardMetric[]>;
   fetchDashboardReviewTrend: ApiOperation<undefined, ReviewTrendPoint[]>;

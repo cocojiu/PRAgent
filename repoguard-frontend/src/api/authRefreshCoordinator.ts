@@ -7,7 +7,6 @@ import {
 
 export interface TokenPairResponse {
   accessToken: string;
-  refreshToken?: string;
 }
 
 export type AuthRefreshResult = {
@@ -43,7 +42,7 @@ export class AuthSessionRefreshCoordinator {
     if (!body?.success || !body.data?.accessToken) {
       return false;
     }
-    saveAuthTokens(body.data.accessToken, body.data.refreshToken ?? "", remember);
+    saveAuthTokens(body.data.accessToken, "", remember);
     return true;
   }
 }

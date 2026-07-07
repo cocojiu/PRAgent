@@ -15,7 +15,6 @@ export interface CurrentUser extends AuthUser {
 
 export interface AuthResponse {
   accessToken: string;
-  refreshToken?: string;
   tokenType: string;
   accessTokenExpiresInSeconds: number;
   refreshTokenExpiresInSeconds: number;
@@ -37,13 +36,13 @@ export interface RegisterRequest {
 
 export const login = async (payload: LoginRequest) => {
   const response = await apiRequest("login", payload);
-  saveAuthTokens(response.accessToken, response.refreshToken ?? "", payload.remember);
+  saveAuthTokens(response.accessToken, "", payload.remember);
   return response;
 };
 
 export const register = async (payload: RegisterRequest) => {
   const response = await apiRequest("register", payload);
-  saveAuthTokens(response.accessToken, response.refreshToken ?? "", false);
+  saveAuthTokens(response.accessToken, "", false);
   return response;
 };
 
