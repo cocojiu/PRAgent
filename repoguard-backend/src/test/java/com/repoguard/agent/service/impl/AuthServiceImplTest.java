@@ -27,6 +27,7 @@ import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.user.UserAccountSessionInvalidator;
+import com.repoguard.agent.user.UserLoginAuditRecorder;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,7 @@ class AuthServiceImplTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
+    private final UserLoginAuditRecorder loginAuditRecorder = new UserLoginAuditRecorder(userLoginAuditMapper);
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
@@ -51,7 +53,7 @@ class AuthServiceImplTest {
     private final AuthServiceImpl authService = new AuthServiceImpl(
         userAccountMapper,
         userRefreshTokenMapper,
-        userLoginAuditMapper,
+        loginAuditRecorder,
         passwordHashService,
         authProperties,
         authTokenService,
@@ -411,7 +413,7 @@ class AuthServiceImplTest {
         assertThatThrownBy(() -> new AuthServiceImpl(
             userAccountMapper,
             userRefreshTokenMapper,
-            userLoginAuditMapper,
+            loginAuditRecorder,
             passwordHashService,
             authProperties,
             authTokenService,
@@ -423,11 +425,27 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void constructorRequiresLoginAuditRecorder() {
+        assertThatThrownBy(() -> new AuthServiceImpl(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            null,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("loginAuditRecorder");
+    }
+
+    @Test
     void constructorRequiresMetrics() {
         assertThatThrownBy(() -> new AuthServiceImpl(
             userAccountMapper,
             userRefreshTokenMapper,
-            userLoginAuditMapper,
+            loginAuditRecorder,
             passwordHashService,
             authProperties,
             authTokenService,

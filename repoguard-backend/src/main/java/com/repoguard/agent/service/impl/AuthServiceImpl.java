@@ -13,19 +13,16 @@ import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.entity.UserAccount;
-import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.mapper.UserAccountMapper;
-import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.user.UserLoginAuditRecorder;
 import com.repoguard.agent.user.UserAccountSessionInvalidator;
-import com.repoguard.agent.web.AuditClientIpResolver;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
@@ -33,8 +30,6 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -50,7 +45,7 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
-    private final UserLoginAuditMapper userLoginAuditMapper;
+    private final UserLoginAuditRecorder loginAuditRecorder;
     private final PasswordHashService passwordHashService;
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
@@ -60,7 +55,7 @@ public class AuthServiceImpl implements AuthService {
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
-        UserLoginAuditMapper userLoginAuditMapper,
+        UserLoginAuditRecorder loginAuditRecorder,
         PasswordHashService passwordHashService,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
@@ -69,7 +64,7 @@ public class AuthServiceImpl implements AuthService {
     ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
-        this.userLoginAuditMapper = userLoginAuditMapper;
+        this.loginAuditRecorder = Objects.requireNonNull(loginAuditRecorder, "loginAuditRecorder must not be null");
         this.passwordHashService = passwordHashService;
         this.authProperties = authProperties;
         this.authTokenService = authTokenService;
@@ -397,34 +392,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private void recordAudit(Long userId, String account, String eventType, String result, String failureReason) {
-        UserLoginAudit audit = new UserLoginAudit();
-        audit.setUserId(userId);
-        audit.setAccount(account);
-        audit.setEventType(eventType);
-        audit.setResult(result);
-        audit.setFailureReason(failureReason);
-        audit.setCreatedAt(LocalDateTime.now());
-
-        HttpServletRequest request = currentRequest();
-        if (request != null) {
-            audit.setClientIp(AuditClientIpResolver.resolve(request));
-            audit.setUserAgent(truncate(request.getHeader("User-Agent"), 512));
-        }
-        userLoginAuditMapper.insert(audit);
-    }
-
-    private HttpServletRequest currentRequest() {
-        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
-            return attributes.getRequest();
-        }
-        return null;
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        return value.substring(0, maxLength);
+        loginAuditRecorder.record(userId, account, eventType, result, failureReason);
     }
 
     private UserAccount findByUsername(String username) {
