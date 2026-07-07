@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientResponseException;
@@ -10,6 +11,8 @@ import org.springframework.web.client.RestClientResponseException;
 public class LlmHttpResponseReader {
 
     public byte[] readSuccessfulBody(ClientHttpResponse response, String failureMessagePrefix) throws IOException {
+        Objects.requireNonNull(response, "response");
+        Objects.requireNonNull(failureMessagePrefix, "failureMessagePrefix");
         byte[] body = response.getBody().readAllBytes();
         if (!response.getStatusCode().isError()) {
             return body;
