@@ -32,6 +32,7 @@ class RabbitReviewTaskPublisherTest {
     );
     private final RabbitPublishFailureMetricsRecorder metricsRecorder =
         new RabbitPublishFailureMetricsRecorder(metrics);
+    private final RabbitPublishSpecFactory specFactory = new RabbitPublishSpecFactory();
 
     @Test
     void reliablePublisherRejectsMissingFailureClassifier() {
@@ -49,10 +50,25 @@ class RabbitReviewTaskPublisherTest {
         assertThatThrownBy(() -> new RabbitReviewTaskPublisher(
             new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
             properties(),
+            specFactory,
             null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
+    }
+
+    @Test
+    void constructorRejectsMissingSpecFactory() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+
+        assertThatThrownBy(() -> new RabbitReviewTaskPublisher(
+            new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
+            properties(),
+            null,
+            metricsRecorder
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("specFactory");
     }
 
     @Test
@@ -167,6 +183,7 @@ class RabbitReviewTaskPublisherTest {
         return new RabbitReviewTaskPublisher(
             new RabbitReliableMessagePublisher(rabbitTemplate, new RabbitPublishFailureClassifier()),
             properties,
+            specFactory,
             metricsRecorder
         );
     }

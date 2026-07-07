@@ -13,6 +13,7 @@ import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
+import com.repoguard.agent.messaging.RabbitPublishSpecFactory;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
@@ -35,6 +36,7 @@ class RabbitNotificationEventPublisherTest {
     );
     private final RabbitPublishFailureMetricsRecorder metricsRecorder =
         new RabbitPublishFailureMetricsRecorder(metrics);
+    private final RabbitPublishSpecFactory specFactory = new RabbitPublishSpecFactory();
 
     @Test
     void constructorRejectsMissingMetricsRecorder() {
@@ -43,10 +45,25 @@ class RabbitNotificationEventPublisherTest {
         assertThatThrownBy(() -> new RabbitNotificationEventPublisher(
             reliablePublisher(rabbitTemplate),
             properties(),
+            specFactory,
             null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
+    }
+
+    @Test
+    void constructorRejectsMissingSpecFactory() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+
+        assertThatThrownBy(() -> new RabbitNotificationEventPublisher(
+            reliablePublisher(rabbitTemplate),
+            properties(),
+            null,
+            metricsRecorder
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("specFactory");
     }
 
     @Test
@@ -111,6 +128,7 @@ class RabbitNotificationEventPublisherTest {
         RabbitNotificationEventPublisher publisher = new RabbitNotificationEventPublisher(
             reliablePublisher(rabbitTemplate),
             properties,
+            specFactory,
             metricsRecorder
         );
 
@@ -183,7 +201,7 @@ class RabbitNotificationEventPublisherTest {
         RabbitTemplate rabbitTemplate,
         RabbitNotificationQueueProperties properties
     ) {
-        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, metricsRecorder);
+        return new RabbitNotificationEventPublisher(reliablePublisher(rabbitTemplate), properties, specFactory, metricsRecorder);
     }
 
     private RabbitReliableMessagePublisher reliablePublisher(RabbitTemplate rabbitTemplate) {

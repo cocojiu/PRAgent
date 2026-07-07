@@ -5,6 +5,7 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishResult;
 import com.repoguard.agent.messaging.RabbitPublishSpec;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
+import com.repoguard.agent.messaging.RabbitPublishSpecFactory;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,16 +20,19 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
 
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitNotificationQueueProperties properties;
+    private final RabbitPublishSpecFactory specFactory;
     private final RabbitPublishFailureMetricsRecorder metricsRecorder;
 
     @Autowired
     public RabbitNotificationEventPublisher(
         RabbitReliableMessagePublisher reliablePublisher,
         RabbitNotificationQueueProperties properties,
+        RabbitPublishSpecFactory specFactory,
         RabbitPublishFailureMetricsRecorder metricsRecorder
     ) {
         this.reliablePublisher = Objects.requireNonNull(reliablePublisher, "reliablePublisher");
         this.properties = Objects.requireNonNull(properties, "properties");
+        this.specFactory = Objects.requireNonNull(specFactory, "specFactory");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
     }
 
@@ -61,7 +65,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
     }
 
     private RabbitPublishSpec spec(NotificationEventMessage message) {
-        return RabbitPublishSpec.from(properties, "notification-event-%d".formatted(message.eventId()));
+        return specFactory.notificationEvent(properties, message.eventId());
     }
 
     private String safePart(String value) {

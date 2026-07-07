@@ -15,16 +15,19 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
 
     private final RabbitReliableMessagePublisher reliablePublisher;
     private final RabbitReviewQueueProperties properties;
+    private final RabbitPublishSpecFactory specFactory;
     private final RabbitPublishFailureMetricsRecorder metricsRecorder;
 
     @Autowired
     public RabbitReviewTaskPublisher(
         RabbitReliableMessagePublisher reliablePublisher,
         RabbitReviewQueueProperties properties,
+        RabbitPublishSpecFactory specFactory,
         RabbitPublishFailureMetricsRecorder metricsRecorder
     ) {
         this.reliablePublisher = Objects.requireNonNull(reliablePublisher, "reliablePublisher");
         this.properties = Objects.requireNonNull(properties, "properties");
+        this.specFactory = Objects.requireNonNull(specFactory, "specFactory");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
     }
 
@@ -61,7 +64,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     }
 
     private RabbitPublishSpec spec(ReviewTaskMessage message) {
-        return RabbitPublishSpec.from(properties, "review-task-%d".formatted(message.taskId()));
+        return specFactory.reviewTask(properties, message.taskId());
     }
 
     private String safePart(String value) {
