@@ -2,24 +2,46 @@ package com.repoguard.agent.testsupport;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.repoguard.agent.testsupport.ControllerEndpointCatalog.Endpoint;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.RecordComponent;
+import java.lang.reflect.Type;
+import java.math.BigDecimal;
 import java.util.Set;
+import org.springframework.web.bind.annotation.RequestBody;
 
 public final class OpenApiContractDocument {
 
     private static final String APPLICATION_JSON = "application/json";
     private static final ObjectMapper JSON = new ObjectMapper()
-        .enable(SerializationFeature.INDENT_OUTPUT);
+        .enable(SerializationFeature.INDENT_OUTPUT)
+        .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+        .enable(DeserializationFeature.USE_LONG_FOR_INTS);
 
     private OpenApiContractDocument() {
     }
@@ -166,20 +188,17 @@ public final class OpenApiContractDocument {
     }
 
     private static Map<String, Object> components(List<Endpoint> endpoints) {
-        Set<String> schemaNames = new LinkedHashSet<>();
-        schemaNames.add("ApiResponse");
+        Set<Class<?>> schemaTypes = new LinkedHashSet<>();
         endpoints.stream()
-            .map(endpoint -> ControllerEndpointCatalog.requestBodyType(endpoint.method()))
-            .filter(type -> !"-".equals(type))
-            .filter(type -> !"byte[]".equals(type))
-            .forEach(schemaNames::add);
+            .map(endpoint -> requestBodyClass(endpoint.method()))
+            .flatMap(Optional::stream)
+            .filter(type -> type != byte[].class)
+            .forEach(type -> collectSchemaTypes(type, schemaTypes));
 
         Map<String, Object> schemas = new LinkedHashMap<>();
-        for (String schemaName : schemaNames.stream().sorted().toList()) {
-            Map<String, Object> schema = new LinkedHashMap<>();
-            schema.put("type", "object");
-            schema.put("x-java-type", schemaName);
-            schemas.put(schemaName, schema);
+        schemas.put("ApiResponse", objectSchema("ApiResponse"));
+        for (Class<?> schemaType : schemaTypes.stream().sorted(Comparator.comparing(Class::getSimpleName)).toList()) {
+            schemas.put(schemaType.getSimpleName(), schemaForRecord(schemaType, schemaTypes));
         }
 
         Map<String, Object> components = new LinkedHashMap<>();
@@ -205,6 +224,165 @@ public final class OpenApiContractDocument {
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", type);
         return schema;
+    }
+
+    private static Optional<Class<?>> requestBodyClass(Method method) {
+        for (Parameter parameter : method.getParameters()) {
+            if (parameter.isAnnotationPresent(RequestBody.class)) {
+                return Optional.of(parameter.getType());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static void collectSchemaTypes(Class<?> type, Set<Class<?>> schemaTypes) {
+        if (!isSchemaRecord(type) || !schemaTypes.add(type)) {
+            return;
+        }
+        for (RecordComponent component : type.getRecordComponents()) {
+            Class<?> componentType = component.getType();
+            if (isSchemaRecord(componentType)) {
+                collectSchemaTypes(componentType, schemaTypes);
+            }
+            if (List.class.isAssignableFrom(componentType)) {
+                listItemClass(component.getGenericType())
+                    .filter(OpenApiContractDocument::isSchemaRecord)
+                    .ifPresent(itemType -> collectSchemaTypes(itemType, schemaTypes));
+            }
+        }
+    }
+
+    private static Map<String, Object> schemaForRecord(Class<?> type, Set<Class<?>> schemaTypes) {
+        if (!isSchemaRecord(type)) {
+            return objectSchema(type.getSimpleName());
+        }
+
+        Map<String, Object> schema = objectSchema(type.getSimpleName());
+        Map<String, Object> properties = new LinkedHashMap<>();
+        List<String> required = new ArrayList<>();
+        for (RecordComponent component : type.getRecordComponents()) {
+            Map<String, Object> property = schemaForComponent(component, schemaTypes);
+            properties.put(component.getName(), property);
+            if (isRequired(component)) {
+                required.add(component.getName());
+            }
+        }
+        schema.put("properties", properties);
+        if (!required.isEmpty()) {
+            schema.put("required", required);
+        }
+        return schema;
+    }
+
+    private static Map<String, Object> objectSchema(String javaType) {
+        Map<String, Object> schema = new LinkedHashMap<>();
+        schema.put("type", "object");
+        schema.put("x-java-type", javaType);
+        return schema;
+    }
+
+    private static Map<String, Object> schemaForComponent(RecordComponent component, Set<Class<?>> schemaTypes) {
+        Map<String, Object> schema = schemaForType(component.getType(), component.getGenericType(), schemaTypes);
+        applyValidationConstraints(component, schema);
+        if (annotation(component, Valid.class).isPresent()) {
+            schema.put("x-valid", true);
+        }
+        return schema;
+    }
+
+    private static Map<String, Object> schemaForType(Class<?> type, Type genericType, Set<Class<?>> schemaTypes) {
+        if (type == String.class) {
+            return scalarSchema("string");
+        }
+        if (type == Boolean.class || type == boolean.class) {
+            return scalarSchema("boolean");
+        }
+        if (type == Integer.class || type == int.class) {
+            Map<String, Object> schema = scalarSchema("integer");
+            schema.put("format", "int32");
+            return schema;
+        }
+        if (type == Long.class || type == long.class) {
+            Map<String, Object> schema = scalarSchema("integer");
+            schema.put("format", "int64");
+            return schema;
+        }
+        if (type == BigDecimal.class || type == Double.class || type == double.class || type == Float.class || type == float.class) {
+            return scalarSchema("number");
+        }
+        if (List.class.isAssignableFrom(type)) {
+            Map<String, Object> schema = scalarSchema("array");
+            schema.put("items", listItemClass(genericType)
+                .map(itemType -> schemaForType(itemType, itemType, schemaTypes))
+                .orElseGet(() -> objectSchema("Object")));
+            return schema;
+        }
+        if (isSchemaRecord(type)) {
+            collectSchemaTypes(type, schemaTypes);
+            return refSchema(type.getSimpleName());
+        }
+        return objectSchema(type.getSimpleName());
+    }
+
+    private static Optional<Class<?>> listItemClass(Type genericType) {
+        if (!(genericType instanceof ParameterizedType parameterizedType)) {
+            return Optional.empty();
+        }
+        Type itemType = parameterizedType.getActualTypeArguments()[0];
+        if (itemType instanceof Class<?> itemClass) {
+            return Optional.of(itemClass);
+        }
+        return Optional.empty();
+    }
+
+    private static void applyValidationConstraints(RecordComponent component, Map<String, Object> schema) {
+        annotation(component, NotBlank.class).ifPresent(ignored -> schema.put("minLength", 1));
+        annotation(component, Email.class).ifPresent(ignored -> schema.put("format", "email"));
+        annotation(component, Size.class).ifPresent(size -> {
+            if ("array".equals(schema.get("type"))) {
+                putIfNonDefault(schema, "minItems", size.min(), 0);
+                putIfNonDefault(schema, "maxItems", size.max(), Integer.MAX_VALUE);
+            } else {
+                putIfNonDefault(schema, "minLength", size.min(), 0);
+                putIfNonDefault(schema, "maxLength", size.max(), Integer.MAX_VALUE);
+            }
+        });
+        annotation(component, Pattern.class).ifPresent(pattern -> schema.put("pattern", pattern.regexp()));
+        annotation(component, Min.class).ifPresent(min -> schema.put("minimum", min.value()));
+        annotation(component, Max.class).ifPresent(max -> schema.put("maximum", max.value()));
+        annotation(component, DecimalMin.class).ifPresent(min -> {
+            BigDecimal value = new BigDecimal(min.value());
+            schema.put(min.inclusive() ? "minimum" : "exclusiveMinimum", value);
+        });
+        annotation(component, DecimalMax.class).ifPresent(max -> {
+            BigDecimal value = new BigDecimal(max.value());
+            schema.put(max.inclusive() ? "maximum" : "exclusiveMaximum", value);
+        });
+    }
+
+    private static void putIfNonDefault(Map<String, Object> schema, String key, int value, int defaultValue) {
+        if (value != defaultValue) {
+            schema.put(key, value);
+        }
+    }
+
+    private static boolean isRequired(RecordComponent component) {
+        return component.getType().isPrimitive()
+            || annotation(component, NotNull.class).isPresent()
+            || annotation(component, NotBlank.class).isPresent();
+    }
+
+    private static boolean isSchemaRecord(Class<?> type) {
+        return type.isRecord() && type.getName().startsWith("com.repoguard.agent.dto.");
+    }
+
+    private static <T extends Annotation> Optional<T> annotation(RecordComponent component, Class<T> annotationType) {
+        T annotation = component.getAnnotation(annotationType);
+        if (annotation != null) {
+            return Optional.of(annotation);
+        }
+        annotation = component.getAccessor().getAnnotation(annotationType);
+        return Optional.ofNullable(annotation);
     }
 
     private static String tag(Class<?> controller) {

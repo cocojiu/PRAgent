@@ -1,37 +1,35 @@
 {
-  "openapi": "3.1.0",
-  "info": {
-    "title": "RepoGuard Agent API",
-    "version": "0.0.1-SNAPSHOT"
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "RepoGuard Agent API",
+    "version" : "0.0.1-SNAPSHOT"
   },
-  "paths": {
-    "/api/v1/auth/login": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerLogin",
-        "x-controller-operation": "AuthController#login",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "AuthLoginRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthLoginRequest"
+  "paths" : {
+    "/api/v1/auth/login" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerLogin",
+        "x-controller-operation" : "AuthController#login",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "AuthLoginRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthLoginRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -39,33 +37,31 @@
         }
       }
     },
-    "/api/v1/auth/logout": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerLogout",
-        "x-controller-operation": "AuthController#logout",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "AuthLogoutRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthLogoutRequest"
+    "/api/v1/auth/logout" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerLogout",
+        "x-controller-operation" : "AuthController#logout",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "AuthLogoutRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthLogoutRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -73,22 +69,20 @@
         }
       }
     },
-    "/api/v1/auth/me": {
-      "get": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerMe",
-        "x-controller-operation": "AuthController#me",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/auth/me" : {
+      "get" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerMe",
+        "x-controller-operation" : "AuthController#me",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -96,33 +90,31 @@
         }
       }
     },
-    "/api/v1/auth/refresh": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerRefresh",
-        "x-controller-operation": "AuthController#refresh",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "AuthRefreshRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthRefreshRequest"
+    "/api/v1/auth/refresh" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerRefresh",
+        "x-controller-operation" : "AuthController#refresh",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "AuthRefreshRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthRefreshRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -130,33 +122,31 @@
         }
       }
     },
-    "/api/v1/auth/refresh-token/reset": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerResetRefreshToken",
-        "x-controller-operation": "AuthController#resetRefreshToken",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "AuthRefreshTokenResetRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthRefreshTokenResetRequest"
+    "/api/v1/auth/refresh-token/reset" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerResetRefreshToken",
+        "x-controller-operation" : "AuthController#resetRefreshToken",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "AuthRefreshTokenResetRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthRefreshTokenResetRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -164,33 +154,31 @@
         }
       }
     },
-    "/api/v1/auth/register": {
-      "post": {
-        "tags": [
-          "Auth"
-        ],
-        "operationId": "authControllerRegister",
-        "x-controller-operation": "AuthController#register",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "AuthRegisterRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthRegisterRequest"
+    "/api/v1/auth/register" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerRegister",
+        "x-controller-operation" : "AuthController#register",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "AuthRegisterRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthRegisterRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -198,22 +186,20 @@
         }
       }
     },
-    "/api/v1/cache/stats": {
-      "get": {
-        "tags": [
-          "CacheStats"
-        ],
-        "operationId": "cacheStatsControllerGetStats",
-        "x-controller-operation": "CacheStatsController#getStats",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/cache/stats" : {
+      "get" : {
+        "tags" : [ "CacheStats" ],
+        "operationId" : "cacheStatsControllerGetStats",
+        "x-controller-operation" : "CacheStatsController#getStats",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -221,33 +207,31 @@
         }
       }
     },
-    "/api/v1/config/data-retention/cleanup": {
-      "post": {
-        "tags": [
-          "DataRetention"
-        ],
-        "operationId": "dataRetentionControllerCleanup",
-        "x-controller-operation": "DataRetentionController#cleanup",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "DataRetentionCleanupRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DataRetentionCleanupRequest"
+    "/api/v1/config/data-retention/cleanup" : {
+      "post" : {
+        "tags" : [ "DataRetention" ],
+        "operationId" : "dataRetentionControllerCleanup",
+        "x-controller-operation" : "DataRetentionController#cleanup",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "DataRetentionCleanupRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/DataRetentionCleanupRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -255,54 +239,50 @@
         }
       }
     },
-    "/api/v1/config/integrations/github": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetGithubIntegration",
-        "x-controller-operation": "SystemConfigController#getGithubIntegration",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/integrations/github" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetGithubIntegration",
+        "x-controller-operation" : "SystemConfigController#getGithubIntegration",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateGithubIntegration",
-        "x-controller-operation": "SystemConfigController#updateGithubIntegration",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "GithubIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GithubIntegrationConfigRequest"
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateGithubIntegration",
+        "x-controller-operation" : "SystemConfigController#updateGithubIntegration",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "GithubIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -310,33 +290,31 @@
         }
       }
     },
-    "/api/v1/config/integrations/github/test": {
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerTestGithubIntegration",
-        "x-controller-operation": "SystemConfigController#testGithubIntegration",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "GithubIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GithubIntegrationConfigRequest"
+    "/api/v1/config/integrations/github/test" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerTestGithubIntegration",
+        "x-controller-operation" : "SystemConfigController#testGithubIntegration",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "GithubIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/GithubIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -344,54 +322,50 @@
         }
       }
     },
-    "/api/v1/config/integrations/mysql": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetMysqlIntegration",
-        "x-controller-operation": "SystemConfigController#getMysqlIntegration",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/integrations/mysql" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetMysqlIntegration",
+        "x-controller-operation" : "SystemConfigController#getMysqlIntegration",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateMysqlIntegration",
-        "x-controller-operation": "SystemConfigController#updateMysqlIntegration",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ServiceIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateMysqlIntegration",
+        "x-controller-operation" : "SystemConfigController#updateMysqlIntegration",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ServiceIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ServiceIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -399,33 +373,31 @@
         }
       }
     },
-    "/api/v1/config/integrations/mysql/test": {
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerTestMysqlConnection",
-        "x-controller-operation": "SystemConfigController#testMysqlConnection",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "ServiceIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+    "/api/v1/config/integrations/mysql/test" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerTestMysqlConnection",
+        "x-controller-operation" : "SystemConfigController#testMysqlConnection",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "ServiceIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ServiceIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -433,54 +405,50 @@
         }
       }
     },
-    "/api/v1/config/integrations/rabbitmq": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetRabbitMqIntegration",
-        "x-controller-operation": "SystemConfigController#getRabbitMqIntegration",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/integrations/rabbitmq" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetRabbitMqIntegration",
+        "x-controller-operation" : "SystemConfigController#getRabbitMqIntegration",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateRabbitMqIntegration",
-        "x-controller-operation": "SystemConfigController#updateRabbitMqIntegration",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ServiceIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateRabbitMqIntegration",
+        "x-controller-operation" : "SystemConfigController#updateRabbitMqIntegration",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ServiceIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ServiceIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -488,33 +456,31 @@
         }
       }
     },
-    "/api/v1/config/integrations/rabbitmq/test": {
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerTestRabbitMqConnection",
-        "x-controller-operation": "SystemConfigController#testRabbitMqConnection",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "ServiceIntegrationConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ServiceIntegrationConfigRequest"
+    "/api/v1/config/integrations/rabbitmq/test" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerTestRabbitMqConnection",
+        "x-controller-operation" : "SystemConfigController#testRabbitMqConnection",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "ServiceIntegrationConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ServiceIntegrationConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -522,95 +488,85 @@
         }
       }
     },
-    "/api/v1/config/notification-bindings": {
-      "get": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerListBindings",
-        "x-controller-operation": "NotificationIntegrationController#listBindings",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "organization",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repository",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "provider",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/notification-bindings" : {
+      "get" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerListBindings",
+        "x-controller-operation" : "NotificationIntegrationController#listBindings",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "organization",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "provider",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "post": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerCreateBinding",
-        "x-controller-operation": "NotificationIntegrationController#createBinding",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "NotificationBindingRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotificationBindingRequest"
+      "post" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerCreateBinding",
+        "x-controller-operation" : "NotificationIntegrationController#createBinding",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "NotificationBindingRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationBindingRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -618,72 +574,64 @@
         }
       }
     },
-    "/api/v1/config/notification-bindings/{id}": {
-      "delete": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerDeleteBinding",
-        "x-controller-operation": "NotificationIntegrationController#deleteBinding",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/notification-bindings/{id}" : {
+      "delete" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerDeleteBinding",
+        "x-controller-operation" : "NotificationIntegrationController#deleteBinding",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerUpdateBinding",
-        "x-controller-operation": "NotificationIntegrationController#updateBinding",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+      "put" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerUpdateBinding",
+        "x-controller-operation" : "NotificationIntegrationController#updateBinding",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "NotificationBindingRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotificationBindingRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "NotificationBindingRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationBindingRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -691,42 +639,38 @@
         }
       }
     },
-    "/api/v1/config/notification-bindings/{id}/status": {
-      "put": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerUpdateBindingStatus",
-        "x-controller-operation": "NotificationIntegrationController#updateBindingStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/notification-bindings/{id}/status" : {
+      "put" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerUpdateBindingStatus",
+        "x-controller-operation" : "NotificationIntegrationController#updateBindingStatus",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "NotificationBindingStatusRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NotificationBindingStatusRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "NotificationBindingStatusRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/NotificationBindingStatusRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -734,31 +678,27 @@
         }
       }
     },
-    "/api/v1/config/notification-bindings/{id}/test": {
-      "post": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerTestBinding",
-        "x-controller-operation": "NotificationIntegrationController#testBinding",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/notification-bindings/{id}/test" : {
+      "post" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerTestBinding",
+        "x-controller-operation" : "NotificationIntegrationController#testBinding",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -766,54 +706,50 @@
         }
       }
     },
-    "/api/v1/config/review-policy": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetReviewPolicy",
-        "x-controller-operation": "SystemConfigController#getReviewPolicy",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/review-policy" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetReviewPolicy",
+        "x-controller-operation" : "SystemConfigController#getReviewPolicy",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateReviewPolicy",
-        "x-controller-operation": "SystemConfigController#updateReviewPolicy",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ReviewPolicyConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewPolicyConfigRequest"
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateReviewPolicy",
+        "x-controller-operation" : "SystemConfigController#updateReviewPolicy",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewPolicyConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewPolicyConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -821,33 +757,31 @@
         }
       }
     },
-    "/api/v1/config/review-policy/test": {
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerTestReviewPolicy",
-        "x-controller-operation": "SystemConfigController#testReviewPolicy",
-        "parameters": [],
-        "requestBody": {
-          "required": false,
-          "x-java-type": "ReviewPolicyConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewPolicyConfigRequest"
+    "/api/v1/config/review-policy/test" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerTestReviewPolicy",
+        "x-controller-operation" : "SystemConfigController#testReviewPolicy",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : false,
+          "x-java-type" : "ReviewPolicyConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewPolicyConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -855,54 +789,50 @@
         }
       }
     },
-    "/api/v1/config/review-rules": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetReviewRules",
-        "x-controller-operation": "SystemConfigController#getReviewRules",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/review-rules" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetReviewRules",
+        "x-controller-operation" : "SystemConfigController#getReviewRules",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerCreateReviewRule",
-        "x-controller-operation": "SystemConfigController#createReviewRule",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ReviewRuleConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewRuleConfigRequest"
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerCreateReviewRule",
+        "x-controller-operation" : "SystemConfigController#createReviewRule",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewRuleConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewRuleConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -910,42 +840,38 @@
         }
       }
     },
-    "/api/v1/config/review-rules/{id}": {
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateReviewRule",
-        "x-controller-operation": "SystemConfigController#updateReviewRule",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/review-rules/{id}" : {
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateReviewRule",
+        "x-controller-operation" : "SystemConfigController#updateReviewRule",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ReviewRuleConfigRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewRuleConfigRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewRuleConfigRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewRuleConfigRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -953,42 +879,38 @@
         }
       }
     },
-    "/api/v1/config/review-rules/{id}/status": {
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateReviewRuleStatus",
-        "x-controller-operation": "SystemConfigController#updateReviewRuleStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/config/review-rules/{id}/status" : {
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateReviewRuleStatus",
+        "x-controller-operation" : "SystemConfigController#updateReviewRuleStatus",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ReviewRuleStatusRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ReviewRuleStatusRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewRuleStatusRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewRuleStatusRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -996,33 +918,31 @@
         }
       }
     },
-    "/api/v1/config/secrets/re-encryption": {
-      "post": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerReEncryptSecrets",
-        "x-controller-operation": "SystemConfigController#reEncryptSecrets",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "SecretReEncryptionRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SecretReEncryptionRequest"
+    "/api/v1/config/secrets/re-encryption" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerReEncryptSecrets",
+        "x-controller-operation" : "SystemConfigController#reEncryptSecrets",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "SecretReEncryptionRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SecretReEncryptionRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1030,54 +950,50 @@
         }
       }
     },
-    "/api/v1/config/system-settings": {
-      "get": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerGetSystemSettings",
-        "x-controller-operation": "SystemConfigController#getSystemSettings",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/config/system-settings" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetSystemSettings",
+        "x-controller-operation" : "SystemConfigController#getSystemSettings",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "put": {
-        "tags": [
-          "SystemConfig"
-        ],
-        "operationId": "systemConfigControllerUpdateSystemSettings",
-        "x-controller-operation": "SystemConfigController#updateSystemSettings",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "SystemSettingsRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SystemSettingsRequest"
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerUpdateSystemSettings",
+        "x-controller-operation" : "SystemConfigController#updateSystemSettings",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "SystemSettingsRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SystemSettingsRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1085,22 +1001,20 @@
         }
       }
     },
-    "/api/v1/dashboard/high-risk-reviews": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetHighRiskReviews",
-        "x-controller-operation": "DashboardController#getHighRiskReviews",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/dashboard/high-risk-reviews" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetHighRiskReviews",
+        "x-controller-operation" : "DashboardController#getHighRiskReviews",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1108,31 +1022,27 @@
         }
       }
     },
-    "/api/v1/dashboard/llm-quality": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetLlmQuality",
-        "x-controller-operation": "DashboardController#getLlmQuality",
-        "parameters": [
-          {
-            "name": "llmTrendDays",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/dashboard/llm-quality" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetLlmQuality",
+        "x-controller-operation" : "DashboardController#getLlmQuality",
+        "parameters" : [ {
+          "name" : "llmTrendDays",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1140,31 +1050,27 @@
         }
       }
     },
-    "/api/v1/dashboard/overview": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetOverview",
-        "x-controller-operation": "DashboardController#getOverview",
-        "parameters": [
-          {
-            "name": "llmTrendDays",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/dashboard/overview" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetOverview",
+        "x-controller-operation" : "DashboardController#getOverview",
+        "parameters" : [ {
+          "name" : "llmTrendDays",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1172,22 +1078,20 @@
         }
       }
     },
-    "/api/v1/dashboard/review-trend": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetReviewTrend",
-        "x-controller-operation": "DashboardController#getReviewTrend",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/dashboard/review-trend" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetReviewTrend",
+        "x-controller-operation" : "DashboardController#getReviewTrend",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1195,22 +1099,20 @@
         }
       }
     },
-    "/api/v1/dashboard/risk-distribution": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetRiskDistribution",
-        "x-controller-operation": "DashboardController#getRiskDistribution",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/dashboard/risk-distribution" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetRiskDistribution",
+        "x-controller-operation" : "DashboardController#getRiskDistribution",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1218,22 +1120,20 @@
         }
       }
     },
-    "/api/v1/dashboard/rules": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetRules",
-        "x-controller-operation": "DashboardController#getRules",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/dashboard/rules" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetRules",
+        "x-controller-operation" : "DashboardController#getRules",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1241,22 +1141,20 @@
         }
       }
     },
-    "/api/v1/dashboard/summary": {
-      "get": {
-        "tags": [
-          "Dashboard"
-        ],
-        "operationId": "dashboardControllerGetSummary",
-        "x-controller-operation": "DashboardController#getSummary",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/dashboard/summary" : {
+      "get" : {
+        "tags" : [ "Dashboard" ],
+        "operationId" : "dashboardControllerGetSummary",
+        "x-controller-operation" : "DashboardController#getSummary",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1264,34 +1162,32 @@
         }
       }
     },
-    "/api/v1/github/webhooks": {
-      "post": {
-        "tags": [
-          "GithubWebhook"
-        ],
-        "operationId": "githubWebhookControllerReceive",
-        "x-controller-operation": "GithubWebhookController#receive",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "byte[]",
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "string",
-                "format": "binary"
+    "/api/v1/github/webhooks" : {
+      "post" : {
+        "tags" : [ "GithubWebhook" ],
+        "operationId" : "githubWebhookControllerReceive",
+        "x-controller-operation" : "GithubWebhookController#receive",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "byte[]",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "string",
+                "format" : "binary"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1299,22 +1195,20 @@
         }
       }
     },
-    "/api/v1/message-queue/health": {
-      "get": {
-        "tags": [
-          "MessageQueueHealth"
-        ],
-        "operationId": "messageQueueHealthControllerGetHealth",
-        "x-controller-operation": "MessageQueueHealthController#getHealth",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/message-queue/health" : {
+      "get" : {
+        "tags" : [ "MessageQueueHealth" ],
+        "operationId" : "messageQueueHealthControllerGetHealth",
+        "x-controller-operation" : "MessageQueueHealthController#getHealth",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1322,31 +1216,27 @@
         }
       }
     },
-    "/api/v1/message-queue/tasks/{taskId}/requeue": {
-      "post": {
-        "tags": [
-          "MessageQueueHealth"
-        ],
-        "operationId": "messageQueueHealthControllerRequeueTask",
-        "x-controller-operation": "MessageQueueHealthController#requeueTask",
-        "parameters": [
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/message-queue/tasks/{taskId}/requeue" : {
+      "post" : {
+        "tags" : [ "MessageQueueHealth" ],
+        "operationId" : "messageQueueHealthControllerRequeueTask",
+        "x-controller-operation" : "MessageQueueHealthController#requeueTask",
+        "parameters" : [ {
+          "name" : "taskId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1354,55 +1244,48 @@
         }
       }
     },
-    "/api/v1/notification-deliveries": {
-      "get": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerListDeliveries",
-        "x-controller-operation": "NotificationIntegrationController#listDeliveries",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/notification-deliveries" : {
+      "get" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerListDeliveries",
+        "x-controller-operation" : "NotificationIntegrationController#listDeliveries",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1410,55 +1293,48 @@
         }
       }
     },
-    "/api/v1/notification-events": {
-      "get": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerListEvents",
-        "x-controller-operation": "NotificationIntegrationController#listEvents",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/notification-events" : {
+      "get" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerListEvents",
+        "x-controller-operation" : "NotificationIntegrationController#listEvents",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "taskId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1466,31 +1342,27 @@
         }
       }
     },
-    "/api/v1/notification-events/{id}/retry": {
-      "post": {
-        "tags": [
-          "NotificationIntegration"
-        ],
-        "operationId": "notificationIntegrationControllerRetryEvent",
-        "x-controller-operation": "NotificationIntegrationController#retryEvent",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/notification-events/{id}/retry" : {
+      "post" : {
+        "tags" : [ "NotificationIntegration" ],
+        "operationId" : "notificationIntegrationControllerRetryEvent",
+        "x-controller-operation" : "NotificationIntegrationController#retryEvent",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1498,22 +1370,20 @@
         }
       }
     },
-    "/api/v1/notifications": {
-      "get": {
-        "tags": [
-          "Notification"
-        ],
-        "operationId": "notificationControllerGetNotifications",
-        "x-controller-operation": "NotificationController#getNotifications",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/notifications" : {
+      "get" : {
+        "tags" : [ "Notification" ],
+        "operationId" : "notificationControllerGetNotifications",
+        "x-controller-operation" : "NotificationController#getNotifications",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1521,33 +1391,31 @@
         }
       }
     },
-    "/api/v1/observability/frontend/performance": {
-      "post": {
-        "tags": [
-          "FrontendPerformance"
-        ],
-        "operationId": "frontendPerformanceControllerRecordPerformance",
-        "x-controller-operation": "FrontendPerformanceController#recordPerformance",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "FrontendPerformanceReportRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FrontendPerformanceReportRequest"
+    "/api/v1/observability/frontend/performance" : {
+      "post" : {
+        "tags" : [ "FrontendPerformance" ],
+        "operationId" : "frontendPerformanceControllerRecordPerformance",
+        "x-controller-operation" : "FrontendPerformanceController#recordPerformance",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "FrontendPerformanceReportRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/FrontendPerformanceReportRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1555,87 +1423,76 @@
         }
       }
     },
-    "/api/v1/reviews": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListReviews",
-        "x-controller-operation": "ReviewController#listReviews",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "repository",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "riskLevel",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "source",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "triggerSource",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "keyword",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListReviews",
+        "x-controller-operation" : "ReviewController#listReviews",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "repository",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "riskLevel",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "source",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "triggerSource",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "keyword",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1643,22 +1500,20 @@
         }
       }
     },
-    "/api/v1/reviews/github/pull-requests": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListConfiguredGithubPullRequests",
-        "x-controller-operation": "ReviewController#listConfiguredGithubPullRequests",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/reviews/github/pull-requests" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListConfiguredGithubPullRequests",
+        "x-controller-operation" : "ReviewController#listConfiguredGithubPullRequests",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1666,33 +1521,31 @@
         }
       }
     },
-    "/api/v1/reviews/manual": {
-      "post": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerTriggerManualReview",
-        "x-controller-operation": "ReviewController#triggerManualReview",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "ManualReviewRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ManualReviewRequest"
+    "/api/v1/reviews/manual" : {
+      "post" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerTriggerManualReview",
+        "x-controller-operation" : "ReviewController#triggerManualReview",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ManualReviewRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ManualReviewRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1700,22 +1553,20 @@
         }
       }
     },
-    "/api/v1/reviews/repositories": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListRepositories",
-        "x-controller-operation": "ReviewController#listRepositories",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/reviews/repositories" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListRepositories",
+        "x-controller-operation" : "ReviewController#listRepositories",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1723,31 +1574,27 @@
         }
       }
     },
-    "/api/v1/reviews/{id}": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerGetReviewDetail",
-        "x-controller-operation": "ReviewController#getReviewDetail",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerGetReviewDetail",
+        "x-controller-operation" : "ReviewController#getReviewDetail",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1755,55 +1602,48 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/changed-files": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListChangedFiles",
-        "x-controller-operation": "ReviewController#listChangedFiles",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "hasFinding",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/changed-files" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListChangedFiles",
+        "x-controller-operation" : "ReviewController#listChangedFiles",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "hasFinding",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1811,71 +1651,62 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/findings": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListReviewFindings",
-        "x-controller-operation": "ReviewController#listReviewFindings",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "severity",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "category",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "feedbackStatus",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/findings" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListReviewFindings",
+        "x-controller-operation" : "ReviewController#listReviewFindings",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "severity",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "category",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "feedbackStatus",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1883,50 +1714,45 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/findings/{findingId}/feedback": {
-      "post": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerUpdateFindingFeedback",
-        "x-controller-operation": "ReviewController#updateFindingFeedback",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "findingId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/findings/{findingId}/feedback" : {
+      "post" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerUpdateFindingFeedback",
+        "x-controller-operation" : "ReviewController#updateFindingFeedback",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "FindingFeedbackRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FindingFeedbackRequest"
+        }, {
+          "name" : "findingId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "FindingFeedbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/FindingFeedbackRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1934,31 +1760,27 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/github-comments": {
-      "post": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerPublishGithubComments",
-        "x-controller-operation": "ReviewController#publishGithubComments",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/github-comments" : {
+      "post" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerPublishGithubComments",
+        "x-controller-operation" : "ReviewController#publishGithubComments",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -1966,55 +1788,48 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/github-comments/preview": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerGetGithubCommentPreview",
-        "x-controller-operation": "ReviewController#getGithubCommentPreview",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "commentableOnly",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/github-comments/preview" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerGetGithubCommentPreview",
+        "x-controller-operation" : "ReviewController#getGithubCommentPreview",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "commentableOnly",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2022,55 +1837,48 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/github-comments/publications": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerGetGithubCommentPublicationHistory",
-        "x-controller-operation": "ReviewController#getGithubCommentPublicationHistory",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/github-comments/publications" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerGetGithubCommentPublicationHistory",
+        "x-controller-operation" : "ReviewController#getGithubCommentPublicationHistory",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2078,42 +1886,38 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/human-review": {
-      "post": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerSubmitHumanReview",
-        "x-controller-operation": "ReviewController#submitHumanReview",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/human-review" : {
+      "post" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerSubmitHumanReview",
+        "x-controller-operation" : "ReviewController#submitHumanReview",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "HumanReviewRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/HumanReviewRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "HumanReviewRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/HumanReviewRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2121,47 +1925,41 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/missing-tests": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListMissingTests",
-        "x-controller-operation": "ReviewController#listMissingTests",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/missing-tests" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListMissingTests",
+        "x-controller-operation" : "ReviewController#listMissingTests",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2169,31 +1967,27 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/retry": {
-      "post": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerRetryReview",
-        "x-controller-operation": "ReviewController#retryReview",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/retry" : {
+      "post" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerRetryReview",
+        "x-controller-operation" : "ReviewController#retryReview",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2201,31 +1995,27 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/status": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerGetReviewStatus",
-        "x-controller-operation": "ReviewController#getReviewStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/status" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerGetReviewStatus",
+        "x-controller-operation" : "ReviewController#getReviewStatus",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2233,39 +2023,34 @@
         }
       }
     },
-    "/api/v1/reviews/{id}/timeline": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "reviewControllerListReviewTimeline",
-        "x-controller-operation": "ReviewController#listReviewTimeline",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/reviews/{id}/timeline" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerListReviewTimeline",
+        "x-controller-operation" : "ReviewController#listReviewTimeline",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2273,22 +2058,20 @@
         }
       }
     },
-    "/api/v1/system/health/summary": {
-      "get": {
-        "tags": [
-          "SystemHealth"
-        ],
-        "operationId": "systemHealthControllerGetSystemHealthSummary",
-        "x-controller-operation": "SystemHealthController#getSystemHealthSummary",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/system/health/summary" : {
+      "get" : {
+        "tags" : [ "SystemHealth" ],
+        "operationId" : "systemHealthControllerGetSystemHealthSummary",
+        "x-controller-operation" : "SystemHealthController#getSystemHealthSummary",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2296,54 +2079,50 @@
         }
       }
     },
-    "/api/v1/users": {
-      "get": {
-        "tags": [
-          "UserManagement"
-        ],
-        "operationId": "userManagementControllerListUsers",
-        "x-controller-operation": "UserManagementController#listUsers",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/users" : {
+      "get" : {
+        "tags" : [ "UserManagement" ],
+        "operationId" : "userManagementControllerListUsers",
+        "x-controller-operation" : "UserManagementController#listUsers",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
           }
         }
       },
-      "post": {
-        "tags": [
-          "UserManagement"
-        ],
-        "operationId": "userManagementControllerCreateUser",
-        "x-controller-operation": "UserManagementController#createUser",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "UserCreateRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserCreateRequest"
+      "post" : {
+        "tags" : [ "UserManagement" ],
+        "operationId" : "userManagementControllerCreateUser",
+        "x-controller-operation" : "UserManagementController#createUser",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "UserCreateRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UserCreateRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2351,22 +2130,20 @@
         }
       }
     },
-    "/api/v1/users/audits": {
-      "get": {
-        "tags": [
-          "UserManagement"
-        ],
-        "operationId": "userManagementControllerListOperationAudits",
-        "x-controller-operation": "UserManagementController#listOperationAudits",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+    "/api/v1/users/audits" : {
+      "get" : {
+        "tags" : [ "UserManagement" ],
+        "operationId" : "userManagementControllerListOperationAudits",
+        "x-controller-operation" : "UserManagementController#listOperationAudits",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2374,42 +2151,38 @@
         }
       }
     },
-    "/api/v1/users/{id}/role": {
-      "put": {
-        "tags": [
-          "UserManagement"
-        ],
-        "operationId": "userManagementControllerUpdateRole",
-        "x-controller-operation": "UserManagementController#updateRole",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/users/{id}/role" : {
+      "put" : {
+        "tags" : [ "UserManagement" ],
+        "operationId" : "userManagementControllerUpdateRole",
+        "x-controller-operation" : "UserManagementController#updateRole",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "UserRoleUpdateRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserRoleUpdateRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "UserRoleUpdateRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UserRoleUpdateRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2417,42 +2190,38 @@
         }
       }
     },
-    "/api/v1/users/{id}/status": {
-      "put": {
-        "tags": [
-          "UserManagement"
-        ],
-        "operationId": "userManagementControllerUpdateStatus",
-        "x-controller-operation": "UserManagementController#updateStatus",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
+    "/api/v1/users/{id}/status" : {
+      "put" : {
+        "tags" : [ "UserManagement" ],
+        "operationId" : "userManagementControllerUpdateStatus",
+        "x-controller-operation" : "UserManagementController#updateStatus",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
           }
-        ],
-        "requestBody": {
-          "required": true,
-          "x-java-type": "UserStatusUpdateRequest",
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UserStatusUpdateRequest"
+        } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "UserStatusUpdateRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UserStatusUpdateRequest"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "OK",
-            "x-java-response-envelope": "ApiResponse",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResponse"
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ApiResponse"
                 }
               }
             }
@@ -2461,99 +2230,738 @@
       }
     }
   },
-  "components": {
-    "schemas": {
-      "ApiResponse": {
-        "type": "object",
-        "x-java-type": "ApiResponse"
+  "components" : {
+    "schemas" : {
+      "ApiResponse" : {
+        "type" : "object",
+        "x-java-type" : "ApiResponse"
       },
-      "AuthLoginRequest": {
-        "type": "object",
-        "x-java-type": "AuthLoginRequest"
+      "AuthLoginRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthLoginRequest",
+        "properties" : {
+          "account" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "remember" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "account", "password" ]
       },
-      "AuthLogoutRequest": {
-        "type": "object",
-        "x-java-type": "AuthLogoutRequest"
+      "AuthLogoutRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthLogoutRequest",
+        "properties" : {
+          "refreshToken" : {
+            "type" : "string",
+            "maxLength" : 512
+          }
+        }
       },
-      "AuthRefreshRequest": {
-        "type": "object",
-        "x-java-type": "AuthRefreshRequest"
+      "AuthRefreshRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthRefreshRequest",
+        "properties" : {
+          "refreshToken" : {
+            "type" : "string",
+            "maxLength" : 512
+          }
+        }
       },
-      "AuthRefreshTokenResetRequest": {
-        "type": "object",
-        "x-java-type": "AuthRefreshTokenResetRequest"
+      "AuthRefreshTokenResetRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthRefreshTokenResetRequest",
+        "properties" : {
+          "account" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "remember" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "account", "password" ]
       },
-      "AuthRegisterRequest": {
-        "type": "object",
-        "x-java-type": "AuthRegisterRequest"
+      "AuthRegisterRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthRegisterRequest",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "minLength" : 3,
+            "maxLength" : 64,
+            "pattern" : "^[A-Za-z0-9_.-]+$"
+          },
+          "email" : {
+            "type" : "string",
+            "minLength" : 1,
+            "format" : "email",
+            "maxLength" : 255
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          },
+          "confirmPassword" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "username", "email", "password", "confirmPassword" ]
       },
-      "DataRetentionCleanupRequest": {
-        "type": "object",
-        "x-java-type": "DataRetentionCleanupRequest"
+      "BaseSettingsRequest" : {
+        "type" : "object",
+        "x-java-type" : "BaseSettingsRequest",
+        "properties" : {
+          "systemName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "language" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 32
+          },
+          "timezone" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 365
+          }
+        },
+        "required" : [ "systemName", "language", "timezone", "retentionDays" ]
       },
-      "FindingFeedbackRequest": {
-        "type": "object",
-        "x-java-type": "FindingFeedbackRequest"
+      "DataRetentionCleanupRequest" : {
+        "type" : "object",
+        "x-java-type" : "DataRetentionCleanupRequest",
+        "properties" : {
+          "retentionDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 365
+          },
+          "maxTasks" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 5000
+          },
+          "execute" : {
+            "type" : "boolean"
+          },
+          "confirmText" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }
       },
-      "FrontendPerformanceReportRequest": {
-        "type": "object",
-        "x-java-type": "FrontendPerformanceReportRequest"
+      "FindingFeedbackRequest" : {
+        "type" : "object",
+        "x-java-type" : "FindingFeedbackRequest",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)valid|false_positive|fixed|ignored|unreviewed"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1024
+          }
+        },
+        "required" : [ "status" ]
       },
-      "GithubIntegrationConfigRequest": {
-        "type": "object",
-        "x-java-type": "GithubIntegrationConfigRequest"
+      "FrontendApiWaterfallItemDto" : {
+        "type" : "object",
+        "x-java-type" : "FrontendApiWaterfallItemDto",
+        "properties" : {
+          "operation" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "method" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "result" : {
+            "type" : "string"
+          },
+          "startedAtMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "durationMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
       },
-      "HumanReviewRequest": {
-        "type": "object",
-        "x-java-type": "HumanReviewRequest"
+      "FrontendLongTaskItemDto" : {
+        "type" : "object",
+        "x-java-type" : "FrontendLongTaskItemDto",
+        "properties" : {
+          "startedAtMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "durationMs" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
       },
-      "ManualReviewRequest": {
-        "type": "object",
-        "x-java-type": "ManualReviewRequest"
+      "FrontendPerformanceReportRequest" : {
+        "type" : "object",
+        "x-java-type" : "FrontendPerformanceReportRequest",
+        "properties" : {
+          "route" : {
+            "type" : "string"
+          },
+          "apiRequests" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FrontendApiWaterfallItemDto"
+            }
+          },
+          "longTasks" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/FrontendLongTaskItemDto"
+            }
+          }
+        }
       },
-      "NotificationBindingRequest": {
-        "type": "object",
-        "x-java-type": "NotificationBindingRequest"
+      "GithubIntegrationConfigRequest" : {
+        "type" : "object",
+        "x-java-type" : "GithubIntegrationConfigRequest",
+        "properties" : {
+          "baseUrl" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "token" : {
+            "type" : "string",
+            "maxLength" : 4096
+          },
+          "defaultOwner" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "defaultRepo" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "baseUrl" ]
       },
-      "NotificationBindingStatusRequest": {
-        "type": "object",
-        "x-java-type": "NotificationBindingStatusRequest"
+      "HumanReviewRequest" : {
+        "type" : "object",
+        "x-java-type" : "HumanReviewRequest",
+        "properties" : {
+          "action" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)approve|changes_requested|reject"
+          },
+          "note" : {
+            "type" : "string",
+            "maxLength" : 1024
+          }
+        },
+        "required" : [ "action" ]
       },
-      "ReviewPolicyConfigRequest": {
-        "type": "object",
-        "x-java-type": "ReviewPolicyConfigRequest"
+      "ManualReviewRequest" : {
+        "type" : "object",
+        "x-java-type" : "ManualReviewRequest",
+        "properties" : {
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1
+          },
+          "title" : {
+            "type" : "string",
+            "maxLength" : 512
+          },
+          "commit" : {
+            "type" : "string",
+            "maxLength" : 64
+          },
+          "branch" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "source" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        },
+        "required" : [ "organization", "repository", "prNumber" ]
       },
-      "ReviewRuleConfigRequest": {
-        "type": "object",
-        "x-java-type": "ReviewRuleConfigRequest"
+      "NotificationBindingRequest" : {
+        "type" : "object",
+        "x-java-type" : "NotificationBindingRequest",
+        "properties" : {
+          "name" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "provider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 32
+          },
+          "organization" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "repository" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "enabled" : {
+            "type" : "boolean"
+          },
+          "webhookUrl" : {
+            "type" : "string",
+            "maxLength" : 4096
+          },
+          "secret" : {
+            "type" : "string",
+            "maxLength" : 4096
+          },
+          "notifyReviewCompleted" : {
+            "type" : "boolean"
+          },
+          "notifyReviewFailed" : {
+            "type" : "boolean"
+          },
+          "notifyHumanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "notifyGithubComment" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "name", "provider", "organization", "repository", "enabled", "notifyReviewCompleted", "notifyReviewFailed", "notifyHumanReviewRequired", "notifyGithubComment" ]
       },
-      "ReviewRuleStatusRequest": {
-        "type": "object",
-        "x-java-type": "ReviewRuleStatusRequest"
+      "NotificationBindingStatusRequest" : {
+        "type" : "object",
+        "x-java-type" : "NotificationBindingStatusRequest",
+        "properties" : {
+          "enabled" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "enabled" ]
       },
-      "SecretReEncryptionRequest": {
-        "type": "object",
-        "x-java-type": "SecretReEncryptionRequest"
+      "NotificationSettingsRequest" : {
+        "type" : "object",
+        "x-java-type" : "NotificationSettingsRequest",
+        "properties" : {
+          "githubComment" : {
+            "type" : "boolean"
+          },
+          "highRiskPr" : {
+            "type" : "boolean"
+          },
+          "failedTask" : {
+            "type" : "boolean"
+          },
+          "email" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        },
+        "required" : [ "githubComment", "highRiskPr", "failedTask" ]
       },
-      "ServiceIntegrationConfigRequest": {
-        "type": "object",
-        "x-java-type": "ServiceIntegrationConfigRequest"
+      "ReviewPolicyConfigRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewPolicyConfigRequest",
+        "properties" : {
+          "llmEnabled" : {
+            "type" : "boolean"
+          },
+          "llmProvider" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "modelName" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "baseUrl" : {
+            "type" : "string",
+            "maxLength" : 512
+          },
+          "apiKey" : {
+            "type" : "string",
+            "maxLength" : 4096
+          },
+          "timeoutSeconds" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 600
+          },
+          "temperature" : {
+            "type" : "number",
+            "minimum" : 0.00,
+            "maximum" : 2.00
+          },
+          "maxTokens" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 128000
+          },
+          "fallbackToRules" : {
+            "type" : "boolean"
+          },
+          "workerConcurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 16
+          },
+          "chunkFileThreshold" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 200
+          },
+          "chunkLineThreshold" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 50000
+          },
+          "chunkMaxFiles" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 50
+          },
+          "chunkMaxLines" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 50000
+          },
+          "inputTokenPricePerMillion" : {
+            "type" : "number",
+            "minimum" : 0.0000,
+            "maximum" : 9999.0000
+          },
+          "outputTokenPricePerMillion" : {
+            "type" : "number",
+            "minimum" : 0.0000,
+            "maximum" : 9999.0000
+          }
+        },
+        "required" : [ "llmEnabled", "llmProvider", "modelName", "timeoutSeconds", "temperature", "maxTokens", "fallbackToRules", "workerConcurrency", "chunkFileThreshold", "chunkLineThreshold", "chunkMaxFiles", "chunkMaxLines", "inputTokenPricePerMillion", "outputTokenPricePerMillion" ]
       },
-      "SystemSettingsRequest": {
-        "type": "object",
-        "x-java-type": "SystemSettingsRequest"
+      "ReviewPolicySettingsRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewPolicySettingsRequest",
+        "properties" : {
+          "maxDiffLines" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 100,
+            "maximum" : 5000
+          },
+          "llmTimeoutSeconds" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 10,
+            "maximum" : 300
+          },
+          "workerConcurrency" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 10
+          },
+          "autoComment" : {
+            "type" : "boolean"
+          },
+          "autoRetry" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "maxDiffLines", "llmTimeoutSeconds", "workerConcurrency", "autoComment", "autoRetry" ]
       },
-      "UserCreateRequest": {
-        "type": "object",
-        "x-java-type": "UserCreateRequest"
+      "ReviewRuleConfigRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleConfigRequest",
+        "properties" : {
+          "id" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64,
+            "pattern" : "^[A-Za-z0-9_-]+$"
+          },
+          "name" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 128
+          },
+          "scope" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 255
+          },
+          "applicableLanguages" : {
+            "type" : "string",
+            "maxLength" : 255
+          },
+          "filePatterns" : {
+            "type" : "string",
+            "maxLength" : 512
+          },
+          "severity" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)critical|high|medium|low|info"
+          },
+          "status" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)enabled|disabled"
+          },
+          "confidence" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 100
+          },
+          "description" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 1024
+          },
+          "positiveExample" : {
+            "type" : "string",
+            "maxLength" : 1024
+          },
+          "falsePositiveGuidance" : {
+            "type" : "string",
+            "maxLength" : 1024
+          }
+        },
+        "required" : [ "id", "name", "scope", "severity", "status", "description" ]
       },
-      "UserRoleUpdateRequest": {
-        "type": "object",
-        "x-java-type": "UserRoleUpdateRequest"
+      "ReviewRuleStatusRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleStatusRequest",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)enabled|disabled"
+          }
+        },
+        "required" : [ "status" ]
       },
-      "UserStatusUpdateRequest": {
-        "type": "object",
-        "x-java-type": "UserStatusUpdateRequest"
+      "SecretReEncryptionRequest" : {
+        "type" : "object",
+        "x-java-type" : "SecretReEncryptionRequest",
+        "properties" : {
+          "sourceEncryptionKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 4096
+          },
+          "sourceKeyId" : {
+            "type" : "string",
+            "maxLength" : 64
+          },
+          "targetEncryptionKey" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 4096
+          },
+          "targetKeyId" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 64
+          },
+          "execute" : {
+            "type" : "boolean"
+          },
+          "confirmText" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        },
+        "required" : [ "sourceEncryptionKey", "targetEncryptionKey", "targetKeyId" ]
+      },
+      "SecuritySettingsRequest" : {
+        "type" : "object",
+        "x-java-type" : "SecuritySettingsRequest",
+        "properties" : {
+          "webhookSignature" : {
+            "type" : "boolean"
+          },
+          "secretMasking" : {
+            "type" : "boolean"
+          },
+          "publicRepoAllowed" : {
+            "type" : "boolean"
+          },
+          "tokenTtlDays" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 180
+          }
+        },
+        "required" : [ "webhookSignature", "secretMasking", "publicRepoAllowed", "tokenTtlDays" ]
+      },
+      "ServiceIntegrationConfigRequest" : {
+        "type" : "object",
+        "x-java-type" : "ServiceIntegrationConfigRequest",
+        "properties" : {
+          "baseUrl" : {
+            "type" : "string",
+            "minLength" : 1,
+            "maxLength" : 512
+          },
+          "username" : {
+            "type" : "string",
+            "maxLength" : 128
+          },
+          "secret" : {
+            "type" : "string",
+            "maxLength" : 4096
+          },
+          "resource" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "baseUrl" ]
+      },
+      "SystemSettingsRequest" : {
+        "type" : "object",
+        "x-java-type" : "SystemSettingsRequest",
+        "properties" : {
+          "base" : {
+            "$ref" : "#/components/schemas/BaseSettingsRequest",
+            "x-valid" : true
+          },
+          "policy" : {
+            "$ref" : "#/components/schemas/ReviewPolicySettingsRequest",
+            "x-valid" : true
+          },
+          "notification" : {
+            "$ref" : "#/components/schemas/NotificationSettingsRequest",
+            "x-valid" : true
+          },
+          "security" : {
+            "$ref" : "#/components/schemas/SecuritySettingsRequest",
+            "x-valid" : true
+          }
+        },
+        "required" : [ "base", "policy", "notification", "security" ]
+      },
+      "UserCreateRequest" : {
+        "type" : "object",
+        "x-java-type" : "UserCreateRequest",
+        "properties" : {
+          "username" : {
+            "type" : "string",
+            "minLength" : 3,
+            "maxLength" : 64,
+            "pattern" : "^[A-Za-z0-9_.-]+$"
+          },
+          "email" : {
+            "type" : "string",
+            "minLength" : 1,
+            "format" : "email",
+            "maxLength" : 255
+          },
+          "password" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          },
+          "confirmPassword" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "username", "email", "password", "confirmPassword" ]
+      },
+      "UserRoleUpdateRequest" : {
+        "type" : "object",
+        "x-java-type" : "UserRoleUpdateRequest",
+        "properties" : {
+          "role" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "ADMIN|VIEWER"
+          }
+        },
+        "required" : [ "role" ]
+      },
+      "UserStatusUpdateRequest" : {
+        "type" : "object",
+        "x-java-type" : "UserStatusUpdateRequest",
+        "properties" : {
+          "status" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "ACTIVE|DISABLED"
+          }
+        },
+        "required" : [ "status" ]
       }
     }
   }

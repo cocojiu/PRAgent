@@ -36,16 +36,49 @@ class OpenApiPathsContractTest {
     @Test
     void openApiJsonSnapshotStaysAlignedWithGeneratedDocument() throws Exception {
         Map<String, Object> document = OpenApiContractDocument.fromControllers(controllers());
+        Map<String, Object> generated = OpenApiContractDocument.fromJson(OpenApiContractDocument.toJson(document));
         Map<String, Object> snapshot = OpenApiContractDocument.fromJson(
             Files.readString(Path.of("src/test/resources/contracts/openapi.json"))
         );
 
         assertThat(snapshot)
             .as("Generated OpenAPI JSON changed. Update the reviewed JSON snapshot with generated-client impact.")
-            .isEqualTo(document);
-        assertThat(OpenApiContractDocument.fromJson(OpenApiContractDocument.toJson(document)))
+            .isEqualTo(generated);
+        assertThat(OpenApiContractDocument.fromJson(OpenApiContractDocument.toJson(generated)))
             .as("OpenAPI JSON serialization should round-trip without losing contract fields.")
-            .isEqualTo(document);
+            .isEqualTo(generated);
+    }
+
+    @Test
+    void openApiComponentsExposeRequestDtoValidationConstraints() {
+        Map<String, Object> schemas = map(map(OpenApiContractDocument.fromControllers(controllers()).get("components")).get("schemas"));
+
+        Map<String, Object> registerProperties = map(map(schemas.get("AuthRegisterRequest")).get("properties"));
+        assertThat(map(registerProperties.get("username")))
+            .containsEntry("type", "string")
+            .containsEntry("minLength", 3)
+            .containsEntry("maxLength", 64)
+            .containsEntry("pattern", "^[A-Za-z0-9_.-]+$");
+        assertThat(map(registerProperties.get("email")))
+            .containsEntry("format", "email")
+            .containsEntry("maxLength", 255);
+        assertThat(list(map(schemas.get("AuthRegisterRequest")).get("required")))
+            .containsExactly("username", "email", "password", "confirmPassword");
+
+        Map<String, Object> policyProperties = map(map(schemas.get("ReviewPolicyConfigRequest")).get("properties"));
+        assertThat(map(policyProperties.get("timeoutSeconds")))
+            .containsEntry("type", "integer")
+            .containsEntry("minimum", 1L)
+            .containsEntry("maximum", 600L);
+        assertThat(map(policyProperties.get("temperature")))
+            .containsEntry("type", "number")
+            .containsEntry("minimum", new java.math.BigDecimal("0.00"))
+            .containsEntry("maximum", new java.math.BigDecimal("2.00"));
+
+        Map<String, Object> systemSettingsProperties = map(map(schemas.get("SystemSettingsRequest")).get("properties"));
+        assertThat(map(systemSettingsProperties.get("base")))
+            .containsEntry("$ref", "#/components/schemas/BaseSettingsRequest")
+            .containsEntry("x-valid", true);
     }
 
     @Test
@@ -93,5 +126,15 @@ class OpenApiPathsContractTest {
         } catch (ClassNotFoundException ex) {
             throw new IllegalStateException("Failed to discover API controllers", ex);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> map(Object value) {
+        return (Map<String, Object>) value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Object> list(Object value) {
+        return (List<Object>) value;
     }
 }
