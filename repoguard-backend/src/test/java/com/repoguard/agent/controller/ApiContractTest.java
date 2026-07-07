@@ -12,6 +12,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.testsupport.ControllerEndpointCatalog;
+import com.repoguard.agent.testsupport.FrontendApiContractCatalog;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.lang.reflect.Parameter;
@@ -19,14 +20,10 @@ import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,23 +35,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class ApiContractTest {
 
     private static final String CONTROLLER_BASE_PACKAGE = "com.repoguard.agent.controller";
-    private static final Pattern FRONTEND_API_OPERATION_PATTERN = Pattern.compile(
-        "^\\s{2}([a-zA-Z0-9]+): \\{\\R(?<body>.*?)^\\s{2}},?",
-        Pattern.MULTILINE | Pattern.DOTALL
-    );
-    private static final Pattern FRONTEND_API_TYPE_OPERATION_PATTERN = Pattern.compile(
-        "^\\s{2}([a-zA-Z0-9]+): ApiOperation<",
-        Pattern.MULTILINE
-    );
-    private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
-    private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
-    private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
-    private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
-    private static final Pattern FRONTEND_INLINE_QUERY_PATTERN = Pattern.compile(
-        "query: [^=]+=> \\(\\{(?<query>.*?)\\}\\)",
-        Pattern.DOTALL
-    );
-    private static final Pattern FRONTEND_QUERY_KEY_PATTERN = Pattern.compile("^\\s+([a-zA-Z0-9_]+):", Pattern.MULTILINE);
 
     @Test
     void controllerBasePathsStayVersionedUnderApiV1() {
@@ -261,7 +241,9 @@ class ApiContractTest {
 
     @Test
     void authRefreshCoordinatorDoesNotOwnDirectApiFetch() throws Exception {
-        String authRefreshSource = Files.readString(frontendSourcePath("api", "authRefreshCoordinator.ts"));
+        String authRefreshSource = Files.readString(
+            FrontendApiContractCatalog.sourcePath("api", "authRefreshCoordinator.ts")
+        );
 
         assertThat(authRefreshSource)
             .as("Auth refresh coordination must reuse the frontend API client transport instead of owning direct fetch/buildUrl details")
@@ -384,68 +366,11 @@ class ApiContractTest {
     }
 
     private Map<String, String> frontendApiContracts() throws Exception {
-        Map<String, String> contracts = new LinkedHashMap<>();
-        frontendEndpointContracts().forEach((operation, contract) -> contracts.put(operation, contract.endpointKey()));
-        return contracts;
+        return FrontendApiContractCatalog.endpointKeys();
     }
 
-    private Map<String, FrontendEndpointContract> frontendEndpointContracts() throws Exception {
-        String source = Files.readString(frontendContractsPath());
-        Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
-        Map<String, FrontendOperationTypes> operationTypes = frontendApiOperationTypes(source);
-        Map<String, FrontendEndpointContract> contracts = new LinkedHashMap<>();
-        while (operationMatcher.find()) {
-            String operation = operationMatcher.group(1);
-            String body = operationMatcher.group("body");
-            FrontendOperationTypes types = operationTypes.getOrDefault(operation, new FrontendOperationTypes("", ""));
-            extractFrontendPath(body).ifPresent(path -> contracts.put(
-                operation,
-                new FrontendEndpointContract(
-                    frontendHttpMethod(body),
-                    path,
-                    frontendQueryParamNames(body),
-                    body.contains("body:"),
-                    body.contains("body:") && !frontendInputTypeAllowsUndefined(types.inputType()),
-                    types.responseType()
-                )
-            ));
-        }
-        return contracts;
-    }
-
-    private Map<String, FrontendOperationTypes> frontendApiOperationTypes(String source) {
-        Matcher matcher = FRONTEND_API_TYPE_OPERATION_PATTERN.matcher(source);
-        Map<String, FrontendOperationTypes> operationTypes = new LinkedHashMap<>();
-        while (matcher.find()) {
-            List<String> arguments = apiOperationTypeArguments(source, matcher.end());
-            operationTypes.put(matcher.group(1), new FrontendOperationTypes(arguments.get(0), arguments.get(1)));
-        }
-        return operationTypes;
-    }
-
-    private List<String> apiOperationTypeArguments(String source, int start) {
-        int depth = 0;
-        int split = -1;
-        for (int index = start; index < source.length(); index++) {
-            char current = source.charAt(index);
-            if (current == '<') {
-                depth++;
-            } else if (current == '>') {
-                if (depth == 0) {
-                    String input = source.substring(start, split).trim();
-                    String response = source.substring(split + 1, index).trim();
-                    return List.of(input, response);
-                }
-                depth--;
-            } else if (current == ',' && depth == 0 && split < 0) {
-                split = index;
-            }
-        }
-        throw new IllegalStateException("Failed to parse frontend ApiOperation type arguments");
-    }
-
-    private boolean frontendInputTypeAllowsUndefined(String inputType) {
-        return "undefined".equals(inputType) || inputType.contains("| undefined");
+    private Map<String, FrontendApiContractCatalog.EndpointContract> frontendEndpointContracts() throws Exception {
+        return FrontendApiContractCatalog.endpointContracts();
     }
 
     private String responseDataType(java.lang.reflect.Method method) {
@@ -473,66 +398,11 @@ class ApiContractTest {
     }
 
     private String normalizeBackendResponseType(String responseType) {
-        return normalizeResponseType(responseType, true);
+        return FrontendApiContractCatalog.normalizeJavaResponseType(responseType);
     }
 
     private String normalizeFrontendResponseType(String responseType) {
-        return normalizeResponseType(responseType, false);
-    }
-
-    private String normalizeResponseType(String responseType, boolean backend) {
-        String type = responseType.replaceAll("\\s+", "");
-        if (type.endsWith("[]")) {
-            return normalizeResponseType(type.substring(0, type.length() - 2), backend) + "[]";
-        }
-        if (type.startsWith("List<") && type.endsWith(">")) {
-            return normalizeResponseType(genericContent(type), backend) + "[]";
-        }
-        if (type.startsWith("Required<") && type.endsWith(">")) {
-            return normalizeResponseType(genericContent(type), backend);
-        }
-        if (type.startsWith("PageResponse<") && type.endsWith(">")) {
-            return "PageResponse<" + normalizeResponseType(genericContent(type), backend) + ">";
-        }
-        if (!backend) {
-            return type;
-        }
-        return backendResponseTypeAliases().getOrDefault(type, defaultBackendResponseTypeName(type));
-    }
-
-    private String genericContent(String type) {
-        return type.substring(type.indexOf('<') + 1, type.length() - 1);
-    }
-
-    private String defaultBackendResponseTypeName(String type) {
-        return switch (type) {
-            case "Void" -> "void";
-            case "String" -> "string";
-            default -> type.endsWith("Dto") ? type.substring(0, type.length() - "Dto".length()) : type;
-        };
-    }
-
-    private Map<String, String> backendResponseTypeAliases() {
-        return Map.ofEntries(
-            Map.entry("AuthCurrentUserDto", "CurrentUser"),
-            Map.entry("CacheStatsResponse", "CacheStats"),
-            Map.entry("DashboardLlmQualityResponse", "DashboardLlmQuality"),
-            Map.entry("DashboardOverviewResponse", "DashboardOverview"),
-            Map.entry("DashboardRulesResponse", "DashboardRules"),
-            Map.entry("GithubCommentPreviewResponse", "GithubCommentPreview"),
-            Map.entry("GithubCommentPublicationHistoryResponse", "GithubCommentPublicationHistory"),
-            Map.entry("GithubCommentPublishResponse", "GithubCommentPublish"),
-            Map.entry("GithubPullRequestOptionsResponse", "GithubPullRequestOptions"),
-            Map.entry("MessageQueueHealthResponse", "MessageQueueHealth"),
-            Map.entry("NotificationCenterDto", "NotificationCenter"),
-            Map.entry("ReviewTaskListItem", "ReviewTask"),
-            Map.entry("ReviewTaskStatusResponse", "ReviewTaskStatus"),
-            Map.entry("ReviewTimelineItem", "TimelineItem"),
-            Map.entry("ServiceIntegrationConfigDto", "ServiceIntegrationConfig"),
-            Map.entry("SystemSettingsDto", "SystemSettings"),
-            Map.entry("UserManagementItemDto", "ManagedUser"),
-            Map.entry("UserOperationAuditDto", "UserOperationAudit")
-        );
+        return FrontendApiContractCatalog.normalizeFrontendResponseType(responseType);
     }
 
     private Map<String, Class<?>> recordComponentTypes(Class<?> recordType) {
@@ -558,111 +428,8 @@ class ApiContractTest {
         return Map.of();
     }
 
-    private Path frontendContractsPath() {
-        return frontendSourcePath("api", "contracts.ts");
-    }
-
-    private Path frontendSourceRoot() {
-        Path candidate = Path.of("..", "repoguard-frontend", "src");
-        if (Files.exists(candidate)) {
-            return candidate;
-        }
-        Path rootCandidate = Path.of("repoguard-frontend", "src");
-        if (Files.exists(rootCandidate)) {
-            return rootCandidate;
-        }
-        return candidate;
-    }
-
-    private Path frontendSourcePath(String first, String second) {
-        Path candidate = Path.of("..", "repoguard-frontend", "src", first, second);
-        if (Files.exists(candidate)) {
-            return candidate;
-        }
-        Path rootCandidate = Path.of("repoguard-frontend", "src", first, second);
-        if (Files.exists(rootCandidate)) {
-            return rootCandidate;
-        }
-        return candidate;
-    }
-
     private List<String> frontendApiPathLiteralsOutsideClientAndContracts() throws Exception {
-        Path root = frontendSourceRoot();
-        List<String> literals = new ArrayList<>();
-        try (var paths = Files.walk(root)) {
-            for (Path path : paths
-                .filter(Files::isRegularFile)
-                .filter(this::isProductionFrontendSource)
-                .filter(file -> !isFrontendClientOrContract(root, file))
-                .sorted()
-                .toList()) {
-                String source = Files.readString(path);
-                Matcher matcher = FRONTEND_API_PATH_LITERAL_PATTERN.matcher(source);
-                while (matcher.find()) {
-                    literals.add(frontendRelativePath(root, path) + " -> " + matcher.group(1));
-                }
-            }
-        }
-        return literals;
-    }
-
-    private boolean isProductionFrontendSource(Path path) {
-        String filename = path.getFileName().toString();
-        return (filename.endsWith(".ts") || filename.endsWith(".vue"))
-            && !filename.endsWith(".test.ts")
-            && !filename.endsWith(".spec.ts");
-    }
-
-    private boolean isFrontendClientOrContract(Path root, Path path) {
-        String relativePath = frontendRelativePath(root, path);
-        return "api/client.ts".equals(relativePath) || "api/contracts.ts".equals(relativePath);
-    }
-
-    private String frontendRelativePath(Path root, Path path) {
-        return root.relativize(path).toString().replace('\\', '/');
-    }
-
-    private Optional<String> extractFrontendPath(String operationBody) {
-        Matcher literalPathMatcher = FRONTEND_LITERAL_PATH_PATTERN.matcher(operationBody);
-        if (literalPathMatcher.find()) {
-            return Optional.of(literalPathMatcher.group(1));
-        }
-        Matcher templatePathMatcher = FRONTEND_TEMPLATE_PATH_PATTERN.matcher(operationBody);
-        if (templatePathMatcher.find()) {
-            return Optional.of(normalizeFrontendTemplatePath(templatePathMatcher.group(1)));
-        }
-        return Optional.empty();
-    }
-
-    private String frontendHttpMethod(String operationBody) {
-        Matcher methodMatcher = FRONTEND_METHOD_PATTERN.matcher(operationBody);
-        return methodMatcher.find() ? methodMatcher.group(1) : "GET";
-    }
-
-    private List<String> frontendQueryParamNames(String operationBody) {
-        if (!operationBody.contains("query:")) {
-            return List.of();
-        }
-        if (operationBody.contains("query: notificationQuery")) {
-            return List.of("page", "pageSize", "status", "taskId");
-        }
-        Matcher queryMatcher = FRONTEND_INLINE_QUERY_PATTERN.matcher(operationBody);
-        if (!queryMatcher.find()) {
-            return List.of("<unparsed-query>");
-        }
-        Matcher keyMatcher = FRONTEND_QUERY_KEY_PATTERN.matcher(queryMatcher.group("query"));
-        List<String> queryParamNames = new ArrayList<>();
-        while (keyMatcher.find()) {
-            queryParamNames.add(keyMatcher.group(1));
-        }
-        return queryParamNames.stream().distinct().toList();
-    }
-
-    private String normalizeFrontendTemplatePath(String path) {
-        return path
-            .replace("${idSegment(input.findingId)}", "{findingId}")
-            .replace("${idSegment(input.taskId)}", "{taskId}")
-            .replace("${idSegment(input.id)}", "{id}");
+        return FrontendApiContractCatalog.apiPathLiteralsOutsideClientAndContracts();
     }
 
     @RestController
@@ -691,20 +458,4 @@ class ApiContractTest {
     ) {
     }
 
-    record FrontendOperationTypes(String inputType, String responseType) {
-    }
-
-    record FrontendEndpointContract(
-        String httpMethod,
-        String path,
-        List<String> queryParamNames,
-        boolean hasRequestBody,
-        boolean requestBodyRequired,
-        String responseType
-    ) {
-
-        String endpointKey() {
-            return httpMethod + " " + path;
-        }
-    }
 }
