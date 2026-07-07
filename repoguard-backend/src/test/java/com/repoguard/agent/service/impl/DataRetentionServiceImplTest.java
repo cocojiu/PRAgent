@@ -44,6 +44,7 @@ class DataRetentionServiceImplTest {
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
     private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
     private final DataRetentionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(DataRetentionMetricsRecorder.class);
+    private final DataRetentionCleanupAuditRecorder auditRecorder = org.mockito.Mockito.mock(DataRetentionCleanupAuditRecorder.class);
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         reviewTaskMapper,
         changedFileMapper,
@@ -54,11 +55,13 @@ class DataRetentionServiceImplTest {
         githubCommentPublicationBatchItemMapper,
         systemSettingsProvider,
         new ReviewTaskStateMachine(),
-        metricsRecorder
+        metricsRecorder,
+        auditRecorder
     );
 
     @Test
     void cleanupDryRunUsesSavedRetentionDaysAndDoesNotDelete() {
+        stubAuditStart(101L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(reviewTaskMapper.selectCount(any())).thenReturn(2L);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(1L), task(2L)));
@@ -66,10 +69,12 @@ class DataRetentionServiceImplTest {
         var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
 
         assertThat(response.executed()).isFalse();
+        assertThat(response.cleanupBatchId()).isEqualTo(101L);
         assertThat(response.retentionDays()).isEqualTo(30);
         assertThat(response.backupReference()).isNull();
         assertThat(response.candidateTasks()).isEqualTo(2);
         assertThat(response.selectedTasks()).isEqualTo(2);
+        verify(auditRecorder).complete(101L, response);
         verify(metricsRecorder).record(response);
         verify(changedFileMapper, never()).delete(any(Wrapper.class));
         verify(reviewTaskMapper, never()).delete(any(Wrapper.class));
@@ -77,6 +82,7 @@ class DataRetentionServiceImplTest {
 
     @Test
     void cleanupExecuteDeletesChildrenBeforeTasks() {
+        stubAuditStart(102L);
         when(reviewTaskMapper.selectCount(any())).thenReturn(1L);
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(9L)));
         when(githubCommentPublicationBatchItemMapper.delete(any())).thenReturn(3);
@@ -96,9 +102,11 @@ class DataRetentionServiceImplTest {
         ));
 
         assertThat(response.executed()).isTrue();
+        assertThat(response.cleanupBatchId()).isEqualTo(102L);
         assertThat(response.backupReference()).isEqualTo("backup://mysql/prod/2026-07-07T22:00:00");
         assertThat(response.deletedBatchItems()).isEqualTo(3);
         assertThat(response.deletedTasks()).isEqualTo(1);
+        verify(auditRecorder).complete(102L, response);
         verify(metricsRecorder).record(response);
         InOrder order = inOrder(
             githubCommentPublicationBatchItemMapper,
@@ -133,6 +141,13 @@ class DataRetentionServiceImplTest {
             org.mockito.Mockito.eq(true),
             org.mockito.Mockito.any(BusinessException.class)
         );
+        verify(auditRecorder, never()).start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        );
     }
 
     @Test
@@ -144,10 +159,18 @@ class DataRetentionServiceImplTest {
             org.mockito.Mockito.eq(true),
             org.mockito.Mockito.any(BusinessException.class)
         );
+        verify(auditRecorder, never()).start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        );
     }
 
     @Test
     void cleanupFailureIsRecordedBeforeRethrow() {
+        stubAuditStart(103L);
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(reviewTaskMapper.selectCount(any())).thenThrow(failure);
@@ -155,6 +178,7 @@ class DataRetentionServiceImplTest {
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null)))
             .isSameAs(failure);
 
+        verify(auditRecorder).fail(103L, failure);
         verify(metricsRecorder).recordFailure(false, failure);
         verify(metricsRecorder, never()).record(any());
     }
@@ -171,7 +195,8 @@ class DataRetentionServiceImplTest {
             githubCommentPublicationBatchItemMapper,
             systemSettingsProvider,
             null,
-            metricsRecorder
+            metricsRecorder,
+            auditRecorder
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -189,10 +214,40 @@ class DataRetentionServiceImplTest {
             githubCommentPublicationBatchItemMapper,
             systemSettingsProvider,
             new ReviewTaskStateMachine(),
-            null
+            null,
+            auditRecorder
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
+    }
+
+    @Test
+    void constructorRejectsMissingAuditRecorder() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            reviewTaskMapper,
+            changedFileMapper,
+            reviewFindingMapper,
+            reviewTimelineMapper,
+            githubCommentPublicationMapper,
+            githubCommentPublicationBatchMapper,
+            githubCommentPublicationBatchItemMapper,
+            systemSettingsProvider,
+            new ReviewTaskStateMachine(),
+            metricsRecorder,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("auditRecorder");
+    }
+
+    private void stubAuditStart(Long cleanupBatchId) {
+        when(auditRecorder.start(
+            org.mockito.Mockito.anyBoolean(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.anyInt(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.any()
+        )).thenReturn(cleanupBatchId);
     }
 
     private ReviewTask task(Long id) {

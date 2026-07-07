@@ -22,6 +22,7 @@ export interface DataRetentionCleanupRequest {
 
 export interface DataRetentionCleanupResponse {
   executed: boolean;
+  cleanupBatchId: number;
   retentionDays: number;
   maxTasks: number;
   backupReference?: string;

@@ -49,6 +49,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final SystemSettingsProvider systemSettingsProvider;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final DataRetentionMetricsRecorder metricsRecorder;
+    private final DataRetentionCleanupAuditRecorder auditRecorder;
 
     @Autowired
     public DataRetentionServiceImpl(
@@ -61,7 +62,8 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
         SystemSettingsProvider systemSettingsProvider,
         ReviewTaskStateMachine reviewTaskStateMachine,
-        DataRetentionMetricsRecorder metricsRecorder
+        DataRetentionMetricsRecorder metricsRecorder,
+        DataRetentionCleanupAuditRecorder auditRecorder
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.changedFileMapper = changedFileMapper;
@@ -73,6 +75,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.systemSettingsProvider = systemSettingsProvider;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
     }
 
     @Override
@@ -96,72 +99,80 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         String backupReference = resolveBackupReference(request, execute);
 
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
-        LambdaQueryWrapper<ReviewTask> candidateQuery = candidateTaskQuery(cutoff);
-        long candidateTasks = reviewTaskMapper.selectCount(candidateQuery);
-        List<Long> taskIds = reviewTaskMapper.selectList(candidateTaskQuery(cutoff)
-                .orderByAsc(ReviewTask::getCreatedAt)
-                .last("limit " + Math.max(1, maxTasks)))
-            .stream()
-            .map(ReviewTask::getId)
-            .toList();
+        Long cleanupBatchId = auditRecorder.start(execute, retentionDays, maxTasks, backupReference, cutoff);
+        try {
+            LambdaQueryWrapper<ReviewTask> candidateQuery = candidateTaskQuery(cutoff);
+            long candidateTasks = reviewTaskMapper.selectCount(candidateQuery);
+            List<Long> taskIds = reviewTaskMapper.selectList(candidateTaskQuery(cutoff)
+                    .orderByAsc(ReviewTask::getCreatedAt)
+                    .last("limit " + Math.max(1, maxTasks)))
+                .stream()
+                .map(ReviewTask::getId)
+                .toList();
 
-        if (!execute || taskIds.isEmpty()) {
-            return recorded(response(
-                false,
+            if (!execute || taskIds.isEmpty()) {
+                return completed(cleanupBatchId, response(
+                    false,
+                    cleanupBatchId,
+                    retentionDays,
+                    maxTasks,
+                    backupReference,
+                    cutoff,
+                    candidateTasks,
+                    taskIds.size(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ));
+            }
+
+            int deletedBatchItems = githubCommentPublicationBatchItemMapper.delete(
+                new LambdaQueryWrapper<GithubCommentPublicationBatchItem>().in(GithubCommentPublicationBatchItem::getTaskId, taskIds)
+            );
+            int deletedPublications = githubCommentPublicationMapper.delete(
+                new LambdaQueryWrapper<GithubCommentPublication>().in(GithubCommentPublication::getTaskId, taskIds)
+            );
+            int deletedBatches = githubCommentPublicationBatchMapper.delete(
+                new LambdaQueryWrapper<GithubCommentPublicationBatch>().in(GithubCommentPublicationBatch::getTaskId, taskIds)
+            );
+            int deletedChangedFiles = changedFileMapper.delete(
+                new LambdaQueryWrapper<ChangedFile>().in(ChangedFile::getTaskId, taskIds)
+            );
+            int deletedTimelines = reviewTimelineMapper.delete(
+                new LambdaQueryWrapper<ReviewTimeline>().in(ReviewTimeline::getTaskId, taskIds)
+            );
+            int deletedFindings = reviewFindingMapper.delete(
+                new LambdaQueryWrapper<ReviewFinding>().in(ReviewFinding::getTaskId, taskIds)
+            );
+            int deletedTasks = reviewTaskMapper.delete(
+                new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, taskIds)
+            );
+
+            return completed(cleanupBatchId, response(
+                true,
+                cleanupBatchId,
                 retentionDays,
                 maxTasks,
                 backupReference,
                 cutoff,
                 candidateTasks,
                 taskIds.size(),
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0
+                deletedBatchItems,
+                deletedPublications,
+                deletedBatches,
+                deletedChangedFiles,
+                deletedTimelines,
+                deletedFindings,
+                deletedTasks
             ));
+        } catch (RuntimeException ex) {
+            auditRecorder.fail(cleanupBatchId, ex);
+            throw ex;
         }
-
-        int deletedBatchItems = githubCommentPublicationBatchItemMapper.delete(
-            new LambdaQueryWrapper<GithubCommentPublicationBatchItem>().in(GithubCommentPublicationBatchItem::getTaskId, taskIds)
-        );
-        int deletedPublications = githubCommentPublicationMapper.delete(
-            new LambdaQueryWrapper<GithubCommentPublication>().in(GithubCommentPublication::getTaskId, taskIds)
-        );
-        int deletedBatches = githubCommentPublicationBatchMapper.delete(
-            new LambdaQueryWrapper<GithubCommentPublicationBatch>().in(GithubCommentPublicationBatch::getTaskId, taskIds)
-        );
-        int deletedChangedFiles = changedFileMapper.delete(
-            new LambdaQueryWrapper<ChangedFile>().in(ChangedFile::getTaskId, taskIds)
-        );
-        int deletedTimelines = reviewTimelineMapper.delete(
-            new LambdaQueryWrapper<ReviewTimeline>().in(ReviewTimeline::getTaskId, taskIds)
-        );
-        int deletedFindings = reviewFindingMapper.delete(
-            new LambdaQueryWrapper<ReviewFinding>().in(ReviewFinding::getTaskId, taskIds)
-        );
-        int deletedTasks = reviewTaskMapper.delete(
-            new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, taskIds)
-        );
-
-        return recorded(response(
-            true,
-            retentionDays,
-            maxTasks,
-            backupReference,
-            cutoff,
-            candidateTasks,
-            taskIds.size(),
-            deletedBatchItems,
-            deletedPublications,
-            deletedBatches,
-            deletedChangedFiles,
-            deletedTimelines,
-            deletedFindings,
-            deletedTasks
-        ));
     }
 
     private int resolveRetentionDays(DataRetentionCleanupRequest request) {
@@ -196,6 +207,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
 
     private DataRetentionCleanupResponse response(
         boolean executed,
+        long cleanupBatchId,
         int retentionDays,
         int maxTasks,
         String backupReference,
@@ -212,6 +224,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     ) {
         return new DataRetentionCleanupResponse(
             executed,
+            cleanupBatchId,
             retentionDays,
             maxTasks,
             backupReference,
@@ -231,5 +244,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private DataRetentionCleanupResponse recorded(DataRetentionCleanupResponse response) {
         metricsRecorder.record(response);
         return response;
+    }
+
+    private DataRetentionCleanupResponse completed(Long cleanupBatchId, DataRetentionCleanupResponse response) {
+        auditRecorder.complete(cleanupBatchId, response);
+        return recorded(response);
     }
 }

@@ -2,6 +2,7 @@ package com.repoguard.agent.dto;
 
 public record DataRetentionCleanupResponse(
     boolean executed,
+    long cleanupBatchId,
     int retentionDays,
     int maxTasks,
     String backupReference,

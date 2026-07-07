@@ -41,6 +41,7 @@ class DataRetentionMetricsRecorderTest {
     void recordsCleanupResponseWithTaskCounts() {
         recorder.record(new DataRetentionCleanupResponse(
             true,
+            77L,
             90,
             500,
             "backup://mysql/prod/2026-07-07T22:00:00",

@@ -66,6 +66,7 @@ class DataRetentionControllerTest {
     void cleanupAcceptsBoundedConfirmationText() throws Exception {
         Mockito.when(dataRetentionService.cleanup(any())).thenReturn(new DataRetentionCleanupResponse(
             false,
+            77L,
             30,
             100,
             "backup://mysql/prod/2026-07-07T22:00:00",
@@ -93,6 +94,7 @@ class DataRetentionControllerTest {
                     }
                     """))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.cleanupBatchId").value(77))
             .andExpect(jsonPath("$.data.retentionDays").value(30))
             .andExpect(jsonPath("$.data.maxTasks").value(100))
             .andExpect(jsonPath("$.data.backupReference").value("backup://mysql/prod/2026-07-07T22:00:00"));

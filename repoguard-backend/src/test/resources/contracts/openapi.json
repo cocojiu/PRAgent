@@ -4541,6 +4541,10 @@
           "executed" : {
             "type" : "boolean"
           },
+          "cleanupBatchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
           "retentionDays" : {
             "type" : "integer",
             "format" : "int32"
@@ -4592,7 +4596,7 @@
             "format" : "int32"
           }
         },
-        "required" : [ "executed", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
+        "required" : [ "executed", "cleanupBatchId", "retentionDays", "maxTasks", "candidateTasks", "selectedTasks", "deletedBatchItems", "deletedPublications", "deletedBatches", "deletedChangedFiles", "deletedTimelines", "deletedFindings", "deletedTasks" ]
       },
       "FailedRuleStatDto" : {
         "type" : "object",
