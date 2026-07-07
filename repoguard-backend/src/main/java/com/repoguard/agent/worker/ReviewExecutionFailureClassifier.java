@@ -1,9 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.external.ExternalCallException;
-import java.net.SocketTimeoutException;
-import java.util.Locale;
-import java.util.concurrent.TimeoutException;
+import com.repoguard.agent.external.ExternalFailureSignals;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DeadlockLoserDataAccessException;
@@ -11,7 +9,6 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -31,12 +28,12 @@ public class ReviewExecutionFailureClassifier {
         if (ex instanceof DataAccessException) {
             return "review_database_error";
         }
-        String detail = normalizedDetail(ex);
-        Integer statusCode = statusCodeFromDetail(detail);
+        String detail = ExternalFailureSignals.normalizedDetail(ex);
+        Integer statusCode = ExternalFailureSignals.statusCodeFromDetail(detail);
         if (statusCode != null) {
             return httpFailureCategory(statusCode);
         }
-        if (detail.contains("retryafter=") || detail.contains("retry-after")) {
+        if (ExternalFailureSignals.hasRetryAfterSignal(detail)) {
             return "review_external_rate_limited";
         }
         if (isTimeout(ex, detail)) {
@@ -88,56 +85,9 @@ public class ReviewExecutionFailureClassifier {
     }
 
     private boolean isTimeout(RuntimeException ex, String detail) {
-        if (ex instanceof ResourceAccessException && containsTimeout(ex)) {
+        if (ex instanceof ResourceAccessException && ExternalFailureSignals.hasTimeoutSignal(ex, detail, true)) {
             return true;
         }
-        return containsTimeout(ex)
-            || detail.contains("timeout")
-            || detail.contains("timed out")
-            || detail.contains("read timed out")
-            || detail.contains("connect timed out");
-    }
-
-    private boolean containsTimeout(Throwable throwable) {
-        Throwable current = throwable;
-        while (current != null) {
-            if (current instanceof SocketTimeoutException || current instanceof TimeoutException) {
-                return true;
-            }
-            String message = current.getMessage();
-            if (StringUtils.hasText(message)) {
-                String normalized = message.toLowerCase(Locale.ROOT);
-                if (normalized.contains("timeout") || normalized.contains("timed out")) {
-                    return true;
-                }
-            }
-            current = current.getCause();
-        }
-        return false;
-    }
-
-    private Integer statusCodeFromDetail(String detail) {
-        int marker = detail.indexOf("status=");
-        if (marker < 0) {
-            return null;
-        }
-        int start = marker + "status=".length();
-        int end = start;
-        while (end < detail.length() && Character.isDigit(detail.charAt(end))) {
-            end++;
-        }
-        if (end == start) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(detail.substring(start, end));
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private String normalizedDetail(RuntimeException ex) {
-        String message = ex == null ? "" : ex.getMessage();
-        return message == null ? "" : message.toLowerCase(Locale.ROOT);
+        return ExternalFailureSignals.hasTimeoutSignal(ex, detail, true);
     }
 }
