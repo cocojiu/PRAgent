@@ -21,6 +21,7 @@ import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -83,7 +84,7 @@ class AuthControllerTest {
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new AuthController(authService))
+        .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager()))
         .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
         .build();
 
