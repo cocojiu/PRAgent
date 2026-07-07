@@ -4,7 +4,6 @@ import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
 import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
-import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
 import java.time.Duration;
 import java.util.Comparator;
@@ -27,15 +26,15 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
     private static final int MAX_TEXT_LENGTH = 80;
     private static final String UNKNOWN = "unknown";
 
-    private final RepoGuardMetrics metrics;
+    private final FrontendPerformanceMetricsRecorder metricsRecorder;
     private final ObservabilityThresholdMonitor thresholdMonitor;
 
     @Autowired
     public FrontendPerformanceObservationServiceImpl(
-        RepoGuardMetrics metrics,
+        FrontendPerformanceMetricsRecorder metricsRecorder,
         ObservabilityThresholdMonitor thresholdMonitor
     ) {
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
     }
 
@@ -47,7 +46,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
 
         apiRequests.forEach(item -> {
             Duration duration = duration(item.durationMs());
-            metrics.frontendApiWaterfallRequest(
+            metricsRecorder.recordApiWaterfallRequest(
                 duration,
                 route,
                 item.operation(),
@@ -60,7 +59,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
         });
         longTasks.forEach(item -> {
             Duration duration = duration(item.durationMs());
-            metrics.frontendLongTask(duration, route);
+            metricsRecorder.recordLongTask(duration, route);
             thresholdMonitor.frontendLongTask(duration, route);
         });
         if (!apiRequests.isEmpty() || !longTasks.isEmpty()) {

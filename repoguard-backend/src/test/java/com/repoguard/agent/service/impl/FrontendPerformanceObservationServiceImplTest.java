@@ -21,12 +21,20 @@ class FrontendPerformanceObservationServiceImplTest {
         meterRegistry,
         new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
     );
+    private final FrontendPerformanceMetricsRecorder metricsRecorder = new FrontendPerformanceMetricsRecorder(metrics);
     private final FrontendPerformanceObservationServiceImpl service =
-        new FrontendPerformanceObservationServiceImpl(metrics, thresholdMonitor(metrics));
+        new FrontendPerformanceObservationServiceImpl(metricsRecorder, thresholdMonitor(metrics));
+
+    @Test
+    void constructorRejectsMissingMetricsRecorder() {
+        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(null, thresholdMonitor(metrics)))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metricsRecorder");
+    }
 
     @Test
     void constructorRejectsMissingThresholdMonitor() {
-        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(metrics, null))
+        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(metricsRecorder, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("thresholdMonitor");
     }
@@ -85,7 +93,7 @@ class FrontendPerformanceObservationServiceImplTest {
         properties.setFrontendApiDurationMs(20);
         properties.setFrontendLongTaskMs(40);
         FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
-            metrics,
+            new FrontendPerformanceMetricsRecorder(metrics),
             new ObservabilityThresholdMonitor(metrics, properties)
         );
 
@@ -137,7 +145,7 @@ class FrontendPerformanceObservationServiceImplTest {
             "notification-ops", 150L
         ));
         FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
-            metrics,
+            new FrontendPerformanceMetricsRecorder(metrics),
             new ObservabilityThresholdMonitor(metrics, properties)
         );
 
