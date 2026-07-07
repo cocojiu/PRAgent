@@ -107,6 +107,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.worker.ReviewHumanReviewDecisionPolicy"),
             Class.forName("com.repoguard.agent.worker.ReviewTaskDurationPolicy"),
             Class.forName("com.repoguard.agent.worker.ReviewTaskFailureOutcomePolicy"),
+            Class.forName("com.repoguard.agent.worker.ReviewTaskRecoveryTimelineLabelFormatter"),
             Class.forName("com.repoguard.agent.worker.ReviewTaskRecoveryTimelineRecorder")
         );
 

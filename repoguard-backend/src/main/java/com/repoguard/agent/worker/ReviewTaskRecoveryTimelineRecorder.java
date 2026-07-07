@@ -11,15 +11,20 @@ import org.springframework.stereotype.Component;
 class ReviewTaskRecoveryTimelineRecorder {
 
     private final ReviewTimelineAppender timelineAppender;
+    private final ReviewTaskRecoveryTimelineLabelFormatter labelFormatter;
 
-    ReviewTaskRecoveryTimelineRecorder(ReviewTimelineAppender timelineAppender) {
+    ReviewTaskRecoveryTimelineRecorder(
+        ReviewTimelineAppender timelineAppender,
+        ReviewTaskRecoveryTimelineLabelFormatter labelFormatter
+    ) {
         this.timelineAppender = Objects.requireNonNull(timelineAppender, "timelineAppender");
+        this.labelFormatter = Objects.requireNonNull(labelFormatter, "labelFormatter");
     }
 
     void requeuePending(ReviewTask task, LocalDateTime eventTime) {
         timelineAppender.append(
             task.getId(),
-            "Review execution timed out; requeue pending",
+            labelFormatter.requeuePending(),
             eventTime,
             ReviewTimelineStatus.CURRENT,
             5
@@ -29,7 +34,7 @@ class ReviewTaskRecoveryTimelineRecorder {
     void recoveryQueued(ReviewTask task, LocalDateTime eventTime) {
         timelineAppender.append(
             task.getId(),
-            "Review execution timeout recovered; message requeued",
+            labelFormatter.recoveryQueued(),
             eventTime,
             ReviewTimelineStatus.CURRENT,
             5
@@ -39,7 +44,7 @@ class ReviewTaskRecoveryTimelineRecorder {
     void recoveryPublishFailed(ReviewTask task, LocalDateTime eventTime, String error) {
         timelineAppender.append(
             task.getId(),
-            "Review execution recovery publish failed: " + error,
+            labelFormatter.recoveryPublishFailed(error),
             eventTime,
             ReviewTimelineStatus.FAILED,
             5
