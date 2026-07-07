@@ -2,10 +2,13 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.external.ExternalCallErrorClassifier;
+import com.repoguard.agent.external.ExternalCallException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.function.BiConsumer;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.RestClientResponseException;
 
 /**
  * Runs GitHub integration connectivity checks and applies saved-config status updates.
@@ -35,7 +38,7 @@ class GithubIntegrationConnectionTestRunner {
             }
             return connectionResult(Boolean.TRUE.equals(result.healthy()), result.status(), result.message());
         } catch (RuntimeException ex) {
-            String error = conciseError(ex);
+            String error = conciseError(classifyGithubHttpFailure(ex));
             if (!transientConfig) {
                 markChecked.accept(configToProbe, error);
             }
@@ -45,6 +48,13 @@ class GithubIntegrationConnectionTestRunner {
 
     private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
         return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()), null, null, null, null, null, null);
+    }
+
+    private RuntimeException classifyGithubHttpFailure(RuntimeException ex) {
+        if (ex instanceof ExternalCallException || ex instanceof RestClientResponseException) {
+            return ExternalCallErrorClassifier.github(ex);
+        }
+        return ex;
     }
 
     private String conciseError(Exception ex) {
