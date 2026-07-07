@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -34,6 +35,7 @@ class CacheStatsServiceImplTest {
         assertThat(dashboardStats.requestCount()).isEqualTo(2);
         assertThat(dashboardStats.hitCount()).isEqualTo(1);
         assertThat(dashboardStats.missCount()).isEqualTo(1);
+        assertThat(dashboardStats.hitRate()).isEqualTo(0.5d);
     }
 
     @Test
@@ -70,6 +72,43 @@ class CacheStatsServiceImplTest {
         assertThat(llmQuality.get("7")).isNull();
     }
 
+    @Test
+    void dashboardCachesEmitHitMissMetricsButOtherCachesDoNot() {
+        SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+        CacheManager observedCacheManager = initializedCacheManager(meterRegistry);
+
+        for (String cacheName : dashboardCacheNames()) {
+            Cache cache = observedCacheManager.getCache(cacheName);
+            assertThat(cache).isNotNull();
+
+            cache.put("key", "value");
+            assertThat(cache.get("key")).isNotNull();
+            assertThat(cache.get("missing")).isNull();
+
+            assertThat(counter(
+                meterRegistry,
+                "repoguard.dashboard.cache.access",
+                "cache", cacheName.toLowerCase(),
+                "result", "hit"
+            )).isEqualTo(1.0d);
+            assertThat(counter(
+                meterRegistry,
+                "repoguard.dashboard.cache.access",
+                "cache", cacheName.toLowerCase(),
+                "result", "miss"
+            )).isEqualTo(1.0d);
+        }
+
+        Cache githubCache = observedCacheManager.getCache(CacheNames.GITHUB_OPEN_PULL_REQUESTS);
+        assertThat(githubCache).isNotNull();
+        githubCache.put("repo", "pullRequests");
+        assertThat(githubCache.get("repo")).isNotNull();
+
+        assertThat(meterRegistry.find("repoguard.dashboard.cache.access")
+            .tag("cache", CacheNames.GITHUB_OPEN_PULL_REQUESTS.toLowerCase())
+            .counter()).isNull();
+    }
+
     private CacheStatsItemDto statsFor(String cacheName) {
         CacheStatsResponse response = service.getStats();
         return response.caches().stream()
@@ -79,12 +118,32 @@ class CacheStatsServiceImplTest {
     }
 
     private static CacheManager initializedCacheManager() {
+        return initializedCacheManager(new SimpleMeterRegistry());
+    }
+
+    private static CacheManager initializedCacheManager(SimpleMeterRegistry meterRegistry) {
         RepoGuardMetrics metrics = new RepoGuardMetrics(
-            new SimpleMeterRegistry(),
+            meterRegistry,
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );
         SimpleCacheManager cacheManager = (SimpleCacheManager) new CacheConfig().cacheManager(metrics);
         cacheManager.afterPropertiesSet();
         return cacheManager;
+    }
+
+    private static List<String> dashboardCacheNames() {
+        return List.of(
+            CacheNames.DASHBOARD_OVERVIEW,
+            CacheNames.DASHBOARD_SUMMARY,
+            CacheNames.DASHBOARD_REVIEW_TREND,
+            CacheNames.DASHBOARD_RISK_DISTRIBUTION,
+            CacheNames.DASHBOARD_RULES,
+            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
+            CacheNames.DASHBOARD_LLM_QUALITY
+        );
+    }
+
+    private static double counter(SimpleMeterRegistry meterRegistry, String name, String... tags) {
+        return meterRegistry.find(name).tags(tags).counter().count();
     }
 }
