@@ -35,6 +35,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ApiContractTest {
 
+    private static final String CONTROLLER_BASE_PACKAGE = "com.repoguard.agent.controller";
     private static final Pattern FRONTEND_API_OPERATION_PATTERN = Pattern.compile(
         "^\\s{2}([a-zA-Z0-9]+): \\{\\R(?<body>.*?)^\\s{2}},?",
         Pattern.MULTILINE | Pattern.DOTALL
@@ -43,21 +44,6 @@ class ApiContractTest {
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
-    private static final List<Class<?>> CONTROLLERS = List.of(
-        AuthController.class,
-        CacheStatsController.class,
-        DashboardController.class,
-        DataRetentionController.class,
-        FrontendPerformanceController.class,
-        GithubWebhookController.class,
-        MessageQueueHealthController.class,
-        NotificationController.class,
-        NotificationIntegrationController.class,
-        ReviewController.class,
-        SystemHealthController.class,
-        SystemConfigController.class,
-        UserManagementController.class
-    );
 
     private static final List<String> EXPECTED_API_SURFACE = List.of(
         "GET /api/v1/auth/me query=[] body=-",
@@ -134,7 +120,7 @@ class ApiContractTest {
 
     @Test
     void controllerBasePathsStayVersionedUnderApiV1() {
-        CONTROLLERS.forEach(controller -> {
+        controllers().forEach(controller -> {
             RequestMapping mapping = controller.getAnnotation(RequestMapping.class);
             if (mapping != null) {
                 assertThat(ControllerEndpointCatalog.classMappingPaths(controller))
@@ -153,7 +139,7 @@ class ApiContractTest {
 
     @Test
     void handlerMethodsReturnStableApiResponseEnvelope() {
-        CONTROLLERS.forEach(controller ->
+        controllers().forEach(controller ->
             List.of(controller.getDeclaredMethods()).stream()
                 .filter(ControllerEndpointCatalog::isHandlerMethod)
                 .forEach(method -> assertThat(method.getReturnType())
@@ -164,7 +150,7 @@ class ApiContractTest {
 
     @Test
     void pagedControllerParamsKeepBoundedContract() {
-        CONTROLLERS.forEach(controller ->
+        controllers().forEach(controller ->
             List.of(controller.getDeclaredMethods()).stream()
                 .filter(ControllerEndpointCatalog::isHandlerMethod)
                 .forEach(method -> List.of(method.getParameters()).forEach(parameter -> {
@@ -322,7 +308,7 @@ class ApiContractTest {
     }
 
     private List<String> apiSurface() {
-        return CONTROLLERS.stream()
+        return controllers().stream()
             .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
             .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path()
                 + " query=" + ControllerEndpointCatalog.requestParamNames(endpoint.method())
@@ -332,11 +318,19 @@ class ApiContractTest {
     }
 
     private List<String> apiSurfaceEndpointKeys() {
-        return CONTROLLERS.stream()
+        return controllers().stream()
             .flatMap(controller -> ControllerEndpointCatalog.endpoints(controller).stream())
             .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path())
             .sorted()
             .toList();
+    }
+
+    private List<Class<?>> controllers() {
+        try {
+            return ControllerEndpointCatalog.discoverControllers(CONTROLLER_BASE_PACKAGE);
+        } catch (ClassNotFoundException ex) {
+            throw new IllegalStateException("Failed to discover API controllers", ex);
+        }
     }
 
     private Map<String, String> frontendApiContracts() throws Exception {

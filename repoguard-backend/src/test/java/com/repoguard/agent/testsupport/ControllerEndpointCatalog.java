@@ -30,6 +30,7 @@ public final class ControllerEndpointCatalog {
         List<String> controllerClassNames = scanner.findCandidateComponents(basePackage).stream()
             .map(BeanDefinition::getBeanClassName)
             .filter(Objects::nonNull)
+            .filter(className -> !className.contains("$"))
             .sorted()
             .toList();
 
