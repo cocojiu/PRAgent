@@ -39,9 +39,9 @@ public class ReviewTaskAfterCommitPublisher {
         ReviewTaskPublishOutboxStore outboxStore,
         Executor reviewPublishExecutor
     ) {
-        this.reviewTaskPublisher = reviewTaskPublisher;
+        this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.outboxStore = Objects.requireNonNull(outboxStore, "outboxStore");
-        this.reviewPublishExecutor = reviewPublishExecutor == null ? Runnable::run : reviewPublishExecutor;
+        this.reviewPublishExecutor = Objects.requireNonNull(reviewPublishExecutor, "reviewPublishExecutor");
     }
 
     public boolean publishAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {

@@ -50,6 +50,28 @@ class ReviewTaskAfterCommitPublisherTest {
     }
 
     @Test
+    void constructorRejectsMissingPublisher() {
+        assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
+            null,
+            outboxStore(),
+            Runnable::run
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewTaskPublisher");
+    }
+
+    @Test
+    void constructorRejectsMissingExecutor() {
+        assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
+            reviewTaskPublisher,
+            outboxStore(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("reviewPublishExecutor");
+    }
+
+    @Test
     void marksPublishFailedWhenExecutorRejectsAfterTransactionCommit() {
         ReviewTask task = task();
         LocalDateTime queuedAt = LocalDateTime.of(2026, 7, 4, 9, 30);
@@ -58,11 +80,7 @@ class ReviewTaskAfterCommitPublisherTest {
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
         ReviewTaskAfterCommitPublisher publisher = new ReviewTaskAfterCommitPublisher(
             reviewTaskPublisher,
-            new ReviewTaskPublishOutboxStore(
-                reviewTaskMapper,
-                new ReviewTimelineAppender(reviewTimelineMapper),
-                new ReviewTaskStateMachine()
-            ),
+            outboxStore(),
             command -> {
                 throw new RejectedExecutionException(
                     "executor shutting down token=raw-token password=raw-password"
@@ -116,6 +134,14 @@ class ReviewTaskAfterCommitPublisherTest {
         task.setLlmFallbackReason("none");
         task.setLlmPromptSummary("summary");
         return task;
+    }
+
+    private ReviewTaskPublishOutboxStore outboxStore() {
+        return new ReviewTaskPublishOutboxStore(
+            reviewTaskMapper,
+            new ReviewTimelineAppender(reviewTimelineMapper),
+            new ReviewTaskStateMachine()
+        );
     }
 
     private ReviewTaskMessage message(LocalDateTime queuedAt) {
