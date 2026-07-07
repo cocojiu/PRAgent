@@ -15,6 +15,8 @@ import com.repoguard.agent.testsupport.ControllerEndpointCatalog;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,7 +43,7 @@ class ApiContractTest {
         Pattern.MULTILINE | Pattern.DOTALL
     );
     private static final Pattern FRONTEND_API_TYPE_OPERATION_PATTERN = Pattern.compile(
-        "^\\s{2}([a-zA-Z0-9]+): ApiOperation<(?<input>.*?),",
+        "^\\s{2}([a-zA-Z0-9]+): ApiOperation<",
         Pattern.MULTILINE
     );
     private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
@@ -219,6 +221,25 @@ class ApiContractTest {
     }
 
     @Test
+    void frontendTypedApiContractsKeepResponseDataAlignedWithBackendApiSurface() throws Exception {
+        Map<String, BackendEndpointContract> backendContracts = backendEndpointContracts();
+
+        assertThat(frontendEndpointContracts())
+            .as("Frontend typed api response contracts must match backend ApiResponse<T> data types")
+            .isNotEmpty()
+            .allSatisfy((operation, frontendContract) -> {
+                BackendEndpointContract backendContract = backendContracts.get(frontendContract.endpointKey());
+
+                assertThat(backendContract)
+                    .as(operation + " frontend endpoint must exist in backend API surface")
+                    .isNotNull();
+                assertThat(normalizeFrontendResponseType(frontendContract.responseType()))
+                    .as(operation + " frontend response type must match backend ApiResponse<T> data type")
+                    .isEqualTo(normalizeBackendResponseType(backendContract.responseDataType()));
+            });
+    }
+
+    @Test
     void frontendDirectApiEntrypointsStayWithinBackendApiSurface() throws Exception {
         Set<String> backendEndpoints = Set.copyOf(apiSurfaceEndpointKeys());
         Map<String, String> directEntrypoints = frontendDirectApiEntrypoints();
@@ -340,7 +361,8 @@ class ApiContractTest {
                 new BackendEndpointContract(
                     ControllerEndpointCatalog.requestParamNames(endpoint.method()),
                     ControllerEndpointCatalog.hasRequestBody(endpoint.method()),
-                    ControllerEndpointCatalog.requestBodyRequired(endpoint.method())
+                    ControllerEndpointCatalog.requestBodyRequired(endpoint.method()),
+                    responseDataType(endpoint.method())
                 )
             ));
         return contracts;
@@ -370,12 +392,12 @@ class ApiContractTest {
     private Map<String, FrontendEndpointContract> frontendEndpointContracts() throws Exception {
         String source = Files.readString(frontendContractsPath());
         Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
-        Map<String, String> operationInputTypes = frontendApiOperationInputTypes(source);
+        Map<String, FrontendOperationTypes> operationTypes = frontendApiOperationTypes(source);
         Map<String, FrontendEndpointContract> contracts = new LinkedHashMap<>();
         while (operationMatcher.find()) {
             String operation = operationMatcher.group(1);
             String body = operationMatcher.group("body");
-            String inputType = operationInputTypes.getOrDefault(operation, "");
+            FrontendOperationTypes types = operationTypes.getOrDefault(operation, new FrontendOperationTypes("", ""));
             extractFrontendPath(body).ifPresent(path -> contracts.put(
                 operation,
                 new FrontendEndpointContract(
@@ -383,24 +405,134 @@ class ApiContractTest {
                     path,
                     frontendQueryParamNames(body),
                     body.contains("body:"),
-                    body.contains("body:") && !frontendInputTypeAllowsUndefined(inputType)
+                    body.contains("body:") && !frontendInputTypeAllowsUndefined(types.inputType()),
+                    types.responseType()
                 )
             ));
         }
         return contracts;
     }
 
-    private Map<String, String> frontendApiOperationInputTypes(String source) {
+    private Map<String, FrontendOperationTypes> frontendApiOperationTypes(String source) {
         Matcher matcher = FRONTEND_API_TYPE_OPERATION_PATTERN.matcher(source);
-        Map<String, String> inputTypes = new LinkedHashMap<>();
+        Map<String, FrontendOperationTypes> operationTypes = new LinkedHashMap<>();
         while (matcher.find()) {
-            inputTypes.put(matcher.group(1), matcher.group("input").trim());
+            List<String> arguments = apiOperationTypeArguments(source, matcher.end());
+            operationTypes.put(matcher.group(1), new FrontendOperationTypes(arguments.get(0), arguments.get(1)));
         }
-        return inputTypes;
+        return operationTypes;
+    }
+
+    private List<String> apiOperationTypeArguments(String source, int start) {
+        int depth = 0;
+        int split = -1;
+        for (int index = start; index < source.length(); index++) {
+            char current = source.charAt(index);
+            if (current == '<') {
+                depth++;
+            } else if (current == '>') {
+                if (depth == 0) {
+                    String input = source.substring(start, split).trim();
+                    String response = source.substring(split + 1, index).trim();
+                    return List.of(input, response);
+                }
+                depth--;
+            } else if (current == ',' && depth == 0 && split < 0) {
+                split = index;
+            }
+        }
+        throw new IllegalStateException("Failed to parse frontend ApiOperation type arguments");
     }
 
     private boolean frontendInputTypeAllowsUndefined(String inputType) {
         return "undefined".equals(inputType) || inputType.contains("| undefined");
+    }
+
+    private String responseDataType(java.lang.reflect.Method method) {
+        Type returnType = method.getGenericReturnType();
+        if (returnType instanceof ParameterizedType parameterizedType
+            && parameterizedType.getRawType() == ApiResponse.class) {
+            return javaTypeName(parameterizedType.getActualTypeArguments()[0]);
+        }
+        return method.getReturnType().getSimpleName();
+    }
+
+    private String javaTypeName(Type type) {
+        if (type instanceof Class<?> typeClass) {
+            return typeClass.getSimpleName();
+        }
+        if (type instanceof ParameterizedType parameterizedType) {
+            Type rawType = parameterizedType.getRawType();
+            String rawName = rawType instanceof Class<?> rawClass ? rawClass.getSimpleName() : rawType.getTypeName();
+            return rawName + "<" + List.of(parameterizedType.getActualTypeArguments()).stream()
+                .map(this::javaTypeName)
+                .reduce((left, right) -> left + "," + right)
+                .orElse("") + ">";
+        }
+        return type.getTypeName();
+    }
+
+    private String normalizeBackendResponseType(String responseType) {
+        return normalizeResponseType(responseType, true);
+    }
+
+    private String normalizeFrontendResponseType(String responseType) {
+        return normalizeResponseType(responseType, false);
+    }
+
+    private String normalizeResponseType(String responseType, boolean backend) {
+        String type = responseType.replaceAll("\\s+", "");
+        if (type.endsWith("[]")) {
+            return normalizeResponseType(type.substring(0, type.length() - 2), backend) + "[]";
+        }
+        if (type.startsWith("List<") && type.endsWith(">")) {
+            return normalizeResponseType(genericContent(type), backend) + "[]";
+        }
+        if (type.startsWith("Required<") && type.endsWith(">")) {
+            return normalizeResponseType(genericContent(type), backend);
+        }
+        if (type.startsWith("PageResponse<") && type.endsWith(">")) {
+            return "PageResponse<" + normalizeResponseType(genericContent(type), backend) + ">";
+        }
+        if (!backend) {
+            return type;
+        }
+        return backendResponseTypeAliases().getOrDefault(type, defaultBackendResponseTypeName(type));
+    }
+
+    private String genericContent(String type) {
+        return type.substring(type.indexOf('<') + 1, type.length() - 1);
+    }
+
+    private String defaultBackendResponseTypeName(String type) {
+        return switch (type) {
+            case "Void" -> "void";
+            case "String" -> "string";
+            default -> type.endsWith("Dto") ? type.substring(0, type.length() - "Dto".length()) : type;
+        };
+    }
+
+    private Map<String, String> backendResponseTypeAliases() {
+        return Map.ofEntries(
+            Map.entry("AuthCurrentUserDto", "CurrentUser"),
+            Map.entry("CacheStatsResponse", "CacheStats"),
+            Map.entry("DashboardLlmQualityResponse", "DashboardLlmQuality"),
+            Map.entry("DashboardOverviewResponse", "DashboardOverview"),
+            Map.entry("DashboardRulesResponse", "DashboardRules"),
+            Map.entry("GithubCommentPreviewResponse", "GithubCommentPreview"),
+            Map.entry("GithubCommentPublicationHistoryResponse", "GithubCommentPublicationHistory"),
+            Map.entry("GithubCommentPublishResponse", "GithubCommentPublish"),
+            Map.entry("GithubPullRequestOptionsResponse", "GithubPullRequestOptions"),
+            Map.entry("MessageQueueHealthResponse", "MessageQueueHealth"),
+            Map.entry("NotificationCenterDto", "NotificationCenter"),
+            Map.entry("ReviewTaskListItem", "ReviewTask"),
+            Map.entry("ReviewTaskStatusResponse", "ReviewTaskStatus"),
+            Map.entry("ReviewTimelineItem", "TimelineItem"),
+            Map.entry("ServiceIntegrationConfigDto", "ServiceIntegrationConfig"),
+            Map.entry("SystemSettingsDto", "SystemSettings"),
+            Map.entry("UserManagementItemDto", "ManagedUser"),
+            Map.entry("UserOperationAuditDto", "UserOperationAudit")
+        );
     }
 
     private Map<String, Class<?>> recordComponentTypes(Class<?> recordType) {
@@ -551,7 +683,15 @@ class ApiContractTest {
     record ContractPayload(String value) {
     }
 
-    record BackendEndpointContract(List<String> queryParamNames, boolean hasRequestBody, boolean requestBodyRequired) {
+    record BackendEndpointContract(
+        List<String> queryParamNames,
+        boolean hasRequestBody,
+        boolean requestBodyRequired,
+        String responseDataType
+    ) {
+    }
+
+    record FrontendOperationTypes(String inputType, String responseType) {
     }
 
     record FrontendEndpointContract(
@@ -559,7 +699,8 @@ class ApiContractTest {
         String path,
         List<String> queryParamNames,
         boolean hasRequestBody,
-        boolean requestBodyRequired
+        boolean requestBodyRequired,
+        String responseType
     ) {
 
         String endpointKey() {
