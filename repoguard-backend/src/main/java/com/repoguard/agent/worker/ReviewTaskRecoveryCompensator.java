@@ -5,6 +5,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -96,7 +97,7 @@ public class ReviewTaskRecoveryCompensator {
                 LocalDateTime nextRetryAt = recoveredAt.plusNanos(recoveryPolicy.publishRetryDelayMs() * 1_000_000);
                 if (recoveryStore.markRecoveryPublishFailed(task, recoveredAt, nextRetryAt, error)) {
                     timelineRecorder.recoveryPublishFailed(task, recoveredAt, error);
-                    metricsRecorder.recordFailed("execute", failureClassifier.classify(ex));
+                    metricsRecorder.recordFailed(RabbitPublishFailurePhase.EXECUTE, failureClassifier.classify(ex));
                     LOGGER.warn(
                         "Review task recovery publish failed taskId={} repository={} prNumber={} operation=review_recovery result=publish_failed attempts={} nextRetryAt={} error={}",
                         task.getId(),

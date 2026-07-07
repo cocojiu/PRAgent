@@ -24,4 +24,18 @@ class RabbitPublishFailureMetricsRecorderTest {
 
         verify(metrics).rabbitPublishFailed("notification", "confirm_timeout");
     }
+
+    @Test
+    void recordsFailedPublishWithTypedFailurePhase() {
+        recorder.recordFailed(RabbitPublishFailurePhase.PUBLISH, "confirm_timeout");
+
+        verify(metrics).rabbitPublishFailed("publish", "confirm_timeout");
+    }
+
+    @Test
+    void rejectsMissingFailurePhase() {
+        assertThatThrownBy(() -> recorder.recordFailed((RabbitPublishFailurePhase) null, "confirm_timeout"))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("failurePhase");
+    }
 }

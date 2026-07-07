@@ -4,6 +4,7 @@ import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishResult;
 import com.repoguard.agent.messaging.RabbitPublishSpec;
+import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import com.repoguard.agent.messaging.RabbitPublishFailureMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishSpecFactory;
 import com.repoguard.agent.messaging.RabbitReliableMessagePublisher;
@@ -59,7 +60,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
                 Math.max(1, properties.getPublishMaxAttempts()),
                 failureReason
             );
-            metricsRecorder.recordFailed("notification", failureReason);
+            metricsRecorder.recordFailed(RabbitPublishFailurePhase.NOTIFICATION, failureReason);
             throw ex;
         }
     }

@@ -16,4 +16,9 @@ public class RabbitPublishFailureMetricsRecorder {
     public void recordFailed(String failurePhase, String reason) {
         metrics.rabbitPublishFailed(failurePhase, reason);
     }
+
+    public void recordFailed(RabbitPublishFailurePhase failurePhase, String reason) {
+        Objects.requireNonNull(failurePhase, "failurePhase");
+        recordFailed(failurePhase.code(), reason);
+    }
 }

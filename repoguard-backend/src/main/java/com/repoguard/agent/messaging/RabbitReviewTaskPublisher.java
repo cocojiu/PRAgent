@@ -57,7 +57,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
                     Math.max(1, properties.getPublishMaxAttempts()),
                     failureReason
                 );
-                metricsRecorder.recordFailed("publish", failureReason);
+                metricsRecorder.recordFailed(RabbitPublishFailurePhase.PUBLISH, failureReason);
                 throw ex;
             }
         }
