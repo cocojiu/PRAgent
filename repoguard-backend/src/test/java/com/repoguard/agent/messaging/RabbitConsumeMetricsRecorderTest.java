@@ -1,6 +1,7 @@
 package com.repoguard.agent.messaging;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -45,13 +46,17 @@ class RabbitConsumeMetricsRecorderTest {
     }
 
     @Test
-    void noopsWhenMetricsAreUnavailable() {
-        RabbitConsumeMetricsRecorder disabledRecorder =
-            new RabbitConsumeMetricsRecorder(null, nanoTimeSupplier);
-        nanoTimeSupplier.setTimes(1_000L, 2_000L);
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new RabbitConsumeMetricsRecorder(null, nanoTimeSupplier))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
+    }
 
-        long startedAt = disabledRecorder.startedAt();
-        disabledRecorder.recordConsumed(startedAt, "success");
+    @Test
+    void constructorRejectsMissingNanoTimeSupplier() {
+        assertThatThrownBy(() -> new RabbitConsumeMetricsRecorder(metrics, null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("nanoTimeSupplier");
     }
 
     private static class TestNanoTimeSupplier implements java.util.function.LongSupplier {

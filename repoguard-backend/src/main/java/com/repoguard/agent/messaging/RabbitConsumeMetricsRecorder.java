@@ -2,6 +2,7 @@ package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.function.LongSupplier;
 
 public class RabbitConsumeMetricsRecorder {
@@ -10,8 +11,8 @@ public class RabbitConsumeMetricsRecorder {
     private final LongSupplier nanoTimeSupplier;
 
     public RabbitConsumeMetricsRecorder(RepoGuardMetrics metrics, LongSupplier nanoTimeSupplier) {
-        this.metrics = metrics;
-        this.nanoTimeSupplier = nanoTimeSupplier;
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.nanoTimeSupplier = Objects.requireNonNull(nanoTimeSupplier, "nanoTimeSupplier");
     }
 
     public long startedAt() {
@@ -23,9 +24,6 @@ public class RabbitConsumeMetricsRecorder {
     }
 
     public void recordConsumed(long startedAt, String result, String failureCategory) {
-        if (metrics == null) {
-            return;
-        }
         metrics.rabbitMessageConsumed(Duration.ofNanos(nanoTimeSupplier.getAsLong() - startedAt), result, failureCategory);
     }
 

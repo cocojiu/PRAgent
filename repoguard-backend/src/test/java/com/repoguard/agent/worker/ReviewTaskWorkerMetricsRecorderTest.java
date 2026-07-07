@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -45,13 +46,10 @@ class ReviewTaskWorkerMetricsRecorderTest {
     }
 
     @Test
-    void noopsWhenMetricsAreUnavailable() {
-        ReviewTaskWorkerMetricsRecorder disabledRecorder =
-            new ReviewTaskWorkerMetricsRecorder(null, clock);
-        clock.setTimes(1_000L, 2_000L);
-
-        long startedAt = disabledRecorder.startedAt();
-        disabledRecorder.recordConsumed(startedAt, "success");
+    void constructorRejectsMissingMetrics() {
+        assertThatThrownBy(() -> new ReviewTaskWorkerMetricsRecorder(null, clock))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("metrics");
     }
 
     private static class TestReviewTaskWorkerClock extends ReviewTaskWorkerClock {
