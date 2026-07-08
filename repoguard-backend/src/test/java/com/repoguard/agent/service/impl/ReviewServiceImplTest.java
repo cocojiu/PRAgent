@@ -94,6 +94,8 @@ class ReviewServiceImplTest {
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
+    private final ReviewRepositoryDimensionService repositoryDimensionService =
+        org.mockito.Mockito.mock(ReviewRepositoryDimensionService.class);
     private final NotificationDispatchService notificationDispatchService = org.mockito.Mockito.mock(
         NotificationDispatchService.class
     );
@@ -121,7 +123,8 @@ class ReviewServiceImplTest {
             reviewTaskListItemAssembler
         ),
         new ReviewTaskStatusAssembler(),
-        new ReviewTaskListQueryBuilder()
+        new ReviewTaskListQueryBuilder(),
+        repositoryDimensionService
     );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
         humanReviewCommandService(),
@@ -251,7 +254,8 @@ class ReviewServiceImplTest {
             reviewTaskStateMachine,
             new TransactionTemplate(manualReviewTransactionManager),
             coordinator,
-            afterCommitPublisher
+            afterCommitPublisher,
+            repositoryDimensionService
         );
     }
 

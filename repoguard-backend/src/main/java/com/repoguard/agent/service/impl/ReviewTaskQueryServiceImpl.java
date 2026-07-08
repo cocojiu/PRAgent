@@ -30,6 +30,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     private final ReviewTaskQueryItemLoader queryItemLoader;
     private final ReviewTaskStatusAssembler statusAssembler;
     private final ReviewTaskListQueryBuilder listQueryBuilder;
+    private final ReviewRepositoryDimensionService repositoryDimensionService;
 
     public ReviewTaskQueryServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
@@ -37,7 +38,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         ReviewTaskDetailDataLoader detailDataLoader,
         ReviewTaskQueryItemLoader queryItemLoader,
         ReviewTaskStatusAssembler statusAssembler,
-        ReviewTaskListQueryBuilder listQueryBuilder
+        ReviewTaskListQueryBuilder listQueryBuilder,
+        ReviewRepositoryDimensionService repositoryDimensionService
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper must not be null");
         this.detailAssembler = Objects.requireNonNull(detailAssembler, "detailAssembler must not be null");
@@ -45,6 +47,10 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         this.queryItemLoader = Objects.requireNonNull(queryItemLoader, "queryItemLoader must not be null");
         this.statusAssembler = Objects.requireNonNull(statusAssembler, "statusAssembler must not be null");
         this.listQueryBuilder = Objects.requireNonNull(listQueryBuilder, "listQueryBuilder must not be null");
+        this.repositoryDimensionService = Objects.requireNonNull(
+            repositoryDimensionService,
+            "repositoryDimensionService must not be null"
+        );
     }
 
     @Override
@@ -80,8 +86,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public List<String> listRepositories() {
-        List<String> repositories = reviewTaskMapper.selectDistinctRepositories();
-        return repositories == null ? List.of() : repositories;
+        return repositoryDimensionService.listRepositoryLabels();
     }
 
     @Override

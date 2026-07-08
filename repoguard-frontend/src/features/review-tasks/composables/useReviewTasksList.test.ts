@@ -26,7 +26,7 @@ describe("useReviewTasksList", () => {
       items: [reviewTask],
       total: 26
     });
-    reviewApi.fetchReviewRepositories.mockResolvedValue(["repo-guard", "repoguard-agent"]);
+    reviewApi.fetchReviewRepositories.mockResolvedValue(["codex/repo-guard", "openai/repo-guard"]);
 
     const list = useReviewTasksList();
     list.initializeReviewTasksList();
@@ -48,7 +48,7 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviewRepositories).toHaveBeenCalledTimes(1);
     expect(list.reviewTasks.value).toEqual([reviewTask]);
     expect(list.totalTasks.value).toBe(26);
-    expect(list.repositories.value).toEqual(["repo-guard", "repoguard-agent"]);
+    expect(list.repositories.value).toEqual(["codex/repo-guard", "openai/repo-guard"]);
     expect(list.loading.value).toBe(false);
   });
 

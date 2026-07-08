@@ -50,6 +50,9 @@ public class ReviewTaskListQueryBuilder {
     private LambdaQueryWrapper<ReviewTask> filteredQuery(ReviewTaskListQueryCriteria criteria, boolean ordered) {
         LambdaQueryWrapper<ReviewTask> wrapper = new LambdaQueryWrapper<>();
 
+        if (StringUtils.hasText(criteria.organization())) {
+            wrapper.eq(ReviewTask::getOrganization, criteria.organization());
+        }
         if (StringUtils.hasText(criteria.repository())) {
             wrapper.eq(ReviewTask::getRepository, criteria.repository());
         }
@@ -90,7 +93,7 @@ public class ReviewTaskListQueryBuilder {
     }
 
     ReviewTaskListQueryCriteria normalize(ReviewQuery query) {
-        String repository = trimToNull(query.repository());
+        RepositoryFilter repositoryFilter = normalizeRepositoryFilter(query.repository());
         String status = upperTrimToNull(query.status());
         String riskLevel = upperTrimToNull(query.riskLevel());
         String source = upperTrimToNull(query.source());
@@ -101,7 +104,8 @@ public class ReviewTaskListQueryBuilder {
         String textKeyword = prNumber == null && commitPrefix == null && isUsableTextKeyword(keyword) ? keyword : null;
         Long cursorId = query.cursorId();
         return new ReviewTaskListQueryCriteria(
-            repository,
+            repositoryFilter.organization(),
+            repositoryFilter.repository(),
             status,
             riskLevel,
             source,
@@ -121,6 +125,23 @@ public class ReviewTaskListQueryBuilder {
 
     private String upperTrimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim().toUpperCase(Locale.ROOT) : null;
+    }
+
+    private RepositoryFilter normalizeRepositoryFilter(String value) {
+        String repository = trimToNull(value);
+        if (repository == null) {
+            return new RepositoryFilter(null, null);
+        }
+        int slashIndex = repository.indexOf('/');
+        if (slashIndex <= 0 || slashIndex == repository.length() - 1) {
+            return new RepositoryFilter(null, repository);
+        }
+        String organization = trimToNull(repository.substring(0, slashIndex));
+        String repositoryName = trimToNull(repository.substring(slashIndex + 1));
+        if (organization == null || repositoryName == null) {
+            return new RepositoryFilter(null, repository);
+        }
+        return new RepositoryFilter(organization, repositoryName);
     }
 
     private Integer parseIntegerOrNull(String value) {
@@ -166,6 +187,7 @@ public class ReviewTaskListQueryBuilder {
     }
 
     record ReviewTaskListQueryCriteria(
+        String organization,
         String repository,
         String status,
         String riskLevel,
@@ -181,5 +203,8 @@ public class ReviewTaskListQueryBuilder {
         boolean hasCursor() {
             return cursorCreatedAt != null && cursorId != null;
         }
+    }
+
+    record RepositoryFilter(String organization, String repository) {
     }
 }

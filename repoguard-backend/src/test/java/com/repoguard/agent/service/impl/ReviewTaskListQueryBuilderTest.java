@@ -35,6 +35,7 @@ class ReviewTaskListQueryBuilderTest {
         var criteria = builder.normalize(query);
         var wrapper = builder.build(query);
 
+        assertThat(criteria.organization()).isNull();
         assertThat(criteria.repository()).isEqualTo("repo-a");
         assertThat(criteria.status()).isEqualTo("FAILED");
         assertThat(criteria.riskLevel()).isEqualTo("HIGH");
@@ -71,6 +72,45 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.prNumber()).isNull();
         assertThat(criteria.commitPrefix()).isNull();
         assertThat(criteria.textKeyword()).isEqualTo("security");
+    }
+
+    @Test
+    void splitsRepositoryDimensionLabelIntoOrganizationAndRepositoryFilters() {
+        var query = new ReviewQuery(
+            1,
+            20,
+            " codex/repo-guard ",
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+
+        var criteria = builder.normalize(query);
+        var wrapper = builder.build(query);
+
+        assertThat(criteria.organization()).isEqualTo("codex");
+        assertThat(criteria.repository()).isEqualTo("repo-guard");
+        assertThat(wrapper.getSqlSegment()).contains("organization", "repository");
+        assertThat(wrapper.getParamNameValuePairs().values()).contains("codex", "repo-guard");
+    }
+
+    @Test
+    void keepsLegacyRepositoryOnlyFilterWhenLabelHasNoOrganization() {
+        var criteria = builder.normalize(new ReviewQuery(
+            1,
+            20,
+            "repo-guard",
+            null,
+            null,
+            null,
+            null,
+            null
+        ));
+
+        assertThat(criteria.organization()).isNull();
+        assertThat(criteria.repository()).isEqualTo("repo-guard");
     }
 
     @Test

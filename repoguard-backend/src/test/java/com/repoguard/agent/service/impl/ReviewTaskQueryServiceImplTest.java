@@ -33,6 +33,8 @@ class ReviewTaskQueryServiceImplTest {
         org.mockito.Mockito.mock(ReviewTaskQueryItemLoader.class);
     private final ReviewTaskStatusAssembler statusAssembler = new ReviewTaskStatusAssembler();
     private final ReviewTaskListQueryBuilder listQueryBuilder = new ReviewTaskListQueryBuilder();
+    private final ReviewRepositoryDimensionService repositoryDimensionService =
+        org.mockito.Mockito.mock(ReviewRepositoryDimensionService.class);
 
     @Test
     void constructorRejectsMissingDetailDataLoader() {
@@ -42,7 +44,8 @@ class ReviewTaskQueryServiceImplTest {
             null,
             queryItemLoader,
             statusAssembler,
-            listQueryBuilder
+            listQueryBuilder,
+            repositoryDimensionService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("detailDataLoader");
@@ -56,10 +59,23 @@ class ReviewTaskQueryServiceImplTest {
             detailDataLoader,
             null,
             statusAssembler,
-            listQueryBuilder
+            listQueryBuilder,
+            repositoryDimensionService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("queryItemLoader");
+    }
+
+    @Test
+    void listRepositoriesReadsRepositoryDimensionLabels() {
+        when(repositoryDimensionService.listRepositoryLabels())
+            .thenReturn(List.of("org-a/repo-guard", "org-b/repo-guard"));
+
+        var repositories = service().listRepositories();
+
+        org.assertj.core.api.Assertions.assertThat(repositories)
+            .containsExactly("org-a/repo-guard", "org-b/repo-guard");
+        verify(repositoryDimensionService).listRepositoryLabels();
     }
 
     @Test
@@ -118,7 +134,8 @@ class ReviewTaskQueryServiceImplTest {
             detailDataLoader,
             queryItemLoader,
             statusAssembler,
-            listQueryBuilder
+            listQueryBuilder,
+            repositoryDimensionService
         );
     }
 

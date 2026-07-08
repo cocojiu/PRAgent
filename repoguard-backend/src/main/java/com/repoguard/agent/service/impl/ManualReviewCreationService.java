@@ -45,6 +45,7 @@ public class ManualReviewCreationService {
     private final TransactionTemplate manualCreateTransactionTemplate;
     private final ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator;
     private final ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher;
+    private final ReviewRepositoryDimensionService repositoryDimensionService;
 
     @Autowired
     public ManualReviewCreationService(
@@ -55,7 +56,8 @@ public class ManualReviewCreationService {
         ReviewTaskStateMachine reviewTaskStateMachine,
         PlatformTransactionManager transactionManager,
         ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator,
-        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
+        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
+        ReviewRepositoryDimensionService repositoryDimensionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
@@ -68,6 +70,10 @@ public class ManualReviewCreationService {
             "manualReviewIdempotencyCoordinator"
         );
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
+        this.repositoryDimensionService = Objects.requireNonNull(
+            repositoryDimensionService,
+            "repositoryDimensionService"
+        );
     }
 
     ManualReviewCreationService(
@@ -78,7 +84,8 @@ public class ManualReviewCreationService {
         ReviewTaskStateMachine reviewTaskStateMachine,
         TransactionTemplate manualCreateTransactionTemplate,
         ManualReviewIdempotencyCoordinator manualReviewIdempotencyCoordinator,
-        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher
+        ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
+        ReviewRepositoryDimensionService repositoryDimensionService
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
@@ -94,6 +101,10 @@ public class ManualReviewCreationService {
             "manualReviewIdempotencyCoordinator"
         );
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
+        this.repositoryDimensionService = Objects.requireNonNull(
+            repositoryDimensionService,
+            "repositoryDimensionService"
+        );
     }
 
     public ManualReviewResponse triggerManualReview(ManualReviewRequest request) {
@@ -190,6 +201,7 @@ public class ManualReviewCreationService {
             return reusedTaskResponse(concurrentTask);
         }
         reviewTimelineAppender.appendInitial(task.getId(), "Task queued", createdAt);
+        repositoryDimensionService.recordRepository(organization, repository, createdAt);
         ownerFuture.complete(task);
         cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
         evictDashboardReviewActivity();

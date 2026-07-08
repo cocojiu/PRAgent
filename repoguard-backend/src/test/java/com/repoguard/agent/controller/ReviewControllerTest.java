@@ -108,7 +108,7 @@ class ReviewControllerTest {
 
         @Override
         public List<String> listRepositories() {
-            return List.of("api", "spring-boot-demo", "web");
+            return List.of("org-a/repo-guard", "org-b/repo-guard", "repo-guard-demo/web");
         }
 
         @Override
@@ -538,9 +538,9 @@ class ReviewControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data", hasSize(3)))
-            .andExpect(jsonPath("$.data[0]").value("api"))
-            .andExpect(jsonPath("$.data[1]").value("spring-boot-demo"))
-            .andExpect(jsonPath("$.data[2]").value("web"));
+            .andExpect(jsonPath("$.data[0]").value("org-a/repo-guard"))
+            .andExpect(jsonPath("$.data[1]").value("org-b/repo-guard"))
+            .andExpect(jsonPath("$.data[2]").value("repo-guard-demo/web"));
     }
 
     @Test
