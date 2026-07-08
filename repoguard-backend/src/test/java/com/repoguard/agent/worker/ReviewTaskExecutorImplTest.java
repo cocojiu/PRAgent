@@ -460,10 +460,15 @@ class ReviewTaskExecutorImplTest {
             claimService,
             failureHandler,
             resultWriter,
-            new ReviewExecutionNotifier(org.mockito.Mockito.mock(NotificationDispatchService.class)),
+            new ReviewExecutionNotifier(
+                org.mockito.Mockito.mock(NotificationDispatchService.class),
+                clock,
+                metricsRecorder
+            ),
             new ReviewExecutionDiffStats(),
             new ReviewExecutionLog(clock, logContextFormatter),
-            clock
+            clock,
+            new ReviewExecutionStageTimer(clock, metricsRecorder)
         );
     }
 

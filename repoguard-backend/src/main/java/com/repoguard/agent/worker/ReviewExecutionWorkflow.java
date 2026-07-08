@@ -7,6 +7,7 @@ import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -24,6 +25,7 @@ class ReviewExecutionWorkflow {
     private final ReviewExecutionDiffStats diffStats;
     private final ReviewExecutionLog executionLog;
     private final ReviewExecutionClock clock;
+    private final ReviewExecutionStageTimer stageTimer;
 
     ReviewExecutionWorkflow(
         PullRequestReviewer pullRequestReviewer,
@@ -37,20 +39,22 @@ class ReviewExecutionWorkflow {
         ReviewExecutionNotifier notifier,
         ReviewExecutionDiffStats diffStats,
         ReviewExecutionLog executionLog,
-        ReviewExecutionClock clock
+        ReviewExecutionClock clock,
+        ReviewExecutionStageTimer stageTimer
     ) {
-        this.pullRequestReviewer = pullRequestReviewer;
-        this.transactionRunner = transactionRunner;
-        this.diffFetcher = diffFetcher;
-        this.reviewTaskStateMachine = reviewTaskStateMachine;
-        this.timelineRecorder = timelineRecorder;
-        this.claimService = claimService;
-        this.failureHandler = failureHandler;
-        this.resultWriter = resultWriter;
-        this.notifier = notifier;
-        this.diffStats = diffStats;
-        this.executionLog = executionLog;
-        this.clock = clock;
+        this.pullRequestReviewer = Objects.requireNonNull(pullRequestReviewer, "pullRequestReviewer");
+        this.transactionRunner = Objects.requireNonNull(transactionRunner, "transactionRunner");
+        this.diffFetcher = Objects.requireNonNull(diffFetcher, "diffFetcher");
+        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
+        this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
+        this.claimService = Objects.requireNonNull(claimService, "claimService");
+        this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
+        this.resultWriter = Objects.requireNonNull(resultWriter, "resultWriter");
+        this.notifier = Objects.requireNonNull(notifier, "notifier");
+        this.diffStats = Objects.requireNonNull(diffStats, "diffStats");
+        this.executionLog = Objects.requireNonNull(executionLog, "executionLog");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.stageTimer = Objects.requireNonNull(stageTimer, "stageTimer");
     }
 
     void execute(ReviewTaskMessage message, ReviewTask task) {
@@ -75,7 +79,7 @@ class ReviewExecutionWorkflow {
             try {
                 GithubPullRequestDiff diff = fetchPullRequestDiff(task);
                 executionLog.diffFetched(task, diff, diffStats);
-                ReviewResult reviewResult = pullRequestReviewer.review(task, diff);
+                ReviewResult reviewResult = stageTimer.record("review", () -> pullRequestReviewer.review(task, diff));
                 ReviewExecutionResultWriter.WriteResult writeResult = completeReview(
                     task,
                     diff,
@@ -83,7 +87,6 @@ class ReviewExecutionWorkflow {
                     startedAt,
                     claimId
                 );
-                notifier.reviewFinished(task, writeResult.findingCount());
                 executionLog.completed(task, reviewResult, writeResult, startedAt);
             } catch (ReviewTaskClaimLostException ex) {
                 executionLog.resultClaimLost(task);
@@ -102,13 +105,13 @@ class ReviewExecutionWorkflow {
     }
 
     private boolean markReviewing(ReviewTask task, LocalDateTime startedAt, String claimId) {
-        return transactionRunner.execute(() -> {
+        return stageTimer.record("claim", () -> transactionRunner.execute(() -> {
             if (!claimService.claimReviewing(task, startedAt, claimId)) {
                 return false;
             }
             timelineRecorder.reviewStarted(task, startedAt);
             return true;
-        });
+        }));
     }
 
     private ReviewExecutionResultWriter.WriteResult completeReview(
@@ -118,17 +121,22 @@ class ReviewExecutionWorkflow {
         LocalDateTime startedAt,
         String claimId
     ) {
-        return transactionRunner.execute(() -> resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId));
+        return stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
+            ReviewExecutionResultWriter.WriteResult writeResult =
+                resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId);
+            notifier.reviewFinishedAfterCommit(task, writeResult.findingCount());
+            return writeResult;
+        }));
     }
 
     private boolean failReview(ReviewTask task, LocalDateTime startedAt, String claimId, RuntimeException ex) {
-        Boolean failed = transactionRunner.execute(() -> {
-            return failureHandler.applyFailure(task, startedAt, claimId, ex);
-        });
-        if (Boolean.TRUE.equals(failed)) {
-            notifier.reviewFailed(task);
-            return true;
-        }
-        return false;
+        Boolean failed = stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
+            boolean applied = failureHandler.applyFailure(task, startedAt, claimId, ex);
+            if (applied) {
+                notifier.reviewFailedAfterCommit(task);
+            }
+            return applied;
+        }));
+        return Boolean.TRUE.equals(failed);
     }
 }

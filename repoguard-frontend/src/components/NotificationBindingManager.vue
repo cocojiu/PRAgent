@@ -25,6 +25,17 @@
       @test="runBindingTest"
       @toggle="toggleBinding"
     />
+    <el-pagination
+      v-if="bindingTotal > bindingPageSize"
+      v-model:current-page="bindingPage"
+      v-model:page-size="bindingPageSize"
+      class="table-pagination"
+      layout="total, sizes, prev, pager, next"
+      :page-sizes="[10, 20, 50, 100]"
+      :total="bindingTotal"
+      @current-change="changeBindingPage"
+      @size-change="changeBindingPageSize"
+    />
 
     <NotificationBindingDialog
       v-model:visible="bindingDialogVisible"
@@ -44,6 +55,9 @@ import { canManage } from "@/stores/authState";
 
 const {
   notificationBindings,
+  bindingPage,
+  bindingPageSize,
+  bindingTotal,
   bindingsLoading: loadingBindings,
   bindingDialogVisible,
   savingBinding,
@@ -55,7 +69,9 @@ const {
   saveBinding,
   runBindingTest,
   toggleBinding,
-  removeBinding
+  removeBinding,
+  changeBindingPage,
+  changeBindingPageSize
 } = useNotificationBindings();
 
 onMounted(() => {

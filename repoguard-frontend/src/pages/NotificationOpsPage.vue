@@ -141,6 +141,17 @@
               @test="runBindingTest"
               @toggle="toggleBinding"
             />
+            <el-pagination
+              v-if="bindingTotal > bindingPageSize"
+              v-model:current-page="bindingPage"
+              v-model:page-size="bindingPageSize"
+              class="ops-pagination"
+              layout="total, sizes, prev, pager, next"
+              :page-sizes="[10, 20, 50, 100]"
+              :total="bindingTotal"
+              @current-change="changeBindingPage"
+              @size-change="changeBindingPageSize"
+            />
           </article>
         </el-tab-pane>
 
@@ -236,6 +247,9 @@ const loading = ref(false);
 
 const {
   notificationBindings,
+  bindingPage,
+  bindingPageSize,
+  bindingTotal,
   bindingsLoading,
   bindingDialogVisible,
   savingBinding,
@@ -247,7 +261,9 @@ const {
   saveBinding,
   runBindingTest,
   toggleBinding,
-  removeBinding
+  removeBinding,
+  changeBindingPage,
+  changeBindingPageSize
 } = useNotificationBindings();
 const {
   deliveriesLoading,

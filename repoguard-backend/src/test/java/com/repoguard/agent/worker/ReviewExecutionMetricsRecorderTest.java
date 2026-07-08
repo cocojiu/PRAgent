@@ -47,6 +47,13 @@ class ReviewExecutionMetricsRecorderTest {
     }
 
     @Test
+    void recordStageWritesStageDurationMetric() {
+        recorder.recordStage(Duration.ofMillis(250), "db_write", "success");
+
+        verify(metrics).reviewExecutionStageDuration(Duration.ofMillis(250), "db_write", "success");
+    }
+
+    @Test
     void constructorRejectsMissingMetrics() {
         assertThatThrownBy(() -> new ReviewExecutionMetricsRecorder(null))
             .isInstanceOf(NullPointerException.class)

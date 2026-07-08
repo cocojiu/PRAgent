@@ -29,4 +29,8 @@ class ReviewExecutionMetricsRecorder {
     void recordGithubDiffFetch(Duration duration, String result) {
         metrics.githubDiffDuration(duration, result);
     }
+
+    void recordStage(Duration duration, String stage, String result) {
+        metrics.reviewExecutionStageDuration(duration, stage, result);
+    }
 }

@@ -1,4 +1,4 @@
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
   createNotificationBinding,
@@ -42,12 +42,19 @@ const toBindingForm = (binding?: NotificationBinding): NotificationBindingReques
 
 export const useNotificationBindings = () => {
   const notificationBindings = ref<NotificationBinding[]>([]);
+  const bindingPage = ref(1);
+  const bindingPageSize = ref(20);
+  const bindingTotal = ref(0);
   const bindingsLoading = ref(false);
   const bindingDialogVisible = ref(false);
   const savingBinding = ref(false);
   const testingBindingId = ref<number>();
   const editingBindingId = ref<number>();
   const bindingForm = reactive<NotificationBindingRequest>(defaultBindingForm());
+
+  const bindingPageCount = computed(() =>
+    Math.max(1, Math.ceil(bindingTotal.value / bindingPageSize.value))
+  );
 
   const upsertBinding = (binding: NotificationBinding) => {
     const index = notificationBindings.value.findIndex((item) => item.id === binding.id);
@@ -61,8 +68,16 @@ export const useNotificationBindings = () => {
   const loadNotificationBindings = async () => {
     bindingsLoading.value = true;
     try {
-      const result = await fetchNotificationBindings();
+      const result = await fetchNotificationBindings({
+        page: bindingPage.value,
+        pageSize: bindingPageSize.value
+      });
       notificationBindings.value = result.items;
+      bindingTotal.value = result.total;
+      if (bindingPage.value > bindingPageCount.value) {
+        bindingPage.value = bindingPageCount.value;
+        await loadNotificationBindings();
+      }
     } catch (error) {
       ElMessage.error(getErrorMessage(error, "渠道绑定加载失败"));
     } finally {
@@ -85,7 +100,11 @@ export const useNotificationBindings = () => {
       const saved = editingBindingId.value
         ? await updateNotificationBinding(editingBindingId.value, { ...bindingForm })
         : await createNotificationBinding({ ...bindingForm });
+      if (!editingBindingId.value) {
+        bindingPage.value = 1;
+      }
       upsertBinding(saved);
+      await loadNotificationBindings();
       bindingDialogVisible.value = false;
       ElMessage.success("消息通知绑定已保存");
     } catch (error) {
@@ -124,14 +143,33 @@ export const useNotificationBindings = () => {
     try {
       await deleteNotificationBinding(id);
       notificationBindings.value = notificationBindings.value.filter((binding) => binding.id !== id);
+      bindingTotal.value = Math.max(0, bindingTotal.value - 1);
+      if (notificationBindings.value.length === 0 && bindingPage.value > 1) {
+        bindingPage.value -= 1;
+      }
+      await loadNotificationBindings();
       ElMessage.success("消息通知绑定已删除");
     } catch (error) {
       ElMessage.error(getErrorMessage(error, "消息通知绑定删除失败"));
     }
   };
 
+  const changeBindingPage = async (page: number) => {
+    bindingPage.value = Math.max(1, page);
+    await loadNotificationBindings();
+  };
+
+  const changeBindingPageSize = async (pageSize: number) => {
+    bindingPageSize.value = Math.max(1, pageSize);
+    bindingPage.value = 1;
+    await loadNotificationBindings();
+  };
+
   return {
     notificationBindings,
+    bindingPage,
+    bindingPageSize,
+    bindingTotal,
     bindingsLoading,
     bindingDialogVisible,
     savingBinding,
@@ -143,6 +181,8 @@ export const useNotificationBindings = () => {
     saveBinding,
     runBindingTest,
     toggleBinding,
-    removeBinding
+    removeBinding,
+    changeBindingPage,
+    changeBindingPageSize
   };
 };

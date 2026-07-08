@@ -52,6 +52,15 @@ public class RepoGuardMetrics {
             .record(nonNegative(duration));
     }
 
+    public void reviewExecutionStageDuration(Duration duration, String stage, String result) {
+        timer(
+            "repoguard.review.execution.stage.duration",
+            "stage", normalize(stage),
+            "result", normalize(result)
+        )
+            .record(nonNegative(duration));
+    }
+
     public void reviewTaskFailed(RuntimeException ex) {
         counter(
             "repoguard.review.task.failed",
