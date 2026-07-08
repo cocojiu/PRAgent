@@ -42,7 +42,8 @@ describe("useReviewTasksList", () => {
       triggerSource: "",
       keyword: "",
       cursorCreatedAt: undefined,
-      cursorId: undefined
+      cursorId: undefined,
+      totalHint: undefined
     });
     expect(reviewApi.fetchReviews).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
     expect(reviewApi.fetchReviewRepositories).toHaveBeenCalledTimes(1);
@@ -75,7 +76,8 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
       cursorCreatedAt: secondTask.createdAt,
-      cursorId: secondTask.id
+      cursorId: secondTask.id,
+      totalHint: 26
     }));
   });
 
@@ -107,7 +109,8 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
       cursorCreatedAt: undefined,
-      cursorId: undefined
+      cursorId: undefined,
+      totalHint: undefined
     }));
   });
 });

@@ -88,7 +88,10 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     private PageResponse<ReviewTaskListItem> listReviewsByKeyset(ReviewQuery query) {
         List<ReviewTask> tasks = reviewTaskMapper.selectList(listQueryBuilder.buildKeysetPage(query));
-        Long total = reviewTaskMapper.selectCount(listQueryBuilder.buildCountQuery(query));
+        Long total = normalizedTotalHint(query);
+        if (total == null) {
+            total = reviewTaskMapper.selectCount(listQueryBuilder.buildCountQuery(query));
+        }
         Map<Long, List<ReviewTimeline>> timelinesByTaskId = queryItemLoader.loadTimelinesByTaskId(tasks);
         return new PageResponse<>(
             tasks.stream()
@@ -96,6 +99,11 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
                 .toList(),
             total == null ? 0 : total
         );
+    }
+
+    private Long normalizedTotalHint(ReviewQuery query) {
+        Long totalHint = query.totalHint();
+        return totalHint == null || totalHint < 0 ? null : totalHint;
     }
 
     @Override

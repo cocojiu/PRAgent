@@ -274,6 +274,35 @@ class ReviewTaskQueryServiceImplTest {
         verify(reviewTaskMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
     }
 
+    @Test
+    void listReviewsUsesKeysetTotalHintWithoutCountingAgain() {
+        ReviewTask task = reviewTask(8L);
+        ReviewTaskListItem item = listItem(task.getId());
+        when(reviewTaskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task));
+        when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
+        when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
+
+        var response = service().listReviews(new ReviewQuery(
+            3,
+            20,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "2026-07-08 12:00:00",
+            task.getId(),
+            42L
+        ));
+
+        org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
+        org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(42);
+        verify(reviewTaskMapper).selectList(any(Wrapper.class));
+        verify(reviewTaskMapper, never()).selectCount(any(Wrapper.class));
+        verify(reviewTaskMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
+    }
+
     private ReviewTaskQueryServiceImpl service() {
         return new ReviewTaskQueryServiceImpl(
             reviewTaskMapper,

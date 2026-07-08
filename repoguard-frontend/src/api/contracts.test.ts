@@ -43,7 +43,8 @@ describe("apiRequest", () => {
       triggerSource: undefined,
       keyword: "",
       cursorCreatedAt: "2026-07-08 12:00:00",
-      cursorId: 123
+      cursorId: 123,
+      totalHint: 42
     });
 
     expect(result).toEqual({ items: [], total: 0 });
@@ -56,6 +57,7 @@ describe("apiRequest", () => {
     expect(url).toContain("riskLevel=high");
     expect(url).toContain("cursorCreatedAt=2026-07-08+12%3A00%3A00");
     expect(url).toContain("cursorId=123");
+    expect(url).toContain("totalHint=42");
     expect(url).not.toContain("keyword=");
     expect(init.method).toBeUndefined();
   });

@@ -505,11 +505,13 @@ class ReviewControllerTest {
     void listReviewsPassesKeysetCursorParameters() throws Exception {
         mockMvc.perform(get("/api/v1/reviews")
                 .param("cursorCreatedAt", "2026-07-08 12:00:00")
-                .param("cursorId", "123"))
+                .param("cursorId", "123")
+                .param("totalHint", "42"))
             .andExpect(status().isOk());
 
         assertThat(lastListQuery.cursorCreatedAt()).isEqualTo("2026-07-08 12:00:00");
         assertThat(lastListQuery.cursorId()).isEqualTo(123L);
+        assertThat(lastListQuery.totalHint()).isEqualTo(42L);
     }
 
     @Test

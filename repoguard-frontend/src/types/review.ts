@@ -351,6 +351,7 @@ export interface ReviewQuery {
   keyword?: string;
   cursorCreatedAt?: string;
   cursorId?: number;
+  totalHint?: number;
 }
 
 export interface ManualReviewRequest {

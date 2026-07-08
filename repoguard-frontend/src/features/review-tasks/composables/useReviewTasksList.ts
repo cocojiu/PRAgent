@@ -84,7 +84,8 @@ export const useReviewTasksList = () => {
         triggerSource: sourceFilter.value,
         keyword: keyword.value.trim(),
         cursorCreatedAt: cursor?.cursorCreatedAt,
-        cursorId: cursor?.cursorId
+        cursorId: cursor?.cursorId,
+        totalHint: cursor ? totalTasks.value : undefined
       });
       if (requestSeq !== taskRequestSeq) {
         return;
