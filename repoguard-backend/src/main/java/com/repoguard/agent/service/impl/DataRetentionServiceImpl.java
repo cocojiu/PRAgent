@@ -22,6 +22,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
@@ -55,6 +56,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
     private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
+    private final ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper;
     private final SystemSettingsProvider systemSettingsProvider;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final DataRetentionMetricsRecorder metricsRecorder;
@@ -73,6 +75,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         GithubCommentPublicationMapper githubCommentPublicationMapper,
         GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
         GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
+        ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper,
         SystemSettingsProvider systemSettingsProvider,
         ReviewTaskStateMachine reviewTaskStateMachine,
         DataRetentionMetricsRecorder metricsRecorder,
@@ -88,6 +91,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         this.githubCommentPublicationMapper = githubCommentPublicationMapper;
         this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
         this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
+        this.reviewTaskArchiveSummaryMapper = Objects.requireNonNull(
+            reviewTaskArchiveSummaryMapper,
+            "reviewTaskArchiveSummaryMapper"
+        );
         this.systemSettingsProvider = systemSettingsProvider;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
@@ -201,6 +208,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 ));
             }
 
+            reviewTaskArchiveSummaryMapper.insertArchiveSummaries(cleanupBatchId, backupReference, taskIds);
             int deletedBatchItems = githubCommentPublicationBatchItemMapper.delete(
                 new LambdaQueryWrapper<GithubCommentPublicationBatchItem>().in(GithubCommentPublicationBatchItem::getTaskId, taskIds)
             );
