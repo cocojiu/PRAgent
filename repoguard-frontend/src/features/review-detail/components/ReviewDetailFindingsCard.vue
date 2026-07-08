@@ -10,8 +10,8 @@
         加载 Findings
       </el-button>
     </div>
-    <div v-else-if="findings.length" class="finding-list">
-      <section v-for="(finding, index) in findings" :key="`${finding.file}-${finding.line}-${index}`" class="finding-item">
+    <div v-else-if="renderedFindings.length" class="finding-list">
+      <section v-for="(finding, index) in renderedFindings" :key="`${finding.file}-${finding.line}-${index}`" class="finding-item">
         <div class="finding-head">
           <span :class="`risk-pill ${finding.severity}`">{{ riskText(finding.severity) }}</span>
           <code>{{ finding.file }}</code>
@@ -30,25 +30,25 @@
         <div class="finding-body">
           <div>
             <h3>问题描述</h3>
-            <p>{{ finding.message || "暂无问题描述" }}</p>
+            <p :title="finding.message">{{ previewText(finding.message) || "暂无问题描述" }}</p>
           </div>
           <div>
             <h3>修复建议</h3>
-            <p>{{ finding.recommendation || "暂无修复建议" }}</p>
+            <p :title="finding.recommendation">{{ previewText(finding.recommendation) || "暂无修复建议" }}</p>
           </div>
         </div>
         <div v-if="hasExplainability(finding)" class="finding-explainability">
           <div v-if="finding.evidence">
             <h3>触发依据</h3>
-            <p>{{ finding.evidence }}</p>
+            <p :title="finding.evidence">{{ previewText(finding.evidence) }}</p>
           </div>
           <div v-if="finding.impact">
             <h3>影响</h3>
-            <p>{{ finding.impact }}</p>
+            <p :title="finding.impact">{{ previewText(finding.impact) }}</p>
           </div>
           <div v-if="finding.fixExample">
             <h3>修复示例</h3>
-            <p>{{ finding.fixExample }}</p>
+            <p :title="finding.fixExample">{{ previewText(finding.fixExample) }}</p>
           </div>
         </div>
         <div class="finding-feedback">
@@ -99,6 +99,9 @@
           </div>
         </div>
       </section>
+      <p v-if="hiddenFindingCount" class="render-budget-note">
+        当前页另有 {{ hiddenFindingCount }} 条结果
+      </p>
     </div>
     <el-empty v-else description="暂无审查问题" />
     <el-pagination
@@ -114,10 +117,17 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import { RefreshCw } from "lucide-vue-next";
+import {
+  boundedDetailItems,
+  hiddenDetailItemCount,
+  observeDetailRegionRender,
+  truncateDetailText
+} from "../reviewDetailRenderBudget";
 import type { FindingFeedbackStatus, ReviewFinding, RiskLevel } from "@/types";
 
-defineProps<{
+const props = defineProps<{
   canManage: boolean;
   feedbackSavingId: number | null;
   findings: ReviewFinding[];
@@ -171,4 +181,27 @@ const reviewDimensionText = (dimension?: string) => {
 
 const hasExplainability = (finding: ReviewFinding) =>
   Boolean(finding.evidence || finding.impact || finding.fixExample);
+
+const renderedFindings = computed(() => boundedDetailItems(props.findings));
+const hiddenFindingCount = computed(() => hiddenDetailItemCount(props.findings));
+const previewText = (value?: string) => truncateDetailText(value);
+
+watch(
+  () => [props.loaded, props.currentPage, props.findings.length, props.total] as const,
+  ([loaded]) => {
+    if (!loaded) {
+      return;
+    }
+    void observeDetailRegionRender({
+      region: "review-detail.findings",
+      operation: "fetchReviewFindings",
+      itemCount: renderedFindings.value.length,
+      totalCount: props.total,
+      startedAtMs: now()
+    });
+  },
+  { flush: "post" }
+);
+
+const now = () => (typeof performance === "undefined" ? Date.now() : performance.now());
 </script>

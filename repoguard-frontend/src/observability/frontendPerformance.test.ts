@@ -41,6 +41,15 @@ describe("frontend performance observation", () => {
       startedAtMs: 12,
       durationMs: 48
     });
+    const buffer = await import("./frontendPerformanceBuffer");
+    buffer.observeFrontendLongTask({
+      startedAtMs: 80,
+      durationMs: 24,
+      region: "review-detail.findings",
+      operation: "fetchReviewFindings",
+      itemCount: 20,
+      totalCount: 300
+    });
 
     await vi.advanceTimersByTimeAsync(1300);
 
@@ -60,6 +69,16 @@ describe("frontend performance observation", () => {
           result: "success",
           startedAtMs: 12,
           durationMs: 48
+        }
+      ],
+      longTasks: [
+        {
+          startedAtMs: 80,
+          durationMs: 24,
+          region: "review-detail.findings",
+          operation: "fetchReviewFindings",
+          itemCount: 20,
+          totalCount: 300
         }
       ]
     });
@@ -84,5 +103,51 @@ describe("frontend performance observation", () => {
     await vi.advanceTimersByTimeAsync(1300);
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps lazy detail render observations after the initial window", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn().mockResolvedValue(okResponse());
+    vi.stubGlobal("fetch", fetchMock);
+    const client = await import("@/api/client");
+    const observation = await import("./frontendPerformance");
+    const buffer = await import("./frontendPerformanceBuffer");
+    client.saveAuthTokens("access-token", "refresh-token", true);
+
+    observation.startFrontendPerformanceObservation(() => "review-detail");
+    await vi.advanceTimersByTimeAsync(7000);
+    buffer.observeFrontendLongTask({
+      startedAtMs: 7010,
+      durationMs: 18,
+      region: "review-detail.comment-preview",
+      operation: "fetchGithubCommentPreview",
+      itemCount: 20,
+      totalCount: 260
+    });
+    observation.observeFrontendApiRequest({
+      operation: "lateApi",
+      path: "/api/v1/late",
+      method: "GET",
+      result: "success",
+      startedAtMs: 7020,
+      durationMs: 25
+    });
+
+    await vi.advanceTimersByTimeAsync(1300);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      route: "review-detail",
+      apiRequests: [],
+      longTasks: [
+        {
+          region: "review-detail.comment-preview",
+          operation: "fetchGithubCommentPreview",
+          itemCount: 20,
+          totalCount: 260
+        }
+      ]
+    });
   });
 });

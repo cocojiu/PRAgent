@@ -49,7 +49,7 @@
     </div>
     <el-table
       v-else
-      :data="changedFiles"
+      :data="renderedChangedFiles"
       class="rg-table"
       size="large"
       aria-label="变更文件列表"
@@ -77,6 +77,9 @@
         <el-empty description="暂无变更文件" />
       </template>
     </el-table>
+    <p v-if="changedFilesHiddenCount" class="render-budget-note">
+      当前页另有 {{ changedFilesHiddenCount }} 个文件
+    </p>
     <el-pagination
       v-if="changedFilesLoaded && changedFilesTotal > pageSize"
       class="detail-pagination"
@@ -90,12 +93,18 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import { RefreshCw } from "lucide-vue-next";
+import {
+  boundedDetailItems,
+  hiddenDetailItemCount,
+  observeDetailRegionRender
+} from "../reviewDetailRenderBudget";
 import type { ChangedFile, MissingTest } from "@/types";
 
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 
-defineProps<{
+const props = defineProps<{
   missingTests: MissingTest[];
   changedFiles: ChangedFileWithFindingCount[];
   missingTestsLoaded: boolean;
@@ -116,4 +125,26 @@ defineEmits<{
   missingTestsPageChange: [page: number];
   changedFilesPageChange: [page: number];
 }>();
+
+const renderedChangedFiles = computed(() => boundedDetailItems(props.changedFiles));
+const changedFilesHiddenCount = computed(() => hiddenDetailItemCount(props.changedFiles));
+
+watch(
+  () => [props.changedFilesLoaded, props.changedFilesPage, props.changedFiles.length, props.changedFilesTotal] as const,
+  ([loaded]) => {
+    if (!loaded) {
+      return;
+    }
+    void observeDetailRegionRender({
+      region: "review-detail.changed-files",
+      operation: "fetchReviewChangedFiles",
+      itemCount: renderedChangedFiles.value.length,
+      totalCount: props.changedFilesTotal,
+      startedAtMs: now()
+    });
+  },
+  { flush: "post" }
+);
+
+const now = () => (typeof performance === "undefined" ? Date.now() : performance.now());
 </script>

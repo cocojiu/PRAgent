@@ -1084,6 +1084,17 @@
   margin-top: 16px;
 }
 
+.render-budget-note {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 7px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 @media (max-width: 1280px) {
   .detail-kpi-grid,
   .detail-layout {

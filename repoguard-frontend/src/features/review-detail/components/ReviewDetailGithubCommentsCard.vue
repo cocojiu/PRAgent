@@ -96,9 +96,9 @@
           </span>
         </div>
       </div>
-      <div v-if="githubCommentPreview.items.length" class="comment-preview-list">
+      <div v-if="renderedPreviewItems.length" class="comment-preview-list">
         <section
-          v-for="item in githubCommentPreview.items"
+          v-for="item in renderedPreviewItems"
           :key="commentPreviewKey(item)"
           :class="['comment-preview-item', { blocked: !item.commentable }]"
         >
@@ -124,8 +124,11 @@
           >
             查看已发布评论
           </a>
-          <pre>{{ item.commentBody }}</pre>
+          <pre :title="item.commentBody">{{ commentBodyPreview(item.commentBody) }}</pre>
         </section>
+        <p v-if="hiddenPreviewItemCount" class="render-budget-note">
+          当前页另有 {{ hiddenPreviewItemCount }} 条预览
+        </p>
       </div>
       <el-empty v-else description="暂无评论草稿" />
       <el-pagination
@@ -233,8 +236,16 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from "vue";
 import { Github } from "lucide-vue-next";
 import { RouterLink } from "vue-router";
+import {
+  COMMENT_BODY_PREVIEW_CHARS,
+  boundedDetailItems,
+  hiddenDetailItemCount,
+  observeDetailRegionRender,
+  truncateDetailText
+} from "../reviewDetailRenderBudget";
 import type {
   FindingFeedbackStatus,
   GithubCommentPreview,
@@ -245,7 +256,7 @@ import type {
   RiskLevel
 } from "@/types";
 
-defineProps<{
+const props = defineProps<{
   canManage: boolean;
   canLoadGithubComments: boolean;
   canPublishGithubComments: boolean;
@@ -287,4 +298,32 @@ defineEmits<{
   previewPageChange: [page: number];
   publish: [];
 }>();
+
+const previewItems = computed(() => props.githubCommentPreview?.items ?? []);
+const renderedPreviewItems = computed(() => boundedDetailItems(previewItems.value));
+const hiddenPreviewItemCount = computed(() => hiddenDetailItemCount(previewItems.value));
+const commentBodyPreview = (value?: string) => truncateDetailText(value, COMMENT_BODY_PREVIEW_CHARS);
+
+watch(
+  () => [
+    props.githubCommentPreview?.page,
+    props.githubCommentPreview?.items.length,
+    props.githubCommentPreview?.itemTotal
+  ] as const,
+  () => {
+    if (!props.githubCommentPreview) {
+      return;
+    }
+    void observeDetailRegionRender({
+      region: "review-detail.comment-preview",
+      operation: "fetchGithubCommentPreview",
+      itemCount: renderedPreviewItems.value.length,
+      totalCount: props.githubCommentPreview.itemTotal,
+      startedAtMs: now()
+    });
+  },
+  { flush: "post" }
+);
+
+const now = () => (typeof performance === "undefined" ? Date.now() : performance.now());
 </script>

@@ -4995,6 +4995,20 @@
           "durationMs" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "region" : {
+            "type" : "string"
+          },
+          "operation" : {
+            "type" : "string"
+          },
+          "itemCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "totalCount" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },

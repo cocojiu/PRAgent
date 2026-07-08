@@ -39,7 +39,14 @@ class FrontendPerformanceControllerTest {
                         }
                       ],
                       "longTasks": [
-                        { "startedAtMs": 90, "durationMs": 83 }
+                        {
+                          "startedAtMs": 90,
+                          "durationMs": 83,
+                          "region": "review-detail.findings",
+                          "operation": "fetchReviewFindings",
+                          "itemCount": 20,
+                          "totalCount": 300
+                        }
                       ]
                     }
                     """))
@@ -51,6 +58,10 @@ class FrontendPerformanceControllerTest {
             "overview".equals(request.route())
                 && request.apiRequests().size() == 1
                 && request.longTasks().size() == 1
+                && "review-detail.findings".equals(request.longTasks().getFirst().region())
+                && "fetchReviewFindings".equals(request.longTasks().getFirst().operation())
+                && request.longTasks().getFirst().itemCount() == 20
+                && request.longTasks().getFirst().totalCount() == 300
         ));
     }
 }

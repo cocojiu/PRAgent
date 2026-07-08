@@ -15,6 +15,10 @@ export type FrontendApiRequestObservation = {
 export type FrontendLongTaskObservation = {
   startedAtMs: number;
   durationMs: number;
+  region?: string;
+  operation?: string;
+  itemCount?: number;
+  totalCount?: number;
 };
 
 export type FrontendPerformanceReport = {
@@ -64,7 +68,7 @@ export const observeFrontendApiRequest = (observation: FrontendApiRequestObserva
 };
 
 export const observeFrontendLongTask = (observation: FrontendLongTaskObservation) => {
-  if (!hooks.shouldRecord()) {
+  if (!isRegionRenderObservation(observation) && !hooks.shouldRecord()) {
     return;
   }
   if (longTasks.length >= MAX_LONG_TASKS) {
@@ -72,7 +76,11 @@ export const observeFrontendLongTask = (observation: FrontendLongTaskObservation
   }
   longTasks.push({
     startedAtMs: nonNegative(observation.startedAtMs),
-    durationMs: nonNegative(observation.durationMs)
+    durationMs: nonNegative(observation.durationMs),
+    region: optionalStableText(observation.region),
+    operation: optionalStableText(observation.operation),
+    itemCount: observation.itemCount === undefined ? undefined : nonNegative(observation.itemCount),
+    totalCount: observation.totalCount === undefined ? undefined : nonNegative(observation.totalCount)
   });
   hooks.scheduleFlush();
 };
@@ -101,3 +109,6 @@ const optionalStableText = (value: string | undefined) => {
   const normalized = value?.trim();
   return normalized || undefined;
 };
+
+const isRegionRenderObservation = (observation: FrontendLongTaskObservation) =>
+  Boolean(optionalStableText(observation.region) || optionalStableText(observation.operation));

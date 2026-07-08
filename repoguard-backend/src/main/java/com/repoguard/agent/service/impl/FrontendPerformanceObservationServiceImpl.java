@@ -94,15 +94,30 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 + ":trace="
                 + safeText(item.traceId()))
             .collect(Collectors.joining(","));
+        String longTaskRegions = longTasks.stream()
+            .sorted(Comparator.comparingLong(item -> safeMillis(item.startedAtMs())))
+            .limit(MAX_WATERFALL_LOG_ITEMS)
+            .map(item -> safeText(item.region())
+                + "@"
+                + safeText(item.operation())
+                + ":"
+                + safeMillis(item.durationMs())
+                + "ms"
+                + ":items="
+                + safeCount(item.itemCount())
+                + "/"
+                + safeCount(item.totalCount()))
+            .collect(Collectors.joining(","));
 
         log.info(
-            "Frontend performance observed route={} apiRequests={} apiTotalDurationMs={} longTasks={} maxLongTaskMs={} waterfall={}",
+            "Frontend performance observed route={} apiRequests={} apiTotalDurationMs={} longTasks={} maxLongTaskMs={} waterfall={} longTaskRegions={}",
             route,
             apiRequests.size(),
             apiTotalDuration,
             longTasks.size(),
             maxLongTaskDuration,
-            waterfall
+            waterfall,
+            longTaskRegions
         );
     }
 
@@ -132,6 +147,13 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
             return 0;
         }
         return bytes;
+    }
+
+    private static int safeCount(Integer count) {
+        if (count == null || count < 0) {
+            return 0;
+        }
+        return count;
     }
 
     private static String status(Integer status) {

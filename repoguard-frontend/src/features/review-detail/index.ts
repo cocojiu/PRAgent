@@ -49,3 +49,13 @@ export {
   writebackCheckStatusText
 } from "./reviewDetailDisplayMappers";
 export { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "./reviewDetailTaskMappers";
+export {
+  COMMENT_BODY_PREVIEW_CHARS,
+  DETAIL_RENDER_ITEM_LIMIT,
+  DETAIL_TEXT_PREVIEW_CHARS,
+  boundedDetailItems,
+  hiddenDetailItemCount,
+  isDetailTextTruncated,
+  observeDetailRegionRender,
+  truncateDetailText
+} from "./reviewDetailRenderBudget";

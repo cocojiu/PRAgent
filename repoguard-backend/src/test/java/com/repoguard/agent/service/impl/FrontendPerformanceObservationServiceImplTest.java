@@ -54,7 +54,14 @@ class FrontendPerformanceObservationServiceImplTest {
                 12L,
                 48L
             )),
-            List.of(new FrontendLongTaskItemDto(90L, 83L))
+            List.of(new FrontendLongTaskItemDto(
+                90L,
+                83L,
+                "review-detail.findings",
+                "fetchReviewFindings",
+                20,
+                300
+            ))
         ));
 
         assertThat(meterRegistry.find("repoguard.frontend.api.waterfall.request")
@@ -112,7 +119,7 @@ class FrontendPerformanceObservationServiceImplTest {
                 12L,
                 48L
             )),
-            List.of(new FrontendLongTaskItemDto(90L, 83L))
+            List.of(new FrontendLongTaskItemDto(90L, 83L, null, null, null, null))
         ));
 
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
@@ -183,7 +190,7 @@ class FrontendPerformanceObservationServiceImplTest {
                 12L,
                 apiDurationMs
             )),
-            List.of(new FrontendLongTaskItemDto(90L, longTaskMs))
+            List.of(new FrontendLongTaskItemDto(90L, longTaskMs, route, "fetchRouteData", 20, 20))
         ));
     }
 
