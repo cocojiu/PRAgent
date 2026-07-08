@@ -31,6 +31,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.notification.NotificationDispatchService;
@@ -83,6 +84,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 class ReviewServiceImplTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+    private final ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper =
+        org.mockito.Mockito.mock(ReviewTaskArchiveSummaryMapper.class);
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
@@ -106,6 +109,7 @@ class ReviewServiceImplTest {
     private final ReviewTaskListItemAssembler reviewTaskListItemAssembler = new ReviewTaskListItemAssembler();
     private final ReviewTaskQueryService reviewTaskQueryService = new ReviewTaskQueryServiceImpl(
         reviewTaskMapper,
+        reviewTaskArchiveSummaryMapper,
         new ReviewTaskDetailAssembler(
             new ReviewRiskProfileBuilder(),
             new PrReviewSummaryBuilder()

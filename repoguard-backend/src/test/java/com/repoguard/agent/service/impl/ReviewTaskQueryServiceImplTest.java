@@ -10,7 +10,9 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
@@ -23,6 +25,8 @@ import org.junit.jupiter.api.Test;
 class ReviewTaskQueryServiceImplTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+    private final ReviewTaskArchiveSummaryMapper archiveSummaryMapper =
+        org.mockito.Mockito.mock(ReviewTaskArchiveSummaryMapper.class);
     private final ReviewTaskDetailAssembler detailAssembler = new ReviewTaskDetailAssembler(
         new ReviewRiskProfileBuilder(),
         new PrReviewSummaryBuilder()
@@ -40,6 +44,7 @@ class ReviewTaskQueryServiceImplTest {
     void constructorRejectsMissingDetailDataLoader() {
         assertThatThrownBy(() -> new ReviewTaskQueryServiceImpl(
             reviewTaskMapper,
+            archiveSummaryMapper,
             detailAssembler,
             null,
             queryItemLoader,
@@ -55,6 +60,7 @@ class ReviewTaskQueryServiceImplTest {
     void constructorRejectsMissingQueryItemLoader() {
         assertThatThrownBy(() -> new ReviewTaskQueryServiceImpl(
             reviewTaskMapper,
+            archiveSummaryMapper,
             detailAssembler,
             detailDataLoader,
             null,
@@ -64,6 +70,38 @@ class ReviewTaskQueryServiceImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("queryItemLoader");
+    }
+
+    @Test
+    void getReviewDetailFallsBackToArchiveSummaryWhenHotTaskWasCleaned() {
+        ReviewTaskArchiveSummary archive = archiveSummary(521L);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(null);
+        when(archiveSummaryMapper.selectByTaskId(521L)).thenReturn(archive);
+
+        var response = service().getReviewDetail(521L);
+
+        org.assertj.core.api.Assertions.assertThat(response.id()).isEqualTo(521L);
+        org.assertj.core.api.Assertions.assertThat(response.archived()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(response.archiveCleanupBatchId()).isEqualTo(3001L);
+        org.assertj.core.api.Assertions.assertThat(response.archiveBackupReference()).isEqualTo("backup://mysql/prod/2026-07-08");
+        org.assertj.core.api.Assertions.assertThat(response.archivedAt()).isEqualTo("2026-07-09 01:10:00");
+        org.assertj.core.api.Assertions.assertThat(response.findingTotal()).isEqualTo(6);
+        org.assertj.core.api.Assertions.assertThat(response.missingTestTotal()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(response.changedFileTotal()).isEqualTo(12);
+        org.assertj.core.api.Assertions.assertThat(response.findings()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(response.changedFiles()).isEmpty();
+        verify(queryItemLoader, never()).loadRequired(521L);
+        verify(detailDataLoader, never()).loadSummary(521L);
+    }
+
+    @Test
+    void getReviewDetailStillRejectsMissingTaskWhenArchiveSummaryIsAbsent() {
+        when(reviewTaskMapper.selectById(404L)).thenReturn(null);
+        when(archiveSummaryMapper.selectByTaskId(404L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service().getReviewDetail(404L))
+            .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
+            .hasMessageContaining("Review task not found: 404");
     }
 
     @Test
@@ -130,6 +168,7 @@ class ReviewTaskQueryServiceImplTest {
     private ReviewTaskQueryServiceImpl service() {
         return new ReviewTaskQueryServiceImpl(
             reviewTaskMapper,
+            archiveSummaryMapper,
             detailAssembler,
             detailDataLoader,
             queryItemLoader,
@@ -153,6 +192,33 @@ class ReviewTaskQueryServiceImplTest {
         task.setMqRetries(0);
         task.setCreatedAt(LocalDateTime.of(2026, 7, 8, 12, 0));
         return task;
+    }
+
+    private ReviewTaskArchiveSummary archiveSummary(Long taskId) {
+        ReviewTaskArchiveSummary archive = new ReviewTaskArchiveSummary();
+        archive.setTaskId(taskId);
+        archive.setCleanupBatchId(3001L);
+        archive.setOrganization("org");
+        archive.setRepository("repo");
+        archive.setPrNumber(42);
+        archive.setTitle("Task " + taskId);
+        archive.setCommitSha("abcdef0");
+        archive.setBranchName("main");
+        archive.setStatus("COMPLETED");
+        archive.setRiskLevel("LOW");
+        archive.setSource("manual_input");
+        archive.setTriggerSource("manual_input");
+        archive.setCreatedAt(LocalDateTime.of(2026, 6, 8, 12, 0));
+        archive.setFinishedAt(LocalDateTime.of(2026, 6, 8, 12, 3));
+        archive.setDurationSeconds(180);
+        archive.setFindingCount(6);
+        archive.setMissingTestCount(2);
+        archive.setChangedFileCount(12);
+        archive.setTimelineCount(4);
+        archive.setPublicationCount(3);
+        archive.setBackupReference("backup://mysql/prod/2026-07-08");
+        archive.setArchivedAt(LocalDateTime.of(2026, 7, 9, 1, 10));
+        return archive;
     }
 
     private ReviewTaskListItem listItem(Long id) {

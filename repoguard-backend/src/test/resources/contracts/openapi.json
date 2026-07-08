@@ -7140,12 +7140,25 @@
             "type" : "integer",
             "format" : "int64"
           },
-          "findingSeverityCounts" : {
-            "type" : "object",
-            "x-java-type" : "FindingSeverityCountsDto"
+            "findingSeverityCounts" : {
+              "type" : "object",
+              "x-java-type" : "FindingSeverityCountsDto"
+            },
+            "archived" : {
+              "type" : "boolean"
+            },
+            "archiveCleanupBatchId" : {
+              "type" : "integer",
+              "format" : "int64"
+            },
+            "archiveBackupReference" : {
+              "type" : "string"
+            },
+            "archivedAt" : {
+              "type" : "string"
+            }
           }
-        }
-      },
+        },
       "ReviewTimelineItem" : {
         "type" : "object",
         "x-java-type" : "ReviewTimelineItem",

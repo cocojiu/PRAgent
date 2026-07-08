@@ -1,7 +1,10 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
@@ -10,13 +13,18 @@ import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
+import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
+import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader.ReviewTaskDetailData;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
@@ -24,7 +32,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTaskArchiveSummaryMapper archiveSummaryMapper;
     private final ReviewTaskDetailAssembler detailAssembler;
     private final ReviewTaskDetailDataLoader detailDataLoader;
     private final ReviewTaskQueryItemLoader queryItemLoader;
@@ -34,6 +45,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     public ReviewTaskQueryServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskArchiveSummaryMapper archiveSummaryMapper,
         ReviewTaskDetailAssembler detailAssembler,
         ReviewTaskDetailDataLoader detailDataLoader,
         ReviewTaskQueryItemLoader queryItemLoader,
@@ -42,6 +54,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         ReviewRepositoryDimensionService repositoryDimensionService
     ) {
         this.reviewTaskMapper = Objects.requireNonNull(reviewTaskMapper, "reviewTaskMapper must not be null");
+        this.archiveSummaryMapper = Objects.requireNonNull(archiveSummaryMapper, "archiveSummaryMapper must not be null");
         this.detailAssembler = Objects.requireNonNull(detailAssembler, "detailAssembler must not be null");
         this.detailDataLoader = Objects.requireNonNull(detailDataLoader, "detailDataLoader must not be null");
         this.queryItemLoader = Objects.requireNonNull(queryItemLoader, "queryItemLoader must not be null");
@@ -91,7 +104,10 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public ReviewTaskSummary getReviewDetail(Long id) {
-        ReviewTask task = queryItemLoader.loadRequired(id);
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            return getArchivedReviewDetail(id);
+        }
         ReviewTaskDetailData detailData = detailDataLoader.loadSummary(id);
         ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(
             task,
@@ -109,6 +125,84 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             detailData.changedFileTotal(),
             detailData.findingSeverityCounts()
         ));
+    }
+
+    private ReviewTaskSummary getArchivedReviewDetail(Long id) {
+        ReviewTaskArchiveSummary archive = archiveSummaryMapper.selectByTaskId(id);
+        if (archive == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        ReviewTask task = archivedTask(archive);
+        ReviewTaskListItem item = archivedListItem(archive);
+        return ReviewTaskSummary.fromDetail(
+            detailAssembler.assemble(
+                task,
+                item,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                longValue(archive.getFindingCount()),
+                longValue(archive.getMissingTestCount()),
+                longValue(archive.getChangedFileCount()),
+                FindingSeverityCountsDto.empty()
+            ),
+            true,
+            archive.getCleanupBatchId(),
+            archive.getBackupReference(),
+            formatDateTimeOrNull(archive.getArchivedAt())
+        );
+    }
+
+    private ReviewTask archivedTask(ReviewTaskArchiveSummary archive) {
+        ReviewTask task = new ReviewTask();
+        task.setId(archive.getTaskId());
+        task.setPrNumber(archive.getPrNumber());
+        task.setTitle(archive.getTitle());
+        task.setRepository(archive.getRepository());
+        task.setOrganization(archive.getOrganization());
+        task.setCommitSha(archive.getCommitSha());
+        task.setBranchName(archive.getBranchName());
+        task.setStatus(archive.getStatus());
+        task.setRiskLevel(archive.getRiskLevel());
+        task.setMqRetries(0);
+        task.setLlmStatus(archive.getStatus());
+        task.setSource(archive.getSource());
+        task.setTriggerSource(archive.getTriggerSource());
+        task.setCreatedAt(archive.getCreatedAt());
+        task.setFinishedAt(archive.getFinishedAt());
+        task.setDurationSeconds(archive.getDurationSeconds());
+        task.setHumanReviewRequired(false);
+        task.setHumanReviewStatus("NOT_REQUIRED");
+        return task;
+    }
+
+    private ReviewTaskListItem archivedListItem(ReviewTaskArchiveSummary archive) {
+        return new ReviewTaskListItem(
+            archive.getTaskId(),
+            archive.getPrNumber(),
+            archive.getTitle(),
+            archive.getRepository(),
+            archive.getOrganization(),
+            archive.getCommitSha(),
+            archive.getBranchName(),
+            lower(archive.getStatus()),
+            lower(archive.getRiskLevel()),
+            0,
+            lower(archive.getStatus()),
+            archive.getSource(),
+            archive.getTriggerSource(),
+            formatDateTimeOrNull(archive.getCreatedAt()),
+            formatDuration(archive.getDurationSeconds()),
+            null,
+            null,
+            null,
+            false,
+            "not_required",
+            null,
+            null,
+            null
+        );
     }
 
     @Override
@@ -150,6 +244,25 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         ReviewTaskListItem item = queryItemLoader.assemble(task, timelines);
 
         return statusAssembler.assemble(task, item, latestTimeline);
+    }
+
+    private String formatDateTimeOrNull(LocalDateTime value) {
+        return value == null ? null : value.format(DATE_TIME_FORMATTER);
+    }
+
+    private String formatDuration(Integer durationSeconds) {
+        int totalSeconds = durationSeconds == null ? 0 : durationSeconds;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return minutes + " 分 " + seconds + " 秒";
+    }
+
+    private String lower(String value) {
+        return value == null ? null : value.toLowerCase(Locale.ROOT);
+    }
+
+    private long longValue(Integer value) {
+        return value == null ? 0L : value.longValue();
     }
 
 }

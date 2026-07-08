@@ -57,6 +57,10 @@ export interface ReviewTaskSummary extends ReviewTask {
   llm: LlmStatus;
   chunkedReview: ChunkedReview;
   rabbitMq: RabbitMqStatus;
+  archived?: boolean;
+  archiveCleanupBatchId?: number;
+  archiveBackupReference?: string;
+  archivedAt?: string;
 }
 
 export type ReviewTaskDetail = ReviewTaskSummary;

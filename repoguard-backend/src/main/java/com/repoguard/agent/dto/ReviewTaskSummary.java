@@ -42,9 +42,23 @@ public record ReviewTaskSummary(
     Long findingTotal,
     Long missingTestTotal,
     Long changedFileTotal,
-    FindingSeverityCountsDto findingSeverityCounts
+    FindingSeverityCountsDto findingSeverityCounts,
+    Boolean archived,
+    Long archiveCleanupBatchId,
+    String archiveBackupReference,
+    String archivedAt
 ) {
     public static ReviewTaskSummary fromDetail(ReviewTaskDetail detail) {
+        return fromDetail(detail, false, null, null, null);
+    }
+
+    public static ReviewTaskSummary fromDetail(
+        ReviewTaskDetail detail,
+        Boolean archived,
+        Long archiveCleanupBatchId,
+        String archiveBackupReference,
+        String archivedAt
+    ) {
         return new ReviewTaskSummary(
             detail.id(),
             detail.prNumber(),
@@ -82,7 +96,11 @@ public record ReviewTaskSummary(
             detail.findingTotal(),
             detail.missingTestTotal(),
             detail.changedFileTotal(),
-            detail.findingSeverityCounts()
+            detail.findingSeverityCounts(),
+            archived,
+            archiveCleanupBatchId,
+            archiveBackupReference,
+            archivedAt
         );
     }
 }

@@ -184,7 +184,11 @@ class ReviewControllerTest {
                 1L,
                 1L,
                 1L,
-                new FindingSeverityCountsDto(1L, 2L, 3L, 4L, 5L)
+                new FindingSeverityCountsDto(1L, 2L, 3L, 4L, 5L),
+                false,
+                null,
+                null,
+                null
             );
         }
 

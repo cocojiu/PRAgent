@@ -25,6 +25,7 @@ public class ReviewTaskArchiveSummary {
     private LocalDateTime finishedAt;
     private Integer durationSeconds;
     private Integer findingCount;
+    private Integer missingTestCount;
     private Integer changedFileCount;
     private Integer timelineCount;
     private Integer publicationCount;
@@ -165,6 +166,14 @@ public class ReviewTaskArchiveSummary {
 
     public void setFindingCount(Integer findingCount) {
         this.findingCount = findingCount;
+    }
+
+    public Integer getMissingTestCount() {
+        return missingTestCount;
+    }
+
+    public void setMissingTestCount(Integer missingTestCount) {
+        this.missingTestCount = missingTestCount;
     }
 
     public Integer getChangedFileCount() {

@@ -13,6 +13,9 @@ class ReviewTaskArchiveSummaryMigrationTest {
     private static final Path MIGRATION = Path.of(
         "src/main/resources/db/migration/V49__review_task_archive_summary.sql"
     );
+    private static final Path MISSING_TEST_COUNT_MIGRATION = Path.of(
+        "src/main/resources/db/migration/V50__review_task_archive_missing_test_count.sql"
+    );
 
     @Test
     void migrationCreatesArchiveSummaryWithLookupIndexes() throws IOException {
@@ -28,6 +31,16 @@ class ReviewTaskArchiveSummaryMigrationTest {
             .contains("idx_review_task_archive_summary_repo_created")
             .contains("idx_review_task_archive_summary_created")
             .contains("idx_review_task_archive_summary_batch");
+        assertThat(sql).doesNotContain("delete from", "truncate", "drop table");
+    }
+
+    @Test
+    void migrationAddsSeparateMissingTestCountForArchivedSummary() throws IOException {
+        String sql = Files.readString(MISSING_TEST_COUNT_MIGRATION, StandardCharsets.UTF_8).toLowerCase();
+
+        assertThat(sql)
+            .contains("alter table review_task_archive_summary")
+            .contains("add column missing_test_count int not null default 0");
         assertThat(sql).doesNotContain("delete from", "truncate", "drop table");
     }
 }
