@@ -4950,6 +4950,13 @@
           "result" : {
             "type" : "string"
           },
+          "traceId" : {
+            "type" : "string"
+          },
+          "responseBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
           "startedAtMs" : {
             "type" : "integer",
             "format" : "int64"

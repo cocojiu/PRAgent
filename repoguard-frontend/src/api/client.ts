@@ -14,7 +14,15 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_FETCH_CREDENTIALS: RequestCredentials = "include";
+const TRACE_ID_HEADER = "X-Trace-Id";
 type InternalRequestInit = RequestInit & { skipAuthorization?: boolean };
+
+export type RequestWithMetaResult<T> = {
+  data: T;
+  traceId: string;
+  responseBytes: number;
+  status: number;
+};
 
 export {
   clearAuthToken,
@@ -41,18 +49,27 @@ export const request = async <T>(
   params?: Record<string, string | number | undefined>,
   options: RequestInit = {}
 ): Promise<T> => {
+  const result = await requestWithMeta<T>(path, params, options);
+  return result.data;
+};
+
+export const requestWithMeta = async <T>(
+  path: string,
+  params?: Record<string, string | number | undefined>,
+  options: RequestInit = {}
+): Promise<RequestWithMetaResult<T>> => {
   const response = await safeDoRequest(path, params, options);
   if (response.ok || response.status !== 401 || isRefreshExcludedAuthPath(path)) {
-    return unwrapResponse(response);
+    return unwrapResponseWithMeta<T>(response);
   }
 
   const refreshed = await refreshCoordinator.refreshSession();
   if (!refreshed) {
     clearAuthToken();
     redirectToLogin();
-    return unwrapResponse(response);
+    return unwrapResponseWithMeta<T>(response);
   }
-  return unwrapResponse(await safeDoRequest(path, params, options));
+  return unwrapResponseWithMeta<T>(await safeDoRequest(path, params, options));
 };
 
 const doRequest = async (
@@ -74,12 +91,38 @@ const doRequest = async (
   if (csrfToken && requiresAuthCsrfHeader(path, method) && !headers.has("X-RepoGuard-CSRF")) {
     headers.set("X-RepoGuard-CSRF", csrfToken);
   }
+  if (!headers.has(TRACE_ID_HEADER)) {
+    headers.set(TRACE_ID_HEADER, generateTraceId());
+  }
 
   return fetch(buildUrl(path, params), {
     ...fetchOptions,
     headers,
     credentials: fetchOptions.credentials ?? AUTH_FETCH_CREDENTIALS
   }) as Promise<Response>;
+};
+
+const unwrapResponseWithMeta = async <T>(response: Response): Promise<RequestWithMetaResult<T>> => {
+  const responseBytes = await responseSizeBytes(response);
+  return {
+    data: await unwrapResponse<T>(response),
+    traceId: response.headers.get(TRACE_ID_HEADER) || "",
+    responseBytes,
+    status: response.status
+  };
+};
+
+const responseSizeBytes = async (response: Response) => {
+  const contentLength = response.headers.get("Content-Length");
+  if (contentLength && /^\d+$/.test(contentLength)) {
+    return Number(contentLength);
+  }
+  try {
+    const text = await response.clone().text();
+    return new TextEncoder().encode(text).length;
+  } catch {
+    return 0;
+  }
 };
 
 const safeDoRequest = async (
@@ -132,3 +175,16 @@ const requiresAuthCsrfHeader = (path: string, method: string) =>
     "/api/v1/auth/refresh",
     "/api/v1/auth/logout"
   ].includes(path);
+
+const generateTraceId = () => {
+  const cryptoApi = globalThis.crypto;
+  if (cryptoApi?.randomUUID) {
+    return cryptoApi.randomUUID();
+  }
+  if (cryptoApi?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  }
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+};

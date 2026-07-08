@@ -6,6 +6,8 @@ export type FrontendApiRequestObservation = {
   method: string;
   status?: number;
   result: ApiRequestResult;
+  traceId?: string;
+  responseBytes?: number;
   startedAtMs: number;
   durationMs: number;
 };
@@ -53,6 +55,8 @@ export const observeFrontendApiRequest = (observation: FrontendApiRequestObserva
     path: stableText(observation.path),
     method: stableText(observation.method),
     status: observation.status && observation.status > 0 ? observation.status : undefined,
+    traceId: optionalStableText(observation.traceId),
+    responseBytes: observation.responseBytes === undefined ? undefined : nonNegative(observation.responseBytes),
     startedAtMs: nonNegative(observation.startedAtMs),
     durationMs: nonNegative(observation.durationMs)
   });
@@ -91,4 +95,9 @@ const nonNegative = (value: number | undefined) => {
 const stableText = (value: string | undefined) => {
   const normalized = value?.trim();
   return normalized || "unknown";
+};
+
+const optionalStableText = (value: string | undefined) => {
+  const normalized = value?.trim();
+  return normalized || undefined;
 };

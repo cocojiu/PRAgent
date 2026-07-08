@@ -82,7 +82,17 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
         String waterfall = apiRequests.stream()
             .sorted(Comparator.comparingLong(item -> safeMillis(item.startedAtMs())))
             .limit(MAX_WATERFALL_LOG_ITEMS)
-            .map(item -> safeText(item.operation()) + "@" + safeText(item.path()) + ":" + safeMillis(item.durationMs()) + "ms")
+            .map(item -> safeText(item.operation())
+                + "@"
+                + safeText(item.path())
+                + ":"
+                + safeMillis(item.durationMs())
+                + "ms"
+                + ":"
+                + safeBytes(item.responseBytes())
+                + "bytes"
+                + ":trace="
+                + safeText(item.traceId()))
             .collect(Collectors.joining(","));
 
         log.info(
@@ -115,6 +125,13 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
             return 0;
         }
         return millis;
+    }
+
+    private static long safeBytes(Long bytes) {
+        if (bytes == null || bytes < 0) {
+            return 0;
+        }
+        return bytes;
     }
 
     private static String status(Integer status) {

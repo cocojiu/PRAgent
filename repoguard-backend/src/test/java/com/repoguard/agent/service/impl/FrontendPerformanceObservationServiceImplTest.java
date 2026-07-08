@@ -49,6 +49,8 @@ class FrontendPerformanceObservationServiceImplTest {
                 "GET",
                 200,
                 "success",
+                "trace-summary-1",
+                2048L,
                 12L,
                 48L
             )),
@@ -105,6 +107,8 @@ class FrontendPerformanceObservationServiceImplTest {
                 "GET",
                 200,
                 "success",
+                "trace-summary-2",
+                2048L,
                 12L,
                 48L
             )),
@@ -174,6 +178,8 @@ class FrontendPerformanceObservationServiceImplTest {
                 "GET",
                 200,
                 "success",
+                "trace-route",
+                4096L,
                 12L,
                 apiDurationMs
             )),

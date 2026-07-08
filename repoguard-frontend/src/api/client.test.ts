@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RequestError } from "@/utils/errors";
-import { clearAuthToken, hasAuthToken, request, resolveRefreshToken, saveAuthTokens } from "./client";
+import { clearAuthToken, hasAuthToken, request, requestWithMeta, resolveRefreshToken, saveAuthTokens } from "./client";
 
-const apiResponse = (data: unknown, status = 200) =>
+const apiResponse = (data: unknown, status = 200, traceId?: string) =>
   new Response(JSON.stringify({
     success: status >= 200 && status < 300,
     code: status >= 200 && status < 300 ? "OK" : "UNAUTHORIZED",
@@ -11,7 +11,10 @@ const apiResponse = (data: unknown, status = 200) =>
     timestamp: "2026-07-03T21:45:00+08:00"
   }), {
     status,
-    headers: { "Content-Type": "application/json" }
+    headers: {
+      "Content-Type": "application/json",
+      ...(traceId ? { "X-Trace-Id": traceId } : {})
+    }
   });
 
 describe("auth token client", () => {
@@ -102,6 +105,20 @@ describe("auth token client", () => {
       status: 0,
       code: "NETWORK_ERROR"
     });
+  });
+
+  it("adds a trace id header and exposes response trace metadata", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(apiResponse({ ok: true }, 200, "server-trace-1")));
+
+    const result = await requestWithMeta<{ ok: boolean }>("/api/v1/observed");
+
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get("X-Trace-Id")).toBeTruthy();
+    expect(result.data).toEqual({ ok: true });
+    expect(result.traceId).toBe("server-trace-1");
+    expect(result.status).toBe(200);
+    expect(result.responseBytes).toBeGreaterThan(0);
   });
 
   it("does not wrap existing request errors", async () => {

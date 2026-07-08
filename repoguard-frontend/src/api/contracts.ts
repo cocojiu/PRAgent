@@ -1,4 +1,4 @@
-import { request } from "@/api/client";
+import { requestWithMeta } from "@/api/client";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
 import type { AuthResponse, CurrentUser, LoginRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
@@ -584,7 +584,7 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   }
   const startedAtMs = currentTimeMs();
   try {
-    const response = await request<ApiContract[Operation]["response"]>(
+    const response = await requestWithMeta<ApiContract[Operation]["response"]>(
       path,
       endpoint.query?.(input),
       options
@@ -594,12 +594,15 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
         operation: String(operation),
         path: observationPath,
         method,
+        status: response.status,
         result: "success",
+        traceId: response.traceId,
+        responseBytes: response.responseBytes,
         startedAtMs,
         durationMs: currentTimeMs() - startedAtMs
       });
     }
-    return response;
+    return response.data;
   } catch (error) {
     if (shouldObserve) {
       observeFrontendApiRequest({

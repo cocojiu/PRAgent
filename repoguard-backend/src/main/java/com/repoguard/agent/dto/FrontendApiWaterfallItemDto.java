@@ -6,6 +6,8 @@ public record FrontendApiWaterfallItemDto(
     String method,
     Integer status,
     String result,
+    String traceId,
+    Long responseBytes,
     Long startedAtMs,
     Long durationMs
 ) {
