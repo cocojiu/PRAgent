@@ -28,6 +28,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
@@ -214,36 +215,81 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         String category,
         String feedbackStatus
     ) {
-        queryItemLoader.loadRequired(id);
+        ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
+        if (archive != null) {
+            long total = hasAnyText(severity, category, feedbackStatus) ? 0L : longValue(archive.getFindingCount());
+            return new PageResponse<>(List.of(), total);
+        }
         return detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus);
     }
 
     @Override
     public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
-        queryItemLoader.loadRequired(id);
+        ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
+        if (archive != null) {
+            long total = hasFinding == null ? longValue(archive.getChangedFileCount()) : 0L;
+            return new PageResponse<>(List.of(), total);
+        }
         return detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
     }
 
     @Override
     public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
-        queryItemLoader.loadRequired(id);
+        ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
+        if (archive != null) {
+            return new PageResponse<>(List.of(), longValue(archive.getMissingTestCount()));
+        }
         return detailDataLoader.loadMissingTestsPage(id, page, pageSize);
     }
 
     @Override
     public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
-        queryItemLoader.loadRequired(id);
+        ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
+        if (archive != null) {
+            return List.of(archivedTimelineItem(archive));
+        }
         return detailDataLoader.loadTimelineItems(id, limit);
     }
 
     @Override
     public ReviewTaskStatusResponse getReviewStatus(Long id) {
-        ReviewTask task = queryItemLoader.loadRequired(id);
+        ReviewTask task = reviewTaskMapper.selectById(id);
+        if (task == null) {
+            ReviewTaskArchiveSummary archive = loadArchiveSummaryOrThrow(id);
+            return statusAssembler.assemble(
+                archivedTask(archive),
+                archivedListItem(archive),
+                archivedTimelineItem(archive)
+            );
+        }
         List<ReviewTimeline> timelines = queryItemLoader.loadTimelines(id);
         var latestTimeline = queryItemLoader.latestTimelineItem(timelines);
         ReviewTaskListItem item = queryItemLoader.assemble(task, timelines);
 
         return statusAssembler.assemble(task, item, latestTimeline);
+    }
+
+    private ReviewTaskArchiveSummary archiveIfHotTaskMissing(Long id) {
+        if (reviewTaskMapper.selectById(id) != null) {
+            return null;
+        }
+        return loadArchiveSummaryOrThrow(id);
+    }
+
+    private ReviewTaskArchiveSummary loadArchiveSummaryOrThrow(Long id) {
+        ReviewTaskArchiveSummary archive = archiveSummaryMapper.selectByTaskId(id);
+        if (archive == null) {
+            throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
+        }
+        return archive;
+    }
+
+    private ReviewTimelineItem archivedTimelineItem(ReviewTaskArchiveSummary archive) {
+        return new ReviewTimelineItem(
+            "Review task archived; summary restored from retention archive",
+            formatDateTimeOrNull(archive.getArchivedAt()),
+            "done"
+        );
     }
 
     private String formatDateTimeOrNull(LocalDateTime value) {
@@ -263,6 +309,15 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     private long longValue(Integer value) {
         return value == null ? 0L : value.longValue();
+    }
+
+    private boolean hasAnyText(String... values) {
+        for (String value : values) {
+            if (StringUtils.hasText(value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
 }

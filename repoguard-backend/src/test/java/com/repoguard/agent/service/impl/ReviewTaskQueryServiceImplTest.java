@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -102,6 +103,53 @@ class ReviewTaskQueryServiceImplTest {
         assertThatThrownBy(() -> service().getReviewDetail(404L))
             .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
             .hasMessageContaining("Review task not found: 404");
+    }
+
+    @Test
+    void archivedDetailPagedSectionsReturnArchivedTotalsWithoutHotDetailQueries() {
+        ReviewTaskArchiveSummary archive = archiveSummary(521L);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(null);
+        when(archiveSummaryMapper.selectByTaskId(521L)).thenReturn(archive);
+
+        var findings = service().listReviewFindings(521L, 1, 20, null, null, null);
+        var filteredFindings = service().listReviewFindings(521L, 1, 20, "high", null, null);
+        var changedFiles = service().listChangedFiles(521L, 1, 20, null);
+        var filteredChangedFiles = service().listChangedFiles(521L, 1, 20, true);
+        var missingTests = service().listMissingTests(521L, 1, 20);
+
+        org.assertj.core.api.Assertions.assertThat(findings.items()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(findings.total()).isEqualTo(6);
+        org.assertj.core.api.Assertions.assertThat(filteredFindings.total()).isZero();
+        org.assertj.core.api.Assertions.assertThat(changedFiles.items()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(changedFiles.total()).isEqualTo(12);
+        org.assertj.core.api.Assertions.assertThat(filteredChangedFiles.total()).isZero();
+        org.assertj.core.api.Assertions.assertThat(missingTests.items()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(missingTests.total()).isEqualTo(2);
+        verify(detailDataLoader, never()).loadFindingsPage(any(), anyInt(), anyInt(), any(), any(), any());
+        verify(detailDataLoader, never()).loadChangedFilesPage(any(), anyInt(), anyInt(), any());
+        verify(detailDataLoader, never()).loadMissingTestsPage(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void archivedTimelineAndStatusReturnArchiveMarker() {
+        ReviewTaskArchiveSummary archive = archiveSummary(521L);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(null);
+        when(archiveSummaryMapper.selectByTaskId(521L)).thenReturn(archive);
+
+        var timeline = service().listReviewTimeline(521L, 20);
+        var status = service().getReviewStatus(521L);
+
+        org.assertj.core.api.Assertions.assertThat(timeline)
+            .containsExactly(new com.repoguard.agent.dto.ReviewTimelineItem(
+                "Review task archived; summary restored from retention archive",
+                "2026-07-09 01:10:00",
+                "done"
+            ));
+        org.assertj.core.api.Assertions.assertThat(status.id()).isEqualTo(521L);
+        org.assertj.core.api.Assertions.assertThat(status.status()).isEqualTo("completed");
+        org.assertj.core.api.Assertions.assertThat(status.latestTimeline().label()).contains("archived");
+        verify(detailDataLoader, never()).loadTimelineItems(521L, 20);
+        verify(queryItemLoader, never()).loadTimelines(521L);
     }
 
     @Test
