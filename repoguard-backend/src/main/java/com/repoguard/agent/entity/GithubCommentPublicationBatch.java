@@ -24,6 +24,10 @@ public class GithubCommentPublicationBatch {
     private Integer skippedCount;
     private LocalDateTime createdAt;
     private LocalDateTime completedAt;
+    private LocalDateTime claimedAt;
+    private String claimedBy;
+    private LocalDateTime nextRetryAt;
+    private String lastError;
 
     public Long getId() {
         return id;
@@ -103,5 +107,37 @@ public class GithubCommentPublicationBatch {
 
     public void setCompletedAt(LocalDateTime completedAt) {
         this.completedAt = completedAt;
+    }
+
+    public LocalDateTime getClaimedAt() {
+        return claimedAt;
+    }
+
+    public void setClaimedAt(LocalDateTime claimedAt) {
+        this.claimedAt = claimedAt;
+    }
+
+    public String getClaimedBy() {
+        return claimedBy;
+    }
+
+    public void setClaimedBy(String claimedBy) {
+        this.claimedBy = claimedBy;
+    }
+
+    public LocalDateTime getNextRetryAt() {
+        return nextRetryAt;
+    }
+
+    public void setNextRetryAt(LocalDateTime nextRetryAt) {
+        this.nextRetryAt = nextRetryAt;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    public void setLastError(String lastError) {
+        this.lastError = lastError;
     }
 }

@@ -63,12 +63,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -145,6 +147,7 @@ class ReviewServiceImplTest {
         );
     private final GithubCommentPublishMetricsRecorder githubCommentPublishMetricsRecorder =
         new GithubCommentPublishMetricsRecorder(metrics);
+    private final Executor githubCommentPublishExecutor = Runnable::run;
     private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
         githubIntegrationProvider,
@@ -172,6 +175,7 @@ class ReviewServiceImplTest {
         reviewTaskMapper,
         githubCommentPublishMetricsRecorder,
         notificationDispatchService,
+        githubCommentPublishExecutor,
         githubCommentPublishCandidateLoader,
         new GithubCommentPublishGuard(reviewTaskStateMachine),
         new GithubCommentPublishPlanBuilder(),
@@ -205,6 +209,16 @@ class ReviewServiceImplTest {
         githubCommentApplicationService,
         githubPullRequestOptionService
     );
+
+    @BeforeEach
+    void stubGithubCommentBatchPersistence() {
+        org.mockito.Mockito.doAnswer(invocation -> {
+            GithubCommentPublicationBatch batch = invocation.getArgument(0);
+            batch.setId(99L);
+            return 1;
+        }).when(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
+        when(githubCommentPublicationBatchMapper.update(any())).thenReturn(1);
+    }
 
     private HumanReviewCommandService humanReviewCommandService() {
         return new HumanReviewCommandService(
@@ -359,12 +373,13 @@ class ReviewServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
+        assertThat(result.status()).isEqualTo("queued");
         assertThat(result.totalFindings()).isEqualTo(2);
-        assertThat(result.attemptedCount()).isEqualTo(3);
-        assertThat(result.succeededCount()).isEqualTo(3);
+        assertThat(result.attemptedCount()).isZero();
+        assertThat(result.succeededCount()).isZero();
         assertThat(result.failedCount()).isZero();
         assertThat(result.skippedCount()).isZero();
-        assertThat(result.items()).extracting("status").containsExactly("published", "published", "published");
+        assertThat(result.items()).isEmpty();
         verify(githubCommentPublicationMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublication.class));
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
         verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
@@ -393,10 +408,15 @@ class ReviewServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
-        assertThat(result.failedCount()).isEqualTo(1);
-        assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_permission_denied");
-        assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 权限不足");
-        assertThat(result.items().getFirst().failureSuggestion()).contains("评论权限");
+        assertThat(result.status()).isEqualTo("queued");
+        ArgumentCaptor<GithubCommentPublicationBatchItem> itemCaptor =
+            ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
+        verify(githubCommentPublicationBatchItemMapper).insert(itemCaptor.capture());
+        var historyItem = new GithubCommentPublicationHistoryAssembler(githubWritebackFailureClassifier)
+            .assembleItem(itemCaptor.getValue());
+        assertThat(historyItem.failureCategory()).isEqualTo("github_permission_denied");
+        assertThat(historyItem.failureReason()).isEqualTo("GitHub Token 权限不足");
+        assertThat(historyItem.failureSuggestion()).contains("评论权限");
     }
 
     @Test
@@ -430,9 +450,10 @@ class ReviewServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
+        assertThat(result.status()).isEqualTo("queued");
         assertThat(result.attemptedCount()).isZero();
         assertThat(result.succeededCount()).isZero();
-        assertThat(result.skippedCount()).isEqualTo(2);
+        assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).isEmpty();
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
@@ -544,11 +565,14 @@ class ReviewServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
+        assertThat(result.status()).isEqualTo("queued");
         assertThat(result.totalFindings()).isEqualTo(2);
-        assertThat(result.attemptedCount()).isEqualTo(2);
-        assertThat(result.succeededCount()).isEqualTo(2);
-        assertThat(result.skippedCount()).isEqualTo(1);
-        assertThat(result.items()).extracting("findingId").containsExactly(null, 1L);
+        assertThat(result.attemptedCount()).isZero();
+        assertThat(result.succeededCount()).isZero();
+        assertThat(result.skippedCount()).isZero();
+        assertThat(result.items()).isEmpty();
+        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2))
+            .insert(any(GithubCommentPublicationBatchItem.class));
     }
 
     @Test

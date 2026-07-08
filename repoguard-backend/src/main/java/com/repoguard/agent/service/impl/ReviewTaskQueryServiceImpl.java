@@ -6,9 +6,9 @@ import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -70,14 +70,14 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
     }
 
     @Override
-    public ReviewTaskDetail getReviewDetail(Long id) {
+    public ReviewTaskSummary getReviewDetail(Long id) {
         ReviewTask task = queryItemLoader.loadRequired(id);
         ReviewTaskDetailData detailData = detailDataLoader.loadSummary(id);
         ReviewTaskListItem item = queryItemLoader.assembleFromTimelineItems(
             task,
             detailDataLoader.loadTimelineItems(id, 20)
         );
-        return detailAssembler.assemble(
+        return ReviewTaskSummary.fromDetail(detailAssembler.assemble(
             task,
             item,
             detailData.findings(),
@@ -88,7 +88,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             detailData.missingTestTotal(),
             detailData.changedFileTotal(),
             detailData.findingSeverityCounts()
-        );
+        ));
     }
 
     @Override

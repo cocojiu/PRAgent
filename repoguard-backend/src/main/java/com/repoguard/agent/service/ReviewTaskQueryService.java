@@ -5,8 +5,8 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import java.util.List;
@@ -17,7 +17,7 @@ public interface ReviewTaskQueryService {
 
     List<String> listRepositories();
 
-    ReviewTaskDetail getReviewDetail(Long id);
+    ReviewTaskSummary getReviewDetail(Long id);
 
     PageResponse<ReviewFindingDto> listReviewFindings(
         Long id,

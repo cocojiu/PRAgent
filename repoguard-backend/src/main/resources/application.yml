@@ -140,6 +140,9 @@ app:
       key: ${REPOGUARD_ADMIN_API_KEY:}
       header-name: ${REPOGUARD_ADMIN_API_KEY_HEADER:X-RepoGuard-Admin-Key}
   github:
+    comment-publish:
+      recovery-interval-ms: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_INTERVAL_MS:60000}
+      recovery-batch-size: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_BATCH_SIZE:20}
     webhook:
       enabled: ${REPOGUARD_GITHUB_WEBHOOK_ENABLED:true}
       secret: ${REPOGUARD_GITHUB_WEBHOOK_SECRET:}

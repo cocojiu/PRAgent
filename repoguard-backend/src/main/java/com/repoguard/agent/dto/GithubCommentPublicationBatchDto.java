@@ -15,6 +15,8 @@ public record GithubCommentPublicationBatchDto(
     Integer skippedCount,
     String createdAt,
     String completedAt,
+    String nextRetryAt,
+    String lastError,
     List<GithubCommentPublicationHistoryItem> items
 ) {
 }

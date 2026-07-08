@@ -2915,7 +2915,7 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "ReviewTaskDetail",
+            "x-java-response-data" : "ReviewTaskSummary",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2932,7 +2932,7 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "$ref" : "#/components/schemas/ReviewTaskDetail"
+                      "$ref" : "#/components/schemas/ReviewTaskSummary"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -5060,6 +5060,12 @@
           "completedAt" : {
             "type" : "string"
           },
+          "nextRetryAt" : {
+            "type" : "string"
+          },
+          "lastError" : {
+            "type" : "string"
+          },
           "items" : {
             "type" : "array",
             "items" : {
@@ -5203,6 +5209,13 @@
           "taskId" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "batchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
           },
           "totalFindings" : {
             "type" : "integer",
@@ -6744,9 +6757,139 @@
           }
         }
       },
-      "ReviewTaskDetail" : {
+      "ReviewTaskListItem" : {
         "type" : "object",
-        "x-java-type" : "ReviewTaskDetail",
+        "x-java-type" : "ReviewTaskListItem",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "commit" : {
+            "type" : "string"
+          },
+          "branch" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "mqRetries" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "llmStatus" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "triggerSource" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewTaskStatusResponse" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskStatusResponse",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "riskLevel" : {
+            "type" : "string"
+          },
+          "llmStatus" : {
+            "type" : "string"
+          },
+          "duration" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "failureCategory" : {
+            "type" : "string"
+          },
+          "failureReason" : {
+            "type" : "string"
+          },
+          "failureSuggestion" : {
+            "type" : "string"
+          },
+          "latestTimeline" : {
+            "$ref" : "#/components/schemas/ReviewTimelineItem"
+          },
+          "humanReviewRequired" : {
+            "type" : "boolean"
+          },
+          "humanReviewStatus" : {
+            "type" : "string"
+          },
+          "humanReviewNote" : {
+            "type" : "string"
+          },
+          "humanReviewBy" : {
+            "type" : "string"
+          },
+          "humanReviewedAt" : {
+            "type" : "string"
+          }
+        }
+      },
+      "ReviewTaskSummary" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskSummary",
         "properties" : {
           "id" : {
             "type" : "integer",
@@ -6877,136 +7020,6 @@
           "findingSeverityCounts" : {
             "type" : "object",
             "x-java-type" : "FindingSeverityCountsDto"
-          }
-        }
-      },
-      "ReviewTaskListItem" : {
-        "type" : "object",
-        "x-java-type" : "ReviewTaskListItem",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "prNumber" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "title" : {
-            "type" : "string"
-          },
-          "repository" : {
-            "type" : "string"
-          },
-          "organization" : {
-            "type" : "string"
-          },
-          "commit" : {
-            "type" : "string"
-          },
-          "branch" : {
-            "type" : "string"
-          },
-          "status" : {
-            "type" : "string"
-          },
-          "riskLevel" : {
-            "type" : "string"
-          },
-          "mqRetries" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "llmStatus" : {
-            "type" : "string"
-          },
-          "source" : {
-            "type" : "string"
-          },
-          "triggerSource" : {
-            "type" : "string"
-          },
-          "createdAt" : {
-            "type" : "string"
-          },
-          "duration" : {
-            "type" : "string"
-          },
-          "failureCategory" : {
-            "type" : "string"
-          },
-          "failureReason" : {
-            "type" : "string"
-          },
-          "failureSuggestion" : {
-            "type" : "string"
-          },
-          "humanReviewRequired" : {
-            "type" : "boolean"
-          },
-          "humanReviewStatus" : {
-            "type" : "string"
-          },
-          "humanReviewNote" : {
-            "type" : "string"
-          },
-          "humanReviewBy" : {
-            "type" : "string"
-          },
-          "humanReviewedAt" : {
-            "type" : "string"
-          }
-        }
-      },
-      "ReviewTaskStatusResponse" : {
-        "type" : "object",
-        "x-java-type" : "ReviewTaskStatusResponse",
-        "properties" : {
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "status" : {
-            "type" : "string"
-          },
-          "riskLevel" : {
-            "type" : "string"
-          },
-          "llmStatus" : {
-            "type" : "string"
-          },
-          "duration" : {
-            "type" : "string"
-          },
-          "updatedAt" : {
-            "type" : "string"
-          },
-          "failureCategory" : {
-            "type" : "string"
-          },
-          "failureReason" : {
-            "type" : "string"
-          },
-          "failureSuggestion" : {
-            "type" : "string"
-          },
-          "latestTimeline" : {
-            "$ref" : "#/components/schemas/ReviewTimelineItem"
-          },
-          "humanReviewRequired" : {
-            "type" : "boolean"
-          },
-          "humanReviewStatus" : {
-            "type" : "string"
-          },
-          "humanReviewNote" : {
-            "type" : "string"
-          },
-          "humanReviewBy" : {
-            "type" : "string"
-          },
-          "humanReviewedAt" : {
-            "type" : "string"
           }
         }
       },

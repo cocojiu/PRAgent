@@ -39,6 +39,8 @@ public class GithubCommentPublicationHistoryAssembler {
             batch.getSkippedCount(),
             format(batch.getCreatedAt()),
             format(batch.getCompletedAt()),
+            format(batch.getNextRetryAt()),
+            batch.getLastError(),
             items.stream().map(this::assembleItem).toList()
         );
     }

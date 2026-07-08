@@ -42,7 +42,7 @@ export interface ReviewTask {
   humanReviewedAt?: string;
 }
 
-export interface ReviewTaskDetail extends ReviewTask {
+export interface ReviewTaskSummary extends ReviewTask {
   prUrl: string;
   findings: ReviewFinding[];
   missingTests: MissingTest[];
@@ -58,6 +58,8 @@ export interface ReviewTaskDetail extends ReviewTask {
   chunkedReview: ChunkedReview;
   rabbitMq: RabbitMqStatus;
 }
+
+export type ReviewTaskDetail = ReviewTaskSummary;
 
 export interface ReviewTaskStatus {
   id: number;
@@ -164,11 +166,15 @@ export interface FindingFeedbackResponse {
 
 export interface GithubCommentPublish {
   taskId: number;
+  batchId?: number | null;
+  status?: "queued" | "running" | "completed" | "partial_failed" | "failed" | "skipped" | "empty" | string;
   totalFindings: number;
   attemptedCount: number;
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
+  nextRetryAt?: string;
+  lastError?: string;
   items: GithubCommentPublishItem[];
 }
 
@@ -199,7 +205,7 @@ export interface GithubCommentPublicationHistory {
 
 export interface GithubCommentPublicationBatch {
   batchId: number;
-  status: "completed" | "partial_failed" | "failed" | "skipped" | "empty" | string;
+  status: "queued" | "running" | "completed" | "partial_failed" | "failed" | "skipped" | "empty" | string;
   totalFindings: number;
   attemptedCount: number;
   succeededCount: number;
@@ -207,6 +213,8 @@ export interface GithubCommentPublicationBatch {
   skippedCount: number;
   createdAt: string;
   completedAt?: string;
+  nextRetryAt?: string;
+  lastError?: string;
   items: GithubCommentPublicationHistoryItem[];
 }
 

@@ -1,6 +1,8 @@
 package com.repoguard.agent.github;
 
 public enum GithubCommentPublicationBatchStatus {
+    QUEUED("queued"),
+    RUNNING("running"),
     EMPTY("empty"),
     COMPLETED("completed"),
     SKIPPED("skipped"),

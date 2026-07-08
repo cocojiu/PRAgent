@@ -16,8 +16,8 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.service.FindingFeedbackService;
@@ -79,7 +79,7 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    public ReviewTaskDetail getReviewDetail(Long id) {
+    public ReviewTaskSummary getReviewDetail(Long id) {
         return reviewTaskQueryService.getReviewDetail(id);
     }
 

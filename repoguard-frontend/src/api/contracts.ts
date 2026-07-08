@@ -51,7 +51,7 @@ import type {
   SecretReEncryptionResponse,
   ReviewTrendPoint,
   ReviewTask,
-  ReviewTaskDetail,
+  ReviewTaskSummary,
   ReviewTaskStatus,
   ServiceIntegrationConfig,
   ServiceIntegrationConfigRequest,
@@ -144,7 +144,7 @@ export type ApiContract = {
     PageResponse<DataRetentionCleanupAudit>
   >;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
-  fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskDetail>;
+  fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskSummary>;
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
   fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
   fetchReviewMissingTests: ApiOperation<ReviewDetailPageInput, PageResponse<MissingTest>>;

@@ -18,8 +18,8 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.common.BusinessException;
@@ -96,7 +96,7 @@ public class ReviewController {
      * 返回 PR 评审详情页需要的完整只读数据。
      */
     @GetMapping("/{id}")
-    public ApiResponse<ReviewTaskDetail> getReviewDetail(@PathVariable @Min(1) Long id) {
+    public ApiResponse<ReviewTaskSummary> getReviewDetail(@PathVariable @Min(1) Long id) {
         return ApiResponse.ok(reviewService.getReviewDetail(id));
     }
 

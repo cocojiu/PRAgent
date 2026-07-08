@@ -37,9 +37,9 @@ import com.repoguard.agent.dto.RabbitMqStatusDto;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
@@ -112,8 +112,8 @@ class ReviewControllerTest {
         }
 
         @Override
-        public ReviewTaskDetail getReviewDetail(Long id) {
-            return new ReviewTaskDetail(
+        public ReviewTaskSummary getReviewDetail(Long id) {
+            return new ReviewTaskSummary(
                 id,
                 512,
                 "新增用户导出接口",
@@ -391,6 +391,8 @@ class ReviewControllerTest {
                     0,
                     "2026-06-09 12:00:00",
                     "2026-06-09 12:00:01",
+                    null,
+                    null,
                     List.of(new GithubCommentPublicationHistoryItem(
                         1L,
                         "src/App.java",

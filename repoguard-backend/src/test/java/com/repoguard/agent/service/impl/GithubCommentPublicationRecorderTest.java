@@ -16,6 +16,7 @@ import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -30,6 +31,11 @@ class GithubCommentPublicationRecorderTest {
         batchMapper,
         batchItemMapper
     );
+
+    @BeforeEach
+    void allowBatchConditionalUpdates() {
+        when(batchMapper.update(any())).thenReturn(1);
+    }
 
     @Test
     void recordPublicationInsertsNewFindingPublication() {
@@ -140,11 +146,11 @@ class GithubCommentPublicationRecorderTest {
         ));
 
         assertThat(batchId).isEqualTo(99L);
-        ArgumentCaptor<GithubCommentPublicationBatch> batchCaptor = ArgumentCaptor.forClass(GithubCommentPublicationBatch.class);
-        verify(batchMapper).insert(batchCaptor.capture());
-        assertThat(batchCaptor.getValue().getStatus()).isEqualTo("completed");
-        assertThat(batchCaptor.getValue().getSucceededCount()).isEqualTo(1);
-        assertThat(batchCaptor.getValue().getSkippedCount()).isEqualTo(1);
+        ArgumentCaptor<GithubCommentPublicationBatch> insertedBatchCaptor =
+            ArgumentCaptor.forClass(GithubCommentPublicationBatch.class);
+        verify(batchMapper).insert(insertedBatchCaptor.capture());
+        assertThat(insertedBatchCaptor.getValue().getStatus()).isEqualTo("queued");
+        verify(batchMapper).update(any());
 
         ArgumentCaptor<GithubCommentPublicationBatchItem> itemCaptor = ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
         verify(batchItemMapper, Mockito.times(2)).insert(itemCaptor.capture());
@@ -173,9 +179,7 @@ class GithubCommentPublicationRecorderTest {
             )
         ));
 
-        ArgumentCaptor<GithubCommentPublicationBatch> batchCaptor = ArgumentCaptor.forClass(GithubCommentPublicationBatch.class);
-        verify(batchMapper).insert(batchCaptor.capture());
-        assertThat(batchCaptor.getValue().getStatus()).isEqualTo("partial_failed");
+        verify(batchMapper).update(any());
     }
 
     private GithubCommentPublishItem item(Long findingId, boolean success, String status, String publishedAt) {

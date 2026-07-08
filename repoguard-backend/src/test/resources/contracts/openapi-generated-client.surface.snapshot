@@ -30,7 +30,7 @@ notificationIntegrationControllerUpdateBinding(input: { path: { id: number }; bo
 notificationIntegrationControllerUpdateBindingStatus(input: { path: { id: number }; body: NotificationBindingStatusRequest }): Promise<NotificationBinding>; // PUT /api/v1/config/notification-bindings/{id}/status
 reviewControllerGetGithubCommentPreview(input: { path: { id: number }; query?: { commentableOnly?: boolean; page?: number; pageSize?: number } }): Promise<GithubCommentPreview>; // GET /api/v1/reviews/{id}/github-comments/preview
 reviewControllerGetGithubCommentPublicationHistory(input: { path: { id: number }; query?: { page?: number; pageSize?: number; status?: string } }): Promise<GithubCommentPublicationHistory>; // GET /api/v1/reviews/{id}/github-comments/publications
-reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskDetail>; // GET /api/v1/reviews/{id}
+reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskSummary>; // GET /api/v1/reviews/{id}
 reviewControllerGetReviewStatus(input: { path: { id: number } }): Promise<ReviewTaskStatus>; // GET /api/v1/reviews/{id}/status
 reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
 reviewControllerListConfiguredGithubPullRequests(): Promise<GithubPullRequestOptions>; // GET /api/v1/reviews/github/pull-requests

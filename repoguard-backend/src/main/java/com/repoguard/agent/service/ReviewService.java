@@ -8,8 +8,8 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
-import com.repoguard.agent.dto.ReviewTaskDetail;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.dto.GithubCommentPreviewResponse;
@@ -34,7 +34,7 @@ public interface ReviewService {
     /**
      * 加载单个评审任务，以及前端详情页需要的所有只读区块。
      */
-    ReviewTaskDetail getReviewDetail(Long id);
+    ReviewTaskSummary getReviewDetail(Long id);
 
     PageResponse<ReviewFindingDto> listReviewFindings(
         Long id,

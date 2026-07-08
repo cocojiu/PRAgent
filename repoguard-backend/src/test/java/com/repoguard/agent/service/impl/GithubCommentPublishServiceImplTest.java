@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.GithubCommentPreviewItem;
+import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
 import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
@@ -25,7 +26,11 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.service.impl.GithubCommentPublishCandidateLoader.GithubCommentPublishCandidateOverview;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class GithubCommentPublishServiceImplTest {
 
@@ -51,6 +56,7 @@ class GithubCommentPublishServiceImplTest {
     private final NotificationDispatchService notificationDispatchService = org.mockito.Mockito.mock(
         NotificationDispatchService.class
     );
+    private final RecordingExecutor publishExecutor = new RecordingExecutor();
     private final GithubCommentPublicationRecorder publicationRecorder = new GithubCommentPublicationRecorder(
         publicationMapper,
         batchMapper,
@@ -62,6 +68,7 @@ class GithubCommentPublishServiceImplTest {
         reviewTaskMapper,
         metricsRecorder,
         notificationDispatchService,
+        publishExecutor,
         publishCandidateLoader,
         new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
         new GithubCommentPublishPlanBuilder(),
@@ -72,6 +79,16 @@ class GithubCommentPublishServiceImplTest {
         ),
         publicationRecorder
     );
+
+    @BeforeEach
+    void assignBatchIds() {
+        org.mockito.Mockito.doAnswer(invocation -> {
+            GithubCommentPublicationBatch batch = invocation.getArgument(0);
+            batch.setId(99L);
+            return 1;
+        }).when(batchMapper).insert(any(GithubCommentPublicationBatch.class));
+        when(batchMapper.update(any())).thenReturn(1);
+    }
 
     @Test
     void publishGithubCommentsSendsCommentableDraftsAndRecordsBatchHistory() {
@@ -94,22 +111,30 @@ class GithubCommentPublishServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
-        assertThat(result.attemptedCount()).isEqualTo(2);
-        assertThat(result.succeededCount()).isEqualTo(2);
-        assertThat(result.failedCount()).isZero();
-        assertThat(result.skippedCount()).isEqualTo(1);
-        assertThat(result.items()).extracting("status")
-            .containsExactly("published", "published");
+        assertThat(result.batchId()).isEqualTo(99L);
+        assertThat(result.status()).isEqualTo("queued");
+        assertThat(result.attemptedCount()).isZero();
+        assertThat(result.items()).isEmpty();
+        verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
+
+        publishExecutor.runPending();
+
         verify(publicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
         verify(batchMapper).insert(any(GithubCommentPublicationBatch.class));
+        verify(batchMapper, org.mockito.Mockito.times(2)).update(any());
         verify(batchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
         verify(metricsRecorder).recordItems(2, 0, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(false));
+        ArgumentCaptor<GithubCommentPublishResponse> notificationResponseCaptor =
+            ArgumentCaptor.forClass(GithubCommentPublishResponse.class);
         verify(notificationDispatchService).githubCommentsPublished(
             any(ReviewTask.class),
-            org.mockito.Mockito.eq(result),
-            org.mockito.Mockito.isNull()
+            notificationResponseCaptor.capture(),
+            org.mockito.Mockito.eq(99L)
         );
+        assertThat(notificationResponseCaptor.getValue().attemptedCount()).isEqualTo(2);
+        assertThat(notificationResponseCaptor.getValue().succeededCount()).isEqualTo(2);
+        assertThat(notificationResponseCaptor.getValue().failedCount()).isZero();
     }
 
     @Test
@@ -128,10 +153,13 @@ class GithubCommentPublishServiceImplTest {
 
         var result = service.publishGithubComments(521L);
 
-        assertThat(result.failedCount()).isEqualTo(1);
-        assertThat(result.items().getFirst().failureCategory()).isEqualTo("github_permission_denied");
-        assertThat(result.items().getFirst().failureReason()).isEqualTo("GitHub Token 权限不足");
-        assertThat(result.items().getFirst().failureSuggestion()).contains("评论权限");
+        assertThat(result.status()).isEqualTo("queued");
+        publishExecutor.runPending();
+
+        var itemCaptor = org.mockito.ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
+        verify(batchItemMapper).insert(itemCaptor.capture());
+        assertThat(itemCaptor.getValue().getStatus()).isEqualTo("failed");
+        assertThat(itemCaptor.getValue().getMessage()).contains("403 Resource not accessible");
         verify(metricsRecorder).recordItems(0, 1, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(true));
     }
@@ -142,6 +170,7 @@ class GithubCommentPublishServiceImplTest {
             reviewTaskMapper,
             null,
             notificationDispatchService,
+            publishExecutor,
             publishCandidateLoader,
             new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
             new GithubCommentPublishPlanBuilder(),
@@ -162,6 +191,7 @@ class GithubCommentPublishServiceImplTest {
             reviewTaskMapper,
             metricsRecorder,
             null,
+            publishExecutor,
             publishCandidateLoader,
             new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
             new GithubCommentPublishPlanBuilder(),
@@ -188,6 +218,38 @@ class GithubCommentPublishServiceImplTest {
             .hasMessageContaining("Human review");
 
         verify(publishCandidateLoader, never()).loadOverview(any());
+        verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
+    }
+
+    @Test
+    void publishGithubCommentsKeepsQueuedBatchWhenExecutorRejects() {
+        ReviewTask task = task();
+        Executor rejectingExecutor = command -> {
+            throw new RejectedExecutionException("queue full");
+        };
+        GithubCommentPublishServiceImpl rejectingService = new GithubCommentPublishServiceImpl(
+            reviewTaskMapper,
+            metricsRecorder,
+            notificationDispatchService,
+            rejectingExecutor,
+            publishCandidateLoader,
+            new GithubCommentPublishGuard(new ReviewTaskStateMachine()),
+            new GithubCommentPublishPlanBuilder(),
+            new GithubCommentDraftPublisher(
+                githubPullRequestClient,
+                publicationRecorder,
+                writebackFailureClassifier
+            ),
+            publicationRecorder
+        );
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(publishCandidateLoader.loadOverview(task)).thenReturn(overview(1, null));
+
+        var result = rejectingService.publishGithubComments(521L);
+
+        assertThat(result.status()).isEqualTo("queued");
+        assertThat(result.batchId()).isEqualTo(99L);
+        verify(batchMapper).update(any());
         verify(githubPullRequestClient, never()).publishPullRequestComments(any(), any());
     }
 
@@ -241,5 +303,21 @@ class GithubCommentPublishServiceImplTest {
         task.setCreatedAt(LocalDateTime.of(2026, 6, 18, 10, 0));
         task.setDurationSeconds(37);
         return task;
+    }
+
+    private static final class RecordingExecutor implements Executor {
+        private Runnable pendingCommand;
+
+        @Override
+        public void execute(Runnable command) {
+            pendingCommand = command;
+        }
+
+        private void runPending() {
+            assertThat(pendingCommand).isNotNull();
+            Runnable command = pendingCommand;
+            pendingCommand = null;
+            command.run();
+        }
     }
 }

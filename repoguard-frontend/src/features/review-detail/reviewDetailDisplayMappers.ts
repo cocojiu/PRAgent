@@ -235,6 +235,8 @@ export const publishStatusText = (status: string) => {
 
 export const publicationBatchStatusText = (status: string) => {
   const labels: Record<string, string> = {
+    queued: "排队中",
+    running: "回写中",
     completed: "完成",
     partial_failed: "部分失败",
     failed: "失败",
@@ -246,6 +248,8 @@ export const publicationBatchStatusText = (status: string) => {
 
 export const publicationBatchStatusClass = (status: string) => {
   const classes: Record<string, string> = {
+    queued: "pending",
+    running: "processing",
     completed: "success",
     partial_failed: "warning",
     failed: "danger",

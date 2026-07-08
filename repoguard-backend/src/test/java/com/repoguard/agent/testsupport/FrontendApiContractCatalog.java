@@ -228,6 +228,7 @@ public final class FrontendApiContractCatalog {
             Map.entry("MessageQueueHealthResponse", "MessageQueueHealth"),
             Map.entry("NotificationCenterDto", "NotificationCenter"),
             Map.entry("ReviewTaskListItem", "ReviewTask"),
+            Map.entry("ReviewTaskSummary", "ReviewTaskSummary"),
             Map.entry("ReviewTaskStatusResponse", "ReviewTaskStatus"),
             Map.entry("ReviewTimelineItem", "TimelineItem"),
             Map.entry("ServiceIntegrationConfigDto", "ServiceIntegrationConfig"),

@@ -71,10 +71,30 @@
         />
       </div>
       <div v-if="githubCommentPublishResult" class="comment-publish-summary">
-        <span>已尝试：{{ githubCommentPublishResult.attemptedCount }}</span>
-        <span>成功：{{ githubCommentPublishResult.succeededCount }}</span>
-        <span>失败：{{ githubCommentPublishResult.failedCount }}</span>
-        <span>跳过：{{ githubCommentPublishResult.skippedCount }}</span>
+        <template v-if="githubCommentPublishResult.status === 'queued'">
+          <span :class="`status-pill ${publicationBatchStatusClass(githubCommentPublishResult.status)}`">
+            {{ publicationBatchStatusText(githubCommentPublishResult.status) }}
+          </span>
+          <span v-if="githubCommentPublishResult.batchId">批次：#{{ githubCommentPublishResult.batchId }}</span>
+          <span>审查发现：{{ githubCommentPublishResult.totalFindings }}</span>
+        </template>
+        <template v-else>
+          <span>已尝试：{{ githubCommentPublishResult.attemptedCount }}</span>
+          <span>成功：{{ githubCommentPublishResult.succeededCount }}</span>
+          <span>失败：{{ githubCommentPublishResult.failedCount }}</span>
+          <span>跳过：{{ githubCommentPublishResult.skippedCount }}</span>
+        </template>
+        <div
+          v-if="githubCommentPublishResult.nextRetryAt || githubCommentPublishResult.lastError"
+          class="publication-batch-note"
+        >
+          <span v-if="githubCommentPublishResult.nextRetryAt">
+            下次重试：{{ githubCommentPublishResult.nextRetryAt }}
+          </span>
+          <span v-if="githubCommentPublishResult.lastError">
+            {{ githubCommentPublishResult.lastError }}
+          </span>
+        </div>
       </div>
       <div v-if="githubCommentPreview.items.length" class="comment-preview-list">
         <section
@@ -162,6 +182,10 @@
               <span>失败 {{ batch.failedCount }}</span>
               <span>跳过 {{ batch.skippedCount }}</span>
             </div>
+          </div>
+          <div v-if="batch.nextRetryAt || batch.lastError" class="publication-batch-note">
+            <span v-if="batch.nextRetryAt">下次重试：{{ batch.nextRetryAt }}</span>
+            <span v-if="batch.lastError">{{ batch.lastError }}</span>
           </div>
           <div class="comment-history-items">
             <div

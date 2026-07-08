@@ -315,7 +315,8 @@ const {
   clearGithubCommentPreviewAndHistory,
   clearGithubCommentState,
   publishGithubCommentsForTask,
-  resetGithubCommentPublishResult
+  resetGithubCommentPublishResult,
+  stopGithubCommentPublishPolling
 } = useReviewDetailGithubComments();
 let stopPolling = () => {};
 let syncPolling = () => {};
@@ -666,6 +667,7 @@ const loadGithubCommentData = async () => {
 watch(
   () => route.params.id,
   () => {
+    stopGithubCommentPublishPolling();
     stopPolling();
     void loadDetail();
   }
@@ -676,6 +678,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  stopGithubCommentPublishPolling();
   cleanupPolling();
 });
 </script>
