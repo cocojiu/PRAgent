@@ -1,7 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
@@ -13,7 +13,7 @@ import com.repoguard.agent.service.ReviewPolicyConfigService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import org.springframework.cache.annotation.CacheEvict;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -29,13 +29,16 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
 
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final SecretCryptoService secretCryptoService;
+    private final CacheEvictionService cacheEvictionService;
 
     public ReviewPolicyConfigServiceImpl(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        SecretCryptoService secretCryptoService
+        SecretCryptoService secretCryptoService,
+        CacheEvictionService cacheEvictionService
     ) {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.secretCryptoService = secretCryptoService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     @Override
@@ -45,18 +48,6 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
 
     @Override
     @Transactional
-    @CacheEvict(
-        cacheNames = {
-            CacheNames.DASHBOARD_OVERVIEW,
-            CacheNames.DASHBOARD_SUMMARY,
-            CacheNames.DASHBOARD_REVIEW_TREND,
-            CacheNames.DASHBOARD_RISK_DISTRIBUTION,
-            CacheNames.DASHBOARD_RULES,
-            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
-            CacheNames.DASHBOARD_LLM_QUALITY
-        },
-        allEntries = true
-    )
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
         SecretUpdateValue apiKey = SecretUpdateValue.resolve(secretCryptoService, config.getApiKeyValue(), request.apiKey());
@@ -85,7 +76,12 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
                     .set("api_key_value", null)
             );
         }
+        evictDashboardOverviewCompatibility();
         return toReviewPolicyDto(config);
+    }
+
+    private void evictDashboardOverviewCompatibility() {
+        cacheEvictionService.evictDashboardOverviewCompatibility();
     }
 
     private ReviewPolicyConfig loadReviewPolicy() {

@@ -127,7 +127,8 @@ class SystemConfigServiceImplTest {
         );
     private final ReviewPolicyConfigServiceImpl reviewPolicyConfigService = new ReviewPolicyConfigServiceImpl(
         reviewPolicyConfigMapper,
-        secretCryptoService
+        secretCryptoService,
+        cacheEvictionService
     );
     private final ReviewRuleConfigServiceImpl reviewRuleConfigService = new ReviewRuleConfigServiceImpl(
         reviewRuleConfigMapper,
@@ -140,7 +141,8 @@ class SystemConfigServiceImplTest {
         new SystemSettingsApplicationServiceImpl(
             systemSettingsConfigMapper,
             systemSettingLogMapper,
-            reviewPolicyConfigMapper
+            reviewPolicyConfigMapper,
+            cacheEvictionService
         );
     private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
         connectionTestService,

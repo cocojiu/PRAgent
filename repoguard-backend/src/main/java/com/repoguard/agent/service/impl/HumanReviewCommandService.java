@@ -68,7 +68,7 @@ public class HumanReviewCommandService {
             reviewedAt,
             ReviewTimelineStatus.DONE
         );
-        evictDashboardOverview();
+        evictDashboardReviewActivity();
         return humanReviewResponse(task, humanReviewMessage(humanReviewStatus));
     }
 
@@ -139,8 +139,8 @@ public class HumanReviewCommandService {
         return value == null ? null : value.format(DATE_TIME_FORMATTER);
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardReviewActivity() {
+        cacheEvictionService.evictDashboardReviewActivity();
     }
 
     private String truncate(String value) {

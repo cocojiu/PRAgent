@@ -1,6 +1,7 @@
 package com.repoguard.agent.config;
 
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
+import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -20,37 +21,65 @@ public class CacheEvictionService {
 
     private final CacheManager cacheManager;
     private final Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier;
+    private final Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier;
 
     public CacheEvictionService(CacheManager cacheManager) {
-        this(cacheManager, () -> null);
+        this(cacheManager, () -> null, () -> null);
     }
 
     @Autowired
     public CacheEvictionService(
         CacheManager cacheManager,
-        ObjectProvider<DashboardDailySnapshotService> dashboardSnapshotServiceProvider
+        ObjectProvider<DashboardDailySnapshotService> dashboardSnapshotServiceProvider,
+        ObjectProvider<DashboardSnapshotStore> dashboardSnapshotStoreProvider
     ) {
-        this(cacheManager, dashboardSnapshotServiceProvider::getIfAvailable);
+        this(
+            cacheManager,
+            dashboardSnapshotServiceProvider::getIfAvailable,
+            dashboardSnapshotStoreProvider::getIfAvailable
+        );
     }
 
-    private CacheEvictionService(
+    public CacheEvictionService(
         CacheManager cacheManager,
-        Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier
+        Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
+        Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier
     ) {
         this.cacheManager = Objects.requireNonNull(cacheManager, "cacheManager must not be null");
         this.dashboardSnapshotServiceSupplier =
             Objects.requireNonNull(dashboardSnapshotServiceSupplier, "dashboardSnapshotServiceSupplier must not be null");
+        this.dashboardSnapshotStoreSupplier =
+            Objects.requireNonNull(dashboardSnapshotStoreSupplier, "dashboardSnapshotStoreSupplier must not be null");
     }
 
     public void evictDashboardOverview() {
-        refreshDashboardSnapshotsAfterCommit();
-        clear(CacheNames.DASHBOARD_OVERVIEW);
-        clear(CacheNames.DASHBOARD_SUMMARY);
-        clear(CacheNames.DASHBOARD_REVIEW_TREND);
-        clear(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
+        evictDashboardReviewActivity();
+    }
+
+    public void evictDashboardReviewActivity() {
+        refreshDashboardSnapshotsAfterCommit(DashboardDailySnapshotService::refreshCurrentWindows);
+        evictDashboardOverviewCompatibility();
+        evictDashboardSummary();
+        evictDashboardReviewTrend();
+        evictDashboardRiskDistribution();
+        evictDashboardRules();
+        evictDashboardHighRiskReviews();
+        evictDashboardLlmQuality();
+    }
+
+    public void evictDashboardFeedbackQuality() {
+        refreshDashboardSnapshotsAfterCommit(DashboardDailySnapshotService::refreshCurrentLlmQualityWindow);
+        evictDashboardLlmQuality();
+    }
+
+    public void evictDashboardRules() {
         clear(CacheNames.DASHBOARD_RULES);
-        clear(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
-        clear(CacheNames.DASHBOARD_LLM_QUALITY);
+        evictSnapshot(CacheNames.DASHBOARD_RULES + ":rules");
+    }
+
+    public void evictDashboardOverviewCompatibility() {
+        clear(CacheNames.DASHBOARD_OVERVIEW);
+        evictSnapshotsByPrefix(CacheNames.DASHBOARD_OVERVIEW + ":");
     }
 
     public void evictGithubOpenPullRequests() {
@@ -68,8 +97,49 @@ public class CacheEvictionService {
         }
     }
 
-    private void refreshDashboardSnapshotsAfterCommit() {
-        Runnable refresh = this::refreshDashboardSnapshots;
+    private void evictDashboardSummary() {
+        clear(CacheNames.DASHBOARD_SUMMARY);
+        evictSnapshot(CacheNames.DASHBOARD_SUMMARY + ":summary");
+    }
+
+    private void evictDashboardReviewTrend() {
+        clear(CacheNames.DASHBOARD_REVIEW_TREND);
+        evictSnapshot(CacheNames.DASHBOARD_REVIEW_TREND + ":reviewTrend");
+    }
+
+    private void evictDashboardRiskDistribution() {
+        clear(CacheNames.DASHBOARD_RISK_DISTRIBUTION);
+        evictSnapshot(CacheNames.DASHBOARD_RISK_DISTRIBUTION + ":riskDistribution");
+    }
+
+    private void evictDashboardHighRiskReviews() {
+        clear(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS);
+        evictSnapshot(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS + ":highRiskReviews");
+    }
+
+    private void evictDashboardLlmQuality() {
+        clear(CacheNames.DASHBOARD_LLM_QUALITY);
+        evictSnapshotsByPrefix(CacheNames.DASHBOARD_LLM_QUALITY + ":");
+    }
+
+    private void evictSnapshot(String key) {
+        DashboardSnapshotStore snapshotStore = dashboardSnapshotStoreSupplier.get();
+        if (snapshotStore != null) {
+            snapshotStore.evict(key);
+        }
+    }
+
+    private void evictSnapshotsByPrefix(String prefix) {
+        DashboardSnapshotStore snapshotStore = dashboardSnapshotStoreSupplier.get();
+        if (snapshotStore != null) {
+            snapshotStore.evictByPrefix(prefix);
+        }
+    }
+
+    private void refreshDashboardSnapshotsAfterCommit(
+        java.util.function.Consumer<DashboardDailySnapshotService> refresher
+    ) {
+        Runnable refresh = () -> refreshDashboardSnapshots(refresher);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
@@ -82,13 +152,13 @@ public class CacheEvictionService {
         refresh.run();
     }
 
-    private void refreshDashboardSnapshots() {
+    private void refreshDashboardSnapshots(java.util.function.Consumer<DashboardDailySnapshotService> refresher) {
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         if (snapshotService == null) {
             return;
         }
         try {
-            snapshotService.refreshCurrentWindows();
+            refresher.accept(snapshotService);
         } catch (RuntimeException ex) {
             LOGGER.warn("Dashboard daily snapshot refresh failed during cache eviction", ex);
         }

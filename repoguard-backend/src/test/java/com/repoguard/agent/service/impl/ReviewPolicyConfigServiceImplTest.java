@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
@@ -18,9 +19,11 @@ class ReviewPolicyConfigServiceImplTest {
 
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
+    private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final ReviewPolicyConfigServiceImpl service = new ReviewPolicyConfigServiceImpl(
         reviewPolicyConfigMapper,
-        secretCryptoService
+        secretCryptoService,
+        cacheEvictionService
     );
 
     @Test
@@ -61,6 +64,7 @@ class ReviewPolicyConfigServiceImplTest {
         assertThat(result.chunkLineThreshold()).isEqualTo(700);
         assertThat(result.outputTokenPricePerMillion()).isEqualByComparingTo("1.50");
         verify(reviewPolicyConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test

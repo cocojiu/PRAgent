@@ -74,7 +74,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
             feedbackAt,
             ReviewTimelineStatus.DONE
         );
-        evictDashboardOverview();
+        evictDashboardFeedbackQuality();
         return findingFeedbackResponse(finding);
     }
 
@@ -102,8 +102,8 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         return truncate("Finding feedback updated: " + status.dtoCode() + " for " + file);
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardFeedbackQuality() {
+        cacheEvictionService.evictDashboardFeedbackQuality();
     }
 
     private String cleanNote(String note) {

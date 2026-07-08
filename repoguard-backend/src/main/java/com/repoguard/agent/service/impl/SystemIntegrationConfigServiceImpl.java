@@ -79,7 +79,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
                 .eq("id", config.getId())
                 .set("last_error", null)
         );
-        evictDashboardOverview();
+        evictDashboardOverviewCompatibility();
         return toGithubDto(config);
     }
 
@@ -105,8 +105,8 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
         return updateServiceIntegration(RABBITMQ_PROVIDER, request);
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardOverviewCompatibility() {
+        cacheEvictionService.evictDashboardOverviewCompatibility();
     }
 
     private IntegrationConfig loadGithubConfig() {

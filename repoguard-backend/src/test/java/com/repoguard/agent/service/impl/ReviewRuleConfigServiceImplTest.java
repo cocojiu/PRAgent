@@ -60,7 +60,7 @@ class ReviewRuleConfigServiceImplTest {
     }
 
     @Test
-    void createReviewRuleNormalizesFieldsAndEvictsDashboardOverview() {
+    void createReviewRuleNormalizesFieldsAndEvictsDashboardRules() {
         when(reviewRuleConfigMapper.selectById("RG-JAVA-002")).thenReturn(null);
         when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88)));
 
@@ -79,7 +79,7 @@ class ReviewRuleConfigServiceImplTest {
         assertThat(inserted.getSeverity()).isEqualTo("LOW");
         assertThat(inserted.getStatus()).isEqualTo("ENABLED");
         assertThat(inserted.getSortOrder()).isEqualTo(20);
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardRules();
     }
 
     @Test
@@ -93,7 +93,7 @@ class ReviewRuleConfigServiceImplTest {
         assertThat(rule.getStatus()).isEqualTo("DISABLED");
         assertThat(result.status()).isEqualTo("disabled");
         verify(reviewRuleConfigMapper).updateById(rule);
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardRules();
     }
 
     @Test

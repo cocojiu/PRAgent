@@ -6,6 +6,7 @@ import com.repoguard.agent.config.CacheConfig;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
+import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -13,7 +14,6 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.support.SimpleCacheManager;
@@ -68,7 +68,7 @@ class CacheStatsServiceImplTest {
         summary.put("summary", "value");
         llmQuality.put("7", "value");
 
-        evictionService.evictDashboardOverview();
+        evictionService.evictDashboardReviewActivity();
 
         assertThat(overview.get("overview")).isNull();
         assertThat(summary.get("summary")).isNull();
@@ -76,13 +76,54 @@ class CacheStatsServiceImplTest {
     }
 
     @Test
-    void dashboardEvictionRefreshesPersistedSnapshots() {
+    void dashboardReviewActivityEvictionRefreshesAllPersistedSnapshots() {
         DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
-        CacheEvictionService eviction = new CacheEvictionService(cacheManager, objectProvider(snapshotService));
+        CacheEvictionService eviction = new CacheEvictionService(cacheManager, () -> snapshotService, () -> null);
 
-        eviction.evictDashboardOverview();
+        eviction.evictDashboardReviewActivity();
 
         Mockito.verify(snapshotService).refreshCurrentWindows();
+    }
+
+    @Test
+    void feedbackEvictionClearsOnlyLlmQualityAndRefreshesLlmSnapshot() {
+        DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
+        DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
+        CacheEvictionService eviction = new CacheEvictionService(cacheManager, () -> snapshotService, () -> snapshotStore);
+        Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
+        Cache llmQuality = cacheManager.getCache(CacheNames.DASHBOARD_LLM_QUALITY);
+        assertThat(summary).isNotNull();
+        assertThat(llmQuality).isNotNull();
+        summary.put("summary", "summary-value");
+        llmQuality.put("7", "llm-value");
+        snapshotStore.getOrLoad(CacheNames.DASHBOARD_SUMMARY + ":summary", () -> "summary-snapshot");
+        snapshotStore.getOrLoad(CacheNames.DASHBOARD_LLM_QUALITY + ":7", () -> "llm-snapshot");
+
+        eviction.evictDashboardFeedbackQuality();
+
+        assertThat(summary.get("summary")).isNotNull();
+        assertThat(llmQuality.get("7")).isNull();
+        assertThat(snapshotStore.getOrLoad(CacheNames.DASHBOARD_SUMMARY + ":summary", () -> "new-summary"))
+            .isEqualTo("summary-snapshot");
+        assertThat(snapshotStore.getOrLoad(CacheNames.DASHBOARD_LLM_QUALITY + ":7", () -> "new-llm"))
+            .isEqualTo("new-llm");
+        Mockito.verify(snapshotService).refreshCurrentLlmQualityWindow();
+        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+    }
+
+    @Test
+    void ruleEvictionClearsOnlyRulesModule() {
+        Cache rules = cacheManager.getCache(CacheNames.DASHBOARD_RULES);
+        Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
+        assertThat(rules).isNotNull();
+        assertThat(summary).isNotNull();
+        rules.put("rules", "rules-value");
+        summary.put("summary", "summary-value");
+
+        evictionService.evictDashboardRules();
+
+        assertThat(rules.get("rules")).isNull();
+        assertThat(summary.get("summary")).isNotNull();
     }
 
     @Test
@@ -160,44 +201,4 @@ class CacheStatsServiceImplTest {
         return meterRegistry.find(name).tags(tags).counter().count();
     }
 
-    private static ObjectProvider<DashboardDailySnapshotService> objectProvider(
-        DashboardDailySnapshotService snapshotService
-    ) {
-        return new ObjectProvider<>() {
-            @Override
-            public DashboardDailySnapshotService getObject(Object... args) {
-                return snapshotService;
-            }
-
-            @Override
-            public DashboardDailySnapshotService getIfAvailable() {
-                return snapshotService;
-            }
-
-            @Override
-            public DashboardDailySnapshotService getIfUnique() {
-                return snapshotService;
-            }
-
-            @Override
-            public DashboardDailySnapshotService getObject() {
-                return snapshotService;
-            }
-
-            @Override
-            public java.util.Iterator<DashboardDailySnapshotService> iterator() {
-                return List.of(snapshotService).iterator();
-            }
-
-            @Override
-            public java.util.stream.Stream<DashboardDailySnapshotService> stream() {
-                return java.util.stream.Stream.of(snapshotService);
-            }
-
-            @Override
-            public java.util.stream.Stream<DashboardDailySnapshotService> orderedStream() {
-                return java.util.stream.Stream.of(snapshotService);
-            }
-        };
-    }
 }

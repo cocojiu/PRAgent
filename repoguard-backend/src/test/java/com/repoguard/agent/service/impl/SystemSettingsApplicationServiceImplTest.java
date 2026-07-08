@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
@@ -29,10 +30,12 @@ class SystemSettingsApplicationServiceImplTest {
         org.mockito.Mockito.mock(SystemSettingLogMapper.class);
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper =
         org.mockito.Mockito.mock(ReviewPolicyConfigMapper.class);
+    private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final SystemSettingsApplicationServiceImpl service = new SystemSettingsApplicationServiceImpl(
         systemSettingsConfigMapper,
         systemSettingLogMapper,
-        reviewPolicyConfigMapper
+        reviewPolicyConfigMapper,
+        cacheEvictionService
     );
 
     @Test
@@ -81,6 +84,7 @@ class SystemSettingsApplicationServiceImplTest {
         assertThat(logCaptor.getValue().getAction()).isEqualTo("更新系统设置");
         assertThat(logCaptor.getValue().getStatus()).isEqualTo("成功");
         assertThat(logCaptor.getValue().getCreatedAt()).isNotNull();
+        verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test

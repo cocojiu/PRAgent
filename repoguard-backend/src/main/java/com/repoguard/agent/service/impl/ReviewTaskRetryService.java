@@ -54,7 +54,7 @@ public class ReviewTaskRetryService {
         int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
         resetTaskForRetry(task, retryCount);
         reviewTaskMapper.updateById(task);
-        evictDashboardOverview();
+        evictDashboardReviewActivity();
 
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
@@ -119,7 +119,7 @@ public class ReviewTaskRetryService {
         task.setLlmPromptSummary(null);
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardReviewActivity() {
+        cacheEvictionService.evictDashboardReviewActivity();
     }
 }

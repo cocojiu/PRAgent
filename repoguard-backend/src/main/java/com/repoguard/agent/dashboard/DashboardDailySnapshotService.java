@@ -78,8 +78,19 @@ public class DashboardDailySnapshotService {
 
     @Transactional
     public void refreshCurrentWindows() {
+        refreshCurrentReviewWindow();
+        refreshCurrentLlmQualityWindow();
+    }
+
+    @Transactional
+    public void refreshCurrentReviewWindow() {
         LocalDate latestReviewDate = latestReviewDate();
         refreshReviewSnapshot(reviewTrendWindow.startDate(latestReviewDate));
+    }
+
+    @Transactional
+    public void refreshCurrentLlmQualityWindow() {
+        LocalDate latestReviewDate = latestReviewDate();
         refreshLlmQualitySnapshot(llmQualityTrendBuilder.window(DashboardLlmTrendDays.NINETY_DAYS, latestReviewDate).startDate());
     }
 

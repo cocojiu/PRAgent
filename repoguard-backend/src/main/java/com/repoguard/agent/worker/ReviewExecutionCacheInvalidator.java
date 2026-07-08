@@ -14,6 +14,6 @@ class ReviewExecutionCacheInvalidator {
     }
 
     void reviewTaskChanged() {
-        cacheEvictionService.evictDashboardOverview();
+        cacheEvictionService.evictDashboardReviewActivity();
     }
 }

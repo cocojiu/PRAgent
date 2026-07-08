@@ -1,7 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.BaseSettingsDto;
 import com.repoguard.agent.dto.NotificationSettingsDto;
 import com.repoguard.agent.dto.ReviewPolicySettingsDto;
@@ -20,7 +20,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import org.springframework.cache.annotation.CacheEvict;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -37,15 +37,18 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
     private final SystemSettingsConfigMapper systemSettingsConfigMapper;
     private final SystemSettingLogMapper systemSettingLogMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
+    private final CacheEvictionService cacheEvictionService;
 
     public SystemSettingsApplicationServiceImpl(
         SystemSettingsConfigMapper systemSettingsConfigMapper,
         SystemSettingLogMapper systemSettingLogMapper,
-        ReviewPolicyConfigMapper reviewPolicyConfigMapper
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        CacheEvictionService cacheEvictionService
     ) {
         this.systemSettingsConfigMapper = systemSettingsConfigMapper;
         this.systemSettingLogMapper = systemSettingLogMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     @Override
@@ -55,18 +58,6 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
 
     @Override
     @Transactional
-    @CacheEvict(
-        cacheNames = {
-            CacheNames.DASHBOARD_OVERVIEW,
-            CacheNames.DASHBOARD_SUMMARY,
-            CacheNames.DASHBOARD_REVIEW_TREND,
-            CacheNames.DASHBOARD_RISK_DISTRIBUTION,
-            CacheNames.DASHBOARD_RULES,
-            CacheNames.DASHBOARD_HIGH_RISK_REVIEWS,
-            CacheNames.DASHBOARD_LLM_QUALITY
-        },
-        allEntries = true
-    )
     public SystemSettingsDto updateSystemSettings(SystemSettingsRequest request) {
         SystemSettingsConfig settingsConfig = loadSystemSettings();
         ReviewPolicyConfig reviewPolicyConfig = loadReviewPolicy();
@@ -96,7 +87,12 @@ public class SystemSettingsApplicationServiceImpl implements SystemSettingsAppli
         reviewPolicyConfigMapper.updateById(reviewPolicyConfig);
 
         recordSystemSettingLog("admin", "更新系统设置", "成功", now);
+        evictDashboardOverviewCompatibility();
         return toSystemSettingsDto(settingsConfig, reviewPolicyConfig, loadSettingLogs());
+    }
+
+    private void evictDashboardOverviewCompatibility() {
+        cacheEvictionService.evictDashboardOverviewCompatibility();
     }
 
     private ReviewPolicyConfig loadReviewPolicy() {

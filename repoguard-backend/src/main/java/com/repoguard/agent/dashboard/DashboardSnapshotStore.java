@@ -34,6 +34,16 @@ public class DashboardSnapshotStore {
         return snapshot;
     }
 
+    public void evict(String key) {
+        snapshots.remove(key);
+        refreshingKeys.remove(key);
+    }
+
+    public void evictByPrefix(String prefix) {
+        snapshots.keySet().removeIf(key -> key.startsWith(prefix));
+        refreshingKeys.removeIf(key -> key.startsWith(prefix));
+    }
+
     @SuppressWarnings("unchecked")
     private <T> T snapshot(String key) {
         return (T) snapshots.get(key);

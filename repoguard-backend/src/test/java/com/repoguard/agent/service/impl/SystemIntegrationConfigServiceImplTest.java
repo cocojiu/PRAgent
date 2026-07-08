@@ -72,7 +72,7 @@ class SystemIntegrationConfigServiceImplTest {
     }
 
     @Test
-    void updateGithubIntegrationStoresNewTokenAndEvictsDashboardOverview() {
+    void updateGithubIntegrationStoresNewTokenAndEvictsDashboardOverviewCompatibility() {
         IntegrationConfig config = githubConfig("old-token");
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
@@ -89,7 +89,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(config.getLastError()).isNull();
         assertThat(result.token()).isEqualTo("****1234");
         verify(integrationConfigMapper).updateById(config);
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test
@@ -109,7 +109,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(result.token()).isNull();
         verify(integrationConfigMapper).updateById(config);
         verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test
@@ -169,7 +169,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(result.token()).isNull();
         assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
         verify(integrationConfigMapper).updateById(config);
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test

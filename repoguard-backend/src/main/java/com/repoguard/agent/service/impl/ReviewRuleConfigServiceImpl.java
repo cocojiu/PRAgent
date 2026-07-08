@@ -87,7 +87,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         rule.setCreatedAt(now);
         rule.setUpdatedAt(now);
         reviewRuleConfigMapper.insert(rule);
-        evictDashboardOverview();
+        evictDashboardRules();
         return toReviewRuleDto(rule, 0);
     }
 
@@ -103,7 +103,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         applyReviewRuleRequest(rule, normalizedId, request);
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
-        evictDashboardOverview();
+        evictDashboardRules();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
@@ -115,12 +115,12 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(status));
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
-        evictDashboardOverview();
+        evictDashboardRules();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardRules() {
+        cacheEvictionService.evictDashboardRules();
     }
 
     private ReviewRuleConfig loadReviewRule(String id) {

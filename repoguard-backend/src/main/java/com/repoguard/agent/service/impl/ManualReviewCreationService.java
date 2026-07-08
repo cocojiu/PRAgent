@@ -192,7 +192,7 @@ public class ManualReviewCreationService {
         reviewTimelineAppender.appendInitial(task.getId(), "Task queued", createdAt);
         ownerFuture.complete(task);
         cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
-        evictDashboardOverview();
+        evictDashboardReviewActivity();
         metrics.reviewTaskCreated(source.code());
         ReviewTaskMessage message = new ReviewTaskMessage(
             task.getId(),
@@ -375,8 +375,8 @@ public class ManualReviewCreationService {
             + request.prNumber();
     }
 
-    private void evictDashboardOverview() {
-        cacheEvictionService.evictDashboardOverview();
+    private void evictDashboardReviewActivity() {
+        cacheEvictionService.evictDashboardReviewActivity();
     }
 
     private String lower(String value) {

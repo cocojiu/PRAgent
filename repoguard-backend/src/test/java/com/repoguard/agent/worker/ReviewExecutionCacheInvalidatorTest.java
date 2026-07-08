@@ -9,13 +9,13 @@ import org.junit.jupiter.api.Test;
 class ReviewExecutionCacheInvalidatorTest {
 
     @Test
-    void reviewTaskChangedEvictsDashboardOverview() {
+    void reviewTaskChangedEvictsDashboardReviewActivity() {
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
         ReviewExecutionCacheInvalidator invalidator = new ReviewExecutionCacheInvalidator(cacheEvictionService);
 
         invalidator.reviewTaskChanged();
 
-        verify(cacheEvictionService).evictDashboardOverview();
+        verify(cacheEvictionService).evictDashboardReviewActivity();
     }
 
     @Test
