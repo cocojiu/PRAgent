@@ -16,6 +16,7 @@ public class DashboardSnapshotStore {
     private static final Logger LOGGER = LoggerFactory.getLogger(DashboardSnapshotStore.class);
 
     private final Map<String, Object> snapshots = new ConcurrentHashMap<>();
+    private final Map<String, Object> loadingLocks = new ConcurrentHashMap<>();
     private final Set<String> refreshingKeys = ConcurrentHashMap.newKeySet();
     private final Executor executor;
 
@@ -28,7 +29,7 @@ public class DashboardSnapshotStore {
     public <T> T getOrLoad(String key, Supplier<T> loader) {
         T snapshot = snapshot(key);
         if (snapshot == null) {
-            return loadAndStore(key, loader);
+            return loadOnce(key, loader);
         }
         refreshAsync(key, loader);
         return snapshot;
@@ -36,11 +37,13 @@ public class DashboardSnapshotStore {
 
     public void evict(String key) {
         snapshots.remove(key);
+        loadingLocks.remove(key);
         refreshingKeys.remove(key);
     }
 
     public void evictByPrefix(String prefix) {
         snapshots.keySet().removeIf(key -> key.startsWith(prefix));
+        loadingLocks.keySet().removeIf(key -> key.startsWith(prefix));
         refreshingKeys.removeIf(key -> key.startsWith(prefix));
     }
 
@@ -53,6 +56,21 @@ public class DashboardSnapshotStore {
         T value = loader.get();
         snapshots.put(key, value);
         return value;
+    }
+
+    private <T> T loadOnce(String key, Supplier<T> loader) {
+        Object lock = loadingLocks.computeIfAbsent(key, ignored -> new Object());
+        try {
+            synchronized (lock) {
+                T snapshot = snapshot(key);
+                if (snapshot != null) {
+                    return snapshot;
+                }
+                return loadAndStore(key, loader);
+            }
+        } finally {
+            loadingLocks.remove(key, lock);
+        }
     }
 
     private <T> void refreshAsync(String key, Supplier<T> loader) {
