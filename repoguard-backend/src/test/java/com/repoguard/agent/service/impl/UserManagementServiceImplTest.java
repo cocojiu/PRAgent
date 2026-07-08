@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserOperationAuditContext;
@@ -61,13 +62,17 @@ class UserManagementServiceImplTest {
 
     @Test
     void listUsersReturnsUserManagementItems() {
-        when(userAccountMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user(1001L, "admin", "ADMIN", "ACTIVE")));
+        Page<UserAccount> page = Page.of(2, 10);
+        page.setRecords(List.of(user(1001L, "admin", "ADMIN", "ACTIVE")));
+        page.setTotal(21L);
+        when(userAccountMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
 
-        var users = userManagementService.listUsers();
+        var users = userManagementService.listUsers(2, 10, "ADMIN", "ACTIVE", "adm");
 
-        assertThat(users).hasSize(1);
-        assertThat(users.get(0).username()).isEqualTo("admin");
-        assertThat(users.get(0).role()).isEqualTo("ADMIN");
+        assertThat(users.total()).isEqualTo(21L);
+        assertThat(users.items()).hasSize(1);
+        assertThat(users.items().get(0).username()).isEqualTo("admin");
+        assertThat(users.items().get(0).role()).isEqualTo("ADMIN");
     }
 
     @Test
@@ -84,14 +89,18 @@ class UserManagementServiceImplTest {
         audit.setClientIp("10.0.0.1");
         audit.setUserAgent("JUnit");
         audit.setCreatedAt(LocalDateTime.parse("2026-06-11T10:30:00"));
-        when(userOperationAuditMapper.selectList(any(Wrapper.class))).thenReturn(List.of(audit));
+        Page<UserOperationAudit> page = Page.of(1, 20);
+        page.setRecords(List.of(audit));
+        page.setTotal(1L);
+        when(userOperationAuditMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
 
-        var audits = userManagementService.listOperationAudits();
+        var audits = userManagementService.listOperationAudits(1, 20);
 
-        assertThat(audits).hasSize(1);
-        assertThat(audits.get(0).operatorUsername()).isEqualTo("admin");
-        assertThat(audits.get(0).targetUsername()).isEqualTo("viewer");
-        assertThat(audits.get(0).action()).isEqualTo("ROLE_UPDATE");
+        assertThat(audits.total()).isEqualTo(1L);
+        assertThat(audits.items()).hasSize(1);
+        assertThat(audits.items().get(0).operatorUsername()).isEqualTo("admin");
+        assertThat(audits.items().get(0).targetUsername()).isEqualTo("viewer");
+        assertThat(audits.items().get(0).action()).isEqualTo("ROLE_UPDATE");
     }
 
     @Test

@@ -1,8 +1,10 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
@@ -24,6 +26,7 @@ import java.util.Objects;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 public class UserManagementServiceImpl implements UserManagementService {
@@ -31,8 +34,6 @@ public class UserManagementServiceImpl implements UserManagementService {
     private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
     private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
-    private static final int AUDIT_LIMIT = 50;
-
     private final UserAccountMapper userAccountMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
     private final PasswordHashService passwordHashService;
@@ -61,24 +62,44 @@ public class UserManagementServiceImpl implements UserManagementService {
     }
 
     @Override
-    public List<UserManagementItemDto> listUsers() {
-        return userAccountMapper.selectList(new LambdaQueryWrapper<UserAccount>()
-                .orderByDesc(UserAccount::getCreatedAt)
-                .orderByAsc(UserAccount::getId))
-            .stream()
+    public PageResponse<UserManagementItemDto> listUsers(int page, int pageSize, String role, String status, String keyword) {
+        LambdaQueryWrapper<UserAccount> wrapper = new LambdaQueryWrapper<UserAccount>();
+        if (StringUtils.hasText(role)) {
+            wrapper.eq(UserAccount::getRole, role.trim().toUpperCase(Locale.ROOT));
+        }
+        if (StringUtils.hasText(status)) {
+            wrapper.eq(UserAccount::getStatus, status.trim().toUpperCase(Locale.ROOT));
+        }
+        if (StringUtils.hasText(keyword)) {
+            String query = keyword.trim();
+            wrapper.and(condition -> condition
+                .like(UserAccount::getUsername, query)
+                .or()
+                .like(UserAccount::getEmail, query)
+            );
+        }
+        Page<UserAccount> result = userAccountMapper.selectPage(
+            Page.of(page, pageSize),
+            wrapper
+            .orderByDesc(UserAccount::getCreatedAt)
+            .orderByAsc(UserAccount::getId)
+        );
+        return new PageResponse<>(result.getRecords().stream()
             .map(displayMapper::toUserItem)
-            .toList();
+            .toList(), result.getTotal());
     }
 
     @Override
-    public List<UserOperationAuditDto> listOperationAudits() {
-        return userOperationAuditMapper.selectList(new LambdaQueryWrapper<UserOperationAudit>()
-                .orderByDesc(UserOperationAudit::getCreatedAt)
-                .orderByDesc(UserOperationAudit::getId)
-                .last("LIMIT " + AUDIT_LIMIT))
-            .stream()
+    public PageResponse<UserOperationAuditDto> listOperationAudits(int page, int pageSize) {
+        Page<UserOperationAudit> result = userOperationAuditMapper.selectPage(
+            Page.of(page, pageSize),
+            new LambdaQueryWrapper<UserOperationAudit>()
+            .orderByDesc(UserOperationAudit::getCreatedAt)
+            .orderByDesc(UserOperationAudit::getId)
+        );
+        return new PageResponse<>(result.getRecords().stream()
             .map(displayMapper::toAuditItem)
-            .toList();
+            .toList(), result.getTotal());
     }
 
     @Override

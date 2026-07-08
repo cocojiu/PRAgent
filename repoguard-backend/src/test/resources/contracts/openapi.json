@@ -3795,12 +3795,54 @@
         "tags" : [ "UserManagement" ],
         "operationId" : "userManagementControllerListUsers",
         "x-controller-operation" : "UserManagementController#listUsers",
-        "parameters" : [ ],
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        }, {
+          "name" : "role",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "name" : "keyword",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "List<UserManagementItemDto>",
+            "x-java-response-data" : "PageResponse<UserManagementItemDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -3817,10 +3859,21 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "type" : "array",
-                      "items" : {
-                        "$ref" : "#/components/schemas/UserManagementItemDto"
-                      }
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<UserManagementItemDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/UserManagementItemDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -3891,12 +3944,33 @@
         "tags" : [ "UserManagement" ],
         "operationId" : "userManagementControllerListOperationAudits",
         "x-controller-operation" : "UserManagementController#listOperationAudits",
-        "parameters" : [ ],
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "List<UserOperationAuditDto>",
+            "x-java-response-data" : "PageResponse<UserOperationAuditDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -3913,10 +3987,21 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "type" : "array",
-                      "items" : {
-                        "$ref" : "#/components/schemas/UserOperationAuditDto"
-                      }
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<UserOperationAuditDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/UserOperationAuditDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        }
+                      },
+                      "required" : [ "total" ]
                     },
                     "timestamp" : {
                       "type" : "string",

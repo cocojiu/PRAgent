@@ -820,6 +820,12 @@ a {
   border-radius: 0;
 }
 
+.table-pagination {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
 .repo-cell,
 .table-actions {
   display: flex;

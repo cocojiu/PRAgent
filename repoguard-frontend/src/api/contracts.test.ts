@@ -249,7 +249,7 @@ describe("apiRequest", () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({ items: [], total: 0 })));
     vi.stubGlobal("fetch", fetchMock);
 
-    await apiRequest("fetchNotificationBindings", undefined);
+    await apiRequest("fetchNotificationBindings", { page: 2, pageSize: 25, provider: "lark" });
     await apiRequest("fetchNotificationEvents", {
       page: 3,
       pageSize: 5,
@@ -269,8 +269,9 @@ describe("apiRequest", () => {
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/notification-bindings");
-    expect(calls[0][0]).toContain("page=1");
-    expect(calls[0][0]).toContain("pageSize=100");
+    expect(calls[0][0]).toContain("page=2");
+    expect(calls[0][0]).toContain("pageSize=25");
+    expect(calls[0][0]).toContain("provider=lark");
     expect(calls[0][1].method).toBeUndefined();
     expect(calls[1][0]).toContain("/api/v1/notification-events");
     expect(calls[1][0]).toContain("page=3");

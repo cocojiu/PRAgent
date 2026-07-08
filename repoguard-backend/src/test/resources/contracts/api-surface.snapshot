@@ -32,8 +32,8 @@ GET /api/v1/reviews/{id}/missing-tests query=[page, pageSize] body=- bodyRequire
 GET /api/v1/reviews/{id}/status query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id}/timeline query=[limit] body=- bodyRequired=false
 GET /api/v1/system/health/summary query=[] body=- bodyRequired=false
-GET /api/v1/users query=[] body=- bodyRequired=false
-GET /api/v1/users/audits query=[] body=- bodyRequired=false
+GET /api/v1/users query=[page, pageSize, role, status, keyword] body=- bodyRequired=false
+GET /api/v1/users/audits query=[page, pageSize] body=- bodyRequired=false
 POST /api/v1/auth/login query=[] body=AuthLoginRequest bodyRequired=true
 POST /api/v1/auth/logout query=[] body=AuthLogoutRequest bodyRequired=false
 POST /api/v1/auth/refresh query=[] body=AuthRefreshRequest bodyRequired=false

@@ -97,6 +97,17 @@
           <el-empty description="暂无用户账号" />
         </template>
       </el-table>
+      <el-pagination
+        class="table-pagination"
+        background
+        layout="total, sizes, prev, pager, next"
+        :current-page="usersPage"
+        :page-size="usersPageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="usersTotal"
+        @current-change="changeUsersPage"
+        @size-change="changeUsersPageSize"
+      />
     </section>
 
     <section class="user-panel audit-panel">
@@ -133,6 +144,17 @@
           <el-empty description="暂无操作记录" />
         </template>
       </el-table>
+      <el-pagination
+        class="table-pagination"
+        background
+        layout="total, sizes, prev, pager, next"
+        :current-page="auditPage"
+        :page-size="auditPageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="auditTotal"
+        @current-change="changeAuditPage"
+        @size-change="changeAuditPageSize"
+      />
     </section>
 
     <el-dialog v-model="createDialogVisible" title="创建用户" width="480px" destroy-on-close>
@@ -171,11 +193,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "lucide-vue-next";
 import { createUser, fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
-import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserStatus } from "@/api/users";
+import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { canManage, currentUser } from "@/stores/authState";
@@ -184,10 +206,16 @@ import { getErrorMessage } from "@/utils/errors";
 const loading = ref(false);
 const auditLoading = ref(false);
 const keyword = ref("");
-const roleFilter = ref("");
-const statusFilter = ref("");
+const roleFilter = ref<UserRole | "">("");
+const statusFilter = ref<UserStatus | "">("");
 const users = ref<ManagedUser[]>([]);
 const audits = ref<UserOperationAudit[]>([]);
+const usersPage = ref(1);
+const usersPageSize = ref(20);
+const usersTotal = ref(0);
+const auditPage = ref(1);
+const auditPageSize = ref(20);
+const auditTotal = ref(0);
 const savingIds = ref<Set<number>>(new Set());
 const createDialogVisible = ref(false);
 const creatingUser = ref(false);
@@ -232,13 +260,23 @@ const userMetricItems = computed<MetricGridItem[]>(() => {
 });
 
 const loadUsers = async () => {
-  users.value = await fetchUsers();
+  const page = await fetchUsers({
+    page: usersPage.value,
+    pageSize: usersPageSize.value,
+    role: roleFilter.value,
+    status: statusFilter.value,
+    keyword: keyword.value.trim() || undefined
+  });
+  users.value = page.items;
+  usersTotal.value = page.total;
 };
 
 const loadAudits = async () => {
   auditLoading.value = true;
   try {
-    audits.value = await fetchUserOperationAudits();
+    const page = await fetchUserOperationAudits({ page: auditPage.value, pageSize: auditPageSize.value });
+    audits.value = page.items;
+    auditTotal.value = page.total;
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
   } finally {
@@ -269,6 +307,28 @@ const setSaving = (id: number, saving: boolean) => {
   savingIds.value = next;
 };
 
+const changeUsersPage = async (page: number) => {
+  usersPage.value = page;
+  await loadUsers();
+};
+
+const changeUsersPageSize = async (pageSize: number) => {
+  usersPageSize.value = pageSize;
+  usersPage.value = 1;
+  await loadUsers();
+};
+
+const changeAuditPage = async (page: number) => {
+  auditPage.value = page;
+  await loadAudits();
+};
+
+const changeAuditPageSize = async (pageSize: number) => {
+  auditPageSize.value = pageSize;
+  auditPage.value = 1;
+  await loadAudits();
+};
+
 const openCreateDialog = () => {
   if (!canManage.value) {
     return;
@@ -291,13 +351,14 @@ const submitCreateUser = async () => {
   }
   creatingUser.value = true;
   try {
-    const created = await createUser({
+    await createUser({
       username: createForm.username.trim(),
       email: createForm.email.trim(),
       password: createForm.password,
       confirmPassword: createForm.confirmPassword
     });
-    users.value = [created, ...users.value.filter((user) => user.id !== created.id)];
+    usersPage.value = 1;
+    await loadUsers();
     await loadAudits();
     createDialogVisible.value = false;
     ElMessage.success("用户已创建");
@@ -389,6 +450,11 @@ const formatDateTime = (value?: string) => {
   }
   return value.replace("T", " ").slice(0, 16);
 };
+
+watch([roleFilter, statusFilter, keyword], async () => {
+  usersPage.value = 1;
+  await loadUsers();
+});
 
 onMounted(loadAll);
 </script>

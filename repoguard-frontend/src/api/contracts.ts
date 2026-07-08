@@ -85,6 +85,14 @@ type NotificationPageInput = {
   taskId?: number;
 };
 
+type NotificationBindingPageInput = {
+  page?: number;
+  pageSize?: number;
+  organization?: string;
+  repository?: string;
+  provider?: string;
+};
+
 type ReviewDetailPageInput = {
   id: number;
   page?: number;
@@ -113,6 +121,14 @@ type UserRoleInput = {
 type UserStatusInput = {
   id: number;
   status: UserStatus;
+};
+
+type UserPageInput = {
+  page?: number;
+  pageSize?: number;
+  role?: UserRole | "";
+  status?: UserStatus | "";
+  keyword?: string;
 };
 
 type DataRetentionCleanupAuditInput = {
@@ -184,7 +200,7 @@ export type ApiContract = {
   testMysqlConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testRabbitMqConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testReviewPolicyConnection: ApiOperation<ReviewPolicyConfigRequest | undefined, ConnectionTestResult>;
-  fetchNotificationBindings: ApiOperation<undefined, PageResponse<NotificationBinding>>;
+  fetchNotificationBindings: ApiOperation<NotificationBindingPageInput, PageResponse<NotificationBinding>>;
   createNotificationBinding: ApiOperation<NotificationBindingRequest, NotificationBinding>;
   updateNotificationBinding: ApiOperation<{ id: number; payload: NotificationBindingRequest }, NotificationBinding>;
   updateNotificationBindingStatus: ApiOperation<
@@ -199,8 +215,8 @@ export type ApiContract = {
   fetchMessageQueueHealth: ApiOperation<undefined, MessageQueueHealth>;
   requeueMessageQueueTask: ApiOperation<{ taskId: number }, MessageQueueRequeueResponse>;
   fetchNotifications: ApiOperation<undefined, NotificationCenter>;
-  fetchUsers: ApiOperation<undefined, ManagedUser[]>;
-  fetchUserOperationAudits: ApiOperation<undefined, UserOperationAudit[]>;
+  fetchUsers: ApiOperation<UserPageInput, PageResponse<ManagedUser>>;
+  fetchUserOperationAudits: ApiOperation<UserPageInput, PageResponse<UserOperationAudit>>;
   createUser: ApiOperation<UserCreateRequest, ManagedUser>;
   updateUserRole: ApiOperation<UserRoleInput, ManagedUser>;
   updateUserStatus: ApiOperation<UserStatusInput, ManagedUser>;
@@ -459,7 +475,13 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchNotificationBindings: {
     path: () => "/api/v1/config/notification-bindings",
-    query: () => ({ page: 1, pageSize: 100 })
+    query: input => ({
+      page: input.page ?? 1,
+      pageSize: input.pageSize ?? 20,
+      organization: input.organization,
+      repository: input.repository,
+      provider: input.provider
+    })
   },
   createNotificationBinding: {
     method: "POST",
@@ -507,10 +529,18 @@ const apiEndpoints: ApiEndpointMap = {
     path: () => "/api/v1/notifications"
   },
   fetchUsers: {
-    path: () => "/api/v1/users"
+    path: () => "/api/v1/users",
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize,
+      role: input.role || undefined,
+      status: input.status || undefined,
+      keyword: input.keyword
+    })
   },
   fetchUserOperationAudits: {
-    path: () => "/api/v1/users/audits"
+    path: () => "/api/v1/users/audits",
+    query: input => ({ page: input.page, pageSize: input.pageSize })
   },
   createUser: {
     method: "POST",

@@ -65,7 +65,7 @@ systemConfigControllerUpdateReviewRuleStatus(input: { path: { id: string }; body
 systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings
 systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 userManagementControllerCreateUser(input: { body: UserCreateRequest }): Promise<ManagedUser>; // POST /api/v1/users
-userManagementControllerListOperationAudits(): Promise<UserOperationAudit[]>; // GET /api/v1/users/audits
-userManagementControllerListUsers(): Promise<ManagedUser[]>; // GET /api/v1/users
+userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
+userManagementControllerListUsers(input?: { query?: { keyword?: string; page?: number; pageSize?: number; role?: string; status?: string } }): Promise<PageResponse<ManagedUser>>; // GET /api/v1/users
 userManagementControllerUpdateRole(input: { path: { id: number }; body: UserRoleUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/role
 userManagementControllerUpdateStatus(input: { path: { id: number }; body: UserStatusUpdateRequest }): Promise<ManagedUser>; // PUT /api/v1/users/{id}/status

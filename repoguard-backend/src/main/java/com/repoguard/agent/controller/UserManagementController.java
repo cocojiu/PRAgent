@@ -4,6 +4,7 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
@@ -17,19 +18,23 @@ import com.repoguard.agent.service.UserManagementService;
 import com.repoguard.agent.web.AuditClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import java.util.List;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/users")
 @RequireRole("ADMIN")
 @ApiRuntimeEnabled
+@Validated
 public class UserManagementController {
 
     private final UserManagementService userManagementService;
@@ -39,13 +44,22 @@ public class UserManagementController {
     }
 
     @GetMapping
-    public ApiResponse<List<UserManagementItemDto>> listUsers() {
-        return ApiResponse.ok(userManagementService.listUsers());
+    public ApiResponse<PageResponse<UserManagementItemDto>> listUsers(
+        @Min(1) @RequestParam(defaultValue = "1") int page,
+        @Min(1) @Max(100) @RequestParam(defaultValue = "20") int pageSize,
+        @RequestParam(required = false) String role,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) String keyword
+    ) {
+        return ApiResponse.ok(userManagementService.listUsers(page, pageSize, role, status, keyword));
     }
 
     @GetMapping("/audits")
-    public ApiResponse<List<UserOperationAuditDto>> listOperationAudits() {
-        return ApiResponse.ok(userManagementService.listOperationAudits());
+    public ApiResponse<PageResponse<UserOperationAuditDto>> listOperationAudits(
+        @Min(1) @RequestParam(defaultValue = "1") int page,
+        @Min(1) @Max(100) @RequestParam(defaultValue = "20") int pageSize
+    ) {
+        return ApiResponse.ok(userManagementService.listOperationAudits(page, pageSize));
     }
 
     @PostMapping

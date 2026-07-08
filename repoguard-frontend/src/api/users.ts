@@ -39,9 +39,18 @@ export interface UserOperationAudit {
   createdAt: string;
 }
 
-export const fetchUsers = () => apiRequest("fetchUsers", undefined);
+export type UserPageQuery = {
+  page?: number;
+  pageSize?: number;
+  role?: UserRole | "";
+  status?: UserStatus | "";
+  keyword?: string;
+};
 
-export const fetchUserOperationAudits = () => apiRequest("fetchUserOperationAudits", undefined);
+export const fetchUsers = (query: UserPageQuery = {}) => apiRequest("fetchUsers", query);
+
+export const fetchUserOperationAudits = (query: UserPageQuery = {}) =>
+  apiRequest("fetchUserOperationAudits", query);
 
 export const createUser = (payload: UserCreateRequest) => apiRequest("createUser", payload);
 

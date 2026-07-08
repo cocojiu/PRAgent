@@ -83,8 +83,16 @@ export const testRabbitMqConnection = (payload?: ServiceIntegrationConfigRequest
 export const testReviewPolicyConnection = (payload?: ReviewPolicyConfigRequest) =>
   apiRequest("testReviewPolicyConnection", payload);
 
-export const fetchNotificationBindings = () =>
-  apiRequest("fetchNotificationBindings", undefined);
+export type NotificationBindingPageQuery = {
+  page?: number;
+  pageSize?: number;
+  organization?: string;
+  repository?: string;
+  provider?: string;
+};
+
+export const fetchNotificationBindings = (query: NotificationBindingPageQuery = {}) =>
+  apiRequest("fetchNotificationBindings", query);
 
 export const createNotificationBinding = (payload: NotificationBindingRequest) =>
   apiRequest("createNotificationBinding", payload);

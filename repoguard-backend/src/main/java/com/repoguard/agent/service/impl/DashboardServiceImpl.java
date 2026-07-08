@@ -90,28 +90,22 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         return snapshotStore.getOrLoad(
             CacheNames.DASHBOARD_OVERVIEW + ":" + DashboardLlmTrendDays.normalize(llmTrendDays),
-            () -> buildOverview(llmTrendDays)
+            this::buildOverviewCompatibilitySummary
         );
     }
 
-    private DashboardOverviewResponse buildOverview(Integer llmTrendDays) {
-        LocalDate latestReviewDate = latestReviewDate();
-        DashboardLlmQualityTrendBuilder.Window llmTrendWindow = llmQualityTrendBuilder.window(llmTrendDays, latestReviewDate);
-        LocalDate reviewTrendStartDate = reviewTrendWindow.startDate(latestReviewDate);
-        DashboardRulesResponse rules = buildRules(dashboardMapper.selectRuleHitCounts(reviewTrendStartDate));
-        DashboardLlmQualityResponse llmQuality = buildLlmQuality(reviewTrendStartDate, llmTrendWindow);
-
+    private DashboardOverviewResponse buildOverviewCompatibilitySummary() {
         return new DashboardOverviewResponse(
-            dashboardMetricAssembler.assemble(dashboardMapper.selectMetricStat(reviewTrendStartDate)),
-            reviewTrendAssembler.assemble(dashboardMapper.selectReviewTrendCounts(reviewTrendStartDate)),
-            buildRiskDistribution(reviewTrendStartDate),
-            rules.ruleHits(),
-            buildHighRiskReviews(dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate)),
-            rules.failedRules(),
+            getSummary(),
             List.of(),
-            llmQuality.byModel(),
-            llmQuality.byRepository(),
-            llmQuality.trend()
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of()
         );
     }
 

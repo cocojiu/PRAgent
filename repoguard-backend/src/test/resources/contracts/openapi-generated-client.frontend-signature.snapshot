@@ -35,8 +35,8 @@ fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: n
 fetchReviews -> reviewControllerListReviews(input?: { query?: { keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
-fetchUserOperationAudits -> userManagementControllerListOperationAudits(): Promise<UserOperationAudit[]>; // GET /api/v1/users/audits
-fetchUsers -> userManagementControllerListUsers(): Promise<ManagedUser[]>; // GET /api/v1/users
+fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
+fetchUsers -> userManagementControllerListUsers(input?: { query?: { keyword?: string; page?: number; pageSize?: number; role?: string; status?: string } }): Promise<PageResponse<ManagedUser>>; // GET /api/v1/users
 getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout

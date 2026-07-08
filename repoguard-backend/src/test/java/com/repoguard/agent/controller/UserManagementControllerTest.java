@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.repoguard.agent.dto.UserManagementItemDto;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.UserManagementService;
@@ -32,23 +33,32 @@ class UserManagementControllerTest {
 
     @Test
     void listUsersReturnsUsers() throws Exception {
-        Mockito.when(userManagementService.listUsers()).thenReturn(List.of(item(1001L, "admin", "ADMIN", "ACTIVE")));
+        Mockito.when(userManagementService.listUsers(2, 10, "ADMIN", "ACTIVE", "adm"))
+            .thenReturn(new PageResponse<>(List.of(item(1001L, "admin", "ADMIN", "ACTIVE")), 21L));
 
-        mockMvc.perform(get("/api/v1/users"))
+        mockMvc.perform(get("/api/v1/users")
+                .param("page", "2")
+                .param("pageSize", "10")
+                .param("role", "ADMIN")
+                .param("status", "ACTIVE")
+                .param("keyword", "adm"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].username").value("admin"))
-            .andExpect(jsonPath("$.data[0].role").value("ADMIN"));
+            .andExpect(jsonPath("$.data.total").value(21))
+            .andExpect(jsonPath("$.data.items[0].username").value("admin"))
+            .andExpect(jsonPath("$.data.items[0].role").value("ADMIN"));
     }
 
     @Test
     void listOperationAuditsReturnsAuditItems() throws Exception {
-        Mockito.when(userManagementService.listOperationAudits()).thenReturn(List.of(audit()));
+        Mockito.when(userManagementService.listOperationAudits(1, 20))
+            .thenReturn(new PageResponse<>(List.of(audit()), 1L));
 
         mockMvc.perform(get("/api/v1/users/audits"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].operatorUsername").value("admin"))
-            .andExpect(jsonPath("$.data[0].targetUsername").value("viewer"))
-            .andExpect(jsonPath("$.data[0].action").value("ROLE_UPDATE"));
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items[0].operatorUsername").value("admin"))
+            .andExpect(jsonPath("$.data.items[0].targetUsername").value("viewer"))
+            .andExpect(jsonPath("$.data.items[0].action").value("ROLE_UPDATE"));
     }
 
     @Test
