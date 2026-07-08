@@ -106,7 +106,17 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 + ":items="
                 + safeCount(item.itemCount())
                 + "/"
-                + safeCount(item.totalCount()))
+                + safeCount(item.totalCount())
+                + ":api="
+                + safeText(item.apiPath())
+                + ":"
+                + safeMillis(item.apiDurationMs())
+                + "ms"
+                + ":"
+                + safeBytes(item.apiResponseBytes())
+                + "bytes"
+                + ":trace="
+                + safeText(item.apiTraceId()))
             .collect(Collectors.joining(","));
 
         log.info(

@@ -6,6 +6,10 @@ public record FrontendLongTaskItemDto(
     String region,
     String operation,
     Integer itemCount,
-    Integer totalCount
+    Integer totalCount,
+    String apiPath,
+    String apiTraceId,
+    Long apiResponseBytes,
+    Long apiDurationMs
 ) {
 }

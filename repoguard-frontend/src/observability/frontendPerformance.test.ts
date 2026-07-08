@@ -116,8 +116,19 @@ describe("frontend performance observation", () => {
 
     observation.startFrontendPerformanceObservation(() => "review-detail");
     await vi.advanceTimersByTimeAsync(7000);
+    observation.observeFrontendApiRequest({
+      operation: "fetchGithubCommentPreview",
+      path: "/api/v1/reviews/{id}/github-comments/preview",
+      method: "GET",
+      status: 200,
+      result: "success",
+      traceId: "trace-preview-1",
+      responseBytes: 40960,
+      startedAtMs: 7000,
+      durationMs: 42
+    });
     buffer.observeFrontendLongTask({
-      startedAtMs: 7010,
+      startedAtMs: 7050,
       durationMs: 18,
       region: "review-detail.comment-preview",
       operation: "fetchGithubCommentPreview",
@@ -145,7 +156,11 @@ describe("frontend performance observation", () => {
           region: "review-detail.comment-preview",
           operation: "fetchGithubCommentPreview",
           itemCount: 20,
-          totalCount: 260
+          totalCount: 260,
+          apiPath: "/api/v1/reviews/{id}/github-comments/preview",
+          apiTraceId: "trace-preview-1",
+          apiResponseBytes: 40960,
+          apiDurationMs: 42
         }
       ]
     });

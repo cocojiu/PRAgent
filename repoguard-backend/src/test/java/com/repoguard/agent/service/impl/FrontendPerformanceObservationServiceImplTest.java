@@ -60,7 +60,11 @@ class FrontendPerformanceObservationServiceImplTest {
                 "review-detail.findings",
                 "fetchReviewFindings",
                 20,
-                300
+                300,
+                "/api/v1/reviews/{id}/findings",
+                "trace-findings-1",
+                65536L,
+                96L
             ))
         ));
 
@@ -119,7 +123,7 @@ class FrontendPerformanceObservationServiceImplTest {
                 12L,
                 48L
             )),
-            List.of(new FrontendLongTaskItemDto(90L, 83L, null, null, null, null))
+            List.of(new FrontendLongTaskItemDto(90L, 83L, null, null, null, null, null, null, null, null))
         ));
 
         assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
@@ -190,7 +194,18 @@ class FrontendPerformanceObservationServiceImplTest {
                 12L,
                 apiDurationMs
             )),
-            List.of(new FrontendLongTaskItemDto(90L, longTaskMs, route, "fetchRouteData", 20, 20))
+            List.of(new FrontendLongTaskItemDto(
+                90L,
+                longTaskMs,
+                route,
+                "fetchRouteData",
+                20,
+                20,
+                "/api/v1/" + route,
+                "trace-route",
+                4096L,
+                apiDurationMs
+            ))
         ));
     }
 
