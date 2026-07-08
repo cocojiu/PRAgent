@@ -41,7 +41,9 @@ describe("apiRequest", () => {
       riskLevel: "high",
       source: undefined,
       triggerSource: undefined,
-      keyword: ""
+      keyword: "",
+      cursorCreatedAt: "2026-07-08 12:00:00",
+      cursorId: 123
     });
 
     expect(result).toEqual({ items: [], total: 0 });
@@ -52,6 +54,8 @@ describe("apiRequest", () => {
     expect(url).toContain("repository=repo");
     expect(url).toContain("status=completed");
     expect(url).toContain("riskLevel=high");
+    expect(url).toContain("cursorCreatedAt=2026-07-08+12%3A00%3A00");
+    expect(url).toContain("cursorId=123");
     expect(url).not.toContain("keyword=");
     expect(init.method).toBeUndefined();
   });

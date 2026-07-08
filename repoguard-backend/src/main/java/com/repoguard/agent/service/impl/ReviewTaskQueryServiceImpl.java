@@ -49,6 +49,9 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     @Override
     public PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query) {
+        if (listQueryBuilder.hasKeysetCursor(query)) {
+            return listReviewsByKeyset(query);
+        }
         Page<ReviewTask> page = reviewTaskMapper.selectPage(
             Page.of(query.page(), query.pageSize()),
             listQueryBuilder.build(query)
@@ -60,6 +63,18 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
                 .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
                 .toList(),
             page.getTotal()
+        );
+    }
+
+    private PageResponse<ReviewTaskListItem> listReviewsByKeyset(ReviewQuery query) {
+        List<ReviewTask> tasks = reviewTaskMapper.selectList(listQueryBuilder.buildKeysetPage(query));
+        Long total = reviewTaskMapper.selectCount(listQueryBuilder.buildCountQuery(query));
+        Map<Long, List<ReviewTimeline>> timelinesByTaskId = queryItemLoader.loadTimelinesByTaskId(tasks);
+        return new PageResponse<>(
+            tasks.stream()
+                .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
+                .toList(),
+            total == null ? 0 : total
         );
     }
 

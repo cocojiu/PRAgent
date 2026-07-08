@@ -45,6 +45,7 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.commitPrefix()).isNull();
         assertThat(criteria.textKeyword()).isNull();
         assertThat(wrapper.getSqlSegment()).contains("ORDER BY");
+        assertThat(wrapper.getSqlSegment()).contains("created_at", "id");
         assertThat(wrapper.getSqlSegment()).contains("pr_number");
     }
 
@@ -102,5 +103,53 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(criteria.commitPrefix()).isEqualTo("abcdef0");
         assertThat(criteria.textKeyword()).isNull();
         assertThat(wrapper.getSqlSegment()).contains("commit_sha");
+    }
+
+    @Test
+    void buildsKeysetCursorConditionWithStableOrderAndBoundedLimit() {
+        var query = new ReviewQuery(
+            3,
+            500,
+            "repo-a",
+            "completed",
+            null,
+            null,
+            null,
+            null,
+            "2026-07-08 12:00:00",
+            123L
+        );
+
+        var wrapper = builder.buildKeysetPage(query);
+
+        assertThat(builder.hasKeysetCursor(query)).isTrue();
+        assertThat(wrapper.getSqlSegment())
+            .contains("created_at", "<", "id", "ORDER BY")
+            .contains("created_at DESC", "id DESC");
+        assertThat(wrapper.getTargetSql()).contains("limit 100");
+        assertThat(wrapper.getParamNameValuePairs().values())
+            .anySatisfy(value -> assertThat(value).hasToString("2026-07-08T12:00"))
+            .contains(123L);
+    }
+
+    @Test
+    void ignoresInvalidCursorAndKeepsCountQueryUnordered() {
+        var query = new ReviewQuery(
+            1,
+            20,
+            "repo-a",
+            null,
+            null,
+            null,
+            null,
+            null,
+            "not-a-date",
+            0L
+        );
+
+        var countWrapper = builder.buildCountQuery(query);
+
+        assertThat(builder.hasKeysetCursor(query)).isFalse();
+        assertThat(countWrapper.getSqlSegment()).doesNotContain("ORDER BY", "limit", "<");
     }
 }

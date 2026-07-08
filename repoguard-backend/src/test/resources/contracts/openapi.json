@@ -2705,6 +2705,23 @@
             "type" : "string",
             "maxLength" : 255
           }
+        }, {
+          "name" : "cursorCreatedAt",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }, {
+          "name" : "cursorId",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
         } ],
         "responses" : {
           "200" : {

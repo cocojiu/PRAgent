@@ -314,7 +314,9 @@ const apiEndpoints: ApiEndpointMap = {
       riskLevel: input.riskLevel,
       source: input.source,
       triggerSource: input.triggerSource,
-      keyword: input.keyword
+      keyword: input.keyword,
+      cursorCreatedAt: input.cursorCreatedAt,
+      cursorId: input.cursorId
     })
   },
   fetchReviewDetail: {

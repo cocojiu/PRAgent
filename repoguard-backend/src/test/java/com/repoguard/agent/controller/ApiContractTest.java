@@ -128,7 +128,7 @@ class ApiContractTest {
 
         assertThat(apiSurface)
             .contains(
-                "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword] body=- bodyRequired=false",
+                "GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursorCreatedAt, cursorId] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/findings query=[page, pageSize, severity, category, feedbackStatus] body=- bodyRequired=false",
                 "GET /api/v1/reviews/{id}/changed-files query=[page, pageSize, hasFinding] body=- bodyRequired=false",

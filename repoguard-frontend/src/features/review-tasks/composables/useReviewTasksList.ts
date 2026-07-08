@@ -16,6 +16,11 @@ const formatDuration = (seconds: number) => {
   return `${minutes} 分 ${restSeconds} 秒`;
 };
 
+type ReviewTaskCursor = {
+  cursorCreatedAt: string;
+  cursorId: number;
+};
+
 export const useReviewTasksList = () => {
   const loading = ref(false);
   const errorMessage = ref("");
@@ -29,6 +34,7 @@ export const useReviewTasksList = () => {
   const keyword = ref("");
   const currentPage = ref(1);
   const pageSize = ref(8);
+  const pageCursors = new Map<number, ReviewTaskCursor>();
   let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let taskRequestSeq = 0;
 
@@ -67,6 +73,7 @@ export const useReviewTasksList = () => {
     const requestSeq = ++taskRequestSeq;
     loading.value = true;
     errorMessage.value = "";
+    const cursor = pageCursors.get(currentPage.value);
     try {
       const page = await fetchReviews({
         page: currentPage.value,
@@ -75,13 +82,16 @@ export const useReviewTasksList = () => {
         status: statusFilter.value,
         riskLevel: riskFilter.value,
         triggerSource: sourceFilter.value,
-        keyword: keyword.value.trim()
+        keyword: keyword.value.trim(),
+        cursorCreatedAt: cursor?.cursorCreatedAt,
+        cursorId: cursor?.cursorId
       });
       if (requestSeq !== taskRequestSeq) {
         return;
       }
       reviewTasks.value = page.items;
       totalTasks.value = page.total;
+      rememberNextPageCursor(currentPage.value, page.items);
     } catch (error) {
       if (requestSeq !== taskRequestSeq) {
         return;
@@ -108,7 +118,24 @@ export const useReviewTasksList = () => {
     currentPage.value = 1;
   };
 
+  const clearPageCursors = () => {
+    pageCursors.clear();
+  };
+
+  const rememberNextPageCursor = (page: number, tasks: ReviewTask[]) => {
+    const lastTask = tasks.at(-1);
+    if (!lastTask?.createdAt || !lastTask.id) {
+      pageCursors.delete(page + 1);
+      return;
+    }
+    pageCursors.set(page + 1, {
+      cursorCreatedAt: lastTask.createdAt,
+      cursorId: lastTask.id
+    });
+  };
+
   const scheduleFilterLoad = () => {
+    clearPageCursors();
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
     }
@@ -125,6 +152,7 @@ export const useReviewTasksList = () => {
     if (filterDebounceTimer) {
       clearTimeout(filterDebounceTimer);
     }
+    clearPageCursors();
     void loadTasks();
   };
 
@@ -135,8 +163,17 @@ export const useReviewTasksList = () => {
 
   watch([repoFilter, statusFilter, riskFilter, sourceFilter, keyword], scheduleFilterLoad);
 
-  watch([currentPage, pageSize], () => {
+  watch(currentPage, () => {
     void loadTasks();
+  });
+
+  watch(pageSize, () => {
+    clearPageCursors();
+    if (currentPage.value === 1) {
+      void loadTasks();
+    } else {
+      resetPage();
+    }
   });
 
   onUnmounted(() => {

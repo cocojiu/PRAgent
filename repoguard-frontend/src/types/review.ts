@@ -338,6 +338,8 @@ export interface ReviewQuery {
   source?: ReviewTaskSource | "";
   triggerSource?: ReviewTaskTriggerSource | "";
   keyword?: string;
+  cursorCreatedAt?: string;
+  cursorId?: number;
 }
 
 export interface ManualReviewRequest {

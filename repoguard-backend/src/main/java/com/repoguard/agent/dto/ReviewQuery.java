@@ -11,6 +11,20 @@ public record ReviewQuery(
     String riskLevel,
     String source,
     String triggerSource,
-    String keyword
+    String keyword,
+    String cursorCreatedAt,
+    Long cursorId
 ) {
+    public ReviewQuery(
+        int page,
+        int pageSize,
+        String repository,
+        String status,
+        String riskLevel,
+        String source,
+        String triggerSource,
+        String keyword
+    ) {
+        this(page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, null, null);
+    }
 }

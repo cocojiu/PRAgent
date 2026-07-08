@@ -72,7 +72,9 @@ public class ReviewController {
         @RequestParam(required = false) @Size(max = 32) String riskLevel,
         @RequestParam(required = false) @Size(max = 64) String source,
         @RequestParam(required = false) @Size(max = 64) String triggerSource,
-        @RequestParam(required = false) @Size(max = 255) String keyword
+        @RequestParam(required = false) @Size(max = 255) String keyword,
+        @RequestParam(required = false) @Size(max = 32) String cursorCreatedAt,
+        @RequestParam(required = false) @Min(1) Long cursorId
     ) {
         ReviewQuery query = new ReviewQuery(
             page,
@@ -82,7 +84,9 @@ public class ReviewController {
             checkedParam("riskLevel", riskLevel, 32),
             checkedParam("source", source, 64),
             checkedParam("triggerSource", triggerSource, 64),
-            checkedParam("keyword", keyword, 255)
+            checkedParam("keyword", keyword, 255),
+            checkedParam("cursorCreatedAt", cursorCreatedAt, 32),
+            cursorId
         );
         return ApiResponse.ok(reviewService.listReviews(query));
     }

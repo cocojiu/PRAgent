@@ -40,7 +40,9 @@ describe("useReviewTasksList", () => {
       status: "",
       riskLevel: "",
       triggerSource: "",
-      keyword: ""
+      keyword: "",
+      cursorCreatedAt: undefined,
+      cursorId: undefined
     });
     expect(reviewApi.fetchReviews).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
     expect(reviewApi.fetchReviewRepositories).toHaveBeenCalledTimes(1);
@@ -48,6 +50,65 @@ describe("useReviewTasksList", () => {
     expect(list.totalTasks.value).toBe(26);
     expect(list.repositories.value).toEqual(["repo-guard", "repoguard-agent"]);
     expect(list.loading.value).toBe(false);
+  });
+
+  it("uses the previous page tail as cursor when loading the next page", async () => {
+    const secondTask = { ...reviewTask, id: 8, createdAt: "2026-07-06 15:57:00" };
+    reviewApi.fetchReviews
+      .mockResolvedValueOnce({
+        items: [reviewTask, secondTask],
+        total: 26
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 26
+      });
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+
+    list.currentPage.value = 2;
+    await flushAsync();
+
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 2,
+      cursorCreatedAt: secondTask.createdAt,
+      cursorId: secondTask.id
+    }));
+  });
+
+  it("clears remembered cursors before refreshing the task list", async () => {
+    reviewApi.fetchReviews
+      .mockResolvedValueOnce({
+        items: [reviewTask],
+        total: 26
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 26
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        total: 26
+      });
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+    list.currentPage.value = 2;
+    await flushAsync();
+
+    list.refreshTasks();
+    await flushAsync();
+
+    expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
+      page: 2,
+      cursorCreatedAt: undefined,
+      cursorId: undefined
+    }));
   });
 });
 

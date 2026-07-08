@@ -32,7 +32,7 @@ fetchReviewRepositories -> reviewControllerListRepositories(): Promise<string[]>
 fetchReviewRules -> systemConfigControllerGetReviewRules(): Promise<ReviewRulesResponse>; // GET /api/v1/config/review-rules
 fetchReviewStatus -> reviewControllerGetReviewStatus(input: { path: { id: number } }): Promise<ReviewTaskStatus>; // GET /api/v1/reviews/{id}/status
 fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
-fetchReviews -> reviewControllerListReviews(input?: { query?: { keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchReviews -> reviewControllerListReviews(input?: { query?: { cursorCreatedAt?: string; cursorId?: number; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
 fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
