@@ -32,7 +32,7 @@ public interface ReviewService {
     List<String> listRepositories();
 
     /**
-     * 加载单个评审任务，以及前端详情页需要的所有只读区块。
+     * 加载单个评审任务首屏 summary；大集合明细由分页接口按需加载。
      */
     ReviewTaskSummary getReviewDetail(Long id);
 

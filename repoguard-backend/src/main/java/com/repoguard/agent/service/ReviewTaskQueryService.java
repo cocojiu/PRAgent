@@ -17,6 +17,9 @@ public interface ReviewTaskQueryService {
 
     List<String> listRepositories();
 
+    /**
+     * 加载单个评审任务首屏 summary；大集合明细由分页接口按需加载。
+     */
     ReviewTaskSummary getReviewDetail(Long id);
 
     PageResponse<ReviewFindingDto> listReviewFindings(

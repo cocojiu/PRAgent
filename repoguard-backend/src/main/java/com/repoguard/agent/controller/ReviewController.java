@@ -97,7 +97,9 @@ public class ReviewController {
     }
 
     /**
-     * 返回 PR 评审详情页需要的完整只读数据。
+     * 返回 PR 评审详情页首屏 summary。
+     *
+     * <p>Findings、missing tests、changed files 和 timeline 明细必须通过独立分页/限量接口加载。
      */
     @GetMapping("/{id}")
     public ApiResponse<ReviewTaskSummary> getReviewDetail(@PathVariable @Min(1) Long id) {

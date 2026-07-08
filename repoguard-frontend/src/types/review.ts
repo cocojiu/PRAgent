@@ -44,6 +44,9 @@ export interface ReviewTask {
 
 export interface ReviewTaskSummary extends ReviewTask {
   prUrl: string;
+  /**
+   * Summary responses keep large sections empty; use the paged review detail endpoints to load rows.
+   */
   findings: ReviewFinding[];
   missingTests: MissingTest[];
   changedFiles: ChangedFile[];
@@ -63,6 +66,10 @@ export interface ReviewTaskSummary extends ReviewTask {
   archivedAt?: string;
 }
 
+/**
+ * Compatibility alias for detail page state. The root review endpoint returns a summary shell; heavy sections are
+ * populated from paged endpoints after the first screen loads.
+ */
 export type ReviewTaskDetail = ReviewTaskSummary;
 
 export interface ReviewTaskStatus {

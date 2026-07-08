@@ -3,7 +3,10 @@ package com.repoguard.agent.dto;
 import java.util.List;
 
 /**
- * PR review detail page summary response. Large collections are loaded by dedicated paged endpoints.
+ * PR review detail page summary response.
+ *
+ * <p>Large collections are intentionally represented as empty compatibility arrays and loaded by dedicated paged
+ * endpoints. Totals and aggregate counts stay on this response for first-screen rendering.
  */
 public record ReviewTaskSummary(
     Long id,
@@ -79,10 +82,10 @@ public record ReviewTaskSummary(
             detail.failureReason(),
             detail.failureSuggestion(),
             detail.prUrl(),
-            detail.findings(),
-            detail.missingTests(),
-            detail.changedFiles(),
-            detail.timeline(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
             detail.riskProfile(),
             detail.prSummary(),
             detail.llm(),

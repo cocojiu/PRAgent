@@ -9,8 +9,13 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.dto.ChangedFileDto;
+import com.repoguard.agent.dto.FindingSeverityCountsDto;
+import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
@@ -103,6 +108,62 @@ class ReviewTaskQueryServiceImplTest {
         assertThatThrownBy(() -> service().getReviewDetail(404L))
             .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
             .hasMessageContaining("Review task not found: 404");
+    }
+
+    @Test
+    void getReviewDetailReturnsSummaryWithoutLoadingHeavySections() {
+        ReviewTask task = reviewTask(521L);
+        ReviewTaskListItem item = listItem(521L);
+        when(reviewTaskMapper.selectById(521L)).thenReturn(task);
+        when(detailDataLoader.loadSummary(521L)).thenReturn(new ReviewTaskDetailDataLoader.ReviewTaskDetailData(
+            List.of(new ChangedFileDto("src/App.java", "modified", 10, 2)),
+            List.of(new ReviewFindingDto(
+                1L,
+                "high",
+                "src/App.java",
+                12,
+                "Use logger",
+                "Replace stdout with logger",
+                "HIGH",
+                "System.out.println(password)",
+                "Secret may leak",
+                "log.info(\"user exported\")",
+                true,
+                "security",
+                "valid",
+                null,
+                null,
+                null
+            )),
+            List.of(new MissingTestDto("UserExportControllerTest", "exportUsers", "controller", "Add test")),
+            List.of(new ReviewTimelineItem("Heavy timeline item", "10:20:00", "done")),
+            42L,
+            7L,
+            3L,
+            new FindingSeverityCountsDto(1L, 2L, 3L, 4L, 5L)
+        ));
+        when(detailDataLoader.loadTimelineItems(521L, 20))
+            .thenReturn(List.of(new ReviewTimelineItem("Review completed", "10:21:00", "done")));
+        when(queryItemLoader.assembleFromTimelineItems(task, List.of(new ReviewTimelineItem(
+            "Review completed",
+            "10:21:00",
+            "done"
+        )))).thenReturn(item);
+
+        var response = service().getReviewDetail(521L);
+
+        org.assertj.core.api.Assertions.assertThat(response.id()).isEqualTo(521L);
+        org.assertj.core.api.Assertions.assertThat(response.findings()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(response.missingTests()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(response.changedFiles()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(response.timeline()).isEmpty();
+        org.assertj.core.api.Assertions.assertThat(response.findingTotal()).isEqualTo(7);
+        org.assertj.core.api.Assertions.assertThat(response.missingTestTotal()).isEqualTo(3);
+        org.assertj.core.api.Assertions.assertThat(response.changedFileTotal()).isEqualTo(42);
+        verify(detailDataLoader).loadSummary(521L);
+        verify(detailDataLoader, never()).loadFindingsPage(any(), anyInt(), anyInt(), any(), any(), any());
+        verify(detailDataLoader, never()).loadChangedFilesPage(any(), anyInt(), anyInt(), any());
+        verify(detailDataLoader, never()).loadMissingTestsPage(any(), anyInt(), anyInt());
     }
 
     @Test

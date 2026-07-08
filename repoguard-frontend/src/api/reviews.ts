@@ -13,7 +13,7 @@ export const fetchReviews = (query: ReviewQuery) =>
   apiRequest("fetchReviews", query);
 
 /**
- * 查询单个评审任务详情。
+ * 查询单个评审任务首屏 summary；findings/files/missing-tests/timeline 通过分页接口加载。
  */
 export const fetchReviewDetail = (id: number) => apiRequest("fetchReviewDetail", { id });
 

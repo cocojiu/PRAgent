@@ -133,27 +133,10 @@ class ReviewControllerTest {
                 "GitHub API rate limited",
                 "Retry after rate limit resets",
                 "https://github.com/repo-guard-demo/spring-boot-demo/pull/512",
-                List.of(new ReviewFindingDto(
-                    1L,
-                    "high",
-                    "src/App.java",
-                    12,
-                    "Use logger",
-                    "Replace stdout with logger",
-                    "HIGH",
-                    "System.out.println(password)",
-                    "Secret may leak to stdout",
-                    "log.info(\"user exported\")",
-                    true,
-                    "security",
-                    "valid",
-                    "Confirmed by owner",
-                    "review-lead",
-                    "2026-06-12 12:00:00"
-                )),
-                List.of(new MissingTestDto("UserExportControllerTest", "exportUsers", "controller", "Add authorization regression test")),
-                List.of(new ChangedFileDto("src/App.java", "modified", 12, 3)),
-                List.of(new ReviewTimelineItem("GitHub diff fetched", "10:20:30", "done")),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
                 new PrRiskProfileDto(
                     91,
                     "critical",
@@ -548,7 +531,7 @@ class ReviewControllerTest {
     }
 
     @Test
-    void getReviewDetailReturnsTaskDetail() throws Exception {
+    void getReviewDetailReturnsSummaryShell() throws Exception {
         mockMvc.perform(get("/api/v1/reviews/512"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
@@ -571,27 +554,18 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.failureReason").value("GitHub API rate limited"))
             .andExpect(jsonPath("$.data.failureSuggestion").value("Retry after rate limit resets"))
             .andExpect(jsonPath("$.data.prUrl").value("https://github.com/repo-guard-demo/spring-boot-demo/pull/512"))
-            .andExpect(jsonPath("$.data.findings[0].id").value(1))
-            .andExpect(jsonPath("$.data.findings[0].severity").value("high"))
-            .andExpect(jsonPath("$.data.findings[0].file").value("src/App.java"))
-            .andExpect(jsonPath("$.data.findings[0].line").value(12))
-            .andExpect(jsonPath("$.data.findings[0].message").value("Use logger"))
-            .andExpect(jsonPath("$.data.findings[0].recommendation").value("Replace stdout with logger"))
-            .andExpect(jsonPath("$.data.findings[0].isBlocking").value(true))
-            .andExpect(jsonPath("$.data.findings[0].reviewDimension").value("security"))
-            .andExpect(jsonPath("$.data.findings[0].feedbackStatus").value("valid"))
+            .andExpect(jsonPath("$.data.findings", hasSize(0)))
             .andExpect(jsonPath("$.data.findingTotal").value(1))
             .andExpect(jsonPath("$.data.findingSeverityCounts.critical").value(1))
             .andExpect(jsonPath("$.data.findingSeverityCounts.high").value(2))
             .andExpect(jsonPath("$.data.findingSeverityCounts.medium").value(3))
             .andExpect(jsonPath("$.data.findingSeverityCounts.low").value(4))
             .andExpect(jsonPath("$.data.findingSeverityCounts.info").value(5))
-            .andExpect(jsonPath("$.data.missingTests[0].file").value("UserExportControllerTest"))
+            .andExpect(jsonPath("$.data.missingTests", hasSize(0)))
             .andExpect(jsonPath("$.data.missingTestTotal").value(1))
-            .andExpect(jsonPath("$.data.changedFiles[0].path").value("src/App.java"))
-            .andExpect(jsonPath("$.data.changedFiles[0].changeType").value("modified"))
+            .andExpect(jsonPath("$.data.changedFiles", hasSize(0)))
             .andExpect(jsonPath("$.data.changedFileTotal").value(1))
-            .andExpect(jsonPath("$.data.timeline[0].label").value("GitHub diff fetched"))
+            .andExpect(jsonPath("$.data.timeline", hasSize(0)))
             .andExpect(jsonPath("$.data.riskProfile.score").value(91))
             .andExpect(jsonPath("$.data.riskProfile.level").value("critical"))
             .andExpect(jsonPath("$.data.riskProfile.recommendHumanReview").value(true))
