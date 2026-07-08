@@ -27,10 +27,10 @@ public interface DashboardMapper {
         select
             count(*) as total,
             sum(case
-                when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
+                when risk_level_norm in ('HIGH', 'CRITICAL')
                 then 1 else 0 end) as highRisk,
             sum(case
-                when upper(coalesce(nullif(trim(status), ''), '')) = 'FAILED'
+                when status_norm = 'FAILED'
                 then 1 else 0 end) as failed,
             avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
         from review_task
@@ -39,29 +39,19 @@ public interface DashboardMapper {
     DashboardMetricStat selectMetricStat(@Param("startDate") LocalDate startDate);
 
     @Select("""
-        select normalized_risk_level as riskLevel, count(*) as total
-        from (
-            select
-                case
-                    when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
-                    then 'HIGH'
-                    when upper(coalesce(nullif(trim(risk_level), ''), 'INFO')) in ('MEDIUM', 'LOW')
-                    then upper(coalesce(nullif(trim(risk_level), ''), 'INFO'))
-                    else 'INFO'
-                end as normalized_risk_level
-            from review_task
-            where created_at >= #{startDate}
-        ) risk_stats
-        group by normalized_risk_level
+        select risk_bucket_norm as riskLevel, count(*) as total
+        from review_task
+        where created_at >= #{startDate}
+        group by risk_bucket_norm
         """)
     List<DashboardRiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
-        select date_format(created_at, '%m-%d') as dayLabel, count(*) as total
+        select date_format(created_date, '%m-%d') as dayLabel, count(*) as total
         from review_task
         where created_at >= #{startDate}
-        group by date_format(created_at, '%m-%d')
-        order by dayLabel
+        group by created_date
+        order by created_date
         """)
     List<DashboardReviewTrendCount> selectReviewTrendCounts(@Param("startDate") LocalDate startDate);
 
@@ -79,16 +69,15 @@ public interface DashboardMapper {
         select
             t.title as title,
             t.repository as repository,
-            upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')) as riskLevel,
+            t.risk_level_norm as riskLevel,
             count(f.id) as ruleHits,
             t.created_at as createdAt,
             t.status as status
         from review_task t
         left join review_finding f on f.task_id = t.id and f.category = 'FINDING'
-        where upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')) in ('HIGH', 'CRITICAL')
+        where t.risk_level_norm in ('HIGH', 'CRITICAL')
           and t.created_at >= #{startDate}
-        group by t.id, t.title, t.repository, upper(coalesce(nullif(trim(t.risk_level), ''), 'INFO')),
-            t.created_at, t.status
+        group by t.id, t.title, t.repository, t.risk_level_norm, t.created_at, t.status
         order by t.created_at desc
         limit 5
         """)
@@ -96,27 +85,25 @@ public interface DashboardMapper {
 
     @Select("""
         select
-            date_format(created_at, '%Y-%m-%d') as dayKey,
+            date_format(created_date, '%Y-%m-%d') as dayKey,
             count(*) as taskCount,
             sum(case
-                when (lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'parsed'
-                    or (coalesce(nullif(trim(llm_parse_status), ''), '') = ''
-                        and lower(coalesce(nullif(trim(llm_status), ''), '')) = 'completed'))
-                    and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'fallback'
+                when (llm_parse_status_norm = 'parsed'
+                    or (llm_parse_status_norm = '' and llm_status_norm = 'completed'))
+                    and llm_status_norm <> 'fallback'
                 then 1 else 0 end) as parseSuccessCount,
             sum(case
-                when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
-                    or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
+                when llm_status_norm = 'fallback'
+                    or llm_parse_status_norm = 'fallback'
                 then 1 else 0 end) as fallbackCount,
             sum(case
-                when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
+                when llm_parse_status_norm = 'partial_fallback'
                 then 1 else 0 end) as partialFallbackCount
         from review_task
-        where llm_status is not null
-          and llm_status <> ''
-          and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
+        where llm_status_norm <> ''
+          and llm_status_norm <> 'pending'
           and created_at >= #{startDate}
-        group by date_format(created_at, '%Y-%m-%d')
+        group by created_date
         """)
     List<DashboardLlmQualityTrendCount> selectLlmQualityTrendCounts(@Param("startDate") LocalDate startDate);
 
@@ -135,56 +122,45 @@ public interface DashboardMapper {
             coalesce(feedback_stats.falsePositiveFeedbackCount, 0) as falsePositiveFeedbackCount
         from (
             select
-                concat(
-                    coalesce(nullif(trim(llm_provider), ''), 'unknown'),
-                    ' / ',
-                    coalesce(nullif(trim(llm_model), ''), 'unknown')
-                ) as modelLabel,
+                llm_model_label as modelLabel,
                 count(*) as taskCount,
                 avg(coalesce(llm_duration_ms, 0)) as averageDurationMs,
                 avg(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens end) as averageTokens,
                 avg(llm_estimated_cost) as averageCost,
                 sum(case
-                    when (lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'parsed'
-                        or (coalesce(nullif(trim(llm_parse_status), ''), '') = ''
-                            and lower(coalesce(nullif(trim(llm_status), ''), '')) = 'completed'))
-                        and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'fallback'
+                    when (llm_parse_status_norm = 'parsed'
+                        or (llm_parse_status_norm = '' and llm_status_norm = 'completed'))
+                        and llm_status_norm <> 'fallback'
                     then 1 else 0 end) as parseSuccessCount,
                 sum(case
-                    when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
-                        or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
+                    when llm_status_norm = 'fallback'
+                        or llm_parse_status_norm = 'fallback'
                     then 1 else 0 end) as fallbackCount,
                 sum(case
-                    when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
+                    when llm_parse_status_norm = 'partial_fallback'
                     then 1 else 0 end) as partialFallbackCount
             from review_task
-            where llm_status is not null
-              and llm_status <> ''
-              and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
+            where llm_status_norm <> ''
+              and llm_status_norm <> 'pending'
               and created_at >= #{startDate}
             group by modelLabel
         ) task_stats
         left join (
             select
-                concat(
-                    coalesce(nullif(trim(t.llm_provider), ''), 'unknown'),
-                    ' / ',
-                    coalesce(nullif(trim(t.llm_model), ''), 'unknown')
-                ) as modelLabel,
+                t.llm_model_label as modelLabel,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
+                    when f.feedback_status_norm <> 'UNREVIEWED'
                     then 1 else 0 end) as reviewedFeedbackCount,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                    when f.feedback_status_norm = 'VALID'
                     then 1 else 0 end) as validFeedbackCount,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                    when f.feedback_status_norm = 'FALSE_POSITIVE'
                     then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
-            where t.llm_status is not null
-              and t.llm_status <> ''
-              and lower(coalesce(nullif(trim(t.llm_status), ''), '')) <> 'pending'
+            where t.llm_status_norm <> ''
+              and t.llm_status_norm <> 'pending'
               and t.created_at >= #{startDate}
             group by modelLabel
         ) feedback_stats on feedback_stats.modelLabel = task_stats.modelLabel
@@ -204,47 +180,37 @@ public interface DashboardMapper {
             coalesce(feedback_stats.falsePositiveFeedbackCount, 0) as falsePositiveFeedbackCount
         from (
             select
-                case
-                    when organization is null or trim(organization) = ''
-                    then coalesce(nullif(trim(repository), ''), 'unknown')
-                    else concat(trim(organization), '/', coalesce(nullif(trim(repository), ''), 'unknown'))
-                end as repositoryLabel,
+                repository_label as repositoryLabel,
                 count(*) as taskCount,
                 sum(case
-                    when lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'
-                        or lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'
+                    when llm_status_norm = 'fallback'
+                        or llm_parse_status_norm = 'fallback'
                     then 1 else 0 end) as fallbackCount,
                 sum(case
-                    when lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'
+                    when llm_parse_status_norm = 'partial_fallback'
                     then 1 else 0 end) as partialFallbackCount
             from review_task
-            where llm_status is not null
-              and llm_status <> ''
-              and lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'
+            where llm_status_norm <> ''
+              and llm_status_norm <> 'pending'
               and created_at >= #{startDate}
             group by repositoryLabel
         ) task_stats
         left join (
             select
-                case
-                    when t.organization is null or trim(t.organization) = ''
-                    then coalesce(nullif(trim(t.repository), ''), 'unknown')
-                    else concat(trim(t.organization), '/', coalesce(nullif(trim(t.repository), ''), 'unknown'))
-                end as repositoryLabel,
+                t.repository_label as repositoryLabel,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
+                    when f.feedback_status_norm <> 'UNREVIEWED'
                     then 1 else 0 end) as reviewedFeedbackCount,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                    when f.feedback_status_norm = 'VALID'
                     then 1 else 0 end) as validFeedbackCount,
                 sum(case
-                    when upper(coalesce(nullif(trim(f.feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                    when f.feedback_status_norm = 'FALSE_POSITIVE'
                     then 1 else 0 end) as falsePositiveFeedbackCount
             from review_task t
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
-            where t.llm_status is not null
-              and t.llm_status <> ''
-              and lower(coalesce(nullif(trim(t.llm_status), ''), '')) <> 'pending'
+            where t.llm_status_norm <> ''
+              and t.llm_status_norm <> 'pending'
               and t.created_at >= #{startDate}
             group by repositoryLabel
         ) feedback_stats on feedback_stats.repositoryLabel = task_stats.repositoryLabel

@@ -16,17 +16,17 @@ public class DashboardSqlVerificationPlan {
             new QueryAssumption(
                 "selectMetricStat",
                 "7-day review task metric aggregate bounded by review_task.created_at",
-                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk")
+                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk_norm")
             ),
             new QueryAssumption(
                 "selectRiskLevelCounts",
-                "7-day risk distribution grouped by review_task.risk_level",
-                List.of("idx_review_task_dashboard_created_risk")
+                "7-day risk distribution grouped by review_task.risk_bucket_norm",
+                List.of("idx_review_task_dashboard_created_risk_norm")
             ),
             new QueryAssumption(
                 "selectReviewTrendCounts",
-                "7-day daily review trend grouped by review_task.created_at",
-                List.of("idx_review_task_created_at")
+                "7-day daily review trend grouped by review_task.created_date",
+                List.of("idx_review_task_dashboard_created_day")
             ),
             new QueryAssumption(
                 "selectRuleHitCounts",
@@ -36,22 +36,22 @@ public class DashboardSqlVerificationPlan {
             new QueryAssumption(
                 "selectRecentHighRiskReviews",
                 "7-day high-risk task list ordered by review_task.created_at desc",
-                List.of("idx_review_task_risk_created", "idx_review_finding_task_category_rule")
+                List.of("idx_review_task_dashboard_created_risk_norm", "idx_review_finding_task_category_rule")
             ),
             new QueryAssumption(
                 "selectLlmQualityTrendCounts",
-                "7/30/90-day LLM quality trend bounded by review_task.created_at and filtered by llm_status",
-                List.of("idx_review_task_dashboard_created_llm_model")
+                "7/30/90-day LLM quality trend bounded by review_task.created_at and filtered by llm_status_norm",
+                List.of("idx_review_task_dashboard_created_llm_model_norm")
             ),
             new QueryAssumption(
                 "selectLlmQualityByModelStats",
                 "7-day LLM model breakdown with feedback join by task_id",
-                List.of("idx_review_task_dashboard_created_llm_model", "idx_review_finding_task_category_rule")
+                List.of("idx_review_task_dashboard_created_llm_model_norm", "idx_review_finding_task_category_feedback_norm")
             ),
             new QueryAssumption(
                 "selectLlmQualityByRepositoryStats",
                 "7-day LLM repository breakdown with feedback join by task_id",
-                List.of("idx_review_task_dashboard_created_llm_repo", "idx_review_finding_task_category_rule")
+                List.of("idx_review_task_dashboard_created_llm_repo_norm", "idx_review_finding_task_category_feedback_norm")
             )
         );
     }
@@ -64,24 +64,34 @@ public class DashboardSqlVerificationPlan {
                 "Latest review fallback and dashboard windows depend on a direct created_at access path."
             ),
             new IndexAlignment(
-                "idx_review_task_dashboard_created_risk",
-                List.of("created_at", "risk_level"),
-                "Dashboard review task aggregates first constrain the time window, then derive or group by risk level."
+                "idx_review_task_dashboard_created_risk_norm",
+                List.of("created_at", "risk_bucket_norm", "risk_level_norm", "status_norm"),
+                "Dashboard review task aggregates first constrain the time window, then group or filter on generated risk/status columns."
             ),
             new IndexAlignment(
-                "idx_review_task_dashboard_created_llm_model",
-                List.of("created_at", "llm_status", "llm_provider", "llm_model"),
-                "LLM quality model queries first constrain the time window; llm_status uses exclusion filters rather than equality."
+                "idx_review_task_dashboard_created_day",
+                List.of("created_at", "created_date"),
+                "Dashboard trend queries constrain the time window and group by the generated created_date column."
             ),
             new IndexAlignment(
-                "idx_review_task_dashboard_created_llm_repo",
-                List.of("created_at", "llm_status", "organization", "repository"),
-                "LLM repository queries first constrain the time window, then group by repository identity."
+                "idx_review_task_dashboard_created_llm_model_norm",
+                List.of("created_at", "llm_status_norm", "llm_parse_status_norm", "llm_model_label"),
+                "LLM quality model queries first constrain the time window, then use generated status and model label columns."
+            ),
+            new IndexAlignment(
+                "idx_review_task_dashboard_created_llm_repo_norm",
+                List.of("created_at", "llm_status_norm", "llm_parse_status_norm", "repository_label"),
+                "LLM repository queries first constrain the time window, then group by the generated repository label."
             ),
             new IndexAlignment(
                 "idx_review_finding_task_category_rule",
                 List.of("task_id", "category", "rule_id"),
                 "Dashboard finding joins enter by task_id and apply FINDING category before rule aggregation."
+            ),
+            new IndexAlignment(
+                "idx_review_finding_task_category_feedback_norm",
+                List.of("task_id", "category", "feedback_status_norm"),
+                "Dashboard feedback joins enter by task_id/category and aggregate by the generated feedback status."
             )
         );
     }
@@ -97,24 +107,24 @@ public class DashboardSqlVerificationPlan {
             ),
             new ExplainObservation(
                 "selectMetricStat",
-                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk"),
+                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk_norm"),
                 List.of("range"),
                 "rows should stay bounded by the selected dashboard time window.",
                 List.of("key should not be null", "type should not degrade to ALL")
             ),
             new ExplainObservation(
                 "selectRiskLevelCounts",
-                List.of("idx_review_task_dashboard_created_risk"),
+                List.of("idx_review_task_dashboard_created_risk_norm"),
                 List.of("range"),
-                "rows should stay bounded by created_at before grouping by risk_level.",
-                List.of("key should prefer the created_at/risk_level composite index", "type should not degrade to ALL")
+                "rows should stay bounded by created_at before grouping by risk_bucket_norm.",
+                List.of("key should prefer the created_at/risk generated-column index", "type should not degrade to ALL")
             ),
             new ExplainObservation(
                 "selectReviewTrendCounts",
-                List.of("idx_review_task_created_at"),
+                List.of("idx_review_task_dashboard_created_day", "idx_review_task_created_at"),
                 List.of("range"),
-                "rows should stay bounded by the trend window even when date_format grouping uses a derived expression.",
-                List.of("key should not be null", "Using temporary is acceptable only when rows remains window-bounded")
+                "rows should stay bounded by the trend window before grouping by the generated created_date.",
+                List.of("key should not be null", "grouping should not apply date_format directly to created_at")
             ),
             new ExplainObservation(
                 "selectRuleHitCounts",
@@ -125,28 +135,28 @@ public class DashboardSqlVerificationPlan {
             ),
             new ExplainObservation(
                 "selectRecentHighRiskReviews",
-                List.of("idx_review_task_risk_created", "idx_review_task_dashboard_created_risk", "idx_review_finding_task_category_rule"),
+                List.of("idx_review_task_dashboard_created_risk_norm", "idx_review_finding_task_category_rule"),
                 List.of("range", "ref", "eq_ref"),
                 "rows should stay bounded by high/critical risk plus the dashboard time window before the limit is applied.",
-                List.of("review_task key should include risk_level or created_at", "review_finding join should not scan all findings")
+                List.of("review_task key should include generated risk columns or created_at", "review_finding join should not scan all findings")
             ),
             new ExplainObservation(
                 "selectLlmQualityTrendCounts",
-                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("idx_review_task_dashboard_created_llm_model_norm"),
                 List.of("range"),
-                "rows should stay bounded by created_at because llm_status uses exclusion filters instead of equality.",
-                List.of("key should prefer the created_at/llm_status composite index", "type should not degrade to ALL")
+                "rows should stay bounded by created_at because llm_status_norm uses exclusion filters instead of equality.",
+                List.of("key should prefer the created_at/llm generated-column index", "type should not degrade to ALL")
             ),
             new ExplainObservation(
                 "selectLlmQualityByModelStats",
-                List.of("idx_review_task_dashboard_created_llm_model", "idx_review_finding_task_category_rule"),
+                List.of("idx_review_task_dashboard_created_llm_model_norm", "idx_review_finding_task_category_feedback_norm"),
                 List.of("range", "ref", "eq_ref"),
                 "derived task and feedback rows should stay bounded by created_at before model grouping and task_id finding joins.",
                 List.of("derived table filesort is acceptable only after window filtering", "review_finding join should use task_id/category")
             ),
             new ExplainObservation(
                 "selectLlmQualityByRepositoryStats",
-                List.of("idx_review_task_dashboard_created_llm_repo", "idx_review_finding_task_category_rule"),
+                List.of("idx_review_task_dashboard_created_llm_repo_norm", "idx_review_finding_task_category_feedback_norm"),
                 List.of("range", "ref", "eq_ref"),
                 "derived task and feedback rows should stay bounded by created_at before repository grouping and task_id finding joins.",
                 List.of("derived table filesort is acceptable only after window filtering", "review_finding join should use task_id/category")
@@ -169,7 +179,7 @@ public class DashboardSqlVerificationPlan {
                 "selectMetricStat",
                 "review_task",
                 "",
-                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk"),
+                List.of("idx_review_task_created_at", "idx_review_task_dashboard_created_risk_norm"),
                 List.of("range"),
                 "review_task rows should stay bounded by the dashboard time window.",
                 List.of("review_task key should not be null", "review_task type should not be ALL")
@@ -178,18 +188,18 @@ public class DashboardSqlVerificationPlan {
                 "selectRiskLevelCounts",
                 "review_task",
                 "",
-                List.of("idx_review_task_dashboard_created_risk"),
+                List.of("idx_review_task_dashboard_created_risk_norm"),
                 List.of("range"),
-                "review_task rows should stay bounded by created_at before grouping by risk_level.",
-                List.of("review_task key should prefer idx_review_task_dashboard_created_risk")
+                "review_task rows should stay bounded by created_at before grouping by risk_bucket_norm.",
+                List.of("review_task key should prefer idx_review_task_dashboard_created_risk_norm")
             ),
             new ExplainTableExpectation(
                 "selectReviewTrendCounts",
                 "review_task",
                 "",
-                List.of("idx_review_task_created_at"),
+                List.of("idx_review_task_dashboard_created_day", "idx_review_task_created_at"),
                 List.of("range"),
-                "review_task rows should stay bounded by created_at before date_format grouping.",
+                "review_task rows should stay bounded by created_at before created_date grouping.",
                 List.of("review_task type should not be ALL")
             ),
             new ExplainTableExpectation(
@@ -214,10 +224,10 @@ public class DashboardSqlVerificationPlan {
                 "selectRecentHighRiskReviews",
                 "review_task",
                 "t",
-                List.of("idx_review_task_risk_created", "idx_review_task_dashboard_created_risk"),
+                List.of("idx_review_task_dashboard_created_risk_norm"),
                 List.of("range", "ref"),
-                "review_task rows should be bounded by risk_level and created_at before applying limit.",
-                List.of("review_task key should include risk_level or created_at")
+                "review_task rows should be bounded by generated risk columns and created_at before applying limit.",
+                List.of("review_task key should include risk_level_norm or created_at")
             ),
             new ExplainTableExpectation(
                 "selectRecentHighRiskReviews",
@@ -232,7 +242,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityTrendCounts",
                 "review_task",
                 "",
-                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("idx_review_task_dashboard_created_llm_model_norm"),
                 List.of("range"),
                 "review_task rows should be bounded by created_at before LLM status filtering.",
                 List.of("review_task key should prefer the LLM model dashboard index")
@@ -241,7 +251,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByModelStats",
                 "review_task",
                 "",
-                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("idx_review_task_dashboard_created_llm_model_norm"),
                 List.of("range"),
                 "task_stats review_task rows should be window-bounded before model grouping.",
                 List.of("task_stats derived table should not start from a full review_task scan")
@@ -250,7 +260,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByModelStats",
                 "review_task",
                 "t",
-                List.of("idx_review_task_dashboard_created_llm_model"),
+                List.of("idx_review_task_dashboard_created_llm_model_norm"),
                 List.of("range", "ref", "eq_ref"),
                 "feedback_stats review_task rows should be window-bounded before finding joins.",
                 List.of("feedback_stats review_task key should include created_at")
@@ -259,7 +269,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByModelStats",
                 "review_finding",
                 "f",
-                List.of("idx_review_finding_task_category_rule"),
+                List.of("idx_review_finding_task_category_feedback_norm"),
                 List.of("ref", "eq_ref"),
                 "feedback_stats review_finding rows should be reached by task_id/category.",
                 List.of("review_finding type should not be ALL")
@@ -268,7 +278,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByRepositoryStats",
                 "review_task",
                 "",
-                List.of("idx_review_task_dashboard_created_llm_repo"),
+                List.of("idx_review_task_dashboard_created_llm_repo_norm"),
                 List.of("range"),
                 "task_stats review_task rows should be window-bounded before repository grouping.",
                 List.of("task_stats derived table should not start from a full review_task scan")
@@ -277,7 +287,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByRepositoryStats",
                 "review_task",
                 "t",
-                List.of("idx_review_task_dashboard_created_llm_repo"),
+                List.of("idx_review_task_dashboard_created_llm_repo_norm"),
                 List.of("range", "ref", "eq_ref"),
                 "feedback_stats review_task rows should be window-bounded before finding joins.",
                 List.of("feedback_stats review_task key should include created_at")
@@ -286,7 +296,7 @@ public class DashboardSqlVerificationPlan {
                 "selectLlmQualityByRepositoryStats",
                 "review_finding",
                 "f",
-                List.of("idx_review_finding_task_category_rule"),
+                List.of("idx_review_finding_task_category_feedback_norm"),
                 List.of("ref", "eq_ref"),
                 "feedback_stats review_finding rows should be reached by task_id/category.",
                 List.of("review_finding type should not be ALL")

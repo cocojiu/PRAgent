@@ -30,9 +30,10 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
             .contains("count(*) as total")
-            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('high', 'critical')")
-            .contains("upper(coalesce(nullif(trim(status), ''), '')) = 'failed'")
+            .contains("risk_level_norm in ('high', 'critical')")
+            .contains("status_norm = 'failed'")
             .contains("avg(coalesce(duration_seconds, 0)) as averagedurationseconds");
+        assertNoRuntimeDashboardNormalization(sql);
     }
 
     @Test
@@ -41,12 +42,12 @@ class DashboardMapperSqlContractTest {
 
         assertThat(sql)
             .contains("from review_task")
-            .contains("llm_status is not null")
-            .contains("llm_status <> ''")
+            .contains("llm_status_norm <> ''")
             .contains("created_at >= #{startdate}")
-            .contains("date_format(created_at, '%y-%m-%d') as daykey")
-            .contains("group by date_format(created_at, '%y-%m-%d')");
+            .contains("date_format(created_date, '%y-%m-%d') as daykey")
+            .contains("group by created_date");
         assertLlmQualityStatusNormalization(sql);
+        assertNoRuntimeDashboardNormalization(sql);
     }
 
     @Test
@@ -56,9 +57,9 @@ class DashboardMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
-            .contains("date_format(created_at, '%m-%d') as daylabel")
-            .contains("group by date_format(created_at, '%m-%d')")
-            .contains("order by daylabel");
+            .contains("date_format(created_date, '%m-%d') as daylabel")
+            .contains("group by created_date")
+            .contains("order by created_date");
     }
 
     @Test
@@ -68,10 +69,11 @@ class DashboardMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
-            .contains("normalized_risk_level as risklevel")
+            .contains("risk_bucket_norm as risklevel")
             .contains("count(*) as total")
-            .contains("group by normalized_risk_level");
+            .contains("group by risk_bucket_norm");
         assertRiskLevelBucketNormalization(sql);
+        assertNoRuntimeDashboardNormalization(sql);
     }
 
     @Test
@@ -81,11 +83,12 @@ class DashboardMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task t")
             .contains("left join review_finding f on f.task_id = t.id and f.category = 'finding'")
-            .contains("upper(coalesce(nullif(trim(t.risk_level), ''), 'info')) as risklevel")
-            .contains("where upper(coalesce(nullif(trim(t.risk_level), ''), 'info')) in ('high', 'critical')")
+            .contains("t.risk_level_norm as risklevel")
+            .contains("where t.risk_level_norm in ('high', 'critical')")
             .contains("t.created_at >= #{startdate}")
             .contains("order by t.created_at desc")
             .contains("limit 5");
+        assertNoRuntimeDashboardNormalization(sql);
     }
 
     @Test
@@ -108,26 +111,28 @@ class DashboardMapperSqlContractTest {
 
         assertThat(byModelSql)
             .contains("from review_task")
-            .contains("llm_status is not null")
+            .contains("llm_status_norm <> ''")
             .contains("created_at >= #{startdate}")
             .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
-            .contains("feedback_status")
+            .contains("feedback_status_norm")
             .contains("order by task_stats.taskcount desc")
             .contains("limit 6");
         assertThat(byRepositorySql)
             .contains("from review_task")
-            .contains("llm_status is not null")
+            .contains("llm_status_norm <> ''")
             .contains("created_at >= #{startdate}")
             .contains("t.created_at >= #{startdate}")
             .contains("join review_finding f on f.task_id = t.id and f.category = 'finding'")
-            .contains("feedback_status")
+            .contains("feedback_status_norm")
             .contains("order by task_stats.taskcount desc")
             .contains("limit 6");
         assertLlmQualityStatusNormalization(byModelSql);
         assertLlmQualityStatusNormalization(byRepositorySql);
         assertFeedbackStatusNormalization(byModelSql);
         assertFeedbackStatusNormalization(byRepositorySql);
+        assertNoRuntimeDashboardNormalization(byModelSql);
+        assertNoRuntimeDashboardNormalization(byRepositorySql);
     }
 
     @Test
@@ -138,9 +143,14 @@ class DashboardMapperSqlContractTest {
             .contains("idx_review_task_created_at")
             .contains("idx_review_task_risk_created")
             .contains("idx_review_task_dashboard_created_risk")
+            .contains("idx_review_task_dashboard_created_risk_norm")
+            .contains("idx_review_task_dashboard_created_day")
             .contains("idx_review_task_dashboard_created_llm_model")
+            .contains("idx_review_task_dashboard_created_llm_model_norm")
             .contains("idx_review_task_dashboard_created_llm_repo")
+            .contains("idx_review_task_dashboard_created_llm_repo_norm")
             .contains("idx_review_finding_task_category_rule")
+            .contains("idx_review_finding_task_category_feedback_norm")
             .contains("idx_review_task_pr_created")
             .contains("idx_review_task_commit_created")
             .contains("idx_review_task_mq_health");
@@ -179,25 +189,29 @@ class DashboardMapperSqlContractTest {
 
     private void assertLlmQualityStatusNormalization(String sql) {
         assertThat(sql)
-            .contains("lower(coalesce(nullif(trim(llm_status), ''), '')) <> 'pending'")
-            .contains("lower(coalesce(nullif(trim(llm_status), ''), '')) = 'fallback'")
-            .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'fallback'")
-            .contains("lower(coalesce(nullif(trim(llm_parse_status), ''), '')) = 'partial_fallback'");
+            .contains("llm_status_norm <> 'pending'")
+            .contains("llm_status_norm = 'fallback'")
+            .contains("llm_parse_status_norm = 'fallback'")
+            .contains("llm_parse_status_norm = 'partial_fallback'");
     }
 
     private void assertFeedbackStatusNormalization(String sql) {
         assertThat(sql)
-            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) <> 'unreviewed'")
-            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'valid'")
-            .contains("upper(coalesce(nullif(trim(f.feedback_status), ''), 'unreviewed')) = 'false_positive'");
+            .contains("f.feedback_status_norm <> 'unreviewed'")
+            .contains("f.feedback_status_norm = 'valid'")
+            .contains("f.feedback_status_norm = 'false_positive'");
     }
 
     private void assertRiskLevelBucketNormalization(String sql) {
         assertThat(sql)
-            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('high', 'critical')")
-            .contains("then 'high'")
-            .contains("upper(coalesce(nullif(trim(risk_level), ''), 'info')) in ('medium', 'low')")
-            .contains("then upper(coalesce(nullif(trim(risk_level), ''), 'info'))")
-            .contains("else 'info'");
+            .contains("risk_bucket_norm as risklevel")
+            .contains("group by risk_bucket_norm");
+    }
+
+    private void assertNoRuntimeDashboardNormalization(String sql) {
+        assertThat(sql)
+            .doesNotContain("upper(coalesce(nullif(trim(")
+            .doesNotContain("lower(coalesce(nullif(trim(")
+            .doesNotContain("group by date_format(created_at");
     }
 }
