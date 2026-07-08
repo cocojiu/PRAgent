@@ -51,6 +51,7 @@ class SpringBeanConstructorSelectionTest {
             RuleBasedPullRequestReviewer.class,
             AuthTokenService.class,
             SecretCryptoService.class,
+            CacheEvictionService.class,
             DataRetentionServiceImpl.class,
             FindingFeedbackServiceImpl.class,
             DashboardLlmQualityTrendBuilder.class,

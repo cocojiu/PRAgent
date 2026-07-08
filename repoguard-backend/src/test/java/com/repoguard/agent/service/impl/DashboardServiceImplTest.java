@@ -12,6 +12,7 @@ import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
 import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
@@ -56,6 +57,8 @@ class DashboardServiceImplTest {
     private static final Clock FIXED_CLOCK = Clock.fixed(Instant.parse("2026-06-19T10:00:00Z"), ZoneId.of("UTC"));
 
     private final DashboardMapper dashboardMapper = org.mockito.Mockito.mock(DashboardMapper.class);
+    private final DashboardDailySnapshotService dailySnapshotService =
+        org.mockito.Mockito.mock(DashboardDailySnapshotService.class);
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
@@ -86,13 +89,14 @@ class DashboardServiceImplTest {
         llmQualityTrendBuilder,
         reviewTrendWindow,
         systemHealthProbe,
-        snapshotStore
+        snapshotStore,
+        dailySnapshotService
     );
 
     @BeforeEach
     void setUp() {
-        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of());
-        when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of());
+        when(dailySnapshotService.selectLlmQualityTrendCounts(any())).thenReturn(List.of());
+        when(dailySnapshotService.selectReviewTrendCounts(any())).thenReturn(List.of());
     }
 
     @Test
@@ -137,7 +141,8 @@ class DashboardServiceImplTest {
             llmQualityTrendBuilder,
             reviewTrendWindow,
             systemHealthProbe,
-            snapshotStore
+            snapshotStore,
+            dailySnapshotService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("dashboardMetricAssembler");
@@ -145,23 +150,24 @@ class DashboardServiceImplTest {
 
     @Test
     void summaryModuleLoadsOnlyMetricAggregate() {
-        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+        when(dailySnapshotService.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
 
         var summary = service.getSummary();
 
-        verify(dashboardMapper).selectMetricStat(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper, never()).selectReviewTrendCounts(any());
-        verify(dashboardMapper, never()).selectRuleHitCounts(any());
-        verify(dashboardMapper, never()).selectLlmQualityByModelStats(any());
+        verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService, never()).selectReviewTrendCounts(any());
+        verify(dailySnapshotService, never()).selectRuleHitCounts(any());
+        verify(dailySnapshotService, never()).selectLlmQualityByModelStats(any());
+        verify(dashboardMapper, never()).selectMetricStat(any());
         assertThat(summary).hasSize(4);
         assertThat(summary.get(0).value()).isEqualTo("3");
     }
 
     @Test
     void summaryModuleReturnsLastSnapshotWhenRefreshFails() {
-        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+        when(dailySnapshotService.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
         var firstSummary = service.getSummary();
-        when(dashboardMapper.selectMetricStat(any())).thenThrow(new IllegalStateException("database busy"));
+        when(dailySnapshotService.selectMetricStat(any())).thenThrow(new IllegalStateException("database busy"));
 
         var secondSummary = service.getSummary();
 
@@ -171,23 +177,23 @@ class DashboardServiceImplTest {
 
     @Test
     void llmQualityModuleLoadsOnlyLlmQualityAggregates() {
-        when(dashboardMapper.selectLlmQualityByModelStats(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityByModelStats(any())).thenReturn(List.of(
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L)
         ));
-        when(dashboardMapper.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
             llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L)
         ));
-        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
             llmQualityTrendCount("2026-06-19", 3L, 2L, 0L, 1L)
         ));
 
         var llmQuality = service.getLlmQuality(7);
 
-        verify(dashboardMapper).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper, never()).selectMetricStat(any());
-        verify(dashboardMapper, never()).selectRiskLevelCounts(any());
+        verify(dailySnapshotService).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService, never()).selectMetricStat(any());
+        verify(dailySnapshotService, never()).selectRiskLevelCounts(any());
         verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
         assertThat(llmQuality.byModel()).hasSize(1);
         assertThat(llmQuality.byRepository()).hasSize(1);
@@ -234,21 +240,22 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsTopMetricsFromAggregateQuery() {
-        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
+        when(dailySnapshotService.selectMetricStat(any())).thenReturn(metricStat(3L, 2L, 1L, BigDecimal.valueOf(1800)));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
         var metrics = service.getOverview(null).overviewMetrics();
 
-        verify(dashboardMapper).selectMetricStat(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper, never()).selectReviewTrendCounts(any());
-        verify(dashboardMapper, never()).selectRiskLevelCounts(any());
-        verify(dashboardMapper, never()).selectRuleHitCounts(any());
+        verify(dailySnapshotService).selectMetricStat(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService, never()).selectReviewTrendCounts(any());
+        verify(dailySnapshotService, never()).selectRiskLevelCounts(any());
+        verify(dailySnapshotService, never()).selectRuleHitCounts(any());
         verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
-        verify(dashboardMapper, never()).selectLlmQualityByModelStats(any());
-        verify(dashboardMapper, never()).selectLlmQualityByRepositoryStats(any());
-        verify(dashboardMapper, never()).selectLlmQualityTrendCounts(any());
+        verify(dashboardMapper, never()).selectMetricStat(any());
+        verify(dailySnapshotService, never()).selectLlmQualityByModelStats(any());
+        verify(dailySnapshotService, never()).selectLlmQualityByRepositoryStats(any());
+        verify(dailySnapshotService, never()).selectLlmQualityTrendCounts(any());
         assertThat(metrics).extracting("label").containsExactly("本周审查", "高风险 PR", "失败任务", "平均审查耗时");
         assertThat(metrics).extracting("trendType").containsExactly("up", "up-danger", "down", "down");
         assertThat(metrics).extracting("color").containsExactly("blue", "red", "orange", "green");
@@ -262,7 +269,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsReviewTrendFromGroupedQuery() {
-        when(dashboardMapper.selectReviewTrendCounts(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectReviewTrendCounts(any())).thenReturn(List.of(
             reviewTrendCount("06-15", 2L),
             reviewTrendCount("06-16", 3L)
         ));
@@ -272,7 +279,7 @@ class DashboardServiceImplTest {
 
         var reviewTrend = service.getReviewTrend();
 
-        verify(dashboardMapper).selectReviewTrendCounts(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectReviewTrendCounts(LocalDate.of(2026, 6, 13));
         assertThat(reviewTrend).hasSize(2);
         assertThat(reviewTrend.get(0).date()).isEqualTo("06-15");
         assertThat(reviewTrend.get(0).value()).isEqualTo(2L);
@@ -282,8 +289,8 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewFallsBackToLatestReviewWindowWhenCurrentWindowHasNoReviews() {
-        when(dashboardMapper.selectLatestReviewTaskDate()).thenReturn(LocalDate.of(2026, 6, 10));
-        when(dashboardMapper.selectMetricStat(any())).thenReturn(metricStat(4L, 1L, 0L, BigDecimal.valueOf(1200)));
+        when(dailySnapshotService.latestReviewDate()).thenReturn(LocalDate.of(2026, 6, 10));
+        when(dailySnapshotService.selectMetricStat(any())).thenReturn(metricStat(4L, 1L, 0L, BigDecimal.valueOf(1200)));
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
@@ -291,14 +298,14 @@ class DashboardServiceImplTest {
         var overview = service.getOverview(7);
 
         LocalDate fallbackStartDate = LocalDate.of(2026, 6, 4);
-        verify(dashboardMapper).selectMetricStat(fallbackStartDate);
-        verify(dashboardMapper, never()).selectReviewTrendCounts(any());
-        verify(dashboardMapper, never()).selectRiskLevelCounts(any());
-        verify(dashboardMapper, never()).selectRuleHitCounts(any());
+        verify(dailySnapshotService).selectMetricStat(fallbackStartDate);
+        verify(dailySnapshotService, never()).selectReviewTrendCounts(any());
+        verify(dailySnapshotService, never()).selectRiskLevelCounts(any());
+        verify(dailySnapshotService, never()).selectRuleHitCounts(any());
         verify(dashboardMapper, never()).selectRecentHighRiskReviews(any());
-        verify(dashboardMapper, never()).selectLlmQualityByModelStats(any());
-        verify(dashboardMapper, never()).selectLlmQualityByRepositoryStats(any());
-        verify(dashboardMapper, never()).selectLlmQualityTrendCounts(any());
+        verify(dailySnapshotService, never()).selectLlmQualityByModelStats(any());
+        verify(dailySnapshotService, never()).selectLlmQualityByRepositoryStats(any());
+        verify(dailySnapshotService, never()).selectLlmQualityTrendCounts(any());
         assertThat(overview.overviewMetrics()).hasSize(4);
         assertThat(overview.reviewTrend()).isEmpty();
         assertThat(overview.llmQualityTrend()).isEmpty();
@@ -306,7 +313,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRiskDistributionFromGroupedQuery() {
-        when(dashboardMapper.selectRiskLevelCounts(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectRiskLevelCounts(any())).thenReturn(List.of(
             riskLevelCount("HIGH", 1L),
             riskLevelCount("MEDIUM", 2L),
             riskLevelCount("INFO", 1L)
@@ -317,7 +324,7 @@ class DashboardServiceImplTest {
 
         var riskDistribution = service.getRiskDistribution();
 
-        verify(dashboardMapper).selectRiskLevelCounts(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectRiskLevelCounts(LocalDate.of(2026, 6, 13));
         assertThat(riskDistribution).hasSize(4);
         assertThat(riskDistribution).extracting("name").containsExactly("高风险", "中风险", "低风险", "提示");
         assertThat(riskDistribution).extracting("color").containsExactly("#ef4444", "#f59e0b", "#2563eb", "#22c55e");
@@ -333,7 +340,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewBuildsRuleHitsFromGroupedQuery() {
-        when(dashboardMapper.selectRuleHitCounts(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectRuleHitCounts(any())).thenReturn(List.of(
             ruleHitCount("RG-API-001", 2L),
             ruleHitCount(null, 1L),
             ruleHitCount("RG-SECRET-001", 3L)
@@ -344,7 +351,7 @@ class DashboardServiceImplTest {
 
         var overview = service.getRules();
 
-        verify(dashboardMapper).selectRuleHitCounts(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectRuleHitCounts(LocalDate.of(2026, 6, 13));
         assertThat(overview.ruleHits()).hasSize(3);
         assertThat(overview.ruleHits().get(0).name()).isEqualTo("\u786c\u7f16\u7801\u5bc6\u94a5\u68c0\u6d4b");
         assertThat(overview.ruleHits().get(0).color()).isEqualTo("#ef4444");
@@ -395,7 +402,7 @@ class DashboardServiceImplTest {
     void overviewBuildsLlmQualityTrendFromGroupedQuery() {
         String yesterdayKey = LocalDate.of(2026, 6, 18).toString();
         String todayKey = LocalDate.of(2026, 6, 19).toString();
-        when(dashboardMapper.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityTrendCounts(any())).thenReturn(List.of(
             llmQualityTrendCount(yesterdayKey, 2L, 1L, 1L, 0L),
             llmQualityTrendCount(todayKey, 3L, 2L, 0L, 1L)
         ));
@@ -405,7 +412,7 @@ class DashboardServiceImplTest {
 
         var trend = service.getLlmQuality(7).trend();
 
-        verify(dashboardMapper).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectLlmQualityTrendCounts(LocalDate.of(2026, 6, 13));
         assertThat(trend).hasSize(7);
         assertThat(trend.get(4).taskCount()).isZero();
         assertThat(trend.get(4).parseSuccessRate()).isEqualTo("0.0%");
@@ -419,11 +426,11 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewReportsLlmQualityByModelAndRepository() {
-        when(dashboardMapper.selectLlmQualityByModelStats(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityByModelStats(any())).thenReturn(List.of(
             llmQualityModelStat("dashscope / qwen-plus", 3L, 1733, 1200, "0.000123", 1L, 1L, 1L, 3L, 2L, 1L),
             llmQualityModelStat("openai / gpt-test", 1L, 800, 900, "0.000456", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
-        when(dashboardMapper.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
+        when(dailySnapshotService.selectLlmQualityByRepositoryStats(any())).thenReturn(List.of(
             llmQualityRepositoryStat("octocat/api", 3L, 1L, 1L, 3L, 2L, 1L),
             llmQualityRepositoryStat("octocat/web", 1L, 0L, 0L, 0L, 0L, 0L)
         ));
@@ -433,8 +440,8 @@ class DashboardServiceImplTest {
 
         var overview = service.getLlmQuality(30);
 
-        verify(dashboardMapper).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
-        verify(dashboardMapper).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectLlmQualityByModelStats(LocalDate.of(2026, 6, 13));
+        verify(dailySnapshotService).selectLlmQualityByRepositoryStats(LocalDate.of(2026, 6, 13));
         assertThat(overview.byModel()).hasSize(2);
         var qwen = overview.byModel().stream()
             .filter(item -> "dashscope / qwen-plus".equals(item.model()))

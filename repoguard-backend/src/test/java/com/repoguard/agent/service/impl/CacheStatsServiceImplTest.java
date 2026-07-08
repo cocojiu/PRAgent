@@ -5,12 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.config.CacheConfig;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.support.SimpleCacheManager;
@@ -70,6 +73,16 @@ class CacheStatsServiceImplTest {
         assertThat(overview.get("overview")).isNull();
         assertThat(summary.get("summary")).isNull();
         assertThat(llmQuality.get("7")).isNull();
+    }
+
+    @Test
+    void dashboardEvictionRefreshesPersistedSnapshots() {
+        DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
+        CacheEvictionService eviction = new CacheEvictionService(cacheManager, objectProvider(snapshotService));
+
+        eviction.evictDashboardOverview();
+
+        Mockito.verify(snapshotService).refreshCurrentWindows();
     }
 
     @Test
@@ -145,5 +158,46 @@ class CacheStatsServiceImplTest {
 
     private static double counter(SimpleMeterRegistry meterRegistry, String name, String... tags) {
         return meterRegistry.find(name).tags(tags).counter().count();
+    }
+
+    private static ObjectProvider<DashboardDailySnapshotService> objectProvider(
+        DashboardDailySnapshotService snapshotService
+    ) {
+        return new ObjectProvider<>() {
+            @Override
+            public DashboardDailySnapshotService getObject(Object... args) {
+                return snapshotService;
+            }
+
+            @Override
+            public DashboardDailySnapshotService getIfAvailable() {
+                return snapshotService;
+            }
+
+            @Override
+            public DashboardDailySnapshotService getIfUnique() {
+                return snapshotService;
+            }
+
+            @Override
+            public DashboardDailySnapshotService getObject() {
+                return snapshotService;
+            }
+
+            @Override
+            public java.util.Iterator<DashboardDailySnapshotService> iterator() {
+                return List.of(snapshotService).iterator();
+            }
+
+            @Override
+            public java.util.stream.Stream<DashboardDailySnapshotService> stream() {
+                return java.util.stream.Stream.of(snapshotService);
+            }
+
+            @Override
+            public java.util.stream.Stream<DashboardDailySnapshotService> orderedStream() {
+                return java.util.stream.Stream.of(snapshotService);
+            }
+        };
     }
 }
