@@ -71,9 +71,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                     from github_comment_publication publication
                     where publication.task_id = finding.task_id
                       and publication.finding_id = finding.id
-                      and publication.success = 1
-                      and publication.github_url is not null
-                      and trim(publication.github_url) <> ''
+                      and publication.published_success = 1
                 )
                 then 1 else 0 end
             ) as publishedFindings,
@@ -83,9 +81,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                     from github_comment_publication publication
                     where publication.task_id = finding.task_id
                       and publication.finding_id = finding.id
-                      and publication.success = 1
-                      and publication.github_url is not null
-                      and trim(publication.github_url) <> ''
+                      and publication.published_success = 1
                 )
                 and (
                     upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
@@ -123,9 +119,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
               from github_comment_publication publication
               where publication.task_id = finding.task_id
                 and publication.finding_id = finding.id
-                and publication.success = 1
-                and publication.github_url is not null
-                and trim(publication.github_url) <> ''
+                and publication.published_success = 1
           )
           and (
               upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
@@ -151,9 +145,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
               from github_comment_publication publication
               where publication.task_id = finding.task_id
                 and publication.finding_id = finding.id
-                and publication.success = 1
-                and publication.github_url is not null
-                and trim(publication.github_url) <> ''
+                and publication.published_success = 1
           )
           and (
               upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))

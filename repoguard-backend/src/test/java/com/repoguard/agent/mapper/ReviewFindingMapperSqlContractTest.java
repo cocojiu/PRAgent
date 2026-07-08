@@ -27,13 +27,41 @@ class ReviewFindingMapperSqlContractTest {
         assertThat(statSql)
             .contains("from review_finding finding")
             .contains("finding.category = 'finding'")
+            .contains("publication.task_id = finding.task_id")
+            .contains("publication.finding_id = finding.id")
+            .contains("publication.published_success = 1")
             .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .doesNotContain("publication.success = 1")
+            .doesNotContain("trim(publication.github_url)")
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
         assertThat(commentableSql)
             .contains("from review_finding finding")
             .contains("finding.category = 'finding'")
+            .contains("publication.task_id = finding.task_id")
+            .contains("publication.finding_id = finding.id")
+            .contains("publication.published_success = 1")
             .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .doesNotContain("publication.success = 1")
+            .doesNotContain("trim(publication.github_url)")
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
+    }
+
+    @Test
+    void githubCommentPublishCandidateQueryUsesPublishedSuccessLookup() throws Exception {
+        String sql = sql("selectGithubCommentPublishCandidatesAfterId", Long.class, long.class, int.class);
+
+        assertThat(sql)
+            .contains("from review_finding finding")
+            .contains("finding.task_id = #{taskid}")
+            .contains("finding.category = 'finding'")
+            .contains("finding.id > #{afterfindingid}")
+            .contains("not exists ( select 1 from github_comment_publication publication")
+            .contains("publication.task_id = finding.task_id")
+            .contains("publication.finding_id = finding.id")
+            .contains("publication.published_success = 1")
+            .contains("order by finding.id asc")
+            .doesNotContain("publication.success = 1")
+            .doesNotContain("trim(publication.github_url)");
     }
 
     @Test
