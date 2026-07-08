@@ -16,7 +16,14 @@ class ObservabilityThresholdConfigTest {
         "repoguard.observability.thresholds.api-response-bytes-by-path";
     private static final String RETRY_ATTEMPT_PREFIX =
         "repoguard.observability.thresholds.external-call-retry-attempt-by-system";
-    private static final List<String> REVIEW_PERFORMANCE_PATHS = List.of(
+    private static final List<String> API_PERFORMANCE_PATHS = List.of(
+        "/api/v1/dashboard/overview",
+        "/api/v1/dashboard/summary",
+        "/api/v1/dashboard/review-trend",
+        "/api/v1/dashboard/risk-distribution",
+        "/api/v1/dashboard/rules",
+        "/api/v1/dashboard/high-risk-reviews",
+        "/api/v1/dashboard/llm-quality",
         "/api/v1/reviews",
         "/api/v1/reviews/repositories",
         "/api/v1/reviews/{id}",
@@ -26,14 +33,20 @@ class ObservabilityThresholdConfigTest {
         "/api/v1/reviews/{id}/timeline",
         "/api/v1/reviews/{id}/status",
         "/api/v1/reviews/{id}/github-comments/preview",
-        "/api/v1/reviews/{id}/github-comments/publications"
+        "/api/v1/reviews/{id}/github-comments/publications",
+        "/api/v1/config/notification-bindings",
+        "/api/v1/config/notification-bindings/{id}/test",
+        "/api/v1/notification-events",
+        "/api/v1/notification-events/{id}/retry",
+        "/api/v1/notification-deliveries",
+        "/api/v1/notifications"
     );
 
     @Test
-    void reviewDetailEndpointsDeclareDurationAndResponseSizeBudgets() {
+    void keyApiEndpointsDeclareDurationAndResponseSizeBudgets() {
         Properties properties = applicationProperties();
 
-        for (String path : REVIEW_PERFORMANCE_PATHS) {
+        for (String path : API_PERFORMANCE_PATHS) {
             String durationBudget = properties.getProperty(mapKey(DURATION_PREFIX, path));
             String responseBytesBudget = properties.getProperty(mapKey(RESPONSE_BYTES_PREFIX, path));
 
