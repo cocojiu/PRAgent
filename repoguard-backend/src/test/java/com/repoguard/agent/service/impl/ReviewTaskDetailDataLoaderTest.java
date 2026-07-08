@@ -105,6 +105,28 @@ class ReviewTaskDetailDataLoaderTest {
     }
 
     @Test
+    void changedFileFindingFilterUsesDedicatedExistsQueries() {
+        when(changedFileMapper.selectChangedFilesWithFindings(any(), Mockito.eq(521L)))
+            .thenReturn(page(List.of(changedFile())));
+        when(changedFileMapper.selectChangedFilesWithoutFindings(any(), Mockito.eq(521L)))
+            .thenReturn(page(List.of()));
+
+        var withFindings = loader.loadChangedFilesPage(521L, 2, 10, true);
+        var withoutFindings = loader.loadChangedFilesPage(521L, 3, 10, false);
+
+        assertThat(withFindings.items()).hasSize(1);
+        assertThat(withoutFindings.items()).isEmpty();
+        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        Mockito.verify(changedFileMapper).selectChangedFilesWithFindings(pageCaptor.capture(), Mockito.eq(521L));
+        assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(2);
+        assertThat(pageCaptor.getValue().getSize()).isEqualTo(10);
+        Mockito.verify(changedFileMapper).selectChangedFilesWithoutFindings(pageCaptor.capture(), Mockito.eq(521L));
+        assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(3);
+        assertThat(pageCaptor.getValue().getSize()).isEqualTo(10);
+        Mockito.verify(changedFileMapper, Mockito.never()).selectPage(any(), any());
+    }
+
+    @Test
     void constructorRejectsMissingFindingAssembler() {
         assertThatThrownBy(() -> new ReviewTaskDetailDataLoader(
             changedFileMapper,

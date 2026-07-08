@@ -82,10 +82,7 @@ public class ReviewTaskDetailDataLoader {
     }
 
     public PageResponse<ChangedFileDto> loadChangedFilesPage(Long taskId, int page, int pageSize, Boolean hasFinding) {
-        Page<ChangedFile> result = changedFileMapper.selectPage(
-            Page.of(page, pageSize),
-            changedFilePageQuery(taskId, hasFinding)
-        );
+        Page<ChangedFile> result = changedFilePage(taskId, page, pageSize, hasFinding);
         return new PageResponse<>(findingAssembler.toChangedFileDtos(pageRecords(result)), pageTotal(result));
     }
 
@@ -140,20 +137,20 @@ public class ReviewTaskDetailDataLoader {
         return page == null ? 0L : page.getTotal();
     }
 
-    private LambdaQueryWrapper<ChangedFile> changedFilePageQuery(Long taskId, Boolean hasFinding) {
-        LambdaQueryWrapper<ChangedFile> wrapper = new LambdaQueryWrapper<ChangedFile>()
-            .eq(ChangedFile::getTaskId, taskId)
-            .orderByAsc(ChangedFile::getId);
+    private Page<ChangedFile> changedFilePage(Long taskId, int page, int pageSize, Boolean hasFinding) {
+        Page<ChangedFile> pageRequest = Page.of(page, pageSize);
         if (hasFinding == null) {
-            return wrapper;
+            return changedFileMapper.selectPage(
+                pageRequest,
+                new LambdaQueryWrapper<ChangedFile>()
+                    .eq(ChangedFile::getTaskId, taskId)
+                    .orderByAsc(ChangedFile::getId)
+            );
         }
-        String findingFileSql = "select distinct file_path from review_finding where task_id = "
-            + taskId
-            + " and category = 'FINDING'";
         if (Boolean.TRUE.equals(hasFinding)) {
-            return wrapper.inSql(ChangedFile::getFilePath, findingFileSql);
+            return changedFileMapper.selectChangedFilesWithFindings(pageRequest, taskId);
         }
-        return wrapper.notInSql(ChangedFile::getFilePath, findingFileSql);
+        return changedFileMapper.selectChangedFilesWithoutFindings(pageRequest, taskId);
     }
 
     private LambdaQueryWrapper<ReviewFinding> findingPageQuery(
