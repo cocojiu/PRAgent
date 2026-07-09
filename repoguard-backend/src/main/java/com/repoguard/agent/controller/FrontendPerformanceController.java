@@ -4,6 +4,7 @@ import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,7 +22,7 @@ public class FrontendPerformanceController {
     }
 
     @PostMapping("/performance")
-    public ApiResponse<Void> recordPerformance(@RequestBody FrontendPerformanceReportRequest request) {
+    public ApiResponse<Void> recordPerformance(@Valid @RequestBody FrontendPerformanceReportRequest request) {
         observationService.record(request);
         return ApiResponse.ok(null);
     }

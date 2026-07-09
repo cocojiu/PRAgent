@@ -259,6 +259,10 @@ RepoGuard / RepoGuard Review Observability
 - 轻量仓库治理可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests`，用于只检查 tracked 文件治理、Flyway migration、demo data guard 和敏感信息扫描；旧参数 `-IncludeFrontendBuild` 仍兼容并等价于完整模式。
 - 准出门禁分层、失败处理和执行矩阵详见 [生产准出检查自动化说明](./docs/release/16-生产准出检查自动化说明.md)。
 
+## 优化进度
+
+- 2026-07-10：完成 P3 前端性能上报输入约束优化，在 API 边界限制观测批次数量、文本长度、HTTP 状态码、耗时、字节数和计数范围；已通过 `mvn "-Dtest=FrontendPerformanceControllerTest,FrontendPerformanceObservationServiceImplTest,ApiContractTest,ControllerAuthorizationContractTest" test`。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
