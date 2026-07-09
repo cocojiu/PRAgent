@@ -81,6 +81,15 @@
         </el-button>
       </section>
 
+      <el-alert
+        v-if="archiveNotice"
+        class="page-alert"
+        type="info"
+        :title="archiveNotice"
+        show-icon
+        :closable="false"
+      />
+
       <ReviewDetailKpiGrid
         :task="selectedTask"
         :started-at="reviewTimeline[0]?.time ?? selectedTask.createdAt"
@@ -101,8 +110,8 @@
           />
 
           <ReviewDetailHumanReviewCard
-            :can-manage="canManage"
-            :can-submit-human-review="canSubmitHumanReview"
+            :can-manage="canManageHotTask"
+            :can-submit-human-review="canSubmitHumanReview && !isArchivedTask"
             :human-review-status-class="humanReviewStatusClass"
             :human-review-status-text="humanReviewStatusText"
             :submitting-human-review="submittingHumanReview"
@@ -111,10 +120,11 @@
           />
 
           <ReviewDetailFindingsCard
-            :can-manage="canManage"
+            :can-manage="canManageHotTask"
+            :archived="isArchivedTask"
             :feedback-saving-id="feedbackSavingId"
             :findings="reviewFindings"
-            :loaded="findingsLoaded"
+            :loaded="findingsLoaded || isArchivedTask"
             :loading="findingsLoading"
             :current-page="findingsPage"
             :page-size="DETAIL_SECTION_PAGE_SIZE"
@@ -128,8 +138,9 @@
           />
 
           <ReviewDetailGithubCommentsCard
-            :can-manage="canManage"
-            :can-load-github-comments="isTerminalTask"
+            :can-manage="canManageHotTask"
+            :archived="isArchivedTask"
+            :can-load-github-comments="isTerminalTask && !isArchivedTask"
             :can-publish-github-comments="canPublishGithubComments"
             :preview-loading="previewLoading"
             :history-loading="historyLoading"
@@ -168,10 +179,11 @@
           />
 
           <ReviewDetailFilesSection
+            :archived="isArchivedTask"
             :missing-tests="missingTests"
             :changed-files="changedFilesWithFindingCounts"
-            :missing-tests-loaded="missingTestsLoaded"
-            :changed-files-loaded="changedFilesLoaded"
+            :missing-tests-loaded="missingTestsLoaded || isArchivedTask"
+            :changed-files-loaded="changedFilesLoaded || isArchivedTask"
             :missing-tests-loading="missingTestsLoading"
             :changed-files-loading="changedFilesLoading"
             :missing-tests-page="missingTestsPage"
@@ -359,6 +371,7 @@ const {
 const canPublishGithubComments = computed(() =>
   Boolean(
     canManage.value
+      && !isArchivedTask.value
       && githubCommentPreview.value?.commentableCount
       && writebackCheck.value?.tokenConfigured !== false
       && isHumanReviewPublishAllowed.value
@@ -369,10 +382,28 @@ const emptyDescription = computed(() => (errorMessage.value ? "审查详情加�
 const isTerminalTask = computed(() => {
   return isTerminalReviewStatus(selectedTask.value?.status);
 });
+const isArchivedTask = computed(() => selectedTask.value?.archived === true);
+const canManageHotTask = computed(() => canManage.value && !isArchivedTask.value);
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
-const canRetryTask = computed(() => selectedTask.value?.status === "failed");
+const canRetryTask = computed(() => selectedTask.value?.status === "failed" && !isArchivedTask.value);
 const failureReason = computed(() => selectedTask.value?.failureReason ?? "");
 const failureSuggestion = computed(() => selectedTask.value?.failureSuggestion ?? "");
+const archiveNotice = computed(() => {
+  if (!selectedTask.value?.archived) {
+    return "";
+  }
+  const parts = ["该审查任务已归档，当前展示摘要、计数和归档索引信息"];
+  if (selectedTask.value.archivedAt) {
+    parts.push(`归档时间：${selectedTask.value.archivedAt}`);
+  }
+  if (selectedTask.value.archiveCleanupBatchId) {
+    parts.push(`清理批次：#${selectedTask.value.archiveCleanupBatchId}`);
+  }
+  if (selectedTask.value.archiveBackupReference) {
+    parts.push(`备份引用：${selectedTask.value.archiveBackupReference}`);
+  }
+  return parts.join("；");
+});
 const {
   changedFiles,
   changedFilesWithFindingCounts,
@@ -513,6 +544,12 @@ const loadFindingsPage = async (page: number) => {
   if (!selectedTask.value || findingsLoading.value) {
     return;
   }
+  if (isArchivedTask.value) {
+    selectedTask.value = { ...selectedTask.value, findings: [] };
+    findingsPage.value = page;
+    findingsLoaded.value = true;
+    return;
+  }
   const taskId = selectedTask.value.id;
   findingsLoading.value = true;
   try {
@@ -541,6 +578,12 @@ const loadChangedFilesPage = async (page: number) => {
   if (!selectedTask.value || changedFilesLoading.value) {
     return;
   }
+  if (isArchivedTask.value) {
+    selectedTask.value = { ...selectedTask.value, changedFiles: [] };
+    changedFilesPage.value = page;
+    changedFilesLoaded.value = true;
+    return;
+  }
   const taskId = selectedTask.value.id;
   changedFilesLoading.value = true;
   try {
@@ -567,6 +610,12 @@ const loadChangedFilesPage = async (page: number) => {
 
 const loadMissingTestsPage = async (page: number) => {
   if (!selectedTask.value || missingTestsLoading.value) {
+    return;
+  }
+  if (isArchivedTask.value) {
+    selectedTask.value = { ...selectedTask.value, missingTests: [] };
+    missingTestsPage.value = page;
+    missingTestsLoaded.value = true;
     return;
   }
   const taskId = selectedTask.value.id;
@@ -655,7 +704,7 @@ const openPrUrl = () => {
 
 const loadGithubCommentData = async () => {
   const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !isTerminalTask.value) {
+  if (!Number.isFinite(id) || !isTerminalTask.value || isArchivedTask.value) {
     return;
   }
   await Promise.all([

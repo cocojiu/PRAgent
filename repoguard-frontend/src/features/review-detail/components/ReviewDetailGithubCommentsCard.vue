@@ -25,6 +25,14 @@
       </el-button>
     </div>
     <el-alert
+      v-if="archived"
+      class="preview-alert"
+      type="info"
+      title="归档任务仅保留审查摘要，GitHub 评论预览和回写已关闭"
+      show-icon
+      :closable="false"
+    />
+    <el-alert
       v-if="humanReviewPublishBlockReason"
       class="preview-alert"
       type="warning"
@@ -258,6 +266,7 @@ import type {
 
 const props = defineProps<{
   canManage: boolean;
+  archived: boolean;
   canLoadGithubComments: boolean;
   canPublishGithubComments: boolean;
   previewLoading: boolean;

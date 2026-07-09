@@ -4,7 +4,10 @@
       <h2>LLM Findings</h2>
       <span class="count-badge">{{ total }} 条</span>
     </div>
-    <div v-if="!loaded && total > 0" class="lazy-section-actions">
+    <div v-if="archived && total > 0" class="archive-section-note">
+      历史明细已归档，当前保留 {{ total }} 条审查发现计数。
+    </div>
+    <div v-else-if="!loaded && total > 0" class="lazy-section-actions">
       <el-button type="primary" plain :loading="loading" @click="$emit('load')">
         <RefreshCw :size="16" />
         加载 Findings
@@ -129,6 +132,7 @@ import type { FindingFeedbackStatus, ReviewFinding, RiskLevel } from "@/types";
 
 const props = defineProps<{
   canManage: boolean;
+  archived: boolean;
   feedbackSavingId: number | null;
   findings: ReviewFinding[];
   loaded: boolean;

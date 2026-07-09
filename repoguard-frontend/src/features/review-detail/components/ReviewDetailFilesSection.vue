@@ -4,7 +4,10 @@
       <h2>缺失测试</h2>
       <span class="count-badge">{{ missingTestsTotal }} 条</span>
     </div>
-    <div v-if="!missingTestsLoaded && missingTestsTotal > 0" class="lazy-section-actions">
+    <div v-if="archived && missingTestsTotal > 0" class="archive-section-note">
+      历史缺失测试明细已归档，当前保留 {{ missingTestsTotal }} 条计数。
+    </div>
+    <div v-else-if="!missingTestsLoaded && missingTestsTotal > 0" class="lazy-section-actions">
       <el-button type="primary" plain :loading="missingTestsLoading" @click="$emit('missingTestsLoad')">
         <RefreshCw :size="16" />
         加载缺失测试
@@ -41,7 +44,10 @@
       <h2>变更文件</h2>
       <span class="count-badge">{{ changedFilesTotal }} 个</span>
     </div>
-    <div v-if="!changedFilesLoaded && changedFilesTotal > 0" class="lazy-section-actions">
+    <div v-if="archived && changedFilesTotal > 0" class="archive-section-note">
+      历史变更文件明细已归档，当前保留 {{ changedFilesTotal }} 个文件计数。
+    </div>
+    <div v-else-if="!changedFilesLoaded && changedFilesTotal > 0" class="lazy-section-actions">
       <el-button type="primary" plain :loading="changedFilesLoading" @click="$emit('changedFilesLoad')">
         <RefreshCw :size="16" />
         加载变更文件
@@ -105,6 +111,7 @@ import type { ChangedFile, MissingTest } from "@/types";
 type ChangedFileWithFindingCount = ChangedFile & { findingCount: number };
 
 const props = defineProps<{
+  archived: boolean;
   missingTests: MissingTest[];
   changedFiles: ChangedFileWithFindingCount[];
   missingTestsLoaded: boolean;

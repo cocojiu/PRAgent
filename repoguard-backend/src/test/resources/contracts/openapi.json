@@ -2722,6 +2722,15 @@
             "format" : "int64",
             "minimum" : 1
           }
+        }, {
+          "name" : "totalHint",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 0
+          }
         } ],
         "responses" : {
           "200" : {
@@ -5009,6 +5018,20 @@
           "totalCount" : {
             "type" : "integer",
             "format" : "int32"
+          },
+          "apiPath" : {
+            "type" : "string"
+          },
+          "apiTraceId" : {
+            "type" : "string"
+          },
+          "apiResponseBytes" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "apiDurationMs" : {
+            "type" : "integer",
+            "format" : "int64"
           }
         }
       },

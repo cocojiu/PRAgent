@@ -39,7 +39,11 @@ class ObservabilityThresholdConfigTest {
         "/api/v1/notification-events",
         "/api/v1/notification-events/{id}/retry",
         "/api/v1/notification-deliveries",
-        "/api/v1/notifications"
+        "/api/v1/notifications",
+        "/api/v1/config/data-retention/cleanup",
+        "/api/v1/config/data-retention/cleanup-audits",
+        "/api/v1/users",
+        "/api/v1/users/audits"
     );
 
     @Test

@@ -20,7 +20,7 @@ GET /api/v1/message-queue/health query=[] body=- bodyRequired=false
 GET /api/v1/notification-deliveries query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notification-events query=[page, pageSize, status, taskId] body=- bodyRequired=false
 GET /api/v1/notifications query=[] body=- bodyRequired=false
-GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursorCreatedAt, cursorId] body=- bodyRequired=false
+GET /api/v1/reviews query=[page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, cursorCreatedAt, cursorId, totalHint] body=- bodyRequired=false
 GET /api/v1/reviews/github/pull-requests query=[] body=- bodyRequired=false
 GET /api/v1/reviews/repositories query=[] body=- bodyRequired=false
 GET /api/v1/reviews/{id} query=[] body=- bodyRequired=false

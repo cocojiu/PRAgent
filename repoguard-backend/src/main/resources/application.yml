@@ -106,6 +106,10 @@ repoguard:
         "[/api/v1/notification-events/{id}/retry]": ${REPOGUARD_OBSERVABILITY_NOTIFICATION_EVENT_RETRY_API_DURATION_MS:1200}
         "[/api/v1/notification-deliveries]": ${REPOGUARD_OBSERVABILITY_NOTIFICATION_DELIVERIES_API_DURATION_MS:800}
         "[/api/v1/notifications]": ${REPOGUARD_OBSERVABILITY_NOTIFICATIONS_API_DURATION_MS:500}
+        "[/api/v1/config/data-retention/cleanup]": ${REPOGUARD_OBSERVABILITY_DATA_RETENTION_CLEANUP_API_DURATION_MS:1500}
+        "[/api/v1/config/data-retention/cleanup-audits]": ${REPOGUARD_OBSERVABILITY_DATA_RETENTION_CLEANUP_AUDITS_API_DURATION_MS:800}
+        "[/api/v1/users]": ${REPOGUARD_OBSERVABILITY_USERS_API_DURATION_MS:800}
+        "[/api/v1/users/audits]": ${REPOGUARD_OBSERVABILITY_USER_AUDITS_API_DURATION_MS:800}
       api-response-bytes-by-path:
         "[/api/v1/dashboard/overview]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_OVERVIEW_RESPONSE_BYTES:196608}
         "[/api/v1/dashboard/summary]": ${REPOGUARD_OBSERVABILITY_DASHBOARD_SUMMARY_RESPONSE_BYTES:8192}
@@ -130,6 +134,10 @@ repoguard:
         "[/api/v1/notification-events/{id}/retry]": ${REPOGUARD_OBSERVABILITY_NOTIFICATION_EVENT_RETRY_RESPONSE_BYTES:32768}
         "[/api/v1/notification-deliveries]": ${REPOGUARD_OBSERVABILITY_NOTIFICATION_DELIVERIES_RESPONSE_BYTES:65536}
         "[/api/v1/notifications]": ${REPOGUARD_OBSERVABILITY_NOTIFICATIONS_RESPONSE_BYTES:32768}
+        "[/api/v1/config/data-retention/cleanup]": ${REPOGUARD_OBSERVABILITY_DATA_RETENTION_CLEANUP_RESPONSE_BYTES:32768}
+        "[/api/v1/config/data-retention/cleanup-audits]": ${REPOGUARD_OBSERVABILITY_DATA_RETENTION_CLEANUP_AUDITS_RESPONSE_BYTES:65536}
+        "[/api/v1/users]": ${REPOGUARD_OBSERVABILITY_USERS_RESPONSE_BYTES:65536}
+        "[/api/v1/users/audits]": ${REPOGUARD_OBSERVABILITY_USER_AUDITS_RESPONSE_BYTES:65536}
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}

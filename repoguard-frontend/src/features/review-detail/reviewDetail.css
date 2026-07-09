@@ -134,6 +134,15 @@
   flex: 0 0 auto;
 }
 
+.archive-section-note {
+  padding: 12px 14px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  line-height: 1.6;
+}
+
 .detail-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
