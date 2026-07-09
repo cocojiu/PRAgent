@@ -20,6 +20,19 @@ class ReviewFindingMapperSqlContractTest {
     }
 
     @Test
+    void reviewRuleHitCountsKeepCategoryBoundedRuleAggregation() throws Exception {
+        String sql = sql("selectReviewRuleHitCounts");
+
+        assertThat(sql)
+            .contains("from review_finding")
+            .contains("where category = 'finding'")
+            .contains("rule_id is not null")
+            .contains("trim(rule_id) <> ''")
+            .contains("group by rule_id")
+            .doesNotContain("select distinct");
+    }
+
+    @Test
     void githubCommentPreviewQueriesKeepCommentableStatusBoundary() throws Exception {
         String statSql = sql("selectGithubCommentPreviewFindingStat", Long.class);
         String commentableSql = sql("selectGithubCommentPreviewCommentableFindings", Long.class, long.class, int.class);
