@@ -10,13 +10,13 @@ import org.junit.jupiter.api.Test;
 class ReviewFindingMapperSqlContractTest {
 
     @Test
-    void reviewRuleFeedbackStatNormalizesFeedbackStatusBeforeAggregation() throws Exception {
+    void reviewRuleFeedbackStatUsesNormalizedFeedbackStatusBeforeAggregation() throws Exception {
         String sql = sql("selectReviewRuleFeedbackStat");
 
         assertThat(sql)
             .contains("from review_finding")
             .contains("where category = 'finding'");
-        assertFeedbackStatusNormalization(sql);
+        assertFeedbackStatusNormColumn(sql);
     }
 
     @Test
@@ -30,9 +30,10 @@ class ReviewFindingMapperSqlContractTest {
             .contains("publication.task_id = finding.task_id")
             .contains("publication.finding_id = finding.id")
             .contains("publication.published_success = 1")
-            .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .contains("finding.feedback_status_norm in ('unreviewed', 'valid')")
             .doesNotContain("publication.success = 1")
             .doesNotContain("trim(publication.github_url)")
+            .doesNotContain("upper(coalesce(nullif(trim(finding.feedback_status)")
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
         assertThat(commentableSql)
             .contains("from review_finding finding")
@@ -40,9 +41,10 @@ class ReviewFindingMapperSqlContractTest {
             .contains("publication.task_id = finding.task_id")
             .contains("publication.finding_id = finding.id")
             .contains("publication.published_success = 1")
-            .contains("upper(coalesce(nullif(trim(finding.feedback_status), ''), 'unreviewed')) in ('unreviewed', 'valid')")
+            .contains("finding.feedback_status_norm in ('unreviewed', 'valid')")
             .doesNotContain("publication.success = 1")
             .doesNotContain("trim(publication.github_url)")
+            .doesNotContain("upper(coalesce(nullif(trim(finding.feedback_status)")
             .doesNotContain("upper(finding.feedback_status) in ('unreviewed', 'valid')");
     }
 
@@ -59,20 +61,22 @@ class ReviewFindingMapperSqlContractTest {
             .contains("publication.task_id = finding.task_id")
             .contains("publication.finding_id = finding.id")
             .contains("publication.published_success = 1")
+            .contains("finding.feedback_status_norm in ('unreviewed', 'valid')")
             .contains("order by finding.id asc")
             .doesNotContain("publication.success = 1")
-            .doesNotContain("trim(publication.github_url)");
+            .doesNotContain("trim(publication.github_url)")
+            .doesNotContain("upper(coalesce(nullif(trim(finding.feedback_status)");
     }
 
     @Test
-    void findingSeverityCountsNormalizeSeverityBeforeAggregation() throws Exception {
+    void findingSeverityCountsUseNormalizedSeverityBeforeAggregation() throws Exception {
         String sql = sql("selectFindingSeverityCounts", Long.class);
 
         assertThat(sql)
             .contains("from review_finding")
             .contains("where task_id = #{taskid}")
             .contains("category = 'finding'");
-        assertSeverityNormalization(sql);
+        assertSeverityNormColumn(sql);
     }
 
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {
@@ -86,20 +90,22 @@ class ReviewFindingMapperSqlContractTest {
         return sql.replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
-    private void assertFeedbackStatusNormalization(String sql) {
+    private void assertFeedbackStatusNormColumn(String sql) {
         assertThat(sql)
-            .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) = 'valid'")
-            .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) = 'false_positive'")
-            .contains("upper(coalesce(nullif(trim(feedback_status), ''), 'unreviewed')) <> 'unreviewed'");
+            .contains("feedback_status_norm = 'valid'")
+            .contains("feedback_status_norm = 'false_positive'")
+            .contains("feedback_status_norm <> 'unreviewed'")
+            .doesNotContain("upper(coalesce(nullif(trim(feedback_status)");
     }
 
-    private void assertSeverityNormalization(String sql) {
+    private void assertSeverityNormColumn(String sql) {
         assertThat(sql)
-            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'critical'")
-            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'high'")
-            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'medium'")
-            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) = 'low'")
-            .contains("lower(coalesce(nullif(trim(severity), ''), 'info')) not in ('critical', 'high', 'medium', 'low')")
+            .contains("severity_norm = 'critical'")
+            .contains("severity_norm = 'high'")
+            .contains("severity_norm = 'medium'")
+            .contains("severity_norm = 'low'")
+            .contains("severity_norm not in ('critical', 'high', 'medium', 'low')")
+            .doesNotContain("lower(coalesce(nullif(trim(severity)")
             .doesNotContain("lower(severity)");
     }
 }

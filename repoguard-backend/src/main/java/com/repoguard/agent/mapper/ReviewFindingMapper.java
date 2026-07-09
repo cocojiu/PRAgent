@@ -26,13 +26,13 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         select
             count(*) as totalHits,
             sum(case
-                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) = 'VALID'
+                when feedback_status_norm = 'VALID'
                 then 1 else 0 end) as validCount,
             sum(case
-                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) = 'FALSE_POSITIVE'
+                when feedback_status_norm = 'FALSE_POSITIVE'
                 then 1 else 0 end) as falsePositiveCount,
             sum(case
-                when upper(coalesce(nullif(trim(feedback_status), ''), 'UNREVIEWED')) <> 'UNREVIEWED'
+                when feedback_status_norm <> 'UNREVIEWED'
                 then 1 else 0 end) as reviewedCount
         from review_finding
         where category = 'FINDING'
@@ -42,19 +42,19 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
     @Select("""
         select
             sum(case
-                when lower(coalesce(nullif(trim(severity), ''), 'info')) = 'critical'
+                when severity_norm = 'critical'
                 then 1 else 0 end) as critical,
             sum(case
-                when lower(coalesce(nullif(trim(severity), ''), 'info')) = 'high'
+                when severity_norm = 'high'
                 then 1 else 0 end) as high,
             sum(case
-                when lower(coalesce(nullif(trim(severity), ''), 'info')) = 'medium'
+                when severity_norm = 'medium'
                 then 1 else 0 end) as medium,
             sum(case
-                when lower(coalesce(nullif(trim(severity), ''), 'info')) = 'low'
+                when severity_norm = 'low'
                 then 1 else 0 end) as low,
             sum(case
-                when lower(coalesce(nullif(trim(severity), ''), 'info')) not in ('critical', 'high', 'medium', 'low')
+                when severity_norm not in ('critical', 'high', 'medium', 'low')
                 then 1 else 0 end) as info
         from review_finding
         where task_id = #{taskId}
@@ -84,8 +84,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                       and publication.published_success = 1
                 )
                 and (
-                    upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
-                        in ('UNREVIEWED', 'VALID')
+                    finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
                 )
                 then 1 else 0 end
             ) as commentableFindings
@@ -122,8 +121,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and publication.published_success = 1
           )
           and (
-              upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
-                  in ('UNREVIEWED', 'VALID')
+              finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
           )
         order by finding.id asc
         limit #{limit} offset #{offset}
@@ -148,8 +146,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and publication.published_success = 1
           )
           and (
-              upper(coalesce(nullif(trim(finding.feedback_status), ''), 'UNREVIEWED'))
-                  in ('UNREVIEWED', 'VALID')
+              finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
           )
         order by finding.id asc
         limit #{limit}
