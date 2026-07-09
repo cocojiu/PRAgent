@@ -10,18 +10,18 @@ import org.junit.jupiter.api.Test;
 class ReviewTaskMapperSqlContractTest {
 
     @Test
-    void messageQueueHealthSummaryNormalizesStatusBeforeAggregation() throws Exception {
+    void messageQueueHealthSummaryUsesNormalizedStatusBeforeAggregation() throws Exception {
         String sql = sql("selectMessageQueueHealthSummary");
 
         assertThat(sql)
             .contains("from review_task")
             .contains("count(*) as total")
             .contains("publish_claimed_at is not null");
-        assertMqStatusNormalization(sql);
+        assertMqStatusNormColumn(sql);
     }
 
     @Test
-    void messageQueueExceptionTaskQueryNormalizesStatusBeforeFiltering() throws Exception {
+    void messageQueueExceptionTaskQueryUsesNormalizedStatusBeforeFiltering() throws Exception {
         String sql = sql("selectMessageQueueExceptionTasks");
 
         assertThat(sql)
@@ -29,7 +29,8 @@ class ReviewTaskMapperSqlContractTest {
             .contains("from review_task")
             .contains("order by created_at desc")
             .contains("limit 20")
-            .contains("upper(coalesce(nullif(trim(status), ''), 'unknown')) in ('publish_failed', 'execution_timeout', 'requeue_pending', 'dlq')");
+            .contains("status_norm in ('publish_failed', 'execution_timeout', 'requeue_pending', 'dlq')")
+            .doesNotContain("upper(coalesce(nullif(trim(status)");
     }
 
     private String sql(String methodName, Class<?>... parameterTypes) throws NoSuchMethodException {
@@ -43,12 +44,13 @@ class ReviewTaskMapperSqlContractTest {
         return sql.replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 
-    private void assertMqStatusNormalization(String sql) {
+    private void assertMqStatusNormColumn(String sql) {
         assertThat(sql)
-            .contains("upper(coalesce(nullif(trim(status), ''), 'unknown')) = 'publish_failed'")
-            .contains("upper(coalesce(nullif(trim(status), ''), 'unknown')) = 'execution_timeout'")
-            .contains("upper(coalesce(nullif(trim(status), ''), 'unknown')) = 'requeue_pending'")
-            .contains("upper(coalesce(nullif(trim(status), ''), 'unknown')) = 'dlq'")
+            .contains("status_norm = 'publish_failed'")
+            .contains("status_norm = 'execution_timeout'")
+            .contains("status_norm = 'requeue_pending'")
+            .contains("status_norm = 'dlq'")
+            .doesNotContain("upper(coalesce(nullif(trim(status)")
             .doesNotContain("status = 'publish_failed'")
             .doesNotContain("status in ('publish_failed'");
     }

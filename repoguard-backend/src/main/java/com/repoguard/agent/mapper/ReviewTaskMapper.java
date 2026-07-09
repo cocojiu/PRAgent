@@ -30,17 +30,17 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         select
             count(*) as total,
             sum(case
-                when upper(coalesce(nullif(trim(status), ''), 'UNKNOWN')) = 'PUBLISH_FAILED'
+                when status_norm = 'PUBLISH_FAILED'
                 then 1 else 0 end) as publishFailed,
             sum(case
-                when upper(coalesce(nullif(trim(status), ''), 'UNKNOWN')) = 'EXECUTION_TIMEOUT'
+                when status_norm = 'EXECUTION_TIMEOUT'
                 then 1 else 0 end) as executionTimeout,
             sum(case
-                when upper(coalesce(nullif(trim(status), ''), 'UNKNOWN')) = 'REQUEUE_PENDING'
+                when status_norm = 'REQUEUE_PENDING'
                 then 1 else 0 end) as requeuePending,
             sum(case when publish_claimed_at is not null then 1 else 0 end) as claimed,
             sum(case
-                when upper(coalesce(nullif(trim(status), ''), 'UNKNOWN')) = 'DLQ'
+                when status_norm = 'DLQ'
                 then 1 else 0 end) as dlqBacklog,
             max(case
                 when last_publish_error is not null and last_publish_error <> ''
@@ -63,8 +63,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
     @Select("""
         select *
         from review_task
-        where upper(coalesce(nullif(trim(status), ''), 'UNKNOWN'))
-            in ('PUBLISH_FAILED', 'EXECUTION_TIMEOUT', 'REQUEUE_PENDING', 'DLQ')
+        where status_norm in ('PUBLISH_FAILED', 'EXECUTION_TIMEOUT', 'REQUEUE_PENDING', 'DLQ')
         order by created_at desc
         limit 20
         """)
