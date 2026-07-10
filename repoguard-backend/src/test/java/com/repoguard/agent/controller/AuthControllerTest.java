@@ -360,6 +360,19 @@ class AuthControllerTest {
     }
 
     @Test
+    void logoutWithUnsupportedContentTypeReturns415() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .content("refreshToken=ignored")
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isUnsupportedMediaType())
+            .andExpect(jsonPath("$.success").value(false))
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
+            .andExpect(jsonPath("$.message").value("Content type is not supported"));
+    }
+
+    @Test
     void logoutWithCookieTokenRequiresCsrfHeader() throws Exception {
         mockMvc.perform(post("/api/v1/auth/logout")
                 .cookie(refreshCookie(), csrfCookie()))
