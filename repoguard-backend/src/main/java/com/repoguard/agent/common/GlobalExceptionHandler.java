@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -17,6 +18,7 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     private static final String VALIDATION_ERROR_MESSAGE = "Request validation failed";
+    private static final String UNSUPPORTED_MEDIA_TYPE_MESSAGE = "Content type is not supported";
     private static final String INTERNAL_ERROR_MESSAGE = "系统内部异常，请联系管理员。";
 
     @ExceptionHandler(BusinessException.class)
@@ -40,6 +42,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleValidationException(Exception exception) {
         return ResponseEntity.badRequest()
             .body(ApiResponse.error(ErrorCode.BAD_REQUEST, VALIDATION_ERROR_MESSAGE));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnsupportedMediaType(HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
+            .body(ApiResponse.error(ErrorCode.BAD_REQUEST, UNSUPPORTED_MEDIA_TYPE_MESSAGE));
     }
 
     @ExceptionHandler(Exception.class)
