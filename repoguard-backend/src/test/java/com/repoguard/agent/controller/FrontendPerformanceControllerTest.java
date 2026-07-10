@@ -1,7 +1,9 @@
 package com.repoguard.agent.controller;
 
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -63,5 +65,28 @@ class FrontendPerformanceControllerTest {
                 && request.longTasks().getFirst().itemCount() == 20
                 && request.longTasks().getFirst().totalCount() == 300
         ));
+    }
+
+    @Test
+    void recordPerformanceRejectsInvalidObservationBatchBeforeService() throws Exception {
+        mockMvc.perform(post("/api/v1/observability/frontend/performance")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "route": "overview",
+                      "apiRequests": [
+                        {
+                          "operation": "fetchDashboardSummary",
+                          "path": "/api/v1/dashboard/summary",
+                          "method": "TRACE",
+                          "status": 700,
+                          "durationMs": -1
+                        }
+                      ]
+                    }
+                    """))
+            .andExpect(status().isBadRequest());
+
+        verify(service, never()).record(any());
     }
 }

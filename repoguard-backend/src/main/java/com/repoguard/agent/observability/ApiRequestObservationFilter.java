@@ -13,7 +13,6 @@ import java.io.Writer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.util.StringUtils;
@@ -23,14 +22,18 @@ import org.springframework.web.servlet.HandlerMapping;
 public class ApiRequestObservationFilter extends OncePerRequestFilter {
 
     private static final String API_PREFIX = "/api/v1";
-    private static final String UNKNOWN_PATH = "/api/v1/unknown";
-
     private final RepoGuardMetrics metrics;
     private final ObservabilityThresholdMonitor thresholdMonitor;
+    private final ObservationPathNormalizer pathNormalizer;
 
-    public ApiRequestObservationFilter(RepoGuardMetrics metrics, ObservabilityThresholdMonitor thresholdMonitor) {
+    public ApiRequestObservationFilter(
+        RepoGuardMetrics metrics,
+        ObservabilityThresholdMonitor thresholdMonitor,
+        ObservationPathNormalizer pathNormalizer
+    ) {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
+        this.pathNormalizer = Objects.requireNonNull(pathNormalizer, "pathNormalizer");
     }
 
     @Override
@@ -76,7 +79,7 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
         if (bestMatchingPattern instanceof String pattern && StringUtils.hasText(pattern)) {
             return pattern;
         }
-        return normalizeDynamicPath(apiPath(request));
+        return pathNormalizer.normalizeApiPath(apiPath(request));
     }
 
     private String apiPath(HttpServletRequest request) {
@@ -89,35 +92,6 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
             return requestUri.substring(contextPath.length());
         }
         return requestUri;
-    }
-
-    private String normalizeDynamicPath(String path) {
-        if (!StringUtils.hasText(path)) {
-            return UNKNOWN_PATH;
-        }
-        String[] segments = path.split("/");
-        StringBuilder normalized = new StringBuilder();
-        for (String segment : segments) {
-            if (!StringUtils.hasText(segment)) {
-                continue;
-            }
-            normalized.append('/').append(normalizeSegment(segment));
-        }
-        return normalized.isEmpty() ? UNKNOWN_PATH : normalized.toString();
-    }
-
-    private String normalizeSegment(String segment) {
-        String value = segment.trim();
-        if (value.matches("\\d+")) {
-            return "{id}";
-        }
-        if (value.matches("(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")) {
-            return "{uuid}";
-        }
-        if (value.matches("(?i)[0-9a-f]{32,64}")) {
-            return "{hash}";
-        }
-        return value.toLowerCase(Locale.ROOT);
     }
 
     private int effectiveStatus(int status, Throwable failure) {

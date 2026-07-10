@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
+import com.repoguard.agent.observability.ObservationPathNormalizer;
 import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
 import java.time.Duration;
@@ -28,14 +29,17 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
 
     private final FrontendPerformanceMetricsRecorder metricsRecorder;
     private final ObservabilityThresholdMonitor thresholdMonitor;
+    private final ObservationPathNormalizer pathNormalizer;
 
     @Autowired
     public FrontendPerformanceObservationServiceImpl(
         FrontendPerformanceMetricsRecorder metricsRecorder,
-        ObservabilityThresholdMonitor thresholdMonitor
+        ObservabilityThresholdMonitor thresholdMonitor,
+        ObservationPathNormalizer pathNormalizer
     ) {
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
+        this.pathNormalizer = Objects.requireNonNull(pathNormalizer, "pathNormalizer");
     }
 
     @Override
@@ -46,16 +50,17 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
 
         apiRequests.forEach(item -> {
             Duration duration = duration(item.durationMs());
+            String normalizedPath = pathNormalizer.normalizeFrontendPath(item.path());
             metricsRecorder.recordApiWaterfallRequest(
                 duration,
                 route,
                 item.operation(),
-                item.path(),
+                normalizedPath,
                 item.method(),
                 status(item.status()),
                 item.result()
             );
-            thresholdMonitor.frontendApiRequest(duration, route, item.operation(), item.path());
+            thresholdMonitor.frontendApiRequest(duration, route, item.operation(), normalizedPath);
         });
         longTasks.forEach(item -> {
             Duration duration = duration(item.durationMs());
@@ -84,7 +89,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
             .limit(MAX_WATERFALL_LOG_ITEMS)
             .map(item -> safeText(item.operation())
                 + "@"
-                + safeText(item.path())
+                + pathNormalizer.normalizeFrontendPath(item.path())
                 + ":"
                 + safeMillis(item.durationMs())
                 + "ms"
@@ -108,7 +113,7 @@ public class FrontendPerformanceObservationServiceImpl implements FrontendPerfor
                 + "/"
                 + safeCount(item.totalCount())
                 + ":api="
-                + safeText(item.apiPath())
+                + pathNormalizer.normalizeFrontendPath(item.apiPath())
                 + ":"
                 + safeMillis(item.apiDurationMs())
                 + "ms"

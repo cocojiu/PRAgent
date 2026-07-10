@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.repoguard.agent.dto.FrontendApiWaterfallItemDto;
 import com.repoguard.agent.dto.FrontendLongTaskItemDto;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
+import com.repoguard.agent.observability.ObservationPathNormalizer;
 import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
 import com.repoguard.agent.observability.ObservabilityThresholdProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -22,21 +23,33 @@ class FrontendPerformanceObservationServiceImplTest {
         new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
     );
     private final FrontendPerformanceMetricsRecorder metricsRecorder = new FrontendPerformanceMetricsRecorder(metrics);
+    private final ObservationPathNormalizer pathNormalizer = new ObservationPathNormalizer();
     private final FrontendPerformanceObservationServiceImpl service =
-        new FrontendPerformanceObservationServiceImpl(metricsRecorder, thresholdMonitor(metrics));
+        new FrontendPerformanceObservationServiceImpl(metricsRecorder, thresholdMonitor(metrics), pathNormalizer);
 
     @Test
     void constructorRejectsMissingMetricsRecorder() {
-        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(null, thresholdMonitor(metrics)))
+        assertThatThrownBy(() ->
+            new FrontendPerformanceObservationServiceImpl(null, thresholdMonitor(metrics), pathNormalizer)
+        )
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metricsRecorder");
     }
 
     @Test
     void constructorRejectsMissingThresholdMonitor() {
-        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(metricsRecorder, null))
+        assertThatThrownBy(() -> new FrontendPerformanceObservationServiceImpl(metricsRecorder, null, pathNormalizer))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("thresholdMonitor");
+    }
+
+    @Test
+    void constructorRejectsMissingPathNormalizer() {
+        assertThatThrownBy(() ->
+            new FrontendPerformanceObservationServiceImpl(metricsRecorder, thresholdMonitor(metrics), null)
+        )
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("pathNormalizer");
     }
 
     @Test
@@ -107,7 +120,8 @@ class FrontendPerformanceObservationServiceImplTest {
         properties.setFrontendLongTaskMs(40);
         FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
             new FrontendPerformanceMetricsRecorder(metrics),
-            new ObservabilityThresholdMonitor(metrics, properties)
+            new ObservabilityThresholdMonitor(metrics, properties),
+            pathNormalizer
         );
 
         thresholdService.record(new FrontendPerformanceReportRequest(
@@ -139,6 +153,49 @@ class FrontendPerformanceObservationServiceImplTest {
     }
 
     @Test
+    void normalizesDynamicFrontendApiPathsBeforeRecordingMetricsAndThresholds() {
+        RepoGuardMetrics metrics = new RepoGuardMetrics(
+            meterRegistry,
+            new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
+        );
+        ObservabilityThresholdProperties properties = new ObservabilityThresholdProperties();
+        properties.setFrontendApiDurationMs(20);
+        FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
+            new FrontendPerformanceMetricsRecorder(metrics),
+            new ObservabilityThresholdMonitor(metrics, properties),
+            pathNormalizer
+        );
+
+        thresholdService.record(new FrontendPerformanceReportRequest(
+            "task-detail",
+            List.of(new FrontendApiWaterfallItemDto(
+                "fetchReviewFindings",
+                "//repoguard.example.com/api/v1/reviews/123/findings?severity=HIGH#request-42",
+                "GET",
+                200,
+                "success",
+                "trace-findings",
+                4096L,
+                12L,
+                48L
+            )),
+            List.of()
+        ));
+
+        assertThat(meterRegistry.find("repoguard.frontend.api.waterfall.request")
+            .tag("route", "task-detail")
+            .tag("operation", "fetchreviewfindings")
+            .tag("path", "/api/v1/reviews/id/findings")
+            .counter()
+            .count()).isEqualTo(1.0);
+        assertThat(meterRegistry.find("repoguard.observability.threshold.exceeded")
+            .tag("signal", "frontend_api_duration")
+            .tag("subject", "task-detail_fetchreviewfindings_api_v1_reviews_id_findings")
+            .counter()
+            .count()).isEqualTo(1.0);
+    }
+
+    @Test
     void appliesRouteSpecificFrontendPerformanceBudgets() {
         RepoGuardMetrics metrics = new RepoGuardMetrics(
             meterRegistry,
@@ -161,7 +218,8 @@ class FrontendPerformanceObservationServiceImplTest {
         ));
         FrontendPerformanceObservationServiceImpl thresholdService = new FrontendPerformanceObservationServiceImpl(
             new FrontendPerformanceMetricsRecorder(metrics),
-            new ObservabilityThresholdMonitor(metrics, properties)
+            new ObservabilityThresholdMonitor(metrics, properties),
+            pathNormalizer
         );
 
         recordSlowFrontendRoute(thresholdService, "overview", 1300L, 130L);

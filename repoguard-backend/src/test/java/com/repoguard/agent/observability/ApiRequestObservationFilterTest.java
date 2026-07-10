@@ -21,13 +21,25 @@ class ApiRequestObservationFilterTest {
         meterRegistry,
         new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
     );
-    private final ApiRequestObservationFilter filter = new ApiRequestObservationFilter(metrics, thresholdMonitor());
+    private final ObservationPathNormalizer pathNormalizer = new ObservationPathNormalizer();
+    private final ApiRequestObservationFilter filter = new ApiRequestObservationFilter(
+        metrics,
+        thresholdMonitor(),
+        pathNormalizer
+    );
 
     @Test
     void constructorRejectsMissingThresholdMonitor() {
-        assertThatThrownBy(() -> new ApiRequestObservationFilter(metrics, null))
+        assertThatThrownBy(() -> new ApiRequestObservationFilter(metrics, null, pathNormalizer))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("thresholdMonitor");
+    }
+
+    @Test
+    void constructorRejectsMissingPathNormalizer() {
+        assertThatThrownBy(() -> new ApiRequestObservationFilter(metrics, thresholdMonitor(), null))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("pathNormalizer");
     }
 
     @Test
@@ -132,7 +144,8 @@ class ApiRequestObservationFilterTest {
         properties.setApiResponseBytes(4);
         ApiRequestObservationFilter thresholdFilter = new ApiRequestObservationFilter(
             metrics,
-            new ObservabilityThresholdMonitor(metrics, properties)
+            new ObservabilityThresholdMonitor(metrics, properties),
+            pathNormalizer
         );
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews/521");
         request.setAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE, "/api/v1/reviews/{id}");
