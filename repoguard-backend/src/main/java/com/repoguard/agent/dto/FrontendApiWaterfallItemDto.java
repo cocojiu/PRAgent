@@ -19,7 +19,7 @@ public record FrontendApiWaterfallItemDto(
     @Max(599)
     Integer status,
 
-    @Size(max = 32)
+    @Pattern(regexp = "success|failed")
     String result,
 
     @Size(max = 128)

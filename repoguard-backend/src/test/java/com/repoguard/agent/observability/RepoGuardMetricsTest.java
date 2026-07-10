@@ -4,8 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
-import java.time.Duration;
+import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.CannotAcquireLockException;
 
@@ -310,6 +311,69 @@ class RepoGuardMetricsTest {
             "signal", "api_response_bytes",
             "subject", "_api_v1_reviews_id_"
         )).isEqualTo(1.0);
+    }
+
+    @Test
+    void capsClientControlledFrontendMetricDimensions() {
+        FrontendPerformanceMeterFilterConfig config = new FrontendPerformanceMeterFilterConfig();
+
+        SimpleMeterRegistry routeRegistry = filteredRegistry(config.frontendRouteCardinalityLimit());
+        RepoGuardMetrics routeMetrics = metrics(routeRegistry);
+        for (int index = 0; index <= FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_ROUTES; index++) {
+            routeMetrics.frontendLongTask(Duration.ofMillis(1), "route-" + index);
+        }
+        assertThat(routeRegistry.find("repoguard.frontend.long_task").counters())
+            .hasSize(FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_ROUTES);
+
+        SimpleMeterRegistry operationRegistry = filteredRegistry(config.frontendOperationCardinalityLimit());
+        RepoGuardMetrics operationMetrics = metrics(operationRegistry);
+        for (int index = 0; index <= FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_OPERATIONS; index++) {
+            operationMetrics.frontendApiWaterfallRequest(
+                Duration.ofMillis(1),
+                "overview",
+                "operation-" + index,
+                "/api/v1/dashboard/summary",
+                "GET",
+                "200",
+                "success"
+            );
+        }
+        assertThat(operationRegistry.find("repoguard.frontend.api.waterfall.request").counters())
+            .hasSize(FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_OPERATIONS);
+
+        SimpleMeterRegistry pathRegistry = filteredRegistry(config.frontendPathCardinalityLimit());
+        RepoGuardMetrics pathMetrics = metrics(pathRegistry);
+        for (int index = 0; index <= FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_PATHS; index++) {
+            pathMetrics.frontendApiWaterfallRequest(
+                Duration.ofMillis(1),
+                "overview",
+                "fetchDashboardSummary",
+                "/api/v1/path-" + index,
+                "GET",
+                "200",
+                "success"
+            );
+        }
+        assertThat(pathRegistry.find("repoguard.frontend.api.waterfall.request").counters())
+            .hasSize(FrontendPerformanceMeterFilterConfig.MAX_FRONTEND_PATHS);
+
+        SimpleMeterRegistry thresholdRegistry = filteredRegistry(config.thresholdSubjectCardinalityLimit());
+        RepoGuardMetrics thresholdMetrics = metrics(thresholdRegistry);
+        for (int index = 0; index <= FrontendPerformanceMeterFilterConfig.MAX_THRESHOLD_SUBJECTS; index++) {
+            thresholdMetrics.observabilityThresholdExceeded("frontend_api_duration", "subject-" + index);
+        }
+        assertThat(thresholdRegistry.find("repoguard.observability.threshold.exceeded").counters())
+            .hasSize(FrontendPerformanceMeterFilterConfig.MAX_THRESHOLD_SUBJECTS);
+    }
+
+    private SimpleMeterRegistry filteredRegistry(MeterFilter filter) {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        registry.config().meterFilter(filter);
+        return registry;
+    }
+
+    private RepoGuardMetrics metrics(SimpleMeterRegistry registry) {
+        return new RepoGuardMetrics(registry, new ReviewExecutionFailureClassifier());
     }
 
     private double counter(String name, String... tags) {

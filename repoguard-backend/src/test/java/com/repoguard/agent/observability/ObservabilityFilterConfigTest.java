@@ -18,7 +18,8 @@ class ObservabilityFilterConfigTest {
         var apiRegistration = new ApiRequestObservationFilterConfig()
             .apiRequestObservationFilterRegistration(
                 metrics,
-                new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties())
+                new ObservabilityThresholdMonitor(metrics, new ObservabilityThresholdProperties()),
+                new ObservationPathNormalizer()
             );
 
         assertThat(traceRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);

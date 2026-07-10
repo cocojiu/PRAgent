@@ -4961,35 +4961,48 @@
         "x-java-type" : "FrontendApiWaterfallItemDto",
         "properties" : {
           "operation" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 80
           },
           "path" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 512
           },
           "method" : {
-            "type" : "string"
+            "type" : "string",
+            "pattern" : "GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS"
           },
           "status" : {
             "type" : "integer",
-            "format" : "int32"
+            "format" : "int32",
+            "minimum" : 100,
+            "maximum" : 599
           },
           "result" : {
-            "type" : "string"
+            "type" : "string",
+            "pattern" : "success|failed"
           },
           "traceId" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 128
           },
           "responseBytes" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 104857600
           },
           "startedAtMs" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 86400000
           },
           "durationMs" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 86400000
           }
         }
       },
@@ -4999,39 +5012,55 @@
         "properties" : {
           "startedAtMs" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 86400000
           },
           "durationMs" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 86400000
           },
           "region" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 80
           },
           "operation" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 80
           },
           "itemCount" : {
             "type" : "integer",
-            "format" : "int32"
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 1000000
           },
           "totalCount" : {
             "type" : "integer",
-            "format" : "int32"
+            "format" : "int32",
+            "minimum" : 0,
+            "maximum" : 1000000
           },
           "apiPath" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 512
           },
           "apiTraceId" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 128
           },
           "apiResponseBytes" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 104857600
           },
           "apiDurationMs" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "minimum" : 0,
+            "maximum" : 86400000
           }
         }
       },
@@ -5040,19 +5069,24 @@
         "x-java-type" : "FrontendPerformanceReportRequest",
         "properties" : {
           "route" : {
-            "type" : "string"
+            "type" : "string",
+            "maxLength" : 80
           },
           "apiRequests" : {
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/FrontendApiWaterfallItemDto"
-            }
+            },
+            "maxItems" : 50,
+            "x-valid" : true
           },
           "longTasks" : {
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/FrontendLongTaskItemDto"
-            }
+            },
+            "maxItems" : 50,
+            "x-valid" : true
           }
         }
       },
