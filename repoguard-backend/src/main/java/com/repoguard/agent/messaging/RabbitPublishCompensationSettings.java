@@ -21,10 +21,11 @@ public class RabbitPublishCompensationSettings {
     }
 
     public RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
+        LocalDateTime databaseClaimedAt = claimedAt.withNano(0);
         return new RabbitPublishClaim(
-            claimedAt,
+            databaseClaimedAt,
             instanceId,
-            expiredBefore(claimedAt),
+            expiredBefore(databaseClaimedAt),
             maxAttempts()
         );
     }

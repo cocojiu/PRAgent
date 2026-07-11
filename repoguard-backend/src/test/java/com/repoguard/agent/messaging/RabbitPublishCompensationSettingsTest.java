@@ -66,4 +66,17 @@ class RabbitPublishCompensationSettingsTest {
         assertThat(claim.expiredBefore()).isEqualTo(claimedAt.minusMinutes(2));
         assertThat(claim.maxAttempts()).isEqualTo(7);
     }
+
+    @Test
+    void claimUsesMySqlDateTimePrecisionForCompareAndSetUpdates() {
+        properties.setPublishCompensationLeaseMs(120000);
+        RabbitPublishCompensationSettings settings =
+            new RabbitPublishCompensationSettingsFactory(compensationPolicy).create(properties);
+        LocalDateTime claimedAt = LocalDateTime.of(2026, 7, 11, 8, 28, 23, 176_290_599);
+
+        RabbitPublishClaim claim = settings.claim(claimedAt, "node-a");
+
+        assertThat(claim.claimedAt()).isEqualTo(LocalDateTime.of(2026, 7, 11, 8, 28, 23));
+        assertThat(claim.expiredBefore()).isEqualTo(LocalDateTime.of(2026, 7, 11, 8, 26, 23));
+    }
 }
