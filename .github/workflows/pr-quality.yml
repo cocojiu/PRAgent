@@ -96,6 +96,7 @@ jobs:
       REPOGUARD_SECURITY_ENCRYPTION_KEY: Integration-Key-2026!abc123XYZ-secure
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: integration-001
       REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
+      REPOGUARD_ADMIN_API_KEY: Integration-Admin-Key-2026!abc123XYZ
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
