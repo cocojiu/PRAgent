@@ -16,7 +16,9 @@ LABEL org.opencontainers.image.version="${OCI_VERSION}" \
 
 WORKDIR /app
 
-RUN addgroup -S repoguard && adduser -S -G repoguard repoguard
+RUN apk upgrade --no-cache libexpat p11-kit p11-kit-trust \
+    && addgroup -S repoguard \
+    && adduser -S -G repoguard repoguard
 
 COPY --from=layers /app/extracted/BOOT-INF/lib/ ./BOOT-INF/lib/
 COPY --from=layers /app/extracted/org/ ./org/
