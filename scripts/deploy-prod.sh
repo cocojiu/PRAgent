@@ -35,6 +35,37 @@ read_env_value() {
   sed -n "s/^${key}=//p" "$ENV_FILE" | tail -n 1
 }
 
+validate_production_data_routing() {
+  compose_environment="$(compose config --environment)"
+  routing_keys="
+APP_MYSQL_DATABASE
+APP_RABBITMQ_VIRTUAL_HOST
+RABBITMQ_DEFAULT_VHOST
+REPOGUARD_REVIEW_EXCHANGE
+REPOGUARD_REVIEW_QUEUE
+REPOGUARD_REVIEW_ROUTING_KEY
+REPOGUARD_REVIEW_DLX
+REPOGUARD_REVIEW_DLQ
+REPOGUARD_REVIEW_DLQ_ROUTING_KEY
+REPOGUARD_NOTIFICATION_EXCHANGE
+REPOGUARD_NOTIFICATION_QUEUE
+REPOGUARD_NOTIFICATION_ROUTING_KEY
+REPOGUARD_NOTIFICATION_DLX
+REPOGUARD_NOTIFICATION_DLQ
+REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY
+"
+
+  for key in $routing_keys; do
+    value="$(printf '%s\n' "$compose_environment" | sed -n "s/^${key}=//p" | tail -n 1)"
+    case "$value" in
+      *_test|*-test|*.test.*)
+        echo "Refusing production deployment: $key resolves to test routing." >&2
+        return 1
+        ;;
+    esac
+  done
+}
+
 if [ -z "$LEGACY_COMPOSE_FILE" ]; then
   LEGACY_COMPOSE_FILE="$(read_env_value LEGACY_COMPOSE_FILE)"
 fi
@@ -142,6 +173,7 @@ echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
+validate_production_data_routing
 compose pull backend frontend caddy
 
 if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
