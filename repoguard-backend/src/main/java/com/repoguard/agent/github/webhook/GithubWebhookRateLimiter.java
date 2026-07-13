@@ -6,6 +6,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,6 +21,7 @@ public class GithubWebhookRateLimiter {
     private final ConcurrentHashMap<String, Window> ipWindows = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Window> repositoryWindows = new ConcurrentHashMap<>();
 
+    @Autowired
     public GithubWebhookRateLimiter(GithubWebhookProperties properties, MeterRegistry meterRegistry) {
         this(properties, meterRegistry, Clock.systemUTC());
     }
