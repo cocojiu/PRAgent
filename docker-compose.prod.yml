@@ -27,8 +27,10 @@ services:
   rabbitmq:
     image: rabbitmq:3.13
     container_name: repoguard-rabbitmq
+    hostname: repoguard-rabbitmq
     restart: unless-stopped
     environment:
+      RABBITMQ_NODENAME: rabbit@repoguard-rabbitmq
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-repoguard}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/repoguard}
