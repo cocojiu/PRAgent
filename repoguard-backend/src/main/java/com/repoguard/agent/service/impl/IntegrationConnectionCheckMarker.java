@@ -16,20 +16,24 @@ class IntegrationConnectionCheckMarker {
     }
 
     void markChecked(IntegrationConfig config, String error) {
-        if (config == null || config.getId() == null) {
+        if (config == null || config.getId() == null || config.getUpdatedAt() == null) {
             return;
         }
-        config.setLastCheckedAt(LocalDateTime.now());
+        LocalDateTime expectedUpdatedAt = config.getUpdatedAt();
+        LocalDateTime checkedAt = LocalDateTime.now();
+        integrationConfigMapper.update(
+            null,
+                new UpdateWrapper<IntegrationConfig>()
+                .eq("id", config.getId())
+                .eq("updated_at", expectedUpdatedAt)
+                .set("last_checked_at", checkedAt)
+                .set("last_error", error)
+                .set("status", error == null ? "CONFIGURED" : "FAILED")
+                .set("updated_at", checkedAt)
+        );
+        config.setLastCheckedAt(checkedAt);
         config.setLastError(error);
         config.setStatus(error == null ? "CONFIGURED" : "FAILED");
-        config.setUpdatedAt(LocalDateTime.now());
-        integrationConfigMapper.updateById(config);
-        if (error == null) {
-            integrationConfigMapper.update(
-                new UpdateWrapper<IntegrationConfig>()
-                    .eq("id", config.getId())
-                    .set("last_error", null)
-            );
-        }
+        config.setUpdatedAt(checkedAt);
     }
 }

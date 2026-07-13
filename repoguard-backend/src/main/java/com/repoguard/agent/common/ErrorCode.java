@@ -3,6 +3,8 @@ package com.repoguard.agent.common;
 public enum ErrorCode {
     OK("OK"),
     BAD_REQUEST("BAD_REQUEST"),
+    PAYLOAD_TOO_LARGE("PAYLOAD_TOO_LARGE"),
+    TOO_MANY_REQUESTS("TOO_MANY_REQUESTS"),
     UNAUTHORIZED("UNAUTHORIZED"),
     FORBIDDEN("FORBIDDEN"),
     TASK_NOT_FOUND("TASK_NOT_FOUND"),

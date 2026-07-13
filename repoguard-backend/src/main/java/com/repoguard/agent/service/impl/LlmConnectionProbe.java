@@ -4,6 +4,8 @@ import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.math.BigDecimal;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -31,6 +34,18 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
     private final LlmConnectionProbeResponseParser responseParser;
     private final SecretCryptoService secretCryptoService;
     private final ExternalHttpResponseReader responseReader;
+    private final OutboundEndpointPolicy endpointPolicy;
+
+    @Autowired
+    public LlmConnectionProbe(
+        RestClient.Builder restClientBuilder,
+        LlmConnectionProbeResponseParser responseParser,
+        SecretCryptoService secretCryptoService,
+        ExternalHttpResponseReader responseReader,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this(restClientBuilder, responseParser, secretCryptoService, responseReader, endpointPolicy, true);
+    }
 
     public LlmConnectionProbe(
         RestClient.Builder restClientBuilder,
@@ -38,10 +53,22 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
         SecretCryptoService secretCryptoService,
         ExternalHttpResponseReader responseReader
     ) {
+        this(restClientBuilder, responseParser, secretCryptoService, responseReader, null, true);
+    }
+
+    private LlmConnectionProbe(
+        RestClient.Builder restClientBuilder,
+        LlmConnectionProbeResponseParser responseParser,
+        SecretCryptoService secretCryptoService,
+        ExternalHttpResponseReader responseReader,
+        OutboundEndpointPolicy endpointPolicy,
+        boolean ignored
+    ) {
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.responseParser = Objects.requireNonNull(responseParser, "responseParser");
         this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
+        this.endpointPolicy = endpointPolicy;
     }
 
     @Override
@@ -58,6 +85,9 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
             String apiKey = secretCryptoService.decrypt(config.getApiKeyValue());
             if (!StringUtils.hasText(config.getBaseUrl()) || !StringUtils.hasText(apiKey) || !StringUtils.hasText(config.getModelName())) {
                 return new ConnectionProbeResult(false, "failed", "LLM base URL, model or API key is missing");
+            }
+            if (endpointPolicy != null) {
+                endpointPolicy.validate(OutboundEndpointType.LLM, config.getBaseUrl());
             }
             byte[] responseBytes = restClientBuilder
                 .clone()

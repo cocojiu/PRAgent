@@ -1,0 +1,117 @@
+name: Pull Request Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+      - PRAgent-test
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-unit:
+    name: Backend unit and contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run backend tests
+        working-directory: repoguard-backend
+        run: mvn -B test
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jacoco
+          path: repoguard-backend/target/site/jacoco
+          if-no-files-found: warn
+
+  frontend-quality:
+    name: Frontend typecheck lint test build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: repoguard-frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: repoguard-frontend
+        run: npm ci
+      - name: Run quality gate
+        working-directory: repoguard-frontend
+        run: npm run quality
+      - name: Build production bundle
+        working-directory: repoguard-frontend
+        run: npm run build
+
+  backend-integration:
+    name: Spring MySQL RabbitMQ integration
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
+        env:
+          MYSQL_ROOT_PASSWORD: integration-root
+          MYSQL_DATABASE: repoguard_integration
+          MYSQL_USER: repoguard
+          MYSQL_PASSWORD: integration-db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pintegration-root --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+      rabbitmq:
+        image: rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    env:
+      REPOGUARD_RUN_INTEGRATION_TESTS: 'true'
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: repoguard
+      SPRING_DATASOURCE_PASSWORD: integration-db
+      SPRING_RABBITMQ_HOST: 127.0.0.1
+      SPRING_RABBITMQ_PORT: '5672'
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      SPRING_RABBITMQ_VIRTUAL_HOST: /
+      REPOGUARD_SECURITY_ENCRYPTION_KEY: Integration-Key-2026!abc123XYZ-secure
+      REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: integration-001
+      REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Run production-like context tests
+        working-directory: repoguard-backend
+        run: mvn -B -Dtest=ProductionRuntimeContextIntegrationTest test
+
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

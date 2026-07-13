@@ -1,11 +1,14 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.Properties;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,10 +24,21 @@ public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> 
 
     private final DataSource dataSource;
     private final SecretCryptoService secretCryptoService;
+    private final OutboundEndpointPolicy endpointPolicy;
 
     public MysqlConnectionProbe(DataSource dataSource, SecretCryptoService secretCryptoService) {
+        this(dataSource, secretCryptoService, null);
+    }
+
+    @Autowired
+    public MysqlConnectionProbe(
+        DataSource dataSource,
+        SecretCryptoService secretCryptoService,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
         this.dataSource = dataSource;
         this.secretCryptoService = secretCryptoService;
+        this.endpointPolicy = endpointPolicy;
     }
 
     @Override
@@ -55,7 +69,7 @@ public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> 
 
     public ConnectionProbeResult configuredProbe(IntegrationConfig config) {
         try (Connection connection = DriverManager.getConnection(
-            config.getBaseUrl(),
+            validatedBaseUrl(config.getBaseUrl()),
             connectionProperties(config)
         )) {
             boolean valid = connection.isValid(2);
@@ -63,6 +77,13 @@ public class MysqlConnectionProbe implements ConnectionProbe<IntegrationConfig> 
         } catch (Exception ex) {
             return new ConnectionProbeResult(false, "failed", conciseError(ex));
         }
+    }
+
+    private String validatedBaseUrl(String baseUrl) {
+        if (endpointPolicy != null) {
+            endpointPolicy.validate(OutboundEndpointType.MYSQL, baseUrl);
+        }
+        return baseUrl;
     }
 
     Properties connectionProperties(IntegrationConfig config) {

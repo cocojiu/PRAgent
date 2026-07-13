@@ -10,6 +10,9 @@ import com.repoguard.agent.notification.NotificationBindingStatus;
 import com.repoguard.agent.notification.NotificationChannelAdapter;
 import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.notification.NotificationSendResult;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import java.time.LocalDateTime;
+import static org.mockito.ArgumentMatchers.any;
 import org.junit.jupiter.api.Test;
 
 class NotificationBindingConnectionTestServiceImplTest {
@@ -40,7 +43,7 @@ class NotificationBindingConnectionTestServiceImplTest {
         assertThat(binding.getLastError()).isEqualTo("timeout");
         assertThat(binding.getLastCheckedAt()).isNotNull();
         assertThat(binding.getUpdatedAt()).isNotNull();
-        verify(bindingMapper).updateById(binding);
+        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
     }
 
     @Test
@@ -57,7 +60,7 @@ class NotificationBindingConnectionTestServiceImplTest {
         assertThat(result.status()).isEqualTo("connected");
         assertThat(binding.getStatus()).isEqualTo(NotificationBindingStatus.CONNECTED.code());
         assertThat(binding.getLastError()).isNull();
-        verify(bindingMapper).updateById(binding);
+        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
     }
 
     @Test
@@ -78,6 +81,7 @@ class NotificationBindingConnectionTestServiceImplTest {
         binding.setId(1L);
         binding.setProvider("DINGTALK");
         binding.setStatus(NotificationBindingStatus.CONFIGURED.code());
+        binding.setUpdatedAt(LocalDateTime.parse("2026-07-13T12:00:00"));
         return binding;
     }
 }

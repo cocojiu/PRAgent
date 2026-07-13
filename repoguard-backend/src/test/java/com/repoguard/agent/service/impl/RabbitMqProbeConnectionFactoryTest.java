@@ -48,6 +48,18 @@ class RabbitMqProbeConnectionFactoryTest {
         assertThat(connectionFactory.getVirtualHost()).isEqualTo("/");
     }
 
+    @Test
+    void createEnablesTlsAndSecureDefaultPortForAmqps() {
+        IntegrationConfig config = rabbitConfig("amqps://mq.example.com/secure-vhost");
+
+        com.rabbitmq.client.ConnectionFactory connectionFactory = factory.create(config);
+
+        assertThat(connectionFactory.isSSL()).isTrue();
+        assertThat(connectionFactory.getPort()).isEqualTo(5671);
+        assertThat(connectionFactory.getHandshakeTimeout())
+            .isEqualTo(RabbitMqProbeConnectionFactory.HANDSHAKE_TIMEOUT_MILLIS);
+    }
+
     private IntegrationConfig rabbitConfig(String baseUrl) {
         IntegrationConfig config = new IntegrationConfig();
         config.setBaseUrl(baseUrl);

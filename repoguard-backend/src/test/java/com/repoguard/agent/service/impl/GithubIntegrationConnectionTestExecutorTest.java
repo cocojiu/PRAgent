@@ -68,7 +68,7 @@ class GithubIntegrationConnectionTestExecutorTest {
         assertThat(savedConfig.getStatus()).isEqualTo("FAILED");
         assertThat(savedConfig.getLastError()).isEqualTo("bad token");
         assertThat(savedConfig.getLastCheckedAt()).isNotNull();
-        verify(integrationConfigMapper).updateById(savedConfig);
+        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
     }
 
     @Test
@@ -85,6 +85,7 @@ class GithubIntegrationConnectionTestExecutorTest {
         config.setStatus("CONFIGURED");
         config.setBaseUrl("https://api.github.com");
         config.setTokenValue(secretCryptoService.encrypt(token));
+        config.setUpdatedAt(java.time.LocalDateTime.parse("2026-07-13T12:00:00"));
         return config;
     }
 

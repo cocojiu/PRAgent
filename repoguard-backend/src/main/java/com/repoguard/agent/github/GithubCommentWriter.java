@@ -6,6 +6,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -27,9 +29,22 @@ public class GithubCommentWriter {
     private final RestClient restClient;
     private final GithubIntegrationHealthReporter healthReporter;
     private final ExternalHttpJsonResponseReader jsonResponseReader;
+    private final OutboundEndpointPolicy endpointPolicy;
 
     @Autowired
     public GithubCommentWriter(
+        RestClient.Builder restClientBuilder,
+        GithubIntegrationHealthReporter healthReporter,
+        ExternalHttpJsonResponseReader jsonResponseReader,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
+        this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
+        this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
+        this.endpointPolicy = Objects.requireNonNull(endpointPolicy, "endpointPolicy");
+    }
+
+    GithubCommentWriter(
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter,
         ExternalHttpJsonResponseReader jsonResponseReader
@@ -37,6 +52,7 @@ public class GithubCommentWriter {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
         this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
+        this.endpointPolicy = null;
     }
 
     public List<GithubReviewCommentResult> publishPullRequestComments(
@@ -51,6 +67,9 @@ public class GithubCommentWriter {
         ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
         if (!StringUtils.hasText(settings.token())) {
             throw new IllegalStateException("GitHub token is not configured");
+        }
+        if (endpointPolicy != null) {
+            endpointPolicy.validate(OutboundEndpointType.GITHUB, baseUrl);
         }
 
         LocalDateTime startedAt = LocalDateTime.now();
@@ -197,7 +216,7 @@ public class GithubCommentWriter {
         GithubIntegrationSettings settings,
         ExternalCallResilience resilience
     ) {
-        if (StringUtils.hasText(task.getCommitSha()) && task.getCommitSha().trim().matches("[a-fA-F0-9]{40}")) {
+        if (StringUtils.hasText(task.getCommitSha()) && task.getCommitSha().trim().matches("[a-fA-F0-9]{40}|[a-fA-F0-9]{64}")) {
             return task.getCommitSha().trim();
         }
         String url = UriComponentsBuilder

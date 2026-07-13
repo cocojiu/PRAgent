@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 public class PasswordHashService {
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
+    private final String dummyPasswordHash = passwordEncoder.encode("repoguard-dummy-password-value");
 
     public String hash(String rawPassword) {
         return passwordEncoder.encode(rawPassword);
@@ -18,5 +19,11 @@ public class PasswordHashService {
             return false;
         }
         return passwordEncoder.matches(rawPassword, storedHash);
+    }
+
+    public boolean matchesOrDummy(String rawPassword, String storedHash) {
+        boolean validStoredHash = storedHash != null && storedHash.startsWith("$2");
+        boolean matches = passwordEncoder.matches(rawPassword == null ? "" : rawPassword, validStoredHash ? storedHash : dummyPasswordHash);
+        return validStoredHash && matches;
     }
 }

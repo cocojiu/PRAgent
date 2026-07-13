@@ -121,7 +121,7 @@ const reviewTask: ReviewTask = {
   title: "Keep review list light",
   repository: "repo-guard",
   organization: "codex",
-  commit: "abc123",
+  commit: "0123456789abcdef0123456789abcdef01234567",
   branch: "main",
   status: "completed",
   riskLevel: "low",

@@ -34,7 +34,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -145,24 +144,28 @@ class AuthServiceImplTest {
             .hasMessage("账号或密码错误");
 
         assertThat(user.getFailedLoginCount()).isEqualTo(1);
-        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper).recordFailedLogin(
+            Mockito.eq(1001L),
+            Mockito.eq(20),
+            any(LocalDateTime.class),
+            any(LocalDateTime.class)
+        );
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
-    void loginDoesNotRollBackFailureCounterWhenBusinessExceptionIsThrown() throws NoSuchMethodException {
-        Transactional transactional = AuthServiceImpl.class
+    void loginDoesNotOpenTransactionAroundPasswordVerification() throws NoSuchMethodException {
+        var transactional = AuthServiceImpl.class
             .getMethod("login", AuthLoginRequest.class)
-            .getAnnotation(Transactional.class);
+            .getAnnotation(org.springframework.transaction.annotation.Transactional.class);
 
-        assertThat(transactional).isNotNull();
-        assertThat(transactional.noRollbackFor()).contains(BusinessException.class);
+        assertThat(transactional).isNull();
     }
 
     @Test
-    void loginLocksAccountAfterFiveWrongPasswords() {
+    void loginLocksAccountAfterTwentyWrongPasswords() {
         UserAccount user = existingUser();
-        user.setFailedLoginCount(4);
+        user.setFailedLoginCount(19);
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
 
@@ -170,23 +173,28 @@ class AuthServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("账号或密码错误");
 
-        assertThat(user.getFailedLoginCount()).isEqualTo(5);
+        assertThat(user.getFailedLoginCount()).isEqualTo(20);
         assertThat(user.getLockedUntil()).isAfter(LocalDateTime.now());
-        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper).recordFailedLogin(
+            Mockito.eq(1001L),
+            Mockito.eq(20),
+            any(LocalDateTime.class),
+            any(LocalDateTime.class)
+        );
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
     void loginRejectsLockedAccountWithoutIssuingToken() {
         UserAccount user = existingUser();
-        user.setFailedLoginCount(5);
+        user.setFailedLoginCount(20);
         user.setLockedUntil(LocalDateTime.now().plusMinutes(10));
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Secure123", false)))
             .isInstanceOf(BusinessException.class)
-            .hasMessage("账号已暂时锁定，请 15 分钟后再试");
+            .hasMessage("账号或密码错误");
 
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
@@ -219,7 +227,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void loginAuditIgnoresSpoofedForwardedHeaders() {
+    void loginAuditUsesProxySuppliedRealIpInsteadOfForwardedChain() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
@@ -233,7 +241,7 @@ class AuthServiceImplTest {
 
         ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(auditCaptor.capture());
-        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("192.0.2.20");
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("10.0.0.7");
     }
 
     @Test

@@ -12,6 +12,8 @@ import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
@@ -65,6 +67,32 @@ class GithubPullRequestClientImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("resilience");
+    }
+
+    @Test
+    void commentWriterValidatesBaseUrlBeforePublishingWithToken() {
+        OutboundEndpointPolicy endpointPolicy = org.mockito.Mockito.mock(OutboundEndpointPolicy.class);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("rejected endpoint"))
+            .when(endpointPolicy)
+            .validate(OutboundEndpointType.GITHUB, "https://blocked.example");
+        GithubCommentWriter writer = new GithubCommentWriter(
+            RestClient.builder(),
+            healthReporter,
+            jsonResponseReader,
+            endpointPolicy
+        );
+
+        assertThatThrownBy(() -> writer.publishPullRequestComments(
+            githubSettings("https://blocked.example"),
+            "https://blocked.example",
+            "octocat",
+            "api",
+            reviewTask(),
+            List.of(new GithubReviewCommentDraft(10L, null, null, "summary", "pull_request")),
+            passthroughResilience()
+        ))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("rejected endpoint");
     }
 
     @Test

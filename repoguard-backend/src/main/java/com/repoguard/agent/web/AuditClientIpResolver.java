@@ -13,7 +13,8 @@ public final class AuditClientIpResolver {
         if (request == null) {
             return null;
         }
-        return truncate(request.getRemoteAddr(), MAX_CLIENT_IP_LENGTH);
+        String forwarded = request.getHeader("X-Real-IP");
+        return truncate(forwarded == null || forwarded.isBlank() ? request.getRemoteAddr() : forwarded, MAX_CLIENT_IP_LENGTH);
     }
 
     private static String truncate(String value, int maxLength) {

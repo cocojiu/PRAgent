@@ -8,6 +8,8 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
@@ -30,6 +32,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final LlmReviewPipeline reviewPipeline;
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
+    private final OutboundEndpointPolicy endpointPolicy;
 
     @Autowired
     public LlmPullRequestReviewer(
@@ -40,7 +43,36 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         LlmReviewPromptBuilder promptBuilder,
         LlmReviewPipeline reviewPipeline,
         ExternalHttpJsonResponseReader responseReader,
+        LlmChatCompletionResponseExtractor responseExtractor,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, endpointPolicy, true);
+    }
+
+    public LlmPullRequestReviewer(
+        ReviewPolicyProvider reviewPolicyProvider,
+        RestClient.Builder restClientBuilder,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmReviewPipeline reviewPipeline,
+        ExternalHttpJsonResponseReader responseReader,
         LlmChatCompletionResponseExtractor responseExtractor
+    ) {
+        this(reviewPolicyProvider, restClientBuilder, metrics, resilience, promptBuilder, reviewPipeline, responseReader, responseExtractor, null, true);
+    }
+
+    private LlmPullRequestReviewer(
+        ReviewPolicyProvider reviewPolicyProvider,
+        RestClient.Builder restClientBuilder,
+        RepoGuardMetrics metrics,
+        ExternalCallResilience resilience,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmReviewPipeline reviewPipeline,
+        ExternalHttpJsonResponseReader responseReader,
+        LlmChatCompletionResponseExtractor responseExtractor,
+        OutboundEndpointPolicy endpointPolicy,
+        boolean ignored
     ) {
         this.reviewPolicyProvider = Objects.requireNonNull(reviewPolicyProvider, "reviewPolicyProvider");
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
@@ -50,6 +82,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         this.reviewPipeline = Objects.requireNonNull(reviewPipeline, "reviewPipeline");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
         this.responseExtractor = Objects.requireNonNull(responseExtractor, "responseExtractor");
+        this.endpointPolicy = endpointPolicy;
     }
 
     @Override
@@ -65,6 +98,9 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     @Override
     public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
         long startedAt = System.nanoTime();
+        if (endpointPolicy != null) {
+            endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());
+        }
         RestClient restClient = restClientBuilder
             .clone()
             .baseUrl(settings.baseUrl().trim())

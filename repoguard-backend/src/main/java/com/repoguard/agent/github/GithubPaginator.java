@@ -3,6 +3,8 @@ package com.repoguard.agent.github;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -25,14 +27,23 @@ public class GithubPaginator {
 
     private final RestClient restClient;
     private final ExternalHttpJsonResponseReader jsonResponseReader;
+    private final OutboundEndpointPolicy endpointPolicy;
     private final int maxPages;
 
     @Autowired
     public GithubPaginator(
         RestClient.Builder restClientBuilder,
+        ExternalHttpJsonResponseReader jsonResponseReader,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this(restClientBuilder, jsonResponseReader, MAX_PAGES, endpointPolicy);
+    }
+
+    public GithubPaginator(
+        RestClient.Builder restClientBuilder,
         ExternalHttpJsonResponseReader jsonResponseReader
     ) {
-        this(restClientBuilder, jsonResponseReader, MAX_PAGES);
+        this(restClientBuilder, jsonResponseReader, MAX_PAGES, null);
     }
 
     GithubPaginator(
@@ -40,8 +51,18 @@ public class GithubPaginator {
         ExternalHttpJsonResponseReader jsonResponseReader,
         int maxPages
     ) {
+        this(restClientBuilder, jsonResponseReader, maxPages, null);
+    }
+
+    GithubPaginator(
+        RestClient.Builder restClientBuilder,
+        ExternalHttpJsonResponseReader jsonResponseReader,
+        int maxPages,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
+        this.endpointPolicy = endpointPolicy;
         if (maxPages < 1) {
             throw new IllegalArgumentException("maxPages must be positive");
         }
@@ -58,8 +79,17 @@ public class GithubPaginator {
         ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
         List<T> items = new ArrayList<>();
         String nextUrl = pageUrlBuilder.apply(1);
+        String initialOrigin = endpointPolicy == null
+            ? nextUrl
+            : endpointPolicy.validate(OutboundEndpointType.GITHUB, nextUrl).toString();
         for (int page = 1; page <= maxPages; page++) {
             String url = nextUrl;
+            if (endpointPolicy != null) {
+                endpointPolicy.validate(OutboundEndpointType.GITHUB, url);
+            }
+            if (endpointPolicy != null && !endpointPolicy.sameOrigin(OutboundEndpointType.GITHUB, initialOrigin, url)) {
+                throw new IllegalArgumentException("Rejected GitHub pagination link: origin changed");
+            }
             ResponseEntity<T[]> response = executeGithub(operation, effectiveResilience, () -> restClient.get()
                 .uri(url)
                 .headers(headers -> applyGithubHeaders(headers, settings))
@@ -159,4 +189,5 @@ public class GithubPaginator {
             return new NextPageLink(false, null);
         }
     }
+
 }

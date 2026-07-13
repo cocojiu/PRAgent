@@ -2,10 +2,13 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.github.GithubRestClientFactory;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.util.Objects;
 import org.springframework.http.MediaType;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -22,15 +25,37 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
     private final RestClient.Builder restClientBuilder;
     private final SecretCryptoService secretCryptoService;
     private final ExternalHttpResponseReader responseReader;
+    private final OutboundEndpointPolicy endpointPolicy;
+
+    @Autowired
+    public GithubConnectionProbe(
+        RestClient.Builder restClientBuilder,
+        SecretCryptoService secretCryptoService,
+        ExternalHttpResponseReader responseReader,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this(restClientBuilder, secretCryptoService, responseReader, endpointPolicy, true);
+    }
 
     public GithubConnectionProbe(
         RestClient.Builder restClientBuilder,
         SecretCryptoService secretCryptoService,
         ExternalHttpResponseReader responseReader
     ) {
+        this(restClientBuilder, secretCryptoService, responseReader, null, true);
+    }
+
+    private GithubConnectionProbe(
+        RestClient.Builder restClientBuilder,
+        SecretCryptoService secretCryptoService,
+        ExternalHttpResponseReader responseReader,
+        OutboundEndpointPolicy endpointPolicy,
+        boolean ignored
+    ) {
         this.restClientBuilder = Objects.requireNonNull(restClientBuilder, "restClientBuilder");
         this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
         this.responseReader = Objects.requireNonNull(responseReader, "responseReader");
+        this.endpointPolicy = endpointPolicy;
     }
 
     @Override
@@ -41,6 +66,9 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
     @Override
     public ConnectionProbeResult probe(IntegrationConfig config) {
         String url = buildGithubTestUrl(config);
+        if (endpointPolicy != null) {
+            endpointPolicy.validate(OutboundEndpointType.GITHUB, url);
+        }
         String token = secretCryptoService.decrypt(config.getTokenValue());
         if (!StringUtils.hasText(token)) {
             return new ConnectionProbeResult(false, "failed", "GitHub token is missing or cannot be decrypted");

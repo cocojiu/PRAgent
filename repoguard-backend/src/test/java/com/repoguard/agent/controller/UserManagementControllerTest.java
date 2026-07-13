@@ -93,7 +93,7 @@ class UserManagementControllerTest {
         ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
         Mockito.verify(userManagementService).createUser(contextCaptor.capture(), ArgumentMatchers.any());
         org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("192.0.2.10");
+        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
     }
 
     @Test
@@ -150,7 +150,7 @@ class UserManagementControllerTest {
         ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
         Mockito.verify(userManagementService).updateStatus(contextCaptor.capture(), ArgumentMatchers.eq(1002L), ArgumentMatchers.eq("DISABLED"));
         org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("192.0.2.11");
+        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
         org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().userAgent()).isEqualTo("JUnit");
     }
 

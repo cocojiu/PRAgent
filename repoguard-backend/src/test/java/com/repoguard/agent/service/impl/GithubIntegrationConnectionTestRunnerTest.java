@@ -56,6 +56,20 @@ class GithubIntegrationConnectionTestRunnerTest {
     }
 
     @Test
+    void runMarksUnhealthySavedResultAsFailure() {
+        IntegrationConfig config = githubConfig();
+        GithubIntegrationConnectionTestRunner runner = new GithubIntegrationConnectionTestRunner(
+            new StubGithubProbe(new ConnectionProbeResult(false, "failed", "token is missing"), null)
+        );
+        AtomicReference<String> markedError = new AtomicReference<>();
+
+        var result = runner.run(config, false, (markedConfig, error) -> markedError.set(error));
+
+        assertThat(result.success()).isFalse();
+        assertThat(markedError).hasValue("token is missing");
+    }
+
+    @Test
     void runMarksSavedConfigCheckedOnFailure() {
         IntegrationConfig config = githubConfig();
         GithubIntegrationConnectionTestRunner runner = new GithubIntegrationConnectionTestRunner(

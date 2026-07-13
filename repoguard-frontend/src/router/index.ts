@@ -15,34 +15,57 @@ const NotificationOpsPage = () => import("@/pages/NotificationOpsPage.vue");
 const UserManagementPage = () => import("@/pages/UserManagementPage.vue");
 const SystemSettingsPage = () => import("@/pages/SystemSettingsPage.vue");
 
-const appRouteComponentLoaders = [
-  OverviewPage,
-  ReviewTasksPage,
-  ReviewDetailPage,
-  RuleConfigPage,
-  IntegrationsPage,
-  MessageQueueHealthPage,
-  NotificationOpsPage,
-  UserManagementPage,
-  SystemSettingsPage
-];
+type RouteComponentLoader = () => Promise<unknown>;
+
+const commonRouteNeighbors = new Map<string, RouteComponentLoader>([
+  [routeNames.overview, ReviewTasksPage],
+  [routeNames.tasks, OverviewPage],
+  [routeNames.taskDetail, ReviewTasksPage]
+]);
+
+const managementRouteNeighbors = new Map<string, RouteComponentLoader>([
+  [routeNames.rules, IntegrationsPage],
+  [routeNames.integrations, MessageQueueHealthPage],
+  [routeNames.messageQueue, NotificationOpsPage],
+  [routeNames.notificationOps, UserManagementPage],
+  [routeNames.users, SystemSettingsPage],
+  [routeNames.settings, RuleConfigPage]
+]);
 
 let routeComponentPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
-let hasPrefetchedAppRouteComponents = false;
+const prefetchedRoutes = new Set<string>();
 
-const scheduleRouteComponentPrefetch = () => {
-  if (hasPrefetchedAppRouteComponents || routeComponentPrefetchTimer) {
+const scheduleRouteComponentPrefetch = (routeName: string, managementAllowed: boolean) => {
+  const loadComponent = commonRouteNeighbors.get(routeName)
+    ?? (managementAllowed ? managementRouteNeighbors.get(routeName) : undefined);
+  if (!loadComponent || prefetchedRoutes.has(routeName) || routeComponentPrefetchTimer || !prefetchAllowed()) {
     return;
   }
   routeComponentPrefetchTimer = setTimeout(() => {
     routeComponentPrefetchTimer = undefined;
-    hasPrefetchedAppRouteComponents = true;
-    appRouteComponentLoaders.forEach((loadComponent) => {
-      void loadComponent().catch(() => {
-        hasPrefetchedAppRouteComponents = false;
-      });
-    });
-  }, 1800);
+    if (!prefetchAllowed()) {
+      return;
+    }
+    const run = () => {
+      prefetchedRoutes.add(routeName);
+      void loadComponent().catch(() => prefetchedRoutes.delete(routeName));
+    };
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(run, { timeout: 1200 });
+    } else {
+      run();
+    }
+  }, 1200);
+};
+
+const prefetchAllowed = () => {
+  if (document.visibilityState === "hidden") {
+    return false;
+  }
+  const connection = (navigator as Navigator & {
+    connection?: { saveData?: boolean; effectiveType?: string };
+  }).connection;
+  return !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "");
 };
 
 export const router = createRouter({
@@ -156,6 +179,6 @@ router.beforeEach(async (to) => {
 
 router.afterEach((to) => {
   if (to.meta.requiresAuth && hasAuthToken()) {
-    scheduleRouteComponentPrefetch();
+    scheduleRouteComponentPrefetch(String(to.name ?? ""), Boolean(to.meta.requiresManage && canManage.value));
   }
 });

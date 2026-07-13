@@ -20,7 +20,7 @@ type InternalRequestInit = RequestInit & { skipAuthorization?: boolean };
 export type RequestWithMetaResult<T> = {
   data: T;
   traceId: string;
-  responseBytes: number;
+  responseBytes?: number;
   status: number;
 };
 
@@ -103,7 +103,7 @@ const doRequest = async (
 };
 
 const unwrapResponseWithMeta = async <T>(response: Response): Promise<RequestWithMetaResult<T>> => {
-  const responseBytes = await responseSizeBytes(response);
+  const responseBytes = responseSizeBytes(response);
   return {
     data: await unwrapResponse<T>(response),
     traceId: response.headers.get(TRACE_ID_HEADER) || "",
@@ -112,17 +112,13 @@ const unwrapResponseWithMeta = async <T>(response: Response): Promise<RequestWit
   };
 };
 
-const responseSizeBytes = async (response: Response) => {
+const responseSizeBytes = (response: Response): number | undefined => {
   const contentLength = response.headers.get("Content-Length");
   if (contentLength && /^\d+$/.test(contentLength)) {
-    return Number(contentLength);
+    const value = Number(contentLength);
+    return Number.isSafeInteger(value) ? value : undefined;
   }
-  try {
-    const text = await response.clone().text();
-    return new TextEncoder().encode(text).length;
-  } catch {
-    return 0;
-  }
+  return undefined;
 };
 
 const safeDoRequest = async (

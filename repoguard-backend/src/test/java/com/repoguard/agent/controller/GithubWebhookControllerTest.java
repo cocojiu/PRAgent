@@ -30,6 +30,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class GithubWebhookControllerTest {
 
     private static final String SIGNING_KEY = "github-webhook-test-secret";
+    private static final String HEAD_SHA = "0123456789abcdef0123456789abcdef01234567";
+    private static final String UPDATED_HEAD_SHA = "89abcdef0123456789abcdef0123456789abcdef";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final GithubWebhookProperties properties = webhookProperties();
@@ -49,7 +51,7 @@ class GithubWebhookControllerTest {
             new ManualReviewResponse(88L, "queued", "Review task queued", false, "github_webhook", "github_webhook")
         );
 
-        byte[] payload = pullRequestPayload("opened", false, "abc123").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("opened", false, HEAD_SHA).getBytes(StandardCharsets.UTF_8);
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-GitHub-Event", "pull_request")
@@ -75,7 +77,7 @@ class GithubWebhookControllerTest {
         org.assertj.core.api.Assertions.assertThat(request.repository()).isEqualTo("spring-boot-demo");
         org.assertj.core.api.Assertions.assertThat(request.prNumber()).isEqualTo(512);
         org.assertj.core.api.Assertions.assertThat(request.title()).isEqualTo("Add auto review");
-        org.assertj.core.api.Assertions.assertThat(request.commit()).isEqualTo("abc123");
+        org.assertj.core.api.Assertions.assertThat(request.commit()).isEqualTo(HEAD_SHA);
         org.assertj.core.api.Assertions.assertThat(request.branch()).isEqualTo("PRAgent-test");
         org.assertj.core.api.Assertions.assertThat(request.source()).isEqualTo("github_webhook");
     }
@@ -86,7 +88,7 @@ class GithubWebhookControllerTest {
             new ManualReviewResponse(99L, "queued", "Existing review task reused", true, "github_webhook", "github_webhook")
         );
 
-        byte[] payload = pullRequestPayload("synchronize", false, "def456").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("synchronize", false, UPDATED_HEAD_SHA).getBytes(StandardCharsets.UTF_8);
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("X-GitHub-Event", "pull_request")
@@ -133,7 +135,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void draftPullRequestIsSkippedByDefault() throws Exception {
-        byte[] payload = pullRequestPayload("opened", true, "abc123").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("opened", true, HEAD_SHA).getBytes(StandardCharsets.UTF_8);
 
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -158,7 +160,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void ignoredPullRequestActionKeepsSkippedResponseContract() throws Exception {
-        byte[] payload = pullRequestPayload("closed", false, "abc123").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("closed", false, HEAD_SHA).getBytes(StandardCharsets.UTF_8);
 
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -184,7 +186,7 @@ class GithubWebhookControllerTest {
     @Test
     void unmonitoredRepositoryIsSkippedWhenAllowListIsConfigured() throws Exception {
         properties.setAllowedRepositories(java.util.List.of("repo-guard-demo/test-repo"));
-        byte[] payload = pullRequestPayload("opened", false, "abc123").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("opened", false, HEAD_SHA).getBytes(StandardCharsets.UTF_8);
 
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -209,7 +211,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void unmonitoredHeadBranchIsSkippedByDefault() throws Exception {
-        byte[] payload = pullRequestPayload("opened", false, "abc123", "feature/other").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("opened", false, HEAD_SHA, "feature/other").getBytes(StandardCharsets.UTF_8);
 
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -234,7 +236,7 @@ class GithubWebhookControllerTest {
 
     @Test
     void invalidSignatureIsRejectedBeforePayloadHandling() throws Exception {
-        byte[] payload = pullRequestPayload("opened", false, "abc123").getBytes(StandardCharsets.UTF_8);
+        byte[] payload = pullRequestPayload("opened", false, HEAD_SHA).getBytes(StandardCharsets.UTF_8);
 
         mockMvc.perform(post("/api/v1/github/webhooks")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -282,8 +284,8 @@ class GithubWebhookControllerTest {
                 .header("X-GitHub-Event", "ping")
                 .header("X-Hub-Signature-256", "sha256=invalid")
                 .content(payload))
-            .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+            .andExpect(status().isPayloadTooLarge())
+            .andExpect(jsonPath("$.code").value("PAYLOAD_TOO_LARGE"));
 
         verify(reviewService, never()).triggerManualReview(any());
     }

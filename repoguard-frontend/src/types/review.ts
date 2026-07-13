@@ -359,7 +359,7 @@ export interface ManualReviewRequest {
   repository: string;
   prNumber: number;
   title?: string;
-  commit?: string;
+  commit: string;
   branch?: string;
   source?: ReviewTaskSource | string;
 }

@@ -1,4 +1,4 @@
-ARG JAVA_IMAGE=eclipse-temurin:26-jre-alpine
+ARG JAVA_IMAGE=eclipse-temurin:25.0.3_9-jre-alpine@sha256:28db6fdf60e38945e43d840c0333aeaec66c15943070104f7586fd3c9d1665b0
 FROM ${JAVA_IMAGE} AS layers
 
 WORKDIR /app
@@ -7,6 +7,12 @@ COPY target/repoguard-backend-0.0.1-SNAPSHOT.jar /app/repoguard-backend.jar
 RUN java -Djarmode=tools -jar /app/repoguard-backend.jar extract --launcher --destination /app/extracted
 
 FROM ${JAVA_IMAGE}
+
+ARG OCI_VERSION
+ARG OCI_REVISION
+
+LABEL org.opencontainers.image.version="${OCI_VERSION}" \
+      org.opencontainers.image.revision="${OCI_REVISION}"
 
 WORKDIR /app
 

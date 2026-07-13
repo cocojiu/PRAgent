@@ -1,6 +1,8 @@
 package com.repoguard.agent.external;
 
 import java.time.Duration;
+import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.util.Objects;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
@@ -12,7 +14,7 @@ public final class ExternalHttpRequestFactory {
     }
 
     public static SimpleClientHttpRequestFactory simple(Duration connectTimeout, Duration readTimeout) {
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory requestFactory = new NoRedirectRequestFactory();
         requestFactory.setConnectTimeout(requirePositive(connectTimeout, "connectTimeout"));
         requestFactory.setReadTimeout(requirePositive(readTimeout, "readTimeout"));
         return requestFactory;
@@ -33,5 +35,14 @@ public final class ExternalHttpRequestFactory {
             throw new IllegalArgumentException(name + " must be positive");
         }
         return value;
+    }
+
+    private static final class NoRedirectRequestFactory extends SimpleClientHttpRequestFactory {
+
+        @Override
+        protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
+            super.prepareConnection(connection, httpMethod);
+            connection.setInstanceFollowRedirects(false);
+        }
     }
 }

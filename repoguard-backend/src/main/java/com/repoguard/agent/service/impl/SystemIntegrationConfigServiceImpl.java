@@ -9,6 +9,9 @@ import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.external.OutboundCredentialPolicy;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.security.SecretUpdateValue;
@@ -18,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +39,25 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     private final SecretCryptoService secretCryptoService;
     private final Environment environment;
     private final CacheEvictionService cacheEvictionService;
+    private final OutboundEndpointPolicy outboundEndpointPolicy;
+    private final OutboundCredentialPolicy outboundCredentialPolicy;
+
+    @Autowired
+    public SystemIntegrationConfigServiceImpl(
+        IntegrationConfigMapper integrationConfigMapper,
+        SecretCryptoService secretCryptoService,
+        Environment environment,
+        CacheEvictionService cacheEvictionService,
+        OutboundEndpointPolicy outboundEndpointPolicy,
+        OutboundCredentialPolicy outboundCredentialPolicy
+    ) {
+        this.integrationConfigMapper = integrationConfigMapper;
+        this.secretCryptoService = secretCryptoService;
+        this.environment = environment;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.outboundEndpointPolicy = Objects.requireNonNull(outboundEndpointPolicy, "outboundEndpointPolicy");
+        this.outboundCredentialPolicy = Objects.requireNonNull(outboundCredentialPolicy, "outboundCredentialPolicy");
+    }
 
     public SystemIntegrationConfigServiceImpl(
         IntegrationConfigMapper integrationConfigMapper,
@@ -46,6 +69,8 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
         this.secretCryptoService = secretCryptoService;
         this.environment = environment;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.outboundEndpointPolicy = null;
+        this.outboundCredentialPolicy = null;
     }
 
     @Override
@@ -58,6 +83,16 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
     @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
+        if (outboundEndpointPolicy != null) {
+            outboundEndpointPolicy.validateConfiguration(OutboundEndpointType.GITHUB, request.baseUrl());
+            outboundCredentialPolicy.requireFreshCredentialOnOriginChange(
+            OutboundEndpointType.GITHUB,
+            config.getBaseUrl(),
+            request.baseUrl(),
+            request.token(),
+            StringUtils.hasText(config.getTokenValue())
+            );
+        }
         SecretUpdateValue token = SecretUpdateValue.resolve(secretCryptoService, config.getTokenValue(), request.token());
         config.setBaseUrl(request.baseUrl().trim());
         config.setTokenValue(token.encryptedValue());
@@ -128,6 +163,19 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
 
     private ServiceIntegrationConfigDto updateServiceIntegration(String provider, ServiceIntegrationConfigRequest request) {
         IntegrationConfig config = loadServiceIntegration(provider);
+        OutboundEndpointType endpointType = MYSQL_PROVIDER.equals(provider)
+            ? OutboundEndpointType.MYSQL
+            : OutboundEndpointType.RABBITMQ;
+        if (outboundEndpointPolicy != null) {
+            outboundEndpointPolicy.validateConfiguration(endpointType, request.baseUrl());
+            outboundCredentialPolicy.requireFreshCredentialOnOriginChange(
+            endpointType,
+            config.getBaseUrl(),
+            request.baseUrl(),
+            request.secret(),
+            StringUtils.hasText(config.getTokenValue())
+            );
+        }
         SecretUpdateValue secret = SecretUpdateValue.resolve(secretCryptoService, config.getTokenValue(), request.secret());
         config.setBaseUrl(request.baseUrl().trim());
         config.setDefaultOwner(trimToNull(request.username()));

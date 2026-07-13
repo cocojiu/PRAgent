@@ -54,7 +54,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "26"
+          java-version: "25"
           cache: maven
 
       - name: Build backend
@@ -109,6 +109,7 @@ jobs:
           echo "FRONTEND_IMAGE=${frontend_image}" >> "$GITHUB_ENV"
           echo "ALIYUN_BACKEND_IMAGE=${aliyun_backend_image}" >> "$GITHUB_ENV"
           echo "ALIYUN_FRONTEND_IMAGE=${aliyun_frontend_image}" >> "$GITHUB_ENV"
+          echo "IMAGE_VERSION=${image_tag}" >> "$GITHUB_ENV"
           {
             echo "BACKEND_IMAGE_TAGS<<EOF"
             if [ "${PUBLISH_GHCR}" = "true" ]; then
@@ -140,24 +141,58 @@ jobs:
           password: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
 
       - name: Build and push backend image
+        id: backend_image
         uses: docker/build-push-action@v6
         with:
           context: repoguard-backend
           file: repoguard-backend/Dockerfile
           push: true
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            OCI_VERSION=${{ env.IMAGE_VERSION }}
+            OCI_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
           tags: ${{ env.BACKEND_IMAGE_TAGS }}
 
       - name: Build and push frontend image
+        id: frontend_image
         uses: docker/build-push-action@v6
         with:
           context: repoguard-frontend
           file: repoguard-frontend/Dockerfile
           push: true
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            OCI_VERSION=${{ env.IMAGE_VERSION }}
+            OCI_REVISION=${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
           tags: ${{ env.FRONTEND_IMAGE_TAGS }}
+
+      - name: Scan backend image for high and critical CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ${{ env.ALIYUN_BACKEND_IMAGE }}@${{ steps.backend_image.outputs.digest }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Scan frontend image for high and critical CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ${{ env.ALIYUN_FRONTEND_IMAGE }}@${{ steps.frontend_image.outputs.digest }}
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
   deploy:
     name: Deploy

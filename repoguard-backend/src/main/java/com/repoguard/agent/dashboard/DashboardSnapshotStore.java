@@ -77,14 +77,19 @@ public class DashboardSnapshotStore {
         if (!refreshingKeys.add(key)) {
             return;
         }
-        executor.execute(() -> {
-            try {
-                loadAndStore(key, loader);
-            } catch (RuntimeException ex) {
-                LOGGER.warn("Dashboard snapshot refresh failed key={}", key, ex);
-            } finally {
-                refreshingKeys.remove(key);
-            }
-        });
+        try {
+            executor.execute(() -> {
+                try {
+                    loadAndStore(key, loader);
+                } catch (RuntimeException ex) {
+                    LOGGER.warn("Dashboard snapshot refresh failed key={}", key, ex);
+                } finally {
+                    refreshingKeys.remove(key);
+                }
+            });
+        } catch (RuntimeException ex) {
+            refreshingKeys.remove(key);
+            LOGGER.warn("Dashboard snapshot refresh submission failed key={}", key, ex);
+        }
     }
 }

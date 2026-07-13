@@ -72,7 +72,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
         assertThat(savedConfig.getStatus()).isEqualTo("FAILED");
         assertThat(savedConfig.getLastError()).isEqualTo("submitted failed");
         assertThat(savedConfig.getLastCheckedAt()).isNotNull();
-        verify(integrationConfigMapper).updateById(savedConfig);
+        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
     }
 
     @Test
@@ -91,6 +91,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
         config.setDefaultOwner("repoguard");
         config.setDefaultRepo("repoguard");
         config.setTokenValue(secret);
+        config.setUpdatedAt(java.time.LocalDateTime.parse("2026-07-13T12:00:00"));
         return config;
     }
 

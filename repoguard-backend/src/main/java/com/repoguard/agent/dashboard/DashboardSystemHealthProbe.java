@@ -3,8 +3,8 @@ package com.repoguard.agent.dashboard;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.dto.SystemHealthItemDto;
+import com.repoguard.agent.service.impl.RabbitRuntimeHealthProbe;
 import java.util.List;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -12,18 +12,18 @@ public class DashboardSystemHealthProbe {
 
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyProvider reviewPolicyProvider;
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe;
     private final DashboardStatusMapper statusMapper;
 
     public DashboardSystemHealthProbe(
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyProvider reviewPolicyProvider,
-        RabbitTemplate rabbitTemplate,
+        RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe,
         DashboardStatusMapper statusMapper
     ) {
         this.githubIntegrationProvider = githubIntegrationProvider;
         this.reviewPolicyProvider = reviewPolicyProvider;
-        this.rabbitTemplate = rabbitTemplate;
+        this.rabbitRuntimeHealthProbe = rabbitRuntimeHealthProbe;
         this.statusMapper = statusMapper;
     }
 
@@ -38,8 +38,7 @@ public class DashboardSystemHealthProbe {
 
     private String rabbitMqHealthStatus() {
         try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            return statusMapper.rabbitMqHealth(open);
+            return statusMapper.rabbitMqHealth("CONNECTED".equals(rabbitRuntimeHealthProbe.connectionStatus()));
         } catch (RuntimeException ex) {
             return DashboardStatusMapper.HEALTH_ABNORMAL;
         }
