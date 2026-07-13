@@ -58,6 +58,23 @@ print_backend_logs() {
   compose logs --tail=120 backend >&2 || true
 }
 
+wait_service_health() {
+  service="$1"
+  attempts="${2:-30}"
+  i=1
+  while [ "$i" -le "$attempts" ]; do
+    container_id="$(compose ps -q "$service" 2>/dev/null || true)"
+    if [ -n "$container_id" ] && [ "$(docker inspect "$container_id" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null || true)" = "healthy" ]; then
+      return 0
+    fi
+    sleep 2
+    i=$((i + 1))
+  done
+  echo "Service health check failed after $attempts attempts: $service" >&2
+  compose ps "$service" >&2 || true
+  return 1
+}
+
 wait_backend_health() {
   attempts="${1:-30}"
   i=1
@@ -128,6 +145,9 @@ echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 compose pull backend frontend caddy
 
 if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
+  compose up -d --no-deps mysql rabbitmq
+  wait_service_health mysql 45
+  wait_service_health rabbitmq 45
   compose up -d --no-deps backend
   wait_backend_health 45
   compose up -d --no-deps frontend
