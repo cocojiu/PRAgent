@@ -1,6 +1,6 @@
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
     container_name: repoguard-mysql
     restart: unless-stopped
     environment:
@@ -25,7 +25,7 @@ services:
     mem_limit: 700m
 
   rabbitmq:
-    image: rabbitmq:3.13
+    image: rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3
     container_name: repoguard-rabbitmq
     hostname: repoguard-rabbitmq
     restart: unless-stopped

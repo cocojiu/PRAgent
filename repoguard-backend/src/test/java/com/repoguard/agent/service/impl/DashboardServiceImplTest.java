@@ -62,6 +62,8 @@ class DashboardServiceImplTest {
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    private final RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe =
+        org.mockito.Mockito.mock(RabbitRuntimeHealthProbe.class);
     private final DashboardStatusMapper statusMapper = new DashboardStatusMapper();
     private final DashboardRuleDisplayMapper ruleDisplayMapper = new DashboardRuleDisplayMapper();
     private final DashboardOverviewDisplayMapper overviewDisplayMapper = new DashboardOverviewDisplayMapper();
@@ -74,7 +76,7 @@ class DashboardServiceImplTest {
     private final DashboardSystemHealthProbe systemHealthProbe = new DashboardSystemHealthProbe(
         githubIntegrationProvider,
         reviewPolicyProvider,
-        rabbitTemplate,
+        rabbitRuntimeHealthProbe,
         statusMapper
     );
     private final DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
@@ -202,7 +204,7 @@ class DashboardServiceImplTest {
 
     @Test
     void systemHealthReportsConfiguredDependenciesAsHealthy() {
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("CONNECTED");
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
@@ -216,8 +218,7 @@ class DashboardServiceImplTest {
 
     @Test
     void systemHealthKeepsRenderingWhenDependencyHealthChecksFail() {
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
-            .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
+        when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("DISCONNECTED");
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(ReviewPolicySettings.empty());
 
@@ -230,7 +231,7 @@ class DashboardServiceImplTest {
 
     @Test
     void overviewDoesNotRunSynchronousDependencyHealthProbe() {
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
+        when(rabbitRuntimeHealthProbe.connectionStatus())
             .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
 
         var overview = service.getOverview(null);

@@ -32,6 +32,11 @@ export const useReviewTaskCreation = ({
       ElMessage.warning("请选择一个有效的 GitHub PR");
       return;
     }
+    const commit = resolvePullRequestHeadSha(pullRequest);
+    if (!commit || !/^[0-9a-f]{40}([0-9a-f]{24})?$/i.test(commit)) {
+      ElMessage.warning("该 GitHub PR 缺少有效的 head SHA");
+      return;
+    }
     creatingTask.value = true;
     try {
       const response = await triggerManualReview({
@@ -39,7 +44,7 @@ export const useReviewTaskCreation = ({
         repository: pullRequestRepository.value,
         prNumber: pullRequest.number,
         title: pullRequest.title,
-        commit: resolvePullRequestHeadSha(pullRequest),
+        commit,
         branch: pullRequest.branch,
         source: "github_pr_picker"
       });

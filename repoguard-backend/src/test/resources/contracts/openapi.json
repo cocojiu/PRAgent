@@ -5810,7 +5810,8 @@
           },
           "commit" : {
             "type" : "string",
-            "maxLength" : 64
+            "minLength" : 1,
+            "pattern" : "(?i)^[0-9a-f]{40}([0-9a-f]{24})?$"
           },
           "branch" : {
             "type" : "string",
@@ -5821,7 +5822,7 @@
             "maxLength" : 32
           }
         },
-        "required" : [ "organization", "repository", "prNumber" ]
+        "required" : [ "organization", "repository", "prNumber", "commit" ]
       },
       "ManualReviewResponse" : {
         "type" : "object",
@@ -7197,25 +7198,25 @@
             "type" : "integer",
             "format" : "int64"
           },
-            "findingSeverityCounts" : {
-              "type" : "object",
-              "x-java-type" : "FindingSeverityCountsDto"
-            },
-            "archived" : {
-              "type" : "boolean"
-            },
-            "archiveCleanupBatchId" : {
-              "type" : "integer",
-              "format" : "int64"
-            },
-            "archiveBackupReference" : {
-              "type" : "string"
-            },
-            "archivedAt" : {
-              "type" : "string"
-            }
+          "findingSeverityCounts" : {
+            "type" : "object",
+            "x-java-type" : "FindingSeverityCountsDto"
+          },
+          "archived" : {
+            "type" : "boolean"
+          },
+          "archiveCleanupBatchId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "archiveBackupReference" : {
+            "type" : "string"
+          },
+          "archivedAt" : {
+            "type" : "string"
           }
-        },
+        }
+      },
       "ReviewTimelineItem" : {
         "type" : "object",
         "x-java-type" : "ReviewTimelineItem",

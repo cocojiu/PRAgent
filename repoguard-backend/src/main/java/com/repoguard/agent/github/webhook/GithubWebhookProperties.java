@@ -16,6 +16,8 @@ public class GithubWebhookProperties {
     private boolean requireSignature = true;
     private boolean ignoreDraft = true;
     private int maxPayloadBytes = DEFAULT_MAX_PAYLOAD_BYTES;
+    private int maxRequestsPerMinutePerIp = 120;
+    private int maxRequestsPerMinutePerRepository = 60;
     private List<String> allowedActions = new ArrayList<>(List.of("opened", "reopened", "synchronize", "ready_for_review"));
     private List<String> allowedRepositories = new ArrayList<>();
     private List<String> allowedHeadBranches = new ArrayList<>(List.of("PRAgent-test"));
@@ -60,6 +62,22 @@ public class GithubWebhookProperties {
         this.maxPayloadBytes = maxPayloadBytes;
     }
 
+    public int getMaxRequestsPerMinutePerIp() {
+        return maxRequestsPerMinutePerIp;
+    }
+
+    public void setMaxRequestsPerMinutePerIp(int maxRequestsPerMinutePerIp) {
+        this.maxRequestsPerMinutePerIp = maxRequestsPerMinutePerIp;
+    }
+
+    public int getMaxRequestsPerMinutePerRepository() {
+        return maxRequestsPerMinutePerRepository;
+    }
+
+    public void setMaxRequestsPerMinutePerRepository(int maxRequestsPerMinutePerRepository) {
+        this.maxRequestsPerMinutePerRepository = maxRequestsPerMinutePerRepository;
+    }
+
     public List<String> getAllowedActions() {
         return allowedActions;
     }
@@ -88,10 +106,22 @@ public class GithubWebhookProperties {
         if (maxPayloadBytes <= 0) {
             throw new IllegalStateException("app.github.webhook.max-payload-bytes must be positive");
         }
+        if (maxRequestsPerMinutePerIp <= 0 || maxRequestsPerMinutePerRepository <= 0) {
+            throw new IllegalStateException("app.github.webhook rate limits must be positive");
+        }
         boolean productionProfile = Arrays.stream(activeProfiles)
             .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
-        if (productionProfile && enabled && requireSignature && !StringUtils.hasText(secret)) {
-            throw new IllegalStateException("app.github.webhook.secret must be configured in prod profile when signature verification is enabled");
+        if (!productionProfile || !enabled) {
+            return;
+        }
+        if (!requireSignature) {
+            throw new IllegalStateException("app.github.webhook.require-signature must be true in prod profile");
+        }
+        if (!StringUtils.hasText(secret)) {
+            throw new IllegalStateException("app.github.webhook.secret must be configured in prod profile");
+        }
+        if (allowedRepositories.stream().noneMatch(StringUtils::hasText)) {
+            throw new IllegalStateException("app.github.webhook.allowed-repositories must not be empty in prod profile");
         }
     }
 }

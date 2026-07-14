@@ -14,20 +14,19 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.ChannelCallback;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class NotificationServiceImplTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final GithubIntegrationProvider githubIntegrationProvider = org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
-    private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    private final RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe =
+        org.mockito.Mockito.mock(RabbitRuntimeHealthProbe.class);
     private final NotificationServiceImpl service = new NotificationServiceImpl(
         reviewTaskMapper,
         githubIntegrationProvider,
         reviewPolicyProvider,
-        rabbitTemplate
+        rabbitRuntimeHealthProbe
     );
 
     @Test
@@ -37,7 +36,7 @@ class NotificationServiceImplTest {
             task(2L, "COMPLETED", "MEDIUM", "FALLBACK")
         ));
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test", "bad token"));
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(false);
+        when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("DISCONNECTED");
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings(""));
 
         var result = service.getNotifications();

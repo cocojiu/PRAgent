@@ -26,9 +26,14 @@ import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -40,8 +45,8 @@ public class AuthServiceImpl implements AuthService {
     private static final String TOKEN_TYPE_BEARER = "Bearer";
     private static final String AUDIT_SUCCESS = "SUCCESS";
     private static final String AUDIT_FAILURE = "FAILURE";
-    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 5;
-    private static final long ACCOUNT_LOCK_MINUTES = 15;
+    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 20;
+    private static final long ACCOUNT_LOCK_MINUTES = 5;
 
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
@@ -51,6 +56,32 @@ public class AuthServiceImpl implements AuthService {
     private final AuthTokenService authTokenService;
     private final UserAccountSessionInvalidator sessionInvalidator;
     private final RepoGuardMetrics metrics;
+    private final TransactionTemplate authWriteTransaction;
+
+    @Autowired
+    public AuthServiceImpl(
+        UserAccountMapper userAccountMapper,
+        UserRefreshTokenMapper userRefreshTokenMapper,
+        UserLoginAuditRecorder loginAuditRecorder,
+        PasswordHashService passwordHashService,
+        AuthProperties authProperties,
+        AuthTokenService authTokenService,
+        UserAccountSessionInvalidator sessionInvalidator,
+        RepoGuardMetrics metrics,
+        PlatformTransactionManager transactionManager
+    ) {
+        this(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            loginAuditRecorder,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics,
+            buildWriteTransaction(transactionManager)
+        );
+    }
 
     public AuthServiceImpl(
         UserAccountMapper userAccountMapper,
@@ -62,6 +93,30 @@ public class AuthServiceImpl implements AuthService {
         UserAccountSessionInvalidator sessionInvalidator,
         RepoGuardMetrics metrics
     ) {
+        this(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            loginAuditRecorder,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics,
+            (TransactionTemplate) null
+        );
+    }
+
+    private AuthServiceImpl(
+        UserAccountMapper userAccountMapper,
+        UserRefreshTokenMapper userRefreshTokenMapper,
+        UserLoginAuditRecorder loginAuditRecorder,
+        PasswordHashService passwordHashService,
+        AuthProperties authProperties,
+        AuthTokenService authTokenService,
+        UserAccountSessionInvalidator sessionInvalidator,
+        RepoGuardMetrics metrics,
+        TransactionTemplate authWriteTransaction
+    ) {
         this.userAccountMapper = userAccountMapper;
         this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.loginAuditRecorder = Objects.requireNonNull(loginAuditRecorder, "loginAuditRecorder must not be null");
@@ -70,10 +125,10 @@ public class AuthServiceImpl implements AuthService {
         this.authTokenService = authTokenService;
         this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
         this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
+        this.authWriteTransaction = authWriteTransaction;
     }
 
     @Override
-    @Transactional
     public AuthResponse register(AuthRegisterRequest request) {
         if (!authProperties.isRegistrationEnabled()) {
             throw new BusinessException(ErrorCode.FORBIDDEN, "公开注册已关闭，请联系管理员开通账号");
@@ -93,11 +148,12 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "邮箱已存在");
         }
 
+        String passwordHash = passwordHashService.hash(request.password());
         LocalDateTime now = LocalDateTime.now();
         UserAccount user = new UserAccount();
         user.setUsername(username);
         user.setEmail(email);
-        user.setPasswordHash(passwordHashService.hash(request.password()));
+        user.setPasswordHash(passwordHash);
         user.setRole(ROLE_VIEWER);
         user.setStatus(STATUS_ACTIVE);
         user.setFailedLoginCount(0);
@@ -105,23 +161,26 @@ public class AuthServiceImpl implements AuthService {
         user.setCreatedAt(now);
         user.setUpdatedAt(now);
         user.setLastLoginAt(now);
-        try {
-            userAccountMapper.insert(user);
-        } catch (DuplicateKeyException ex) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
-        }
-        recordAudit(user.getId(), user.getUsername(), "REGISTER", AUDIT_SUCCESS, null);
-        return issueTokenPair(user, false);
+        return inWriteTransaction(() -> {
+            try {
+                userAccountMapper.insert(user);
+            } catch (DuplicateKeyException ex) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "用户名或邮箱已存在");
+            }
+            recordAudit(user.getId(), user.getUsername(), "REGISTER", AUDIT_SUCCESS, null);
+            return issueTokenPair(user, false);
+        });
     }
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
     public AuthResponse login(AuthLoginRequest request) {
         UserAccount user = verifyCredentials(request.account(), request.password(), "LOGIN");
-        LocalDateTime now = LocalDateTime.now();
-        clearLoginFailures(user, now);
-        recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
-        return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+        return inWriteTransaction(() -> {
+            LocalDateTime now = LocalDateTime.now();
+            clearLoginFailures(user, now);
+            recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
+            return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+        });
     }
 
     @Override
@@ -184,19 +243,20 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
     public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
         UserAccount user = verifyCredentials(request.account(), request.password(), "TOKEN_RESET");
-        LocalDateTime now = LocalDateTime.now();
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("user_id", user.getId())
-            .eq("status", STATUS_ACTIVE)
-            .set("status", STATUS_REVOKED)
-            .set("revoked_at", now)
-            .set("updated_at", now));
-        rotateSessionVersionAndPersist(user, now);
-        recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
-        return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+        return inWriteTransaction(() -> {
+            LocalDateTime now = LocalDateTime.now();
+            userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+                .eq("user_id", user.getId())
+                .eq("status", STATUS_ACTIVE)
+                .set("status", STATUS_REVOKED)
+                .set("revoked_at", now)
+                .set("updated_at", now));
+            rotateSessionVersionAndPersist(user, now);
+            recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
+            return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
+        });
     }
 
     @Override
@@ -211,17 +271,21 @@ public class AuthServiceImpl implements AuthService {
     private UserAccount verifyCredentials(String accountValue, String password, String eventType) {
         String account = accountValue.trim();
         UserAccount user = account.contains("@") ? findByEmail(account.toLowerCase(Locale.ROOT)) : findByUsername(account);
+        boolean passwordMatches = passwordHashService.matchesOrDummy(
+            password,
+            user == null ? null : user.getPasswordHash()
+        );
         if (user != null && isLocked(user)) {
-            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, "account locked");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号已暂时锁定，请 15 分钟后再试");
+            recordAuditInWriteTransaction(user.getId(), account, eventType, "account locked");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
-        if (user == null || !passwordHashService.matches(password, user.getPasswordHash())) {
+        if (user == null || !passwordMatches) {
             handleFailedCredentialAttempt(user, account, eventType, "bad credentials");
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
         if (!STATUS_ACTIVE.equals(user.getStatus())) {
-            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, "account disabled");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号已被禁用，请联系管理员");
+            recordAuditInWriteTransaction(user.getId(), account, eventType, "account disabled");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
         }
         return user;
     }
@@ -348,29 +412,25 @@ public class AuthServiceImpl implements AuthService {
 
     private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {
         if (user == null) {
-            recordAudit(null, account, eventType, AUDIT_FAILURE, reason);
+            recordAuditInWriteTransaction(null, account, eventType, reason);
             return;
         }
         LocalDateTime now = LocalDateTime.now();
         int failedCount = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;
-        LocalDateTime lockedUntil = null;
-        if (failedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
-            lockedUntil = now.plusMinutes(ACCOUNT_LOCK_MINUTES);
-        }
-        persistFailedLoginAttempt(user, failedCount, lockedUntil, now);
-        recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, reason);
-    }
-
-    private void persistFailedLoginAttempt(UserAccount user, int failedCount, LocalDateTime lockedUntil, LocalDateTime now) {
+        LocalDateTime lockedUntil = now.plusMinutes(ACCOUNT_LOCK_MINUTES);
+        inWriteTransaction(() -> {
+            userAccountMapper.recordFailedLogin(
+                user.getId(),
+                MAX_FAILED_LOGIN_ATTEMPTS,
+                lockedUntil,
+                now
+            );
+            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, reason);
+            return null;
+        });
         user.setFailedLoginCount(failedCount);
-        user.setLockedUntil(lockedUntil);
+        user.setLockedUntil(failedCount >= MAX_FAILED_LOGIN_ATTEMPTS ? lockedUntil : null);
         user.setUpdatedAt(now);
-        UpdateWrapper<UserAccount> update = new UpdateWrapper<UserAccount>()
-            .eq("id", user.getId())
-            .set("failed_login_count", failedCount)
-            .set("locked_until", lockedUntil)
-            .set("updated_at", now);
-        userAccountMapper.update(null, update);
     }
 
     private void clearLoginFailures(UserAccount user, LocalDateTime now) {
@@ -393,6 +453,28 @@ public class AuthServiceImpl implements AuthService {
 
     private void recordAudit(Long userId, String account, String eventType, String result, String failureReason) {
         loginAuditRecorder.record(userId, account, eventType, result, failureReason);
+    }
+
+    private void recordAuditInWriteTransaction(Long userId, String account, String eventType, String failureReason) {
+        inWriteTransaction(() -> {
+            recordAudit(userId, account, eventType, AUDIT_FAILURE, failureReason);
+            return null;
+        });
+    }
+
+    private <T> T inWriteTransaction(Supplier<T> operation) {
+        if (authWriteTransaction == null) {
+            return operation.get();
+        }
+        return authWriteTransaction.execute(status -> operation.get());
+    }
+
+    private static TransactionTemplate buildWriteTransaction(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(
+            Objects.requireNonNull(transactionManager, "transactionManager")
+        );
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return template;
     }
 
     private UserAccount findByUsername(String username) {

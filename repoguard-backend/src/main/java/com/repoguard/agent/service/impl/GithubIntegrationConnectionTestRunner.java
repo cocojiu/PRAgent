@@ -33,7 +33,10 @@ class GithubIntegrationConnectionTestRunner {
         try {
             ConnectionProbeResult result = githubConnectionProbe.probe(configToProbe);
             if (!transientConfig) {
-                markChecked.accept(configToProbe, null);
+                markChecked.accept(
+                    configToProbe,
+                    Boolean.TRUE.equals(result.healthy()) ? null : failureMessage(result)
+                );
             }
             return connectionResult(Boolean.TRUE.equals(result.healthy()), result.status(), result.message());
         } catch (RuntimeException ex) {
@@ -47,6 +50,12 @@ class GithubIntegrationConnectionTestRunner {
 
     private ConnectionTestResultDto connectionResult(boolean success, String status, String message) {
         return new ConnectionTestResultDto(success, status, message, format(LocalDateTime.now()), null, null, null, null, null, null);
+    }
+
+    private String failureMessage(ConnectionProbeResult result) {
+        return result.message() == null || result.message().isBlank()
+            ? "GitHub connection test failed"
+            : result.message();
     }
 
     private RuntimeException classifyGithubHttpFailure(RuntimeException ex) {

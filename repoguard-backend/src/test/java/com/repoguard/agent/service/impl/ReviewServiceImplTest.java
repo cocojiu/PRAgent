@@ -13,6 +13,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
@@ -74,6 +75,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.TransactionDefinition;
@@ -82,6 +84,10 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 class ReviewServiceImplTest {
+
+    private static final String COMMIT_SHA = "0123456789abcdef0123456789abcdef01234567";
+    private static final String SECOND_COMMIT_SHA =
+        "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210";
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper =
@@ -891,7 +897,7 @@ class ReviewServiceImplTest {
             "Hello-World",
             1,
             "Smoke review",
-            "public-pr-1-llm-string-response",
+            COMMIT_SHA,
             "master",
             "github_pr_picker"
         ));
@@ -919,7 +925,7 @@ class ReviewServiceImplTest {
             "Hello-World",
             1,
             "Smoke review",
-            "public-pr-2",
+            SECOND_COMMIT_SHA,
             "master",
             "github_pr_picker"
         ));
@@ -952,7 +958,7 @@ class ReviewServiceImplTest {
             "Hello-World",
             2,
             "Smoke review",
-            "public-pr-after-commit",
+            SECOND_COMMIT_SHA,
             "master",
             "github_pr_picker"
         ));
@@ -962,7 +968,7 @@ class ReviewServiceImplTest {
         ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
         verify(reviewTaskPublisher).publish(messageCaptor.capture());
         assertThat(messageCaptor.getValue().taskId()).isEqualTo(522L);
-        assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-after-commit");
+        assertThat(messageCaptor.getValue().commit()).isEqualTo(SECOND_COMMIT_SHA);
     }
 
     @Test
@@ -977,7 +983,7 @@ class ReviewServiceImplTest {
             "Hello-World",
             1,
             "Smoke review",
-            "public-pr-1-llm-string-response",
+            COMMIT_SHA,
             "master",
             "github_pr_picker"
         ));
@@ -992,26 +998,23 @@ class ReviewServiceImplTest {
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
 
-    @Test
-    void triggerManualReviewReusesExistingPendingCommitTask() {
-        ReviewTask existing = task();
-        existing.setCommitSha("pending");
-        existing.setStatus("QUEUED");
-        when(reviewTaskMapper.selectOne(any())).thenReturn(existing);
-
-        var result = service.triggerManualReview(new ManualReviewRequest(
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {" ", "abc123", "0123456789abcdef0123456789abcdef0123456g"})
+    void triggerManualReviewRejectsMissingOrInvalidCommitSha(String commit) {
+        assertThatThrownBy(() -> service.triggerManualReview(new ManualReviewRequest(
             "octocat",
             "Hello-World",
             1,
             "Smoke review",
-            "",
+            commit,
             "master",
             "github_pr_picker"
-        ));
+        )))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode()).isEqualTo(ErrorCode.BAD_REQUEST));
 
-        assertThat(result.taskId()).isEqualTo(521L);
-        assertThat(result.existing()).isTrue();
-        assertThat(result.status()).isEqualTo("queued");
+        verify(reviewTaskMapper, never()).selectOne(any());
         verify(reviewTaskMapper, never()).insertManualReviewOrReuse(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
     }
@@ -1033,7 +1036,7 @@ class ReviewServiceImplTest {
             "Hello-World",
             1,
             "Smoke review",
-            "public-pr-publish-failed",
+            SECOND_COMMIT_SHA,
             "master",
             "github_pr_picker"
         ));
@@ -1088,7 +1091,7 @@ class ReviewServiceImplTest {
                     "Hello-World",
                     42,
                     "Concurrent review",
-                    "same-commit",
+                    COMMIT_SHA,
                     "master",
                     "github_pr_picker"
                 ));
@@ -1146,7 +1149,7 @@ class ReviewServiceImplTest {
         ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
         verify(reviewTaskPublisher).publish(messageCaptor.capture());
         assertThat(messageCaptor.getValue().taskId()).isEqualTo(521L);
-        assertThat(messageCaptor.getValue().commit()).isEqualTo("public-pr-1-llm-string-response");
+        assertThat(messageCaptor.getValue().commit()).isEqualTo(COMMIT_SHA);
     }
 
     @Test
@@ -1309,7 +1312,7 @@ class ReviewServiceImplTest {
         task.setTitle("Smoke review");
         task.setRepository("Hello-World");
         task.setOrganization("octocat");
-        task.setCommitSha("public-pr-1-llm-string-response");
+        task.setCommitSha(COMMIT_SHA);
         task.setBranchName("master");
         task.setStatus("COMPLETED");
         task.setRiskLevel("LOW");

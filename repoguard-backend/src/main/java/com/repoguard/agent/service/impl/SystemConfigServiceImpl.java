@@ -21,7 +21,6 @@ import com.repoguard.agent.service.SystemSettingsApplicationService;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class SystemConfigServiceImpl implements SystemConfigService {
@@ -127,7 +126,6 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
-    @Transactional
     public ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest configRequest) {
         return connectionTestService.testGithubIntegration(configRequest);
     }

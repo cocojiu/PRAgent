@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
@@ -15,10 +16,23 @@ public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfi
 
     private final RabbitTemplate rabbitTemplate;
     private final RabbitMqProbeConnectionFactory connectionFactory;
+    private final RabbitRuntimeHealthProbe runtimeHealthProbe;
+
+    @Autowired
+    public RabbitMqConnectionProbe(
+        RabbitTemplate rabbitTemplate,
+        RabbitMqProbeConnectionFactory connectionFactory,
+        RabbitRuntimeHealthProbe runtimeHealthProbe
+    ) {
+        this.rabbitTemplate = rabbitTemplate;
+        this.connectionFactory = Objects.requireNonNull(connectionFactory, "connectionFactory");
+        this.runtimeHealthProbe = Objects.requireNonNull(runtimeHealthProbe, "runtimeHealthProbe");
+    }
 
     public RabbitMqConnectionProbe(RabbitTemplate rabbitTemplate, RabbitMqProbeConnectionFactory connectionFactory) {
         this.rabbitTemplate = rabbitTemplate;
         this.connectionFactory = Objects.requireNonNull(connectionFactory, "connectionFactory");
+        this.runtimeHealthProbe = null;
     }
 
     @Override
@@ -32,6 +46,14 @@ public class RabbitMqConnectionProbe implements ConnectionProbe<IntegrationConfi
     }
 
     public ConnectionProbeResult runtimeProbe() {
+        if (runtimeHealthProbe != null) {
+            boolean connected = "CONNECTED".equals(runtimeHealthProbe.connectionStatus());
+            return new ConnectionProbeResult(
+                connected,
+                connected ? "connected" : "failed",
+                connected ? "RabbitMQ runtime channel is open" : "RabbitMQ channel is not open"
+            );
+        }
         if (rabbitTemplate == null) {
             return new ConnectionProbeResult(null, "unavailable", "Runtime RabbitTemplate is not available in this context");
         }

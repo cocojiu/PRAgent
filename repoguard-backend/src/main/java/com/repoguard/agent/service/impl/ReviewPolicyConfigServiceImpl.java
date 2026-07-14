@@ -5,6 +5,9 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.external.OutboundCredentialPolicy;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.security.SecretUpdateValue;
@@ -15,6 +18,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -30,6 +34,23 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final SecretCryptoService secretCryptoService;
     private final CacheEvictionService cacheEvictionService;
+    private final OutboundEndpointPolicy outboundEndpointPolicy;
+    private final OutboundCredentialPolicy outboundCredentialPolicy;
+
+    @Autowired
+    public ReviewPolicyConfigServiceImpl(
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        SecretCryptoService secretCryptoService,
+        CacheEvictionService cacheEvictionService,
+        OutboundEndpointPolicy outboundEndpointPolicy,
+        OutboundCredentialPolicy outboundCredentialPolicy
+    ) {
+        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
+        this.secretCryptoService = secretCryptoService;
+        this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.outboundEndpointPolicy = Objects.requireNonNull(outboundEndpointPolicy, "outboundEndpointPolicy");
+        this.outboundCredentialPolicy = Objects.requireNonNull(outboundCredentialPolicy, "outboundCredentialPolicy");
+    }
 
     public ReviewPolicyConfigServiceImpl(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
@@ -39,6 +60,8 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.secretCryptoService = secretCryptoService;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.outboundEndpointPolicy = null;
+        this.outboundCredentialPolicy = null;
     }
 
     @Override
@@ -50,6 +73,18 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     @Transactional
     public ReviewPolicyConfigDto updateReviewPolicy(ReviewPolicyConfigRequest request) {
         ReviewPolicyConfig config = loadReviewPolicy();
+        if (outboundEndpointPolicy != null && Boolean.TRUE.equals(request.llmEnabled())) {
+            outboundEndpointPolicy.validateConfiguration(OutboundEndpointType.LLM, request.baseUrl());
+        }
+        if (outboundCredentialPolicy != null) {
+            outboundCredentialPolicy.requireFreshCredentialOnOriginChange(
+                OutboundEndpointType.LLM,
+                config.getBaseUrl(),
+                request.baseUrl(),
+                request.apiKey(),
+                StringUtils.hasText(config.getApiKeyValue())
+            );
+        }
         SecretUpdateValue apiKey = SecretUpdateValue.resolve(secretCryptoService, config.getApiKeyValue(), request.apiKey());
         config.setLlmEnabled(request.llmEnabled());
         config.setLlmProvider(request.llmProvider().trim());

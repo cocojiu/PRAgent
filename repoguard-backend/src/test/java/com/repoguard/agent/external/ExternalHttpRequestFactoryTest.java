@@ -36,7 +36,18 @@ class ExternalHttpRequestFactoryTest {
     }
 
     private int intField(Object target, String fieldName) throws ReflectiveOperationException {
-        Field field = target.getClass().getDeclaredField(fieldName);
+        Class<?> type = target.getClass();
+        Field field = null;
+        while (type != null && field == null) {
+            try {
+                field = type.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ex) {
+                type = type.getSuperclass();
+            }
+        }
+        if (field == null) {
+            throw new NoSuchFieldException(fieldName);
+        }
         field.setAccessible(true);
         return field.getInt(target);
     }

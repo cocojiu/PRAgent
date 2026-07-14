@@ -5,6 +5,8 @@ import com.repoguard.agent.config.GithubIntegrationProvider;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private final GithubChangedFileReader changedFileReader;
     private final GithubCommentWriter commentWriter;
     private final GithubIntegrationHealthReporter healthReporter;
+    private final OutboundEndpointPolicy endpointPolicy;
 
     @Autowired
     public GithubPullRequestClientImpl(
@@ -31,7 +34,32 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         GithubPullRequestReader pullRequestReader,
         GithubChangedFileReader changedFileReader,
         GithubCommentWriter commentWriter,
+        GithubIntegrationHealthReporter healthReporter,
+        OutboundEndpointPolicy endpointPolicy
+    ) {
+        this(githubIntegrationProvider, resilience, pullRequestReader, changedFileReader, commentWriter, healthReporter, endpointPolicy, true);
+    }
+
+    public GithubPullRequestClientImpl(
+        GithubIntegrationProvider githubIntegrationProvider,
+        ExternalCallResilience resilience,
+        GithubPullRequestReader pullRequestReader,
+        GithubChangedFileReader changedFileReader,
+        GithubCommentWriter commentWriter,
         GithubIntegrationHealthReporter healthReporter
+    ) {
+        this(githubIntegrationProvider, resilience, pullRequestReader, changedFileReader, commentWriter, healthReporter, null, true);
+    }
+
+    private GithubPullRequestClientImpl(
+        GithubIntegrationProvider githubIntegrationProvider,
+        ExternalCallResilience resilience,
+        GithubPullRequestReader pullRequestReader,
+        GithubChangedFileReader changedFileReader,
+        GithubCommentWriter commentWriter,
+        GithubIntegrationHealthReporter healthReporter,
+        OutboundEndpointPolicy endpointPolicy,
+        boolean ignored
     ) {
         this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
         this.resilience = Objects.requireNonNull(resilience, "resilience");
@@ -39,6 +67,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         this.changedFileReader = Objects.requireNonNull(changedFileReader, "changedFileReader");
         this.commentWriter = Objects.requireNonNull(commentWriter, "commentWriter");
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
+        this.endpointPolicy = endpointPolicy;
     }
 
     @Override
@@ -130,7 +159,11 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     private String baseUrl(GithubIntegrationSettings settings) {
-        return StringUtils.hasText(settings.baseUrl()) ? settings.baseUrl().trim() : DEFAULT_GITHUB_BASE_URL;
+        String baseUrl = StringUtils.hasText(settings.baseUrl()) ? settings.baseUrl().trim() : DEFAULT_GITHUB_BASE_URL;
+        if (endpointPolicy != null) {
+            endpointPolicy.validate(OutboundEndpointType.GITHUB, baseUrl);
+        }
+        return baseUrl;
     }
 
     private String choose(String primary, String fallback) {

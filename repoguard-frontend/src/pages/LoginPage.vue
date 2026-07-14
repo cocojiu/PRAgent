@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ArrowLeft } from "lucide-vue-next";
@@ -57,13 +57,13 @@ const submitting = ref(false);
 const registrationEnabled = import.meta.env.VITE_REGISTRATION_ENABLED === "true"
   || (import.meta.env.DEV && import.meta.env.VITE_REGISTRATION_ENABLED !== "false");
 
-const loginForm = reactive({
+const loginForm = ref({
   account: "",
   password: "",
   remember: false
 });
 
-const registerForm = reactive({
+const registerForm = ref({
   username: "",
   email: "",
   password: "",
@@ -86,16 +86,16 @@ const handleLogin = async () => {
   if (submitting.value) {
     return;
   }
-  if (!loginForm.account.trim() || !loginForm.password) {
+  if (!loginForm.value.account.trim() || !loginForm.value.password) {
     ElMessage.warning("请输入账号和密码");
     return;
   }
   submitting.value = true;
   try {
     await login({
-      account: loginForm.account.trim(),
-      password: loginForm.password,
-      remember: loginForm.remember
+      account: loginForm.value.account.trim(),
+      password: loginForm.value.password,
+      remember: loginForm.value.remember
     });
     ElMessage.success("登录成功");
     void router.push("/repoguard/overview");
@@ -110,21 +110,21 @@ const handleRegister = async () => {
   if (submitting.value) {
     return;
   }
-  if (!registerForm.username.trim() || !registerForm.email.trim() || !registerForm.password || !registerForm.confirmPassword) {
+  if (!registerForm.value.username.trim() || !registerForm.value.email.trim() || !registerForm.value.password || !registerForm.value.confirmPassword) {
     ElMessage.warning("请完整填写注册信息");
     return;
   }
-  if (registerForm.password && registerForm.confirmPassword && registerForm.password !== registerForm.confirmPassword) {
+  if (registerForm.value.password && registerForm.value.confirmPassword && registerForm.value.password !== registerForm.value.confirmPassword) {
     ElMessage.warning("两次输入的密码不一致");
     return;
   }
   submitting.value = true;
   try {
     await register({
-      username: registerForm.username.trim(),
-      email: registerForm.email.trim(),
-      password: registerForm.password,
-      confirmPassword: registerForm.confirmPassword
+      username: registerForm.value.username.trim(),
+      email: registerForm.value.email.trim(),
+      password: registerForm.value.password,
+      confirmPassword: registerForm.value.confirmPassword
     });
     ElMessage.success("注册成功");
     void router.push("/repoguard/overview");

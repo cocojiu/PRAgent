@@ -202,8 +202,7 @@ public class ManualReviewCreationService {
         }
         reviewTimelineAppender.appendInitial(task.getId(), "Task queued", createdAt);
         repositoryDimensionService.recordRepository(organization, repository, createdAt);
-        ownerFuture.complete(task);
-        cleanupManualCreateAfterTransaction(idempotencyKey, ownerFuture);
+        completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, task);
         evictDashboardReviewActivity();
         metrics.reviewTaskCreated(source.code());
         ReviewTaskMessage message = new ReviewTaskMessage(
@@ -316,24 +315,6 @@ public class ManualReviewCreationService {
         });
     }
 
-    private void cleanupManualCreateAfterTransaction(String idempotencyKey, CompletableFuture<ReviewTask> future) {
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            manualReviewIdempotencyCoordinator.remove(idempotencyKey, future);
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                if (status != STATUS_COMMITTED && !future.isCompletedExceptionally()) {
-                    future.completeExceptionally(new IllegalStateException("Manual review transaction rolled back"));
-                    manualReviewIdempotencyCoordinator.remove(idempotencyKey, future);
-                    return;
-                }
-                scheduleManualCreateCleanup(idempotencyKey, future);
-            }
-        });
-    }
-
     private void scheduleManualCreateCleanup(String idempotencyKey, CompletableFuture<ReviewTask> future) {
         manualReviewIdempotencyCoordinator.scheduleRemove(
             idempotencyKey,
@@ -365,10 +346,14 @@ public class ManualReviewCreationService {
     }
 
     private String resolveCommit(ManualReviewRequest request) {
-        if (StringUtils.hasText(request.commit())) {
-            return request.commit().trim();
+        if (!StringUtils.hasText(request.commit())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Commit SHA is required");
         }
-        return "pending";
+        String commit = request.commit().trim();
+        if (!commit.matches("(?i)^[0-9a-f]{40}([0-9a-f]{24})?$")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Commit SHA must be a 40 or 64 character hexadecimal value");
+        }
+        return commit.toLowerCase(Locale.ROOT);
     }
 
     private String resolveBranch(ManualReviewRequest request) {

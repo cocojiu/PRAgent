@@ -5,17 +5,34 @@ import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.external.OutboundCredentialPolicy;
+import com.repoguard.agent.external.OutboundEndpointPolicy;
+import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.security.SecretCryptoService;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 
 @Component
 class ConnectionTestConfigFactory {
 
     private final SecretCryptoService secretCryptoService;
+    private final OutboundEndpointPolicy endpointPolicy;
+    private final OutboundCredentialPolicy credentialPolicy;
 
     ConnectionTestConfigFactory(SecretCryptoService secretCryptoService) {
+        this(secretCryptoService, null, null);
+    }
+
+    @Autowired
+    ConnectionTestConfigFactory(
+        SecretCryptoService secretCryptoService,
+        OutboundEndpointPolicy endpointPolicy,
+        OutboundCredentialPolicy credentialPolicy
+    ) {
         this.secretCryptoService = secretCryptoService;
+        this.endpointPolicy = endpointPolicy;
+        this.credentialPolicy = credentialPolicy;
     }
 
     IntegrationConfig githubIntegrationForTest(
@@ -23,6 +40,16 @@ class ConnectionTestConfigFactory {
         GithubIntegrationConfigRequest request,
         IntegrationConfig savedConfig
     ) {
+        if (endpointPolicy != null) {
+            endpointPolicy.validateConfiguration(OutboundEndpointType.GITHUB, request.baseUrl());
+            credentialPolicy.requireFreshCredentialOnOriginChange(
+                OutboundEndpointType.GITHUB,
+                savedConfig == null ? null : savedConfig.getBaseUrl(),
+                request.baseUrl(),
+                request.token(),
+                savedConfig != null && StringUtils.hasText(savedConfig.getTokenValue())
+            );
+        }
         IntegrationConfig config = new IntegrationConfig();
         String token = resolveSecretValue(
             savedConfig == null ? null : decryptSavedSecret(savedConfig.getTokenValue()),
@@ -42,6 +69,19 @@ class ConnectionTestConfigFactory {
         ServiceIntegrationConfigRequest request,
         IntegrationConfig savedConfig
     ) {
+        OutboundEndpointType type = "MYSQL".equalsIgnoreCase(provider)
+            ? OutboundEndpointType.MYSQL
+            : OutboundEndpointType.RABBITMQ;
+        if (endpointPolicy != null) {
+            endpointPolicy.validateConfiguration(type, request.baseUrl());
+            credentialPolicy.requireFreshCredentialOnOriginChange(
+                type,
+                savedConfig == null ? null : savedConfig.getBaseUrl(),
+                request.baseUrl(),
+                request.secret(),
+                savedConfig != null && StringUtils.hasText(savedConfig.getTokenValue())
+            );
+        }
         IntegrationConfig config = new IntegrationConfig();
         String secret = resolveSecretValue(
             savedConfig == null ? null : decryptSavedSecret(savedConfig.getTokenValue()),
@@ -57,6 +97,16 @@ class ConnectionTestConfigFactory {
     }
 
     ReviewPolicyConfig reviewPolicyForTest(ReviewPolicyConfigRequest request, ReviewPolicyConfig savedConfig) {
+        if (endpointPolicy != null && Boolean.TRUE.equals(request.llmEnabled())) {
+            endpointPolicy.validateConfiguration(OutboundEndpointType.LLM, request.baseUrl());
+            credentialPolicy.requireFreshCredentialOnOriginChange(
+                OutboundEndpointType.LLM,
+                savedConfig == null ? null : savedConfig.getBaseUrl(),
+                request.baseUrl(),
+                request.apiKey(),
+                savedConfig != null && StringUtils.hasText(savedConfig.getApiKeyValue())
+            );
+        }
         ReviewPolicyConfig config = new ReviewPolicyConfig();
         String apiKey = resolveSecretValue(
             savedConfig == null ? null : decryptSavedSecret(savedConfig.getApiKeyValue()),

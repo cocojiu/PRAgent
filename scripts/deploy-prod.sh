@@ -78,7 +78,12 @@ if [ -z "$COMPOSE_PROJECT_NAME" ]; then
   COMPOSE_PROJECT_NAME="$(read_env_value COMPOSE_PROJECT_NAME)"
 fi
 
+if [ -z "${COMPOSE_PROFILES:-}" ]; then
+  COMPOSE_PROFILES="$(read_env_value COMPOSE_PROFILES)"
+fi
+
 export COMPOSE_PROJECT_NAME
+export COMPOSE_PROFILES
 
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
@@ -161,11 +166,170 @@ assert_service_image() {
   fi
 }
 
+has_compose_service() {
+  target_service="$1"
+  compose config --services | grep -Fx "$target_service" >/dev/null 2>&1
+}
+
+print_service_release_identity() {
+  service="$1"
+  container_id="$(compose ps -q "$service")"
+  image_reference="$(docker inspect "$container_id" --format '{{.Config.Image}}')"
+  image_id="$(docker inspect "$container_id" --format '{{.Image}}')"
+  app_version="$(required_release_label "$service" "org.opencontainers.image.version")"
+  git_commit="$(required_release_label "$service" "org.opencontainers.image.revision")"
+  echo "  $service image=$image_reference image_id=$image_id version=$app_version commit=$git_commit"
+}
+
+required_release_label() {
+  service="$1"
+  label="$2"
+  container_id="$(compose ps -q "$service")"
+  value="$(docker inspect "$container_id" --format "{{index .Config.Labels \"$label\"}}" 2>/dev/null || true)"
+  case "$value" in
+    ""|"<no value>"|"unknown")
+      echo "Missing required OCI label for $service: $label" >&2
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$value"
+}
+
+required_image_label() {
+  image="$1"
+  label="$2"
+  value="$(docker image inspect "$image" --format "{{index .Config.Labels \"$label\"}}" 2>/dev/null || true)"
+  case "$value" in
+    ""|"<no value>"|"unknown")
+      echo "Missing required OCI label for image $image: $label" >&2
+      return 1
+      ;;
+  esac
+  printf '%s\n' "$value"
+}
+
+preflight_release_images() {
+  backend_version="$(required_image_label "$BACKEND_IMAGE" "org.opencontainers.image.version")"
+  backend_revision="$(required_image_label "$BACKEND_IMAGE" "org.opencontainers.image.revision")"
+  frontend_version="$(required_image_label "$FRONTEND_IMAGE" "org.opencontainers.image.version")"
+  frontend_revision="$(required_image_label "$FRONTEND_IMAGE" "org.opencontainers.image.revision")"
+  if [ "$backend_version" != "$frontend_version" ] || [ "$backend_revision" != "$frontend_revision" ]; then
+    echo "Backend and frontend release identities do not match" >&2
+    echo "  backend:  version=$backend_version revision=$backend_revision" >&2
+    echo "  frontend: version=$frontend_version revision=$frontend_revision" >&2
+    return 1
+  fi
+}
+
+running_service_image_id() {
+  service="$1"
+  container_id="$(compose ps -q "$service" 2>/dev/null || true)"
+  if [ -n "$container_id" ]; then
+    docker inspect "$container_id" --format '{{.Image}}' 2>/dev/null || true
+  fi
+}
+
+validate_split_runtime_mode() {
+  if ! has_compose_service backend-worker; then
+    return 0
+  fi
+  api_worker_enabled="${REPOGUARD_WORKER_ENABLED:-}"
+  if [ -z "$api_worker_enabled" ]; then
+    api_worker_enabled="$(read_env_value REPOGUARD_WORKER_ENABLED)"
+  fi
+  case "$api_worker_enabled" in
+    false|FALSE|False|0)
+      return 0
+      ;;
+  esac
+  echo "Split deployment requires REPOGUARD_WORKER_ENABLED=false for the API service." >&2
+  return 1
+}
+
+rollback_deployment() {
+  status="$1"
+  trap - 0
+  if [ "$status" -eq 0 ] || [ "${rollback_needed:-false}" != "true" ] || [ -z "${previous_backend_image:-}" ]; then
+    exit "$status"
+  fi
+
+  set +e
+  echo "Deployment failed; restoring the previous application images..." >&2
+  BACKEND_IMAGE="$previous_backend_image"
+  export BACKEND_IMAGE
+  if has_compose_service backend-worker; then
+    compose stop backend-worker >/dev/null 2>&1
+  fi
+  compose up -d --no-deps backend
+  wait_backend_health 45
+  if has_compose_service backend-worker; then
+    compose up -d --no-deps backend-worker
+    wait_service_health backend-worker 45
+  fi
+  if [ -n "${previous_frontend_image:-}" ]; then
+    FRONTEND_IMAGE="$previous_frontend_image"
+    export FRONTEND_IMAGE
+    compose up -d --no-deps frontend
+    compose up -d --no-deps caddy
+  fi
+  compose ps >&2
+  echo "Rollback attempt finished; deployment remains failed with status $status." >&2
+  exit "$status"
+}
+
+rollback_needed=false
+previous_backend_image=""
+previous_frontend_image=""
+trap 'rollback_deployment $?' 0
+
+assert_same_image_id() {
+  first_service="$1"
+  second_service="$2"
+  first_container_id="$(compose ps -q "$first_service")"
+  second_container_id="$(compose ps -q "$second_service")"
+  first_image_id="$(docker inspect "$first_container_id" --format '{{.Image}}')"
+  second_image_id="$(docker inspect "$second_container_id" --format '{{.Image}}')"
+  if [ "$first_image_id" != "$second_image_id" ]; then
+    echo "Image ID mismatch between $first_service and $second_service" >&2
+    echo "  $first_service: $first_image_id" >&2
+    echo "  $second_service: $second_image_id" >&2
+    return 1
+  fi
+}
+
+assert_same_release_identity() {
+  first_service="$1"
+  second_service="$2"
+  first_version="$(required_release_label "$first_service" "org.opencontainers.image.version")"
+  second_version="$(required_release_label "$second_service" "org.opencontainers.image.version")"
+  first_revision="$(required_release_label "$first_service" "org.opencontainers.image.revision")"
+  second_revision="$(required_release_label "$second_service" "org.opencontainers.image.revision")"
+
+  if [ "$first_version" != "$second_version" ] || [ "$first_revision" != "$second_revision" ]; then
+    echo "Release identity mismatch between $first_service and $second_service" >&2
+    echo "  $first_service: version=$first_version revision=$first_revision" >&2
+    echo "  $second_service: version=$second_version revision=$second_revision" >&2
+    return 1
+  fi
+}
+
 verify_deployment() {
   wait_backend_health "${1:-30}"
   wait_http_health "${2:-30}"
   assert_service_image backend "$BACKEND_IMAGE"
+  if has_compose_service backend-worker; then
+    wait_service_health backend-worker "${1:-30}"
+    assert_service_image backend-worker "$BACKEND_IMAGE"
+    assert_same_image_id backend backend-worker
+    assert_same_release_identity backend backend-worker
+  fi
   assert_service_image frontend "$FRONTEND_IMAGE"
+  echo "Deployment release identities:"
+  print_service_release_identity backend
+  if has_compose_service backend-worker; then
+    print_service_release_identity backend-worker
+  fi
+  print_service_release_identity frontend
 }
 
 echo "Deploying RepoGuard images:"
@@ -174,32 +338,53 @@ echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
 validate_production_data_routing
-compose pull backend frontend caddy
-
-if [ -n "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
-  compose up -d --no-deps mysql rabbitmq
-  wait_service_health mysql 45
-  wait_service_health rabbitmq 45
-  compose up -d --no-deps backend
-  wait_backend_health 45
-  compose up -d --no-deps frontend
-  compose up -d --no-deps caddy
-  compose ps
-  verify_deployment 15 30
-  echo "RepoGuard deployment is healthy: $HEALTH_URL"
-  exit 0
+validate_split_runtime_mode
+deploy_services="mysql rabbitmq backend frontend caddy"
+if has_compose_service backend-worker; then
+  deploy_services="mysql rabbitmq backend backend-worker frontend caddy"
 fi
+compose pull $deploy_services
+preflight_release_images
 
-if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
-  if [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
-    docker compose --env-file "$LEGACY_ENV_FILE" -f "$LEGACY_COMPOSE_FILE" down
-  else
-    docker compose -f "$LEGACY_COMPOSE_FILE" down
+previous_backend_image="$(running_service_image_id backend)"
+previous_frontend_image="$(running_service_image_id frontend)"
+
+if [ -z "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
+  if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
+    if [ -n "$LEGACY_ENV_FILE" ] && [ -f "$LEGACY_ENV_FILE" ]; then
+      docker compose --env-file "$LEGACY_ENV_FILE" -f "$LEGACY_COMPOSE_FILE" down
+    else
+      docker compose -f "$LEGACY_COMPOSE_FILE" down
+    fi
   fi
 fi
 
-compose up -d
-compose ps
-verify_deployment 30 30
+compose up -d --no-deps mysql rabbitmq
+wait_service_health mysql 45
+wait_service_health rabbitmq 45
 
+rollback_needed=true
+
+if has_compose_service backend-worker; then
+  worker_container_id="$(compose ps -q backend-worker 2>/dev/null || true)"
+  if [ -n "$worker_container_id" ]; then
+    echo "Stopping the existing Worker before upgrading the API..."
+    compose stop backend-worker
+  fi
+fi
+
+compose up -d --no-deps backend
+wait_backend_health 45
+
+if has_compose_service backend-worker; then
+  compose up -d --no-deps backend-worker
+  wait_service_health backend-worker 45
+fi
+
+compose up -d --no-deps frontend
+compose up -d --no-deps caddy
+compose ps
+verify_deployment 15 30
+
+rollback_needed=false
 echo "RepoGuard deployment is healthy: $HEALTH_URL"

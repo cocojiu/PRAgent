@@ -831,7 +831,7 @@ class ReviewControllerTest {
                       "repository": "spring-boot-demo",
                       "prNumber": 512,
                       "title": "Manual review smoke test",
-                      "commit": "a1b2c3d",
+                      "commit": "0123456789abcdef0123456789abcdef01234567",
                       "branch": "main",
                       "source": "github_pr_picker"
                     }
@@ -843,6 +843,43 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.existing").value(false))
             .andExpect(jsonPath("$.data.source").value("github_pr_picker"))
             .andExpect(jsonPath("$.data.triggerSource").value("github_pr_picker"));
+    }
+
+    @Test
+    void triggerManualReviewRejectsMissingCommitSha() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/manual")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "organization": "repo-guard-demo",
+                      "repository": "spring-boot-demo",
+                      "prNumber": 512,
+                      "title": "Manual review without commit",
+                      "branch": "main",
+                      "source": "github_pr_picker"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void triggerManualReviewRejectsMalformedCommitSha() throws Exception {
+        mockMvc.perform(post("/api/v1/reviews/manual")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "organization": "repo-guard-demo",
+                      "repository": "spring-boot-demo",
+                      "prNumber": 512,
+                      "title": "Manual review with malformed commit",
+                      "commit": "abc123",
+                      "branch": "main",
+                      "source": "github_pr_picker"
+                    }
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
     }
 
     @Test

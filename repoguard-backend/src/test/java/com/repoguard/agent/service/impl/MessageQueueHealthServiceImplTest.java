@@ -13,6 +13,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.config.RabbitMqIntegrationProvider;
 import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.concurrency.AsyncExecutorProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -32,8 +33,11 @@ import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.transaction.TransactionDefinition;
@@ -48,10 +52,16 @@ class MessageQueueHealthServiceImplTest {
     private final RabbitMqIntegrationProvider rabbitMqIntegrationProvider = org.mockito.Mockito.mock(RabbitMqIntegrationProvider.class);
     private final RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
     private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    private final ExecutorService rabbitHealthExecutor = Executors.newSingleThreadExecutor();
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
-    private final RabbitRuntimeHealthProbe runtimeHealthProbe = new RabbitRuntimeHealthProbe(rabbitTemplate, properties);
+    private final RabbitRuntimeHealthProbe runtimeHealthProbe = new RabbitRuntimeHealthProbe(
+        rabbitTemplate,
+        properties,
+        rabbitHealthExecutor,
+        new AsyncExecutorProperties()
+    );
     private final MessageQueueRuntimeConfigAssembler runtimeConfigAssembler = new MessageQueueRuntimeConfigAssembler(
         properties,
         runtimeHealthProbe
@@ -61,6 +71,11 @@ class MessageQueueHealthServiceImplTest {
     );
     private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
     private final MessageQueueHealthServiceImpl service = createService(new RecordingTransactionManager());
+
+    @AfterEach
+    void shutdownRabbitHealthExecutor() {
+        rabbitHealthExecutor.shutdownNow();
+    }
 
     @Test
     void serviceRejectsMissingSubServices() {

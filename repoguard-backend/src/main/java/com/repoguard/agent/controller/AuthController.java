@@ -13,6 +13,7 @@ import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +21,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.Objects;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,10 +40,23 @@ public class AuthController {
 
     private final AuthService authService;
     private final AuthSessionCookieManager cookieManager;
+    private final AuthAttemptLimiter attemptLimiter;
+
+    @Autowired
+    public AuthController(
+        AuthService authService,
+        AuthSessionCookieManager cookieManager,
+        AuthAttemptLimiter attemptLimiter
+    ) {
+        this.authService = Objects.requireNonNull(authService, "authService must not be null");
+        this.cookieManager = Objects.requireNonNull(cookieManager, "cookieManager must not be null");
+        this.attemptLimiter = attemptLimiter;
+    }
 
     public AuthController(AuthService authService, AuthSessionCookieManager cookieManager) {
         this.authService = Objects.requireNonNull(authService, "authService must not be null");
         this.cookieManager = Objects.requireNonNull(cookieManager, "cookieManager must not be null");
+        this.attemptLimiter = null;
     }
 
     @PostMapping("/register")
@@ -50,6 +65,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        limit("register", request.username(), httpRequest);
         AuthResponse response = authService.register(request);
         return authResponse(response, httpRequest, httpResponse);
     }
@@ -60,6 +76,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        limit("login", request.account(), httpRequest);
         AuthResponse response = authService.login(request);
         return authResponse(response, httpRequest, httpResponse);
     }
@@ -98,6 +115,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        limit("reset", request.account(), httpRequest);
         AuthResponse response = authService.resetRefreshToken(request);
         return authResponse(response, httpRequest, httpResponse);
     }
@@ -136,6 +154,12 @@ public class AuthController {
     ) {
         cookieManager.writeRefreshTokenCookies(response, httpRequest, httpResponse);
         return ApiResponse.ok(withoutRefreshToken(response));
+    }
+
+    private void limit(String operation, String account, HttpServletRequest request) {
+        if (attemptLimiter != null) {
+            attemptLimiter.requireAllowed(operation, account, request);
+        }
     }
 
     private AuthResponse withoutRefreshToken(AuthResponse response) {

@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -32,18 +31,18 @@ public class NotificationServiceImpl implements NotificationService {
     private final ReviewTaskMapper reviewTaskMapper;
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ReviewPolicyProvider reviewPolicyProvider;
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe;
 
     public NotificationServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         GithubIntegrationProvider githubIntegrationProvider,
         ReviewPolicyProvider reviewPolicyProvider,
-        RabbitTemplate rabbitTemplate
+        RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.githubIntegrationProvider = githubIntegrationProvider;
         this.reviewPolicyProvider = reviewPolicyProvider;
-        this.rabbitTemplate = rabbitTemplate;
+        this.rabbitRuntimeHealthProbe = rabbitRuntimeHealthProbe;
     }
 
     @Override
@@ -154,8 +153,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addRabbitMqNotification(List<NotificationItemDto> items) {
         try {
-            Boolean open = rabbitTemplate.execute(channel -> channel.isOpen());
-            if (!Boolean.TRUE.equals(open)) {
+            if (!"CONNECTED".equals(rabbitRuntimeHealthProbe.connectionStatus())) {
                 items.add(systemNotification(
                     "integration-rabbitmq-failed",
                     "danger",

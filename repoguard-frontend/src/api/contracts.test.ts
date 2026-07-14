@@ -76,7 +76,7 @@ describe("apiRequest", () => {
       repository: "agent",
       prNumber: 9,
       title: "manual review",
-      commit: "abc123",
+      commit: "0123456789abcdef0123456789abcdef01234567",
       branch: "main"
     });
 
@@ -88,7 +88,7 @@ describe("apiRequest", () => {
       repository: "agent",
       prNumber: 9,
       title: "manual review",
-      commit: "abc123",
+      commit: "0123456789abcdef0123456789abcdef01234567",
       branch: "main"
     }));
   });

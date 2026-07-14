@@ -14,6 +14,8 @@ public class AuthProperties {
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
     private boolean registrationEnabled = true;
+    private int publicAuthRequestsPerMinutePerIp = 30;
+    private int publicAuthRequestsPerMinutePerAccountIp = 10;
 
     public String getTokenSecret() {
         return tokenSecret;
@@ -55,10 +57,28 @@ public class AuthProperties {
         this.registrationEnabled = registrationEnabled;
     }
 
+    public int getPublicAuthRequestsPerMinutePerIp() {
+        return publicAuthRequestsPerMinutePerIp;
+    }
+
+    public void setPublicAuthRequestsPerMinutePerIp(int value) {
+        this.publicAuthRequestsPerMinutePerIp = value;
+    }
+
+    public int getPublicAuthRequestsPerMinutePerAccountIp() {
+        return publicAuthRequestsPerMinutePerAccountIp;
+    }
+
+    public void setPublicAuthRequestsPerMinutePerAccountIp(int value) {
+        this.publicAuthRequestsPerMinutePerAccountIp = value;
+    }
+
     public void validateForProfiles(String[] activeProfiles) {
         requirePositive("repoguard.auth.access-token-ttl-seconds", accessTokenTtlSeconds);
         requirePositive("repoguard.auth.refresh-token-ttl-seconds", refreshTokenTtlSeconds);
         requirePositive("repoguard.auth.remember-token-ttl-seconds", rememberTokenTtlSeconds);
+        requirePositive("repoguard.auth.public-auth-requests-per-minute-per-ip", publicAuthRequestsPerMinutePerIp);
+        requirePositive("repoguard.auth.public-auth-requests-per-minute-per-account-ip", publicAuthRequestsPerMinutePerAccountIp);
 
         boolean productionProfile = Arrays.stream(activeProfiles)
             .anyMatch(profile -> "prod".equalsIgnoreCase(profile));

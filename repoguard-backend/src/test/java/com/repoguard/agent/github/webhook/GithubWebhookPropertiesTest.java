@@ -26,12 +26,23 @@ class GithubWebhookPropertiesTest {
     }
 
     @Test
-    void prodProfileAllowsMissingSecretWhenSignatureVerificationIsDisabled() {
+    void prodProfileRejectsDisabledSignatureVerification() {
         GithubWebhookProperties properties = new GithubWebhookProperties();
         properties.setRequireSignature(false);
 
-        assertThatCode(() -> properties.validateForProfiles(new String[] {"prod"}))
-            .doesNotThrowAnyException();
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("require-signature");
+    }
+
+    @Test
+    void prodProfileRequiresRepositoryAllowList() {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+        properties.setSecret("secret");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("allowed-repositories");
     }
 
     @Test

@@ -118,7 +118,21 @@ describe("auth token client", () => {
     expect(result.data).toEqual({ ok: true });
     expect(result.traceId).toBe("server-trace-1");
     expect(result.status).toBe(200);
-    expect(result.responseBytes).toBeGreaterThan(0);
+    expect(result.responseBytes).toBeUndefined();
+  });
+
+  it("uses content length without cloning the response body", async () => {
+    const response = apiResponse({ ok: true });
+    response.headers.set("Content-Length", "128");
+    response.clone = vi.fn(() => {
+      throw new Error("response body must not be cloned");
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const result = await requestWithMeta<{ ok: boolean }>("/api/v1/observed");
+
+    expect(result.responseBytes).toBe(128);
+    expect(response.clone).not.toHaveBeenCalled();
   });
 
   it("does not wrap existing request errors", async () => {

@@ -8,13 +8,12 @@ import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.dto.SystemHealthItemDto;
+import com.repoguard.agent.service.impl.RabbitRuntimeHealthProbe;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.ChannelCallback;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 class DashboardSystemHealthProbeTest {
 
@@ -22,17 +21,18 @@ class DashboardSystemHealthProbeTest {
         org.mockito.Mockito.mock(GithubIntegrationProvider.class);
     private final ReviewPolicyProvider reviewPolicyProvider =
         org.mockito.Mockito.mock(ReviewPolicyProvider.class);
-    private final RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+    private final RabbitRuntimeHealthProbe rabbitRuntimeHealthProbe =
+        org.mockito.Mockito.mock(RabbitRuntimeHealthProbe.class);
     private final DashboardSystemHealthProbe probe = new DashboardSystemHealthProbe(
         githubIntegrationProvider,
         reviewPolicyProvider,
-        rabbitTemplate,
+        rabbitRuntimeHealthProbe,
         new DashboardStatusMapper()
     );
 
     @Test
     void reportsConfiguredDependenciesAsHealthy() {
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("CONNECTED");
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("CONFIGURED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(reviewPolicySettings("sk-test"));
 
@@ -46,8 +46,7 @@ class DashboardSystemHealthProbeTest {
 
     @Test
     void keepsRenderingWhenDependencyHealthChecksFail() {
-        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any()))
-            .thenThrow(new IllegalStateException("RabbitMQ unavailable"));
+        when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("DISCONNECTED");
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test"));
         when(reviewPolicyProvider.getSettings()).thenReturn(ReviewPolicySettings.empty());
 

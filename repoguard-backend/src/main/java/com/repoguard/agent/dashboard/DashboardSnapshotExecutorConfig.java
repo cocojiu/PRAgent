@@ -1,8 +1,8 @@
 package com.repoguard.agent.dashboard;
 
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
+import com.repoguard.agent.concurrency.AsyncExecutorProperties;
+import com.repoguard.agent.concurrency.BoundedExecutorFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -12,17 +12,11 @@ class DashboardSnapshotExecutorConfig {
     static final String DASHBOARD_SNAPSHOT_EXECUTOR = "dashboardSnapshotExecutor";
 
     @Bean(name = DASHBOARD_SNAPSHOT_EXECUTOR, destroyMethod = "shutdown")
-    ExecutorService dashboardSnapshotExecutor() {
-        return Executors.newSingleThreadExecutor(new DashboardSnapshotThreadFactory());
-    }
-
-    private static final class DashboardSnapshotThreadFactory implements ThreadFactory {
-
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "repoguard-dashboard-snapshot");
-            thread.setDaemon(true);
-            return thread;
-        }
+    ExecutorService dashboardSnapshotExecutor(BoundedExecutorFactory factory, AsyncExecutorProperties properties) {
+        return factory.create(
+            "dashboard-snapshot",
+            properties.getDashboardThreads(),
+            properties.getDashboardQueueCapacity()
+        );
     }
 }
