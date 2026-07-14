@@ -25,8 +25,11 @@ class ReviewRepositoryDimensionMigrationTest {
             .contains("insert into review_repository_dimension")
             .contains("from review_task")
             .contains("concat(trim(organization), '/', trim(repository))")
-            .contains("group by trim(organization), trim(repository)")
+            .contains("group by trim(organization), trim(repository)\non duplicate key update")
             .contains("on duplicate key update");
+        assertThat(sql).doesNotContain(
+            "group by trim(organization), trim(repository), concat(trim(organization), '/', trim(repository))"
+        );
         assertThat(sql).doesNotContain("delete from review_task", "truncate", "drop table");
     }
 }

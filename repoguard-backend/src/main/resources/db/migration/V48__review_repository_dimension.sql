@@ -40,7 +40,7 @@ where organization is not null
   and trim(organization) <> ''
   and repository is not null
   and trim(repository) <> ''
-group by trim(organization), trim(repository), concat(trim(organization), '/', trim(repository))
+group by trim(organization), trim(repository)
 on duplicate key update
     repository_label = values(repository_label),
     first_seen_at = least(first_seen_at, values(first_seen_at)),
