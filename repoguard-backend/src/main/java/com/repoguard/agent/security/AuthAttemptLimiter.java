@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -19,6 +20,7 @@ public class AuthAttemptLimiter {
     private final Clock clock;
     private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
 
+    @Autowired
     public AuthAttemptLimiter(AuthProperties properties, MeterRegistry meterRegistry) {
         this(properties, meterRegistry, Clock.systemUTC());
     }

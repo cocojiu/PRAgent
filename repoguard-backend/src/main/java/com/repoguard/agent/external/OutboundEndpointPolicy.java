@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,6 +21,7 @@ public class OutboundEndpointPolicy {
     private final OutboundEndpointProperties properties;
     private final HostResolver resolver;
 
+    @Autowired
     public OutboundEndpointPolicy(OutboundEndpointProperties properties) {
         this(properties, InetAddress::getAllByName);
     }

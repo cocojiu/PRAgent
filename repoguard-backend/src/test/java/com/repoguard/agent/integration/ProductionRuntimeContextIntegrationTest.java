@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.worker.ReviewTaskWorker;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.boot.WebApplicationType;
@@ -40,17 +39,16 @@ class ProductionRuntimeContextIntegrationTest {
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)
             .profiles("prod")
-            .properties(Map.ofEntries(
-                Map.entry("app.runtime.api.enabled", Boolean.toString(apiEnabled)),
-                Map.entry("app.runtime.worker.enabled", Boolean.toString(workerEnabled)),
-                Map.entry("app.github.webhook.enabled", "false"),
-                Map.entry("app.security.admin-api-key.enabled", "false"),
-                Map.entry("app.cors.allowed-origins[0]", "https://integration.local"),
-                Map.entry("server.port", "0"),
-                Map.entry("spring.main.banner-mode", "off"),
-                Map.entry("spring.task.scheduling.enabled", "false")
-            ))
-            .run();
+            .run(
+                "--app.runtime.api.enabled=" + apiEnabled,
+                "--app.runtime.worker.enabled=" + workerEnabled,
+                "--app.github.webhook.enabled=false",
+                "--app.security.admin-api-key.enabled=false",
+                "--app.cors.allowed-origins[0]=https://integration.local",
+                "--server.port=0",
+                "--spring.main.banner-mode=off",
+                "--spring.task.scheduling.enabled=false"
+            );
     }
 
     private void assertProductionInfrastructure(ConfigurableApplicationContext context) {
