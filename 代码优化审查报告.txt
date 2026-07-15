@@ -951,3 +951,31 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：Java 和 Maven 版本偏差会默认快速失败，JaCoCo 在允许验证的 JDK 上不再产生 class-version 噪声，后端覆盖率回退成为构建门禁，Node 运行与类型版本一致，本项达到本地完成标准。
+
+进度记录 12
+
+完成时间：2026-07-15 18:48:02 +08:00（Asia/Shanghai）
+优化项：P2 前端生产产物体积预算
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由现有 PR Quality 与 Release Images 的生产构建复核门禁。
+
+实施内容：
+
+1. 在 Vite 构建阶段新增产物预算插件，直接分析入口静态依赖图及其 CSS，不依赖哈希文件名或额外测试脚本。
+2. 首屏预加载 JavaScript gzip 预算设为 190 KiB，当前为 179.7 KiB；首屏 CSS gzip 预算设为 60 KiB，当前为 53.9 KiB。
+3. 最大异步 JavaScript chunk gzip 预算设为 140 KiB，当前最大项为 ECharts core 132.8 KiB。
+4. 任一预算超限会使 `vite build` 失败并打印实际值、预算值和最大异步 chunk 文件名；现有 PR 与镜像工作流均执行生产构建，因此无需增加独立 CI 脚本即可阻断体积回退。
+
+涉及文件：
+
+- repoguard-frontend/vite.config.ts
+
+验证结果：
+
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：22 个测试文件、79 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,330 个模块。
+- 构建预算：首屏 JavaScript gzip 179.7/190.0 KiB，首屏 CSS gzip 53.9/60.0 KiB，最大异步 JavaScript gzip 132.8/140.0 KiB，全部通过。
+- git diff --check：通过。
+
+验收结论：生产构建现在能够持续阻断首屏 JavaScript、首屏 CSS 和最大异步 JavaScript 的明显体积回退，同时保留约 5% 至 11% 的合理构建波动空间，本项达到完成标准。
