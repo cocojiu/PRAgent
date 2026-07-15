@@ -2,12 +2,14 @@ export type RequestErrorOptions = {
   status?: number;
   code?: string;
   timestamp?: string;
+  errorId?: string;
 };
 
 export class RequestError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly timestamp?: string;
+  readonly errorId?: string;
 
   constructor(message: string, options: RequestErrorOptions = {}) {
     super(message);
@@ -15,6 +17,7 @@ export class RequestError extends Error {
     this.status = options.status;
     this.code = options.code;
     this.timestamp = options.timestamp;
+    this.errorId = options.errorId;
   }
 }
 

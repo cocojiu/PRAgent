@@ -5,6 +5,9 @@ import java.util.regex.Pattern;
 
 public final class SensitiveTextSanitizer {
 
+    private static final Pattern JDBC_URL_PATTERN = Pattern.compile(
+        "(?i)\\bjdbc:[a-z0-9]+:(?://)?[^\\s,;\"']+"
+    );
     private static final Pattern URI_CREDENTIAL_PATTERN = Pattern.compile(
         "(?i)([a-z][a-z0-9+.-]*://[^\\s/:@]+:)[^\\s/@]+(@)"
     );
@@ -31,7 +34,15 @@ public final class SensitiveTextSanitizer {
             return null;
         }
         String normalized = value.replaceAll("\\s+", " ").trim();
-        String sanitized = URI_CREDENTIAL_PATTERN.matcher(normalized).replaceAll("$1****$2");
+        return sanitizePreservingWhitespace(normalized);
+    }
+
+    static String sanitizePreservingWhitespace(String value) {
+        if (value == null) {
+            return null;
+        }
+        String sanitized = JDBC_URL_PATTERN.matcher(value).replaceAll("jdbc:****");
+        sanitized = URI_CREDENTIAL_PATTERN.matcher(sanitized).replaceAll("$1****$2");
         sanitized = SENSITIVE_QUERY_PARAM_PATTERN.matcher(sanitized).replaceAll("$1****");
         sanitized = SENSITIVE_ASSIGNMENT_PATTERN.matcher(sanitized).replaceAll(SensitiveTextSanitizer::maskSensitiveValue);
         sanitized = BEARER_TOKEN_PATTERN.matcher(sanitized).replaceAll("$1****");

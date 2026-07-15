@@ -1,5 +1,7 @@
 import { RequestError } from "@/utils/errors";
 
+const ERROR_ID_HEADER = "X-Error-Id";
+
 export interface ApiResponse<T> {
   success: boolean;
   code: string;
@@ -20,14 +22,16 @@ export const unwrapResponse = async <T>(response: Response): Promise<T> => {
     throw new RequestError(body?.message || body?.code || `HTTP ${response.status}`, {
       status: response.status,
       code: body?.code,
-      timestamp: body?.timestamp
+      timestamp: body?.timestamp,
+      errorId: response.headers.get(ERROR_ID_HEADER) || undefined
     });
   }
   if (!body?.success) {
     throw new RequestError(body?.message || body?.code || "Request failed", {
       status: response.status,
       code: body?.code,
-      timestamp: body?.timestamp
+      timestamp: body?.timestamp,
+      errorId: response.headers.get(ERROR_ID_HEADER) || undefined
     });
   }
   return body.data;

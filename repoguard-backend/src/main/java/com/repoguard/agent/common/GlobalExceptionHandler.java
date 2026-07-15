@@ -1,6 +1,7 @@
 package com.repoguard.agent.common;
 
 import jakarta.validation.ConstraintViolationException;
+import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -16,7 +17,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    public static final String ERROR_ID_HEADER = "X-Error-Id";
+
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final String ERROR_ID_MDC = "errorId";
     private static final String VALIDATION_ERROR_MESSAGE = "Request validation failed";
     private static final String UNSUPPORTED_MEDIA_TYPE_MESSAGE = "Content type is not supported";
     private static final String INTERNAL_ERROR_MESSAGE = "系统内部异常，请联系管理员。";
@@ -54,15 +58,37 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleException(Exception exception) {
-        LOGGER.error(
-            "Unhandled application exception traceId={} type={} message={} location={}",
-            traceId(),
-            exception.getClass().getName(),
-            sanitizeLogMessage(exception.getMessage()),
-            topStackLocation(exception)
-        );
+        String errorId = UUID.randomUUID().toString();
+        logUnhandledException(errorId, exception);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .header(ERROR_ID_HEADER, errorId)
             .body(ApiResponse.error(ErrorCode.INTERNAL_ERROR, INTERNAL_ERROR_MESSAGE));
+    }
+
+    private void logUnhandledException(String errorId, Exception exception) {
+        String previousErrorId = MDC.get(ERROR_ID_MDC);
+        MDC.put(ERROR_ID_MDC, errorId);
+        try {
+            LOGGER.error(
+                "Unhandled application exception traceId={} errorId={} type={} message={} location={}",
+                traceId(),
+                errorId,
+                exception.getClass().getName(),
+                sanitizeLogMessage(exception.getMessage()),
+                topStackLocation(exception),
+                exception
+            );
+        } finally {
+            restoreErrorId(previousErrorId);
+        }
+    }
+
+    private void restoreErrorId(String previousErrorId) {
+        if (previousErrorId == null) {
+            MDC.remove(ERROR_ID_MDC);
+            return;
+        }
+        MDC.put(ERROR_ID_MDC, previousErrorId);
     }
 
     String sanitizeLogMessage(String message) {

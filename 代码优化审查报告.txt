@@ -1168,3 +1168,48 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：生产容器只保留 stdout 这一条权威日志采集路径，本地开发仍保留有界滚动文件；配置边界同时受静态契约和生产运行时断言保护，本项达到本地完成标准。
+
+进度记录 19
+
+完成时间：2026-07-15 20:35:37 +08:00（Asia/Shanghai）
+优化项：P2 未处理异常 errorId 与安全完整堆栈
+状态：本地实现、全量后端验证和前端生产构建均已完成，准备提交并推送至 PRAgent-test，由生产 profile 集成测试和 Release Images 复核。
+
+实施内容：
+
+1. 未处理异常继续向客户端返回固定的安全 500 响应体，同时新增 `X-Error-Id` 响应头；不改变现有 API body 契约，也不向客户端暴露异常类型、消息或堆栈。
+2. 每次未处理异常生成独立 UUID，并在同一次日志事件的消息、MDC `errorId` 字段和响应头中保持一致；记录结束后恢复原 MDC 值，避免线程复用造成关联标识串扰。
+3. 错误日志恢复完整 Throwable 及 cause 链，通过 Logback `safeMsg`、`safeEx` 转换器统一清洗格式化消息和完整堆栈，在保留异常类型、调用位置及因果链的同时遮蔽 JDBC URL、URI 凭据、敏感查询参数、密码/令牌赋值、Bearer 令牌和 OpenAI 密钥。
+4. JDBC 连接串改为整体归一化为 `jdbc:****`，不再保留数据库主机、端口、库名和连接参数；连接探测错误摘要同步采用同一安全边界。
+5. CORS 显式暴露 `X-Trace-Id` 与 `X-Error-Id`；前端 `RequestError` 捕获服务端 errorId，便于支持人员关联后端日志，但现有页面错误展示行为保持不变。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/common/GlobalExceptionHandler.java
+- repoguard-backend/src/main/java/com/repoguard/agent/common/SensitiveTextSanitizer.java
+- repoguard-backend/src/main/java/com/repoguard/agent/common/SanitizingMessageConverter.java
+- repoguard-backend/src/main/java/com/repoguard/agent/common/SanitizingThrowableConverter.java
+- repoguard-backend/src/main/java/com/repoguard/agent/config/CorsConfig.java
+- repoguard-backend/src/main/resources/logback-spring.xml
+- repoguard-backend/src/test/java/com/repoguard/agent/common/GlobalExceptionHandlerTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/common/SensitiveTextSanitizerTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/common/SanitizingLogConverterTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/config/CorsConfigTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/config/LogbackProfileContractTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/ConnectionProbeErrorMessageTest.java
+- repoguard-frontend/src/api/apiEnvelope.ts
+- repoguard-frontend/src/api/client.test.ts
+- repoguard-frontend/src/utils/errors.ts
+
+验证结果：
+
+- 后端定向测试：13 个测试全部通过，覆盖异常关联、完整因果链、敏感信息清洗、CORS 暴露头和 Logback 配置契约。
+- 后端全量 `mvn verify`：1,607 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- 前端 TypeScript、ESLint：通过。
+- 前端 Vitest：25 个测试文件、87 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,392 个模块。
+- 构建预算：初始 JavaScript gzip 180.4/190.0 KiB，初始 CSS gzip 27.1/32.0 KiB，最大异步 JavaScript gzip 133.9/140.0 KiB，全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+
+验收结论：客户端获得可供排障关联的安全 errorId，服务端恢复完整可诊断异常链且不会把连接地址或凭据写入日志；响应契约和现有用户提示保持稳定，本项达到本地完成标准。

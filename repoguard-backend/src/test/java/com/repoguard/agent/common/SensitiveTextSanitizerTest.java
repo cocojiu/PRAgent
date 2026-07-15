@@ -52,4 +52,16 @@ class SensitiveTextSanitizerTest {
             .contains("sk-****")
             .doesNotContain("sk-secret123456789");
     }
+
+    @Test
+    void masksJdbcUrlsAndCanPreserveStackTraceLineBreaks() {
+        String sanitized = SensitiveTextSanitizer.sanitizePreservingWhitespace(
+            "outer jdbc:mysql://internal-db:3306/repoguard?password=raw-db\n"
+                + "Caused by: token=raw-token\n"
+        );
+
+        assertThat(sanitized)
+            .isEqualTo("outer jdbc:****\nCaused by: token=****\n")
+            .doesNotContain("internal-db", "raw-db", "raw-token");
+    }
 }

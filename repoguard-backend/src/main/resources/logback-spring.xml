@@ -2,10 +2,15 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
+    <conversionRule conversionWord="safeMsg"
+                    converterClass="com.repoguard.agent.common.SanitizingMessageConverter"/>
+    <conversionRule conversionWord="safeEx"
+                    converterClass="com.repoguard.agent.common.SanitizingThrowableConverter"/>
+
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="repoguard-backend"/>
     <property name="LOG_PATH" value="${REPOGUARD_LOG_PATH:-logs/backend}"/>
     <property name="LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId:-}] [taskId=%X{taskId:-}] [prNumber=%X{prNumber:-}] [repository=%X{repository:-}] %logger{36} - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId:-}] [errorId=%X{errorId:-}] [taskId=%X{taskId:-}] [prNumber=%X{prNumber:-}] [repository=%X{repository:-}] %logger{36} - %safeMsg%n%safeEx"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>

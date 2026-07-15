@@ -20,6 +20,15 @@ class LogbackProfileContractTest {
         Document document = parseConfig();
         Element configuration = document.getDocumentElement();
 
+        assertThat(childAttributeValues(configuration, "conversionRule", "conversionWord"))
+            .containsExactly("safeMsg", "safeEx");
+        Element logPattern = directChildren(configuration, "property").stream()
+            .filter(element -> "LOG_PATTERN".equals(element.getAttribute("name")))
+            .findFirst()
+            .orElseThrow();
+        assertThat(logPattern.getAttribute("value"))
+            .contains("[errorId=%X{errorId:-}]", "%safeMsg%n%safeEx")
+            .doesNotContain("%msg");
         assertThat(childAttributeValues(configuration, "appender", "name"))
             .containsExactly("CONSOLE");
         assertThat(rootAppenderRefs(configuration)).containsExactly("CONSOLE");

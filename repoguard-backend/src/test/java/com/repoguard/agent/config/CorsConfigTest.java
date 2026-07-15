@@ -59,6 +59,7 @@ class CorsConfigTest {
 
         CorsConfiguration corsConfiguration = registry.configurations().get("/api/**");
         assertThat(corsConfiguration.getAllowedOrigins()).containsExactly("http://localhost:5173");
+        assertThat(corsConfiguration.getExposedHeaders()).containsExactly("X-Trace-Id", "X-Error-Id");
         assertThat(corsConfiguration.getAllowCredentials()).isTrue();
     }
 

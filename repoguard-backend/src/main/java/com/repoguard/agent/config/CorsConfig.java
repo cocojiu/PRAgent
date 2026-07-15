@@ -33,6 +33,7 @@ public class CorsConfig implements WebMvcConfigurer {
             .allowedOrigins(allowedOrigins.toArray(String[]::new))
             .allowedMethods("*")
             .allowedHeaders("*")
+            .exposedHeaders("X-Trace-Id", "X-Error-Id")
             .allowCredentials(true);
     }
 
