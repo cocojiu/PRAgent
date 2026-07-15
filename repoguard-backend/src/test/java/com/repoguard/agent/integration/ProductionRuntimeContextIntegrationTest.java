@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.worker.ReviewTaskWorker;
+import ch.qos.logback.classic.Logger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
@@ -57,5 +59,9 @@ class ProductionRuntimeContextIntegrationTest {
         assertThat(context.getBean(JdbcTemplate.class).queryForObject("select 1", Integer.class)).isEqualTo(1);
         Boolean rabbitOpen = context.getBean(RabbitTemplate.class).execute(channel -> channel.isOpen());
         assertThat(rabbitOpen).isTrue();
+
+        Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+        assertThat(rootLogger.getAppender("CONSOLE")).isNotNull();
+        assertThat(rootLogger.getAppender("ROLLING_FILE")).isNull();
     }
 }

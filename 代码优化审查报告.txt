@@ -1138,3 +1138,33 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：测试伪凭据不再误触发布密钥门禁，同时门禁强度与扫描范围保持不变；本项达到本地完成标准，最终完成以新一轮 Release Images 全绿为准。
+
+进度记录 18
+
+完成时间：2026-07-15 20:08:08 +08:00（Asia/Shanghai）
+优化项：P2 生产容器日志单一采集路径
+状态：本地实现与全量后端验证已完成，准备提交并推送至 PRAgent-test，由生产 profile 集成测试和 Release Images 复核。
+
+实施内容：
+
+1. CONSOLE appender 与 INFO root logger 作为所有环境的基础日志出口，继续输出 traceId、taskId、prNumber 和 repository 等结构化上下文字段。
+2. ROLLING_FILE appender 仅在 `(dev | local) & !prod` profile 表达式成立时创建并挂载；即使 prod 与本地 profile 被误配为同时启用，`!prod` 也会优先阻止容器文件落盘。
+3. prod、test 及其他非本地环境不再创建 logs/backend 滚动文件，生产日志只经 stdout 进入现有 Docker/Promtail 链路，避免重复 I/O、2GB writable layer 占用和双采集。
+4. 新增 Logback XML 静态契约测试，约束基础 root 仅引用 CONSOLE、唯一 profile 表达式和本地 ROLLING_FILE 引用，防止后续配置回退。
+5. 扩展现有 ProductionRuntimeContextIntegrationTest，在真实 prod profile、MySQL、RabbitMQ 上下文中断言 root logger 存在 CONSOLE 且不存在 ROLLING_FILE。
+
+涉及文件：
+
+- repoguard-backend/src/main/resources/logback-spring.xml
+- repoguard-backend/src/test/java/com/repoguard/agent/config/LogbackProfileContractTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/integration/ProductionRuntimeContextIntegrationTest.java
+
+验证结果：
+
+- Logback profile 定向测试：1 个测试通过，BUILD SUCCESS。
+- 后端全量 `mvn verify`：1,605 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：661 个类分析完成，覆盖率门禁全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：生产容器只保留 stdout 这一条权威日志采集路径，本地开发仍保留有界滚动文件；配置边界同时受静态契约和生产运行时断言保护，本项达到本地完成标准。
