@@ -850,3 +850,39 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：独立 PUT 发生部分成功时，用户可以看到每项结果，页面会主动重新同步服务端状态，不再出现静默部分保存，本项达到完成标准。
+
+进度记录 09
+
+完成时间：2026-07-15 18:14:46 +08:00（Asia/Shanghai）
+优化项：GitHub Actions 前端运行镜像 HIGH 漏洞修复
+状态：已完成，Release Images 验证通过，准备推送本进度记录至 PRAgent-test。
+
+问题根因：
+
+1. `Release Images / Build and Push Images` 在前端镜像 Trivy 扫描步骤失败。
+2. 原运行镜像 `nginxinc/nginx-unprivileged:1.30.3-alpine3.23` 包含 curl/libcurl 8.19.0-r0。
+3. Trivy 检出 CVE-2026-5773 和 CVE-2026-6276；curl 与 libcurl 合计 4 个 HIGH 漏洞，固定修复版本为 8.20.0-r0。
+
+实施内容：
+
+1. 保持 NGINX 稳定版本 1.30.3 不变，将前端运行镜像切换为官方 `1.30.3-alpine-slim` 变体。
+2. 固定官方多架构镜像 digest `sha256:3b24c4bfb2b9f60359b1475605ca1c8ed6e4963eb8369c6835be4d96bdb3ea81`，避免使用可漂移标签。
+3. 项目 Nginx 配置未使用完整版镜像中的 GeoIP、NJS、XSLT、image-filter 等动态模块；slim 变体满足静态文件服务、反向代理、envsubst 和非 root 运行要求。
+4. 没有在项目镜像层临时执行 `apk upgrade`，避免引入 root 切换和依赖仓库时间漂移；通过移除不需要的 curl/libcurl 及动态模块缩小攻击面。
+
+涉及文件：
+
+- repoguard-frontend/Dockerfile
+
+验证结果：
+
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：21 个测试文件、69 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,329 个模块。
+- GitHub Actions `Release Images` run 29407163130：成功。
+- Actions 中后端镜像构建与 Trivy HIGH/CRITICAL 扫描：通过。
+- Actions 中前端 slim 镜像构建、推送与 Trivy HIGH/CRITICAL 扫描：通过。
+- git diff --check：通过。
+
+验收结论：前端运行镜像已移除本项目不需要的 curl/libcurl 依赖和动态模块，原 4 个 HIGH 漏洞不再出现，Release Images 恢复成功，本项达到完成标准。
