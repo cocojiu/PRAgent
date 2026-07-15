@@ -756,3 +756,36 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：用户管理页不再把当前页数量展示为系统总数，所有分页统计的范围都有明确标签，本项达到完成标准。
+
+
+进度记录 06
+
+完成时间：2026-07-15 17:32:11 +08:00（Asia/Shanghai）
+优化项：P1 用户搜索请求风暴和乱序响应覆盖
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 用户关键词搜索增加 350ms 防抖，连续输入只触发停止输入后的最终请求。
+2. 角色和状态选择仍立即加载；触发时会取消尚未执行的关键词防抖计时器，避免旧条件随后补发请求。
+3. 用户列表请求通过 createLatestOnlyLoader 分配递增序号，只有最新请求可以写入 users 和 usersTotal。
+4. 较早请求晚于新请求返回时，其数据被忽略；较早请求晚到的异常也被抑制，不会覆盖或干扰最新页面状态。
+5. 组件卸载时清理防抖计时器并使所有在途请求失效，避免卸载后写入响应式状态。
+6. 筛选触发的请求失败会显示稳定的用户列表加载错误信息，不再形成未处理 Promise rejection。
+
+涉及文件：
+
+- repoguard-frontend/src/pages/UserManagementPage.vue
+- repoguard-frontend/src/features/user-management/latestOnlyLoader.ts
+- repoguard-frontend/src/features/user-management/latestOnlyLoader.test.ts
+
+验证结果：
+
+- 新增 latest-only loader 单元测试：2 个测试通过，覆盖旧响应晚到、旧异常和卸载取消。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：19 个测试文件、65 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,329 个模块。
+- git diff --check：通过。
+
+验收结论：快速输入不会产生逐字符请求风暴，旧请求无法覆盖最新筛选结果，组件卸载后不会写回状态，本项达到完成标准。

@@ -193,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "lucide-vue-next";
 import { createUser, fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
@@ -201,6 +201,7 @@ import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, User
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { buildUserManagementMetrics } from "@/features/user-management/userManagementMetrics";
+import { createLatestOnlyLoader } from "@/features/user-management/latestOnlyLoader";
 import { canManage, currentUser } from "@/stores/authState";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -220,6 +221,7 @@ const auditTotal = ref(0);
 const savingIds = ref<Set<number>>(new Set());
 const createDialogVisible = ref(false);
 const creatingUser = ref(false);
+let userFilterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
 const createForm = reactive<UserCreateRequest>({
   username: "",
   email: "",
@@ -242,16 +244,25 @@ const userMetricItems = computed<MetricGridItem[]>(() => buildUserManagementMetr
   Boolean(roleFilter.value || statusFilter.value || keyword.value.trim())
 ));
 
-const loadUsers = async () => {
-  const page = await fetchUsers({
+const latestUsersLoader = createLatestOnlyLoader<Awaited<ReturnType<typeof fetchUsers>>>((page) => {
+  users.value = page.items;
+  usersTotal.value = page.total;
+});
+
+const loadUsers = () => latestUsersLoader.load(() => fetchUsers({
     page: usersPage.value,
     pageSize: usersPageSize.value,
     role: roleFilter.value,
     status: statusFilter.value,
     keyword: keyword.value.trim() || undefined
-  });
-  users.value = page.items;
-  usersTotal.value = page.total;
+  }));
+
+const loadUsersWithMessage = async () => {
+  try {
+    await loadUsers();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "用户列表加载失败"));
+  }
 };
 
 const loadAudits = async () => {
@@ -434,9 +445,29 @@ const formatDateTime = (value?: string) => {
   return value.replace("T", " ").slice(0, 16);
 };
 
-watch([roleFilter, statusFilter, keyword], async () => {
+watch([roleFilter, statusFilter], () => {
   usersPage.value = 1;
-  await loadUsers();
+  if (userFilterDebounceTimer) {
+    clearTimeout(userFilterDebounceTimer);
+  }
+  void loadUsersWithMessage();
+});
+
+watch(keyword, () => {
+  usersPage.value = 1;
+  if (userFilterDebounceTimer) {
+    clearTimeout(userFilterDebounceTimer);
+  }
+  userFilterDebounceTimer = setTimeout(() => {
+    void loadUsersWithMessage();
+  }, 350);
+});
+
+onUnmounted(() => {
+  if (userFilterDebounceTimer) {
+    clearTimeout(userFilterDebounceTimer);
+  }
+  latestUsersLoader.cancel();
 });
 
 onMounted(loadAll);
