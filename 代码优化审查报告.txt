@@ -929,7 +929,7 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 
 1. 新增 Maven Enforcer 3.6.3，在 validate 阶段要求 JDK `[25,26)` 和 Maven `[3.9.9,4.0.0)`，错误工具链会在编译和测试前快速失败。
 2. JaCoCo 从 0.8.13 升级到 0.8.15；该版本正式支持 Java 26，消除开发机 JDK 26 对 major version 70 的插桩异常。
-3. JaCoCo test 阶段增加 BUNDLE 覆盖率 check：line 不低于 89%，branch 不低于 70%，从当前稳定基线阻断明显覆盖率回退。
+3. JaCoCo verify 阶段增加 BUNDLE 覆盖率 check：line 不低于 89%，branch 不低于 70%；PR 全量后端 Job 执行 `mvn verify`，定向集成 Job 保持 `mvn test`，避免用局部测试覆盖率误判全局基线。
 4. 前端 `@types/node` 从 25.x 对齐到 Node 22 的 22.20.1，并同步更新 package-lock.json；与 `.nvmrc` 和 CI Node 22 保持一致。
 
 涉及文件：
