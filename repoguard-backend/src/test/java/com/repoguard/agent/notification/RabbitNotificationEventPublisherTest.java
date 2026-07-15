@@ -30,7 +30,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 class RabbitNotificationEventPublisherTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+    private final RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
         meterRegistry,
         new ReviewExecutionFailureClassifier()
     );

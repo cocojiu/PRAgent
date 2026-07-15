@@ -13,7 +13,7 @@ import org.springframework.dao.CannotAcquireLockException;
 class RepoGuardMetricsTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+    private final RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
         meterRegistry,
         new ReviewExecutionFailureClassifier()
     );
@@ -373,7 +373,7 @@ class RepoGuardMetricsTest {
     }
 
     private RepoGuardMetrics metrics(SimpleMeterRegistry registry) {
-        return new RepoGuardMetrics(registry, new ReviewExecutionFailureClassifier());
+        return RepoGuardMetrics.forTesting(registry, new ReviewExecutionFailureClassifier());
     }
 
     private double counter(String name, String... tags) {

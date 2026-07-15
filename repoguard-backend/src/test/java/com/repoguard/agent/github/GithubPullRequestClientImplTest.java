@@ -42,7 +42,7 @@ class GithubPullRequestClientImplTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private final GithubIntegrationHealthReporter healthReporter = new GithubIntegrationHealthReporter(
         githubIntegrationProvider,
-        new RepoGuardMetrics(meterRegistry, new ReviewExecutionFailureClassifier())
+        RepoGuardMetrics.forTesting(meterRegistry, new ReviewExecutionFailureClassifier())
     );
     private final GithubPullRequestClientImpl client = client(RestClient.builder(), healthReporter);
 
