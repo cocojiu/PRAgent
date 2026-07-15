@@ -886,3 +886,35 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：前端运行镜像已移除本项目不需要的 curl/libcurl 依赖和动态模块，原 4 个 HIGH 漏洞不再出现，Release Images 恢复成功，本项达到完成标准。
+
+进度记录 10
+
+完成时间：2026-07-15 18:25:31 +08:00（Asia/Shanghai）
+优化项：P2 登录成功后的安全站内回跳
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 登录和注册成功后不再固定跳转总览，而是消费路由守卫写入的 redirect 参数，并使用 replace 避免登录页残留在浏览器返回历史中。
+2. 新增统一的回跳解析器，只允许当前站点下 `/repoguard` 或 `/repoguard/...` 路径，同时保留合法查询参数和 hash。
+3. 绝对外部 URL、协议相对 URL、非 RepoGuard 路径、路径穿越、反斜杠、控制字符、脚本协议和重复 query 值全部回退到 `/repoguard/overview`。
+4. 已登录用户直接访问带 redirect 的登录页时，路由守卫复用同一个安全解析器，避免出现两套校验口径。
+
+涉及文件：
+
+- repoguard-frontend/src/router/authRedirect.ts
+- repoguard-frontend/src/router/authRedirect.test.ts
+- repoguard-frontend/src/router/index.ts
+- repoguard-frontend/src/pages/LoginPage.vue
+- repoguard-frontend/src/e2e/appRouteSmoke.test.ts
+
+验证结果：
+
+- 安全回跳与路由烟雾定向测试：2 个测试文件、13 个测试全部通过。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：22 个测试文件、79 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,330 个模块。
+- git diff --check：通过。
+
+验收结论：认证成功后可以恢复原站内页面，同时所有外站和异常回跳输入均被安全降级到总览页，不形成开放重定向，本项达到完成标准。

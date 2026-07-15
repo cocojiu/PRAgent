@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
 import { hasAuthToken } from "@/api/client";
 import { routeNames } from "@/router/names";
+import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
 import { canManage, currentUser, loadCurrentUser } from "@/stores/authState";
 
 const LoginPage = () => import("@/pages/LoginPage.vue");
@@ -172,8 +173,7 @@ router.beforeEach(async (to) => {
   }
 
   if (to.name === routeNames.login && hasAuthToken()) {
-    const redirect = typeof to.query.redirect === "string" ? to.query.redirect : "/repoguard/overview";
-    return redirect;
+    return resolveSafePostAuthRedirect(to.query.redirect);
   }
 });
 

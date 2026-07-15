@@ -53,6 +53,16 @@ describe("application route smoke", () => {
     await expectResolvedRoute("/repoguard/tasks/42", routeNames.taskDetail);
   });
 
+  it("restores only safe internal redirects for authenticated users", async () => {
+    saveAuthToken("access-token", false);
+
+    const internal = await navigate("/login?redirect=%2Frepoguard%2Ftasks%3Fpage%3D2");
+    expect(internal.fullPath).toBe("/repoguard/tasks?page=2");
+
+    const external = await navigate("/login?redirect=https%3A%2F%2Fevil.example%2Fsteal");
+    expect(external.fullPath).toBe("/repoguard/overview");
+  });
+
   it("loads management routes after resolving the current admin user", async () => {
     saveAuthToken("access-token", false);
 
