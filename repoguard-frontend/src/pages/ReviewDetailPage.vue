@@ -229,13 +229,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, watch } from "vue";
 import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
-import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { fetchReviewChangedFiles, fetchReviewFindings, fetchReviewMissingTests, fetchReviewTimeline } from "@/api/reviews";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
 import {
+  DETAIL_SECTION_PAGE_SIZE,
   ReviewDetailFilesSection,
   ReviewDetailFindingsCard,
   ReviewDetailGithubCommentsCard,
@@ -272,32 +271,19 @@ import {
   useReviewDetailLlmDisplay,
   useReviewDetailPolling,
   useReviewDetailRetry,
+  useReviewDetailSectionLoaders,
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
 import type { ReviewStatus } from "@/types";
-import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_FAILURES = 3;
 const MAX_POLL_INTERVAL_MS = 30000;
-const DETAIL_SECTION_PAGE_SIZE = 20;
 
 const router = useRouter();
 const route = useRoute();
-
-const findingsPage = ref(1);
-const changedFilesPage = ref(1);
-const missingTestsPage = ref(1);
-const findingsLoading = ref(false);
-const changedFilesLoading = ref(false);
-const missingTestsLoading = ref(false);
-const timelineLoading = ref(false);
-const findingsLoaded = ref(false);
-const changedFilesLoaded = ref(false);
-const missingTestsLoaded = ref(false);
-const timelineLoaded = ref(false);
 
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
@@ -332,19 +318,10 @@ const {
 } = useReviewDetailGithubComments();
 let stopPolling = () => {};
 let syncPolling = () => {};
-
-const resetDetailSectionPages = () => {
-  findingsPage.value = 1;
-  changedFilesPage.value = 1;
-  missingTestsPage.value = 1;
-  findingsLoaded.value = false;
-  changedFilesLoaded.value = false;
-  missingTestsLoaded.value = false;
-  timelineLoaded.value = false;
-};
+let resetDetailSections = () => {};
 
 function afterDetailSummaryLoaded() {
-  resetDetailSectionPages();
+  resetDetailSections();
 }
 
 const {
@@ -384,6 +361,28 @@ const isTerminalTask = computed(() => {
   return isTerminalReviewStatus(selectedTask.value?.status);
 });
 const isArchivedTask = computed(() => selectedTask.value?.archived === true);
+const sectionLoaders = useReviewDetailSectionLoaders({ isArchivedTask, selectedTask });
+const {
+  changedFilesLoaded,
+  changedFilesLoading,
+  changedFilesPage,
+  findingsLoaded,
+  findingsLoading,
+  findingsPage,
+  loadChangedFilesFirstPage,
+  loadChangedFilesPage,
+  loadFindingsFirstPage,
+  loadFindingsPage,
+  loadMissingTestsFirstPage,
+  loadMissingTestsPage,
+  loadTimelineItems,
+  missingTestsLoaded,
+  missingTestsLoading,
+  missingTestsPage,
+  timelineLoaded,
+  timelineLoading
+} = sectionLoaders;
+resetDetailSections = sectionLoaders.resetDetailSections;
 const canManageHotTask = computed(() => canManage.value && !isArchivedTask.value);
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
 const canRetryTask = computed(() => selectedTask.value?.status === "failed" && !isArchivedTask.value);
@@ -541,137 +540,6 @@ const loadGithubCommentPublicationHistoryPage = async (page: number) => {
   await loadGithubCommentPublicationHistory(id, { page });
 };
 
-const loadFindingsPage = async (page: number) => {
-  if (!selectedTask.value || findingsLoading.value) {
-    return;
-  }
-  if (isArchivedTask.value) {
-    selectedTask.value = { ...selectedTask.value, findings: [] };
-    findingsPage.value = page;
-    findingsLoaded.value = true;
-    return;
-  }
-  const taskId = selectedTask.value.id;
-  findingsLoading.value = true;
-  try {
-    const result = await fetchReviewFindings(taskId, {
-      page,
-      pageSize: DETAIL_SECTION_PAGE_SIZE
-    });
-    if (!selectedTask.value || selectedTask.value.id !== taskId) {
-      return;
-    }
-    selectedTask.value = {
-      ...selectedTask.value,
-      findings: result.items,
-      findingTotal: result.total
-    };
-    findingsPage.value = page;
-    findingsLoaded.value = true;
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    findingsLoading.value = false;
-  }
-};
-
-const loadChangedFilesPage = async (page: number) => {
-  if (!selectedTask.value || changedFilesLoading.value) {
-    return;
-  }
-  if (isArchivedTask.value) {
-    selectedTask.value = { ...selectedTask.value, changedFiles: [] };
-    changedFilesPage.value = page;
-    changedFilesLoaded.value = true;
-    return;
-  }
-  const taskId = selectedTask.value.id;
-  changedFilesLoading.value = true;
-  try {
-    const result = await fetchReviewChangedFiles(taskId, {
-      page,
-      pageSize: DETAIL_SECTION_PAGE_SIZE
-    });
-    if (!selectedTask.value || selectedTask.value.id !== taskId) {
-      return;
-    }
-    selectedTask.value = {
-      ...selectedTask.value,
-      changedFiles: result.items,
-      changedFileTotal: result.total
-    };
-    changedFilesPage.value = page;
-    changedFilesLoaded.value = true;
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    changedFilesLoading.value = false;
-  }
-};
-
-const loadMissingTestsPage = async (page: number) => {
-  if (!selectedTask.value || missingTestsLoading.value) {
-    return;
-  }
-  if (isArchivedTask.value) {
-    selectedTask.value = { ...selectedTask.value, missingTests: [] };
-    missingTestsPage.value = page;
-    missingTestsLoaded.value = true;
-    return;
-  }
-  const taskId = selectedTask.value.id;
-  missingTestsLoading.value = true;
-  try {
-    const result = await fetchReviewMissingTests(taskId, {
-      page,
-      pageSize: DETAIL_SECTION_PAGE_SIZE
-    });
-    if (!selectedTask.value || selectedTask.value.id !== taskId) {
-      return;
-    }
-    selectedTask.value = {
-      ...selectedTask.value,
-      missingTests: result.items,
-      missingTestTotal: result.total
-    };
-    missingTestsPage.value = page;
-    missingTestsLoaded.value = true;
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error, "请求失败"));
-  } finally {
-    missingTestsLoading.value = false;
-  }
-};
-
-const loadTimelineItems = async () => {
-  if (!selectedTask.value || timelineLoading.value) {
-    return;
-  }
-  const taskId = selectedTask.value.id;
-  timelineLoading.value = true;
-  try {
-    const timeline = await fetchReviewTimeline(taskId, { limit: 20 });
-    if (!selectedTask.value || selectedTask.value.id !== taskId) {
-      return;
-    }
-    selectedTask.value = {
-      ...selectedTask.value,
-      timeline
-    };
-    timelineLoaded.value = true;
-  } catch (error) {
-    ElMessage.warning(getErrorMessage(error, "时间线加载失败"));
-  } finally {
-    timelineLoading.value = false;
-  }
-};
-
-const loadFindingsFirstPage = () => loadFindingsPage(1);
-
-const loadChangedFilesFirstPage = () => loadChangedFilesPage(1);
-
-const loadMissingTestsFirstPage = () => loadMissingTestsPage(1);
-
 const { feedbackSavingId, submitFindingFeedback } = useReviewDetailFindingFeedback({
   canManage,
   findingFeedbackPromptTitle,
@@ -719,6 +587,7 @@ watch(
   () => {
     stopGithubCommentPublishPolling();
     stopPolling();
+    resetDetailSections();
     void loadDetail();
   }
 );
@@ -729,6 +598,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   cancelPendingRequests();
+  resetDetailSections();
   stopGithubCommentPublishPolling();
   cleanupPolling();
 });

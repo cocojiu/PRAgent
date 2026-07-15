@@ -1009,3 +1009,36 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：未使用的 Element Plus 主题样式不再进入首屏，实际组件及其隐式依赖样式均由官方入口保留，且新的 CSS 基线已由构建门禁固化，本项达到完成标准。
+
+进度记录 14
+
+完成时间：2026-07-15 19:16:33 +08:00（Asia/Shanghai）
+优化项：P2 审查详情重型分区加载边界收敛
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 将 findings、changed files、missing tests 和 timeline 的 API 调用、分页、loading/loaded 状态从 ReviewDetailPage 移入独立领域 composable。
+2. 三类分页明细复用统一加载流程，集中维护 20 条分页上限、归档任务空明细行为、服务端 total 回写和稳定错误反馈。
+3. 每个分区增加独立请求序号；路由切换、详情重载和组件卸载会统一失效在途请求，旧响应与旧异常不能写入新任务。
+4. 旧请求完成时仅可收尾自己的 loading 状态，不能提前清除重置后新请求的 loading；新增延迟 Promise 测试覆盖该竞争场景。
+5. ReviewDetailPage 从 735 行降至 605 行，页面保留编排和展示派生逻辑，数据加载边界集中到 review-detail 领域目录。
+
+涉及文件：
+
+- repoguard-frontend/src/pages/ReviewDetailPage.vue
+- repoguard-frontend/src/features/review-detail/index.ts
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailSectionLoaders.ts
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailSectionLoaders.test.ts
+
+验证结果：
+
+- 新增分区加载单元测试：3 个测试通过，覆盖四类接口参数/回写、过期请求竞争和归档明细短路。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：23 个测试文件、82 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,390 个模块。
+- 构建预算：首屏 JavaScript gzip 179.7/190.0 KiB，首屏 CSS gzip 27.1/32.0 KiB，最大异步 JavaScript gzip 132.8/140.0 KiB，全部通过。
+- git diff --check：通过。
+
+验收结论：详情页重型分区的加载职责已按领域边界收敛，路由切换时的在途分区请求不会污染新任务或错误状态，同时页面规模得到有行为测试保护的渐进缩减，本项达到完成标准。

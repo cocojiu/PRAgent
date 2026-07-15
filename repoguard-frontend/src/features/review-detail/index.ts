@@ -16,6 +16,10 @@ export { useReviewDetailLlmDisplay } from "./composables/useReviewDetailLlmDispl
 export { useReviewDetailPolling } from "./composables/useReviewDetailPolling";
 export { useReviewDetailRetry } from "./composables/useReviewDetailRetry";
 export {
+  DETAIL_SECTION_PAGE_SIZE,
+  useReviewDetailSectionLoaders
+} from "./composables/useReviewDetailSectionLoaders";
+export {
   changeTypeText,
   chunkAggregateRiskText,
   chunkReasonText,
