@@ -4,9 +4,21 @@ spring:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/repoguard_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:}
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    username: ${SPRING_RABBITMQ_USERNAME:repoguard}
+    password: ${SPRING_RABBITMQ_PASSWORD:repoguard}
   flyway:
     enabled: ${SPRING_FLYWAY_ENABLED:true}
     locations: classpath:db/migration
+
+repoguard:
+  security:
+    encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
+    encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
+  auth:
+    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:changeme-local-dev}
+    registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}
 
 app:
   cors:

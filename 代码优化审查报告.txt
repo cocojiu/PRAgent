@@ -1252,3 +1252,52 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：匿名访问面已精确到真实 Controller 方法与 HTTP method，普通用户写接口和管理员专用接口具备可读的权限声明；访问令牌策略、RBAC 映射和 Admin API Key 策略均由双向契约约束，本项达到本地完成标准。
+
+进度记录 21
+
+完成时间：2026-07-15 21:39:32 +08:00（Asia/Shanghai）
+优化项：P2 默认运行 profile 与本地默认值安全边界
+状态：本地实现、配置契约测试、全量后端验证、可执行 JAR 启动验证和仓库治理门禁均已完成，准备提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 移除基础 `application.yml` 中默认激活 `dev,local` 的行为；新增 Spring Boot 4 `EnvironmentPostProcessor`，配置数据装载后若仍未显式指定 profile，则在创建应用上下文和连接外部基础设施前立即拒绝启动。
+2. 将 `dev`、`local`、`test` 定义为本地/测试安全域，其余包括 `prod`、`staging` 在内的未知 profile 均按生产强度校验；同时禁止本地/测试 profile 与生产类 profile 混合启用，避免生产环境通过叠加本地 profile 重新获得弱默认值。
+3. 基础配置不再为 RabbitMQ 主机与凭据、加密密钥与密钥编号、认证 token secret 提供本地默认值；用户注册默认关闭，CORS 默认来源为空，使未完整配置的生产类环境以失败关闭方式启动。
+4. 将 localhost RabbitMQ、开发加密密钥、开发 token secret 和注册开启等便利默认值迁移到 `application-dev.yml` 与 `application-test.yml`，本地开发和测试仍可在显式 profile 下保持原有体验。
+5. CORS、认证密钥、Admin API Key、GitHub webhook 和敏感配置加密校验统一复用运行 profile 策略；`staging` 等非本地环境不再绕过过去只针对 `prod` 的强校验。
+6. README 后端本地启动命令显式增加 `-Dspring-boot.run.profiles=dev,local`，消除安全默认值收紧后的操作歧义；提交时仅纳入该单行变更，不包含工作区中既有的其他 README 修改。
+
+涉及文件：
+
+- README.md
+- repoguard-backend/src/main/java/com/repoguard/agent/config/RuntimeProfilePolicy.java
+- repoguard-backend/src/main/java/com/repoguard/agent/config/ExplicitProfileEnvironmentPostProcessor.java
+- repoguard-backend/src/main/java/com/repoguard/agent/config/CorsConfig.java
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AuthProperties.java
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AdminApiKeyProperties.java
+- repoguard-backend/src/main/java/com/repoguard/agent/security/SecretCryptoService.java
+- repoguard-backend/src/main/java/com/repoguard/agent/github/webhook/GithubWebhookProperties.java
+- repoguard-backend/src/main/resources/META-INF/spring.factories
+- repoguard-backend/src/main/resources/application.yml
+- repoguard-backend/src/main/resources/application-dev.yml
+- repoguard-backend/src/main/resources/application-test.yml
+- repoguard-backend/src/test/java/com/repoguard/agent/config/RuntimeProfilePolicyTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/config/ExplicitProfileEnvironmentPostProcessorTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/config/ApplicationProfileConfigurationTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/config/CorsConfigTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/AuthPropertiesTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/AdminApiKeyFilterTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/SecretCryptoServiceTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/github/webhook/GithubWebhookPropertiesTest.java
+
+验证结果：
+
+- profile 策略、Boot 注册、配置边界和生产类强校验定向测试：54 个测试全部通过，0 failure，0 error。
+- 后端全量 `mvn verify`：1,626 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- 可执行 JAR 无 profile 启动验证：按预期退出码 1，并明确报告必须显式指定 Spring profile；未进入数据库或 RabbitMQ 连接阶段。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：基础配置不再静默降级为开发/本地环境，弱默认值仅在显式本地或测试 profile 下可用；未知部署环境默认继承生产强校验，混合 profile 会被提前拒绝，本项达到本地完成标准。

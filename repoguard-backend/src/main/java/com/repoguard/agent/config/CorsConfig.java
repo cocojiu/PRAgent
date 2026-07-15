@@ -1,6 +1,5 @@
 package com.repoguard.agent.config;
 
-import java.util.Arrays;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
@@ -22,8 +21,8 @@ public class CorsConfig implements WebMvcConfigurer {
         if (this.allowedOrigins.contains(WILDCARD_ORIGIN)) {
             throw new IllegalStateException("app.cors.allowed-origins cannot contain * when credentials are allowed");
         }
-        if (isProd(environment) && this.allowedOrigins.isEmpty()) {
-            throw new IllegalStateException("app.cors.allowed-origins must be configured for prod profile");
+        if (RuntimeProfilePolicy.isProductionLike(environment.getActiveProfiles()) && this.allowedOrigins.isEmpty()) {
+            throw new IllegalStateException("app.cors.allowed-origins must be configured for a production-like profile");
         }
     }
 
@@ -35,10 +34,6 @@ public class CorsConfig implements WebMvcConfigurer {
             .allowedHeaders("*")
             .exposedHeaders("X-Trace-Id", "X-Error-Id")
             .allowCredentials(true);
-    }
-
-    private boolean isProd(Environment environment) {
-        return Arrays.asList(environment.getActiveProfiles()).contains("prod");
     }
 
     private List<String> sanitizeAllowedOrigins(AppCorsProperties properties) {

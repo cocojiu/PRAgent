@@ -26,12 +26,23 @@ class CorsConfigTest {
     }
 
     @Test
-    void nonProdProfileAllowsEmptyAllowedOrigins() {
+    void localProfilesAllowEmptyAllowedOrigins() {
         AppCorsProperties properties = new AppCorsProperties();
         MockEnvironment environment = new MockEnvironment();
         environment.setActiveProfiles("dev", "local");
 
         assertThatCode(() -> new CorsConfig(properties, environment)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void stagingProfileRequiresAllowedOrigins() {
+        AppCorsProperties properties = new AppCorsProperties();
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("staging");
+
+        assertThatThrownBy(() -> new CorsConfig(properties, environment))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("app.cors.allowed-origins");
     }
 
     @Test
