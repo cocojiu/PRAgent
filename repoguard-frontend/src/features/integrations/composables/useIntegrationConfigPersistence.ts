@@ -68,18 +68,50 @@ export const useIntegrationConfigPersistence = ({
     applyReviewPolicyConfig(reviewPolicy);
   };
 
+  const loadConfigResults = async () => {
+    const results = await Promise.allSettled([
+      requests.fetchGithubIntegrationConfig(),
+      requests.fetchMysqlIntegrationConfig(),
+      requests.fetchRabbitMqIntegrationConfig(),
+      requests.fetchReviewPolicyConfig()
+    ] as const);
+    const failed: string[] = [];
+
+    if (results[0].status === "fulfilled") {
+      githubConfig.value = results[0].value;
+      applyGithubConfig(results[0].value);
+    } else {
+      failed.push("GitHub");
+    }
+    if (results[1].status === "fulfilled") {
+      mysqlConfig.value = results[1].value;
+      applyServiceConfig("mysql", results[1].value);
+    } else {
+      failed.push("MySQL");
+    }
+    if (results[2].status === "fulfilled") {
+      rabbitMqConfig.value = results[2].value;
+      applyServiceConfig("rabbitmq", results[2].value);
+    } else {
+      failed.push("RabbitMQ");
+    }
+    if (results[3].status === "fulfilled") {
+      reviewPolicyConfig.value = results[3].value;
+      applyReviewPolicyConfig(results[3].value);
+    } else {
+      failed.push("Review Policy");
+    }
+
+    return failed;
+  };
+
   const loadConfig = async () => {
     loading.value = true;
     try {
-      const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
-        requests.fetchGithubIntegrationConfig(),
-        requests.fetchMysqlIntegrationConfig(),
-        requests.fetchRabbitMqIntegrationConfig(),
-        requests.fetchReviewPolicyConfig()
-      ]);
-      applyLoadedConfigs(github, mysql, rabbitMq, reviewPolicy);
-    } catch (error) {
-      ElMessage.warning(getErrorMessage(error, "Config load failed, using local defaults"));
+      const failed = await loadConfigResults();
+      if (failed.length > 0) {
+        ElMessage.warning(`Config load failed for: ${failed.join(", ")}. Available configs were loaded.`);
+      }
     } finally {
       loading.value = false;
     }
@@ -91,16 +123,42 @@ export const useIntegrationConfigPersistence = ({
     }
     saving.value = true;
     try {
-      const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
+      const results = await Promise.allSettled([
         requests.updateGithubIntegrationConfig(payloads.githubPayload()),
         requests.updateMysqlIntegrationConfig(payloads.mysqlPayload()),
         requests.updateRabbitMqIntegrationConfig(payloads.rabbitMqPayload()),
         requests.updateReviewPolicyConfig(payloads.springAiPayload())
-      ]);
-      applyLoadedConfigs(github, mysql, rabbitMq, reviewPolicy);
-      ElMessage.success("Config saved");
-    } catch (error) {
-      ElMessage.error(getErrorMessage(error, "Config save failed"));
+      ] as const);
+      const labels = ["GitHub", "MySQL", "RabbitMQ", "Review Policy"] as const;
+      const succeeded = results
+        .map((result, index) => (result.status === "fulfilled" ? labels[index] : undefined))
+        .filter((label): label is (typeof labels)[number] => Boolean(label));
+      const failed = results
+        .map((result, index) =>
+          result.status === "rejected"
+            ? `${labels[index]} (${getErrorMessage(result.reason, "unknown error")})`
+            : undefined
+        )
+        .filter((label): label is string => Boolean(label));
+
+      if (
+        results[0].status === "fulfilled"
+        && results[1].status === "fulfilled"
+        && results[2].status === "fulfilled"
+        && results[3].status === "fulfilled"
+      ) {
+        applyLoadedConfigs(results[0].value, results[1].value, results[2].value, results[3].value);
+        ElMessage.success(`Config saved: ${succeeded.join(", ")}`);
+        return;
+      }
+
+      const syncFailed = await loadConfigResults();
+      const syncDetail = syncFailed.length > 0
+        ? ` Server resync also failed for: ${syncFailed.join(", ")}.`
+        : " Server state has been reloaded.";
+      ElMessage.error(
+        `Config partially saved. Succeeded: ${succeeded.join(", ") || "none"}. Failed: ${failed.join(", ")}.${syncDetail}`
+      );
     } finally {
       saving.value = false;
     }

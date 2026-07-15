@@ -820,3 +820,33 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：路由快速切换时，旧任务响应、旧错误和旧加载收尾均无法覆盖当前任务状态，页面卸载后也不会写回详情状态，本项达到完成标准。
+
+进度记录 08
+
+完成时间：2026-07-15 17:45:47 +08:00（Asia/Shanghai）
+优化项：P1 集成配置部分保存的逐项反馈与服务端重同步
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 四项配置加载由 Promise.all 改为 Promise.allSettled，单项失败不再阻止其他可用配置展示。
+2. “保存全部”对 GitHub、MySQL、RabbitMQ、Review Policy 四个独立请求逐项结算，反馈中明确列出成功项、失败项及失败原因。
+3. 四项均成功时统一应用服务端响应，并显示包含全部成功项名称的完成消息。
+4. 任一保存请求失败时，自动重新拉取四项服务端配置，确保页面最终展示数据库中的实际状态，而不是保留可能失真的本地表单状态。
+5. 重同步本身出现单项失败时，错误消息继续列出无法同步的配置，避免把未知状态误报为已恢复一致。
+
+涉及文件：
+
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.test.ts
+
+验证结果：
+
+- 新增集成配置持久化单元测试：2 个测试通过，覆盖单项保存失败后的逐项反馈、全量重同步和部分加载。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：21 个测试文件、69 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,329 个模块。
+- git diff --check：通过。
+
+验收结论：独立 PUT 发生部分成功时，用户可以看到每项结果，页面会主动重新同步服务端状态，不再出现静默部分保存，本项达到完成标准。
