@@ -1042,3 +1042,38 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：详情页重型分区的加载职责已按领域边界收敛，路由切换时的在途分区请求不会污染新任务或错误状态，同时页面规模得到有行为测试保护的渐进缩减，本项达到完成标准。
+
+进度记录 15
+
+完成时间：2026-07-15 19:29:19 +08:00（Asia/Shanghai）
+优化项：P2 图表容器自适应与可访问名称
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. EChartPanel 改为使用 ResizeObserver 监听自身容器，侧栏折叠、网格重排和父容器尺寸变化无需等待 window resize 即可触发图表 resize。
+2. 不支持 ResizeObserver 的环境保留 window resize fallback；组件卸载时按实际路径 disconnect/removeEventListener，并 dispose 图表实例。
+3. 图表组件强制接收 accessibleLabel，可选接收可读 summary；容器提供 role、aria-label、aria-describedby，并以视觉隐藏文本暴露数据摘要。
+4. 启用 ECharts AriaComponent 和 decal 纹理，ARIA description 使用稳定中文名称与数据摘要，降低只依赖颜色区分图形的风险。
+5. 审查趋势、风险分布、规则命中、LLM 质量趋势四个图表均生成与当前数据同步的文本摘要。
+6. 侧栏折叠按钮、顶部菜单按钮和折叠状态下的导航链接补充 type、动态 aria-label 与 title，图标控件具备稳定可访问名称和原生提示。
+
+涉及文件：
+
+- repoguard-frontend/src/components/EChartPanel.vue
+- repoguard-frontend/src/components/EChartPanel.test.ts
+- repoguard-frontend/src/features/dashboard/components/DashboardChartSection.vue
+- repoguard-frontend/src/features/dashboard/components/LlmQualitySection.vue
+- repoguard-frontend/src/layouts/RepoGuardLayout.vue
+
+验证结果：
+
+- 新增 EChartPanel 组件测试：验证容器观察、ARIA 关联、ECharts 描述/纹理、ResizeObserver 回调、disconnect 和 dispose。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：24 个测试文件、83 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,391 个模块。
+- 构建预算：首屏 JavaScript gzip 179.9/190.0 KiB，首屏 CSS gzip 27.1/32.0 KiB，最大异步 JavaScript gzip 133.9/140.0 KiB，全部通过。
+- git diff --check：通过。
+
+验收结论：图表能够随真实容器尺寸变化自适应，卸载后不保留观察器或窗口监听；读屏用户可获得稳定名称与数据摘要，侧栏图标控件也具备明确可访问名称，本项达到完成标准。

@@ -11,7 +11,12 @@
           @update:model-value="onTrendDaysChange"
         />
       </div>
-      <EChartPanel v-if="qualityTrend.length" :option="qualityTrendOption" />
+      <EChartPanel
+        v-if="qualityTrend.length"
+        accessible-label="LLM 质量趋势图"
+        :option="qualityTrendOption"
+        :summary="qualityTrendSummary"
+      />
       <el-empty v-else description="暂无 LLM 质量趋势数据" />
     </article>
     <article class="dashboard-card">
@@ -50,6 +55,7 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import type { EChartsOption } from "echarts";
 import EChartPanel from "@/components/EChartPanel.vue";
 import type { LlmQualityByModel, LlmQualityByRepository, LlmQualityTrendPoint } from "@/types";
@@ -59,7 +65,7 @@ interface TrendWindowOption {
   value: number;
 }
 
-defineProps<{
+const props = defineProps<{
   loading: boolean;
   trendDays: number;
   trendWindowOptions: TrendWindowOption[];
@@ -68,6 +74,14 @@ defineProps<{
   qualityByModel: LlmQualityByModel[];
   qualityByRepository: LlmQualityByRepository[];
 }>();
+
+const qualityTrendSummary = computed(() =>
+  props.qualityTrend
+    .map((item) =>
+      `${item.date} ${item.taskCount} 个任务，解析率 ${item.parseSuccessRate}，兜底率 ${item.fallbackRate}，部分补位率 ${item.partialFallbackRate}`
+    )
+    .join("；")
+);
 
 const emit = defineEmits<{
   trendDaysChange: [value: number];
