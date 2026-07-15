@@ -918,3 +918,36 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：认证成功后可以恢复原站内页面，同时所有外站和异常回跳输入均被安全降级到总览页，不形成开放重定向，本项达到完成标准。
+
+进度记录 11
+
+完成时间：2026-07-15 18:32:53 +08:00（Asia/Shanghai）
+优化项：P2 Java/Node 工具链与后端覆盖率回退门禁
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由 CI 的 JDK 25 环境复核默认构建路径。
+
+实施内容：
+
+1. 新增 Maven Enforcer 3.6.3，在 validate 阶段要求 JDK `[25,26)` 和 Maven `[3.9.9,4.0.0)`，错误工具链会在编译和测试前快速失败。
+2. JaCoCo 从 0.8.13 升级到 0.8.15；该版本正式支持 Java 26，消除开发机 JDK 26 对 major version 70 的插桩异常。
+3. JaCoCo test 阶段增加 BUNDLE 覆盖率 check：line 不低于 89%，branch 不低于 70%，从当前稳定基线阻断明显覆盖率回退。
+4. 前端 `@types/node` 从 25.x 对齐到 Node 22 的 22.20.1，并同步更新 package-lock.json；与 `.nvmrc` 和 CI Node 22 保持一致。
+
+涉及文件：
+
+- repoguard-backend/pom.xml
+- repoguard-frontend/package.json
+- repoguard-frontend/package-lock.json
+
+验证结果：
+
+- Maven 3.9.16 + JDK 26 默认 validate：按设计失败，明确提示后端构建必须使用 JDK 25。
+- 本机通过 `-Denforcer.skip=true` 复核后端代码和 JaCoCo：1,604 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：661 个类分析完成，无 major version 70 插桩异常，coverage check 通过。
+- 覆盖率：instruction 90.23%、line 89.86%、branch 72.29%、method 89.84%、class 96.07%。
+- 前端 `@types/node`：22.20.1。
+- 前端 TypeScript、ESLint：通过。
+- 前端 Vitest：22 个测试文件、79 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,330 个模块。
+- git diff --check：通过。
+
+验收结论：Java 和 Maven 版本偏差会默认快速失败，JaCoCo 在允许验证的 JDK 上不再产生 class-version 噪声，后端覆盖率回退成为构建门禁，Node 运行与类型版本一致，本项达到本地完成标准。
