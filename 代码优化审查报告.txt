@@ -685,3 +685,42 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - 本机 JDK 26/JaCoCo 0.8.13 插桩告警继续留待 P2 工具链项处理。
 
 验收结论：成功审计和成功指标只会在清理事务真正提交后产生；提交失败会留下 FAILED 审计；数据库租约及进程锁在事务完成后才释放，本项达到完成标准。
+
+
+进度记录 04
+
+完成时间：2026-07-15 17:22:28 +08:00（Asia/Shanghai）
+优化项：P1 最后一个有效管理员的并发保护
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 新增 user_management_guard 单例守卫表和 active_admin 守卫行，Flyway 迁移版本为 V56。
+2. UserAccountMapper 新增 SELECT ... FOR UPDATE 锁方法，对 active_admin 守卫行获取数据库排他锁。
+3. 所有请求角色降级为 VIEWER 的事务，在读取目标用户和统计管理员之前先获取守卫锁。
+4. 所有请求禁用账号的事务使用同一守卫锁，因此“角色降级”和“账号禁用”两个入口之间也会串行执行。
+5. 提升为 ADMIN、重新启用账号等不会减少有效管理员数量的操作不获取守卫锁，避免扩大锁竞争范围。
+6. 守卫行缺失时立即返回内部错误并停止读取或修改用户，防止迁移异常时退化为无保护更新。
+
+并发保证：
+
+- 两个实例并发降级/禁用不同管理员时，第二个事务会在守卫行等待。
+- 第二个事务取得锁后才创建一致性读取视图，并重新统计已提交的有效管理员数量。
+- 如果第一个事务已经移除倒数第二个有效管理员，第二个事务会看到计数为 0 并拒绝操作，系统至少保留一个 ACTIVE ADMIN。
+
+涉及文件：
+
+- repoguard-backend/src/main/resources/db/migration/V56__active_admin_invariant_guard.sql
+- repoguard-backend/src/main/java/com/repoguard/agent/mapper/UserAccountMapper.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/UserManagementServiceImpl.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/UserManagementServiceImplTest.java
+
+验证结果：
+
+- 定向测试：UserManagementServiceImplTest、UserManagementControllerTest，共 17 个测试，0 failure，0 error。
+- 测试验证数据库守卫锁先于 selectById、管理员计数和 updateById；非危险的重新启用操作不获取锁；守卫缺失时不读取用户。
+- 后端全量测试：1,604 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- git diff --check：通过。
+- 首次定向测试因沙箱无法访问本地 Maven 父 POM/中央仓库而失败，获准访问依赖缓存后测试通过；该失败与代码无关。
+
+验收结论：最后一个有效管理员不变量已由普通计数检查升级为数据库守卫行串行化，可覆盖同实例和多实例并发操作，本项达到完成标准。

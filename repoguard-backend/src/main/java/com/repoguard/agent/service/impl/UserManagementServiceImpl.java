@@ -34,6 +34,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
     private static final String ACTION_STATUS_UPDATE = "STATUS_UPDATE";
+    private static final String ACTIVE_ADMIN_GUARD = "active_admin";
     private final UserAccountMapper userAccountMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
     private final PasswordHashService passwordHashService;
@@ -144,6 +145,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Transactional
     public UserManagementItemDto updateRole(UserOperationAuditContext auditContext, Long userId, String role) {
         String normalizedRole = roleStatusPolicy.normalizeRole(role);
+        lockActiveAdminInvariant(roleStatusPolicy.isViewerRole(normalizedRole));
         UserAccount user = requireUser(userId);
         String beforeRole = user.getRole();
         if (roleStatusPolicy.isAdmin(user) && roleStatusPolicy.isViewerRole(normalizedRole)) {
@@ -162,6 +164,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     @Transactional
     public UserManagementItemDto updateStatus(UserOperationAuditContext auditContext, Long userId, String status) {
         String normalizedStatus = roleStatusPolicy.normalizeStatus(status);
+        lockActiveAdminInvariant(roleStatusPolicy.isDisabledStatus(normalizedStatus));
         UserAccount user = requireUser(userId);
         String beforeStatus = user.getStatus();
         Long operatorId = auditContext == null ? null : auditContext.operatorId();
@@ -201,6 +204,19 @@ public class UserManagementServiceImpl implements UserManagementService {
             .ne(UserAccount::getId, userId));
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "At least one active administrator is required");
+        }
+    }
+
+    private void lockActiveAdminInvariant(boolean required) {
+        if (!required) {
+            return;
+        }
+        String lockedGuard = userAccountMapper.lockActiveAdminInvariant();
+        if (!ACTIVE_ADMIN_GUARD.equals(lockedGuard)) {
+            throw new BusinessException(
+                ErrorCode.INTERNAL_ERROR,
+                "Active administrator guard is unavailable"
+            );
         }
     }
 

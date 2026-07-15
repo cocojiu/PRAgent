@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +30,7 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 
 class UserManagementServiceImplTest {
@@ -58,6 +60,7 @@ class UserManagementServiceImplTest {
     @BeforeEach
     void setUp() {
         Mockito.reset(userAccountMapper, userRefreshTokenMapper, userOperationAuditMapper);
+        when(userAccountMapper.lockActiveAdminInvariant()).thenReturn("active_admin");
     }
 
     @Test
@@ -177,6 +180,11 @@ class UserManagementServiceImplTest {
         assertThat(auditCaptor.getValue().getAfterValue()).isEqualTo("VIEWER");
         assertThat(auditCaptor.getValue().getOperatorUsername()).isEqualTo("operator");
         assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("10.0.0.1");
+        InOrder order = inOrder(userAccountMapper);
+        order.verify(userAccountMapper).lockActiveAdminInvariant();
+        order.verify(userAccountMapper).selectById(1001L);
+        order.verify(userAccountMapper).selectCount(any(Wrapper.class));
+        order.verify(userAccountMapper).updateById(user);
     }
 
     @Test
@@ -233,6 +241,18 @@ class UserManagementServiceImplTest {
         assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper, never()).lockActiveAdminInvariant();
+    }
+
+    @Test
+    void updateStatusRejectsChangeWhenAdminGuardIsUnavailable() {
+        when(userAccountMapper.lockActiveAdminInvariant()).thenReturn(null);
+
+        assertThatThrownBy(() -> userManagementService.updateStatus(auditContext(), 1003L, "DISABLED"))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("Active administrator guard is unavailable");
+
+        verify(userAccountMapper, never()).selectById(1003L);
     }
 
     @Test
