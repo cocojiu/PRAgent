@@ -19,6 +19,8 @@ import com.repoguard.agent.dashboard.DashboardLlmQualityStatsAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityTrendBuilder;
 import com.repoguard.agent.dashboard.DashboardMetricAssembler;
 import com.repoguard.agent.dashboard.DashboardOverviewDisplayMapper;
+import com.repoguard.agent.dashboard.DashboardOverviewFacade;
+import com.repoguard.agent.dashboard.DashboardQualityFacade;
 import com.repoguard.agent.dashboard.DashboardReviewTrendWindow;
 import com.repoguard.agent.dashboard.DashboardReviewTrendAssembler;
 import com.repoguard.agent.dashboard.DashboardRiskDistributionAssembler;
@@ -80,19 +82,28 @@ class DashboardServiceImplTest {
         statusMapper
     );
     private final DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(Runnable::run);
-    private final DashboardServiceImpl service = new DashboardServiceImpl(
+    private final DashboardOverviewFacade overviewFacade = new DashboardOverviewFacade(
         dashboardMapper,
         new DashboardMetricAssembler(overviewDisplayMapper),
         new DashboardReviewTrendAssembler(),
         new DashboardRiskDistributionAssembler(overviewDisplayMapper),
         new DashboardRuleAssembler(ruleDisplayMapper),
         new DashboardHighRiskReviewAssembler(statusMapper),
+        reviewTrendWindow,
+        snapshotStore,
+        dailySnapshotService
+    );
+    private final DashboardQualityFacade qualityFacade = new DashboardQualityFacade(
         new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
         llmQualityTrendBuilder,
         reviewTrendWindow,
-        systemHealthProbe,
         snapshotStore,
         dailySnapshotService
+    );
+    private final DashboardServiceImpl service = new DashboardServiceImpl(
+        overviewFacade,
+        qualityFacade,
+        systemHealthProbe
     );
 
     @BeforeEach
@@ -131,23 +142,14 @@ class DashboardServiceImplTest {
     }
 
     @Test
-    void constructorRejectsMissingDashboardMetricAssembler() {
+    void constructorRejectsMissingOverviewFacade() {
         assertThatThrownBy(() -> new DashboardServiceImpl(
-            dashboardMapper,
             null,
-            new DashboardReviewTrendAssembler(),
-            new DashboardRiskDistributionAssembler(overviewDisplayMapper),
-            new DashboardRuleAssembler(ruleDisplayMapper),
-            new DashboardHighRiskReviewAssembler(statusMapper),
-            new DashboardLlmQualityStatsAssembler(llmQualityFormatter),
-            llmQualityTrendBuilder,
-            reviewTrendWindow,
-            systemHealthProbe,
-            snapshotStore,
-            dailySnapshotService
+            qualityFacade,
+            systemHealthProbe
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("dashboardMetricAssembler");
+            .hasMessageContaining("overviewFacade");
     }
 
     @Test

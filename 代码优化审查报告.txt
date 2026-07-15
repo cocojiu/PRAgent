@@ -1338,3 +1338,35 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：数据保留编排器已从具体 Mapper 调用细节解耦，候选选择、归档和级联删除分别具备清晰输入输出与顺序契约；事务、审计和租约语义保持不变，修改持久化步骤时无需再改动整个编排器测试，本阶段达到本地完成标准。
+
+进度记录 23
+
+完成时间：2026-07-15 22:16:42 +08:00（Asia/Shanghai）
+优化项：P2 Dashboard overview/quality 内聚边界收敛（复杂模块第二阶段）
+状态：本地实现、Dashboard 定向回归、全量后端验证和仓库治理门禁均已完成，准备提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 新增 `DashboardOverviewFacade`，集中承接 overview 兼容响应、核心指标、审查趋势、风险分布、规则命中和高风险审查的查询窗口、组装器协作与最后成功快照回退。
+2. 新增 `DashboardQualityFacade`，集中承接 LLM 质量的模型、仓库和趋势窗口查询与响应组装；LLM 天数归一化、趋势补点和最后成功快照 key 语义保持不变。
+3. `DashboardServiceImpl` 只保留 DashboardService API 契约、Spring Cache 的独立模块缓存声明和端点委派；系统健康继续通过已有 `DashboardSystemHealthProbe` 边界获取。
+4. Dashboard 服务不再直接注入 Mapper、九类 assembler/window/snapshot 组件；构造依赖由 12 个降至 3 个，文件由 224 行降至 92 行，使 overview 与 quality 后续变化不再共同扩大 API 服务装配面。
+5. 保留各模块独立 `@Cacheable(sync = true)` 与 snapshot store 两层保护：外层防止 TTL 击穿，内层在异步刷新失败时返回最近成功值；现有测试继续验证指标模块不会加载趋势/规则/质量聚合，质量模块不会加载 overview 聚合。
+6. 未重复拆分现有 assembler，也未引入通用“依赖大对象”；新 facade 只聚合已经存在且共同参与同一页面领域响应的组件。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/dashboard/DashboardOverviewFacade.java
+- repoguard-backend/src/main/java/com/repoguard/agent/dashboard/DashboardQualityFacade.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DashboardServiceImpl.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/DashboardServiceImplTest.java
+
+验证结果：
+
+- Dashboard facade、快照服务、缓存回退与 Spring Bean 构造器定向测试：24 个测试全部通过，0 failure，0 error。
+- 后端全量 `mvn verify`：1,634 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：Dashboard API 服务已从多聚合器编排器收敛为稳定入口，overview 与 quality 各自拥有内聚的查询、组装和快照恢复边界；缓存与查询隔离行为保持原样，本阶段达到本地完成标准。
