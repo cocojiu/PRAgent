@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -21,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 class RepositoryGovernanceGuardTest {
 
+    private static final Set<String> ALLOWED_MARKDOWN = Set.of("README.md", "代码优化审查报告.md");
     private static final List<String> SCRIPT_EXTENSIONS = List.of(".sh", ".ps1", ".bat", ".cmd");
 
     @Test
@@ -39,13 +41,14 @@ class RepositoryGovernanceGuardTest {
             }
         }
 
-        assertEquals(List.of(), invalidMarkdown, "Only root README.md may be tracked as markdown");
+        assertEquals(List.of(), invalidMarkdown, "Only approved root markdown files may be tracked");
         assertEquals(List.of(), invalidScripts, "Test or temporary scripts must not be tracked");
     }
 
     @Test
-    void governanceClassifierRejectsNonReadmeMarkdown() {
+    void governanceClassifierAllowsApprovedRootMarkdownOnly() {
         assertFalse(isInvalidMarkdown("README.md"));
+        assertFalse(isInvalidMarkdown("代码优化审查报告.md"));
         assertTrue(isInvalidMarkdown("docs/release/checklist.md"));
         assertTrue(isInvalidMarkdown("repoguard-frontend/README.md"));
         assertTrue(isInvalidMarkdown("README.zh.md"));
@@ -119,7 +122,7 @@ class RepositoryGovernanceGuardTest {
     }
 
     private static boolean isInvalidMarkdown(String path) {
-        return path.toLowerCase(Locale.ROOT).endsWith(".md") && !path.equals("README.md");
+        return path.toLowerCase(Locale.ROOT).endsWith(".md") && !ALLOWED_MARKDOWN.contains(path);
     }
 
     private static boolean isTestOrTemporaryScript(String path) {
