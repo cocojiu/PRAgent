@@ -724,3 +724,35 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - 首次定向测试因沙箱无法访问本地 Maven 父 POM/中央仓库而失败，获准访问依赖缓存后测试通过；该失败与代码无关。
 
 验收结论：最后一个有效管理员不变量已由普通计数检查升级为数据库守卫行串行化，可覆盖同实例和多实例并发操作，本项达到完成标准。
+
+
+进度记录 05
+
+完成时间：2026-07-15 17:27:34 +08:00（Asia/Shanghai）
+优化项：P1 用户管理统计口径
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 用户总数不再使用当前页 users.length，而是使用服务端分页响应的 total。
+2. 存在角色、状态或关键词筛选时，总量卡片显示“匹配账号数”和“当前筛选结果”，避免把筛选后的 total 表述为系统全量。
+3. 启用、管理员和禁用三个分类仍基于当前页数据时，明确标记为“本页启用”“本页管理员”“本页禁用”，并显示当前页账号数量。
+4. 表格直接展示服务端已经按角色、状态和关键词筛选的 users，移除重复的本地二次过滤，避免当前页数据再次被不同口径裁剪。
+5. 指标计算提取为纯函数 buildUserManagementMetrics，便于独立验证服务端总量和当前页分项口径。
+
+涉及文件：
+
+- repoguard-frontend/src/pages/UserManagementPage.vue
+- repoguard-frontend/src/features/user-management/userManagementMetrics.ts
+- repoguard-frontend/src/features/user-management/userManagementMetrics.test.ts
+
+验证结果：
+
+- 新增指标单元测试：2 个测试通过，覆盖未筛选总量和筛选结果标签。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：18 个测试文件、63 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,328 个模块。
+- git diff --check：通过。
+
+验收结论：用户管理页不再把当前页数量展示为系统总数，所有分页统计的范围都有明确标签，本项达到完成标准。

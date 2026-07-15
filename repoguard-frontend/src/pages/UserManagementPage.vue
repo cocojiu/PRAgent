@@ -32,7 +32,7 @@
         </el-input>
       </div>
 
-      <el-table :data="filteredUsers" class="rg-table task-table" size="large" aria-label="用户管理列表">
+      <el-table :data="users" class="rg-table task-table" size="large" aria-label="用户管理列表">
         <el-table-column label="账号" min-width="220">
           <template #default="{ row }">
             <div class="user-account-cell">
@@ -200,6 +200,7 @@ import { createUser, fetchUserOperationAudits, fetchUsers, updateUserRole, updat
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import { buildUserManagementMetrics } from "@/features/user-management/userManagementMetrics";
 import { canManage, currentUser } from "@/stores/authState";
 import { getErrorMessage } from "@/utils/errors";
 
@@ -235,29 +236,11 @@ const metricIconMap = {
 
 const getMetricIcon = useMetricIcon(metricIconMap, Users);
 
-const filteredUsers = computed(() => {
-  const query = keyword.value.trim().toLowerCase();
-  return users.value.filter((user) => {
-    const matchesRole = !roleFilter.value || user.role === roleFilter.value;
-    const matchesStatus = !statusFilter.value || user.status === statusFilter.value;
-    const matchesKeyword =
-      !query || user.username.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
-    return matchesRole && matchesStatus && matchesKeyword;
-  });
-});
-
-const userMetricItems = computed<MetricGridItem[]>(() => {
-  const total = users.value.length;
-  const active = users.value.filter((user) => user.status === "ACTIVE").length;
-  const admins = users.value.filter((user) => user.role === "ADMIN").length;
-  const disabled = users.value.filter((user) => user.status === "DISABLED").length;
-  return [
-    { label: "账号总数", value: String(total), note: "已创建账号", color: "blue" },
-    { label: "启用账号", value: String(active), note: "可正常登录", color: "green" },
-    { label: "管理员", value: String(admins), note: "拥有管理权限", color: "orange" },
-    { label: "禁用账号", value: String(disabled), note: "禁止登录", color: "red" }
-  ];
-});
+const userMetricItems = computed<MetricGridItem[]>(() => buildUserManagementMetrics(
+  users.value,
+  usersTotal.value,
+  Boolean(roleFilter.value || statusFilter.value || keyword.value.trim())
+));
 
 const loadUsers = async () => {
   const page = await fetchUsers({
