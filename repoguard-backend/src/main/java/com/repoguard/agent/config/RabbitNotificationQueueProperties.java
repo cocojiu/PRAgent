@@ -22,6 +22,9 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     private long publishCompensationIntervalMs = 60000;
     private long publishCompensationLeaseMs = 120000;
     private int workerConcurrency = 1;
+    private long deliveryClaimLeaseMs = 300000;
+    private long deliveryRecoveryIntervalMs = 60000;
+    private int deliveryRecoveryBatchSize = 20;
 
     public String getExchange() { return exchange; }
     public void setExchange(String exchange) { this.exchange = exchange; }
@@ -53,4 +56,10 @@ public class RabbitNotificationQueueProperties implements RabbitPublishPropertie
     public void setPublishCompensationLeaseMs(long publishCompensationLeaseMs) { this.publishCompensationLeaseMs = publishCompensationLeaseMs; }
     public int getWorkerConcurrency() { return workerConcurrency; }
     public void setWorkerConcurrency(int workerConcurrency) { this.workerConcurrency = workerConcurrency; }
+    public long getDeliveryClaimLeaseMs() { return deliveryClaimLeaseMs; }
+    public void setDeliveryClaimLeaseMs(long deliveryClaimLeaseMs) { this.deliveryClaimLeaseMs = deliveryClaimLeaseMs; }
+    public long getDeliveryRecoveryIntervalMs() { return deliveryRecoveryIntervalMs; }
+    public void setDeliveryRecoveryIntervalMs(long deliveryRecoveryIntervalMs) { this.deliveryRecoveryIntervalMs = deliveryRecoveryIntervalMs; }
+    public int getDeliveryRecoveryBatchSize() { return deliveryRecoveryBatchSize; }
+    public void setDeliveryRecoveryBatchSize(int deliveryRecoveryBatchSize) { this.deliveryRecoveryBatchSize = deliveryRecoveryBatchSize; }
 }

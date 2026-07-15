@@ -28,13 +28,13 @@ class NotificationDeliverableEventQueryTest {
     }
 
     @Test
-    void returnsUnknownStatusEventToPreserveExistingDeliverySemantics() {
+    void skipsUnknownStatusEvent() {
         NotificationEvent event = event("CUSTOM_STATUS");
         when(eventMapper.selectById(11L)).thenReturn(event);
 
         Optional<NotificationEvent> result = query.load(11L);
 
-        assertThat(result).containsSame(event);
+        assertThat(result).isEmpty();
     }
 
     @Test

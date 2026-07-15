@@ -17,6 +17,7 @@ import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.List;
+import java.time.Clock;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -73,6 +74,7 @@ class NotificationDeliveryWorkerTest {
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.success("request-1", "ok"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L), binding(2L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(0L);
 
@@ -91,6 +93,7 @@ class NotificationDeliveryWorkerTest {
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.failed("request-1", "timeout"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(0L);
 
@@ -114,6 +117,7 @@ class NotificationDeliveryWorkerTest {
         NotificationDeliveryWorker worker = worker();
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(1L);
 
@@ -191,12 +195,18 @@ class NotificationDeliveryWorkerTest {
     private NotificationDeliveryWorker worker() {
         NotificationChannelAdapterRegistry registry =
             new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
+        NotificationDeliveryEventStateUpdater eventStateUpdater =
+            new NotificationDeliveryEventStateUpdater(eventMapper);
         return new NotificationDeliveryWorker(
-            new NotificationDeliverableEventQuery(eventMapper),
+            new NotificationDeliveryClaimService(
+                new NotificationDeliverableEventQuery(eventMapper),
+                eventStateUpdater,
+                Clock.systemDefaultZone(),
+                "test-delivery-worker"
+            ),
             new NotificationEventPayloadParser(new ObjectMapper()),
             bindingBatchDeliveryService(registry),
             deliveryCompletionService(),
-            new NotificationDeliveryEventStateUpdater(eventMapper),
             metricsRecorder,
             new NotificationDeliveryFailureClassifier(),
             new NotificationDeliveryLogContextFormatter()

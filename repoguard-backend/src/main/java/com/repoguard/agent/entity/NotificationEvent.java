@@ -20,6 +20,8 @@ public class NotificationEvent {
     private String lastError;
     private LocalDateTime publishClaimedAt;
     private String publishClaimedBy;
+    private LocalDateTime deliveryClaimedAt;
+    private String deliveryClaimedBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -47,6 +49,10 @@ public class NotificationEvent {
     public void setPublishClaimedAt(LocalDateTime publishClaimedAt) { this.publishClaimedAt = publishClaimedAt; }
     public String getPublishClaimedBy() { return publishClaimedBy; }
     public void setPublishClaimedBy(String publishClaimedBy) { this.publishClaimedBy = publishClaimedBy; }
+    public LocalDateTime getDeliveryClaimedAt() { return deliveryClaimedAt; }
+    public void setDeliveryClaimedAt(LocalDateTime deliveryClaimedAt) { this.deliveryClaimedAt = deliveryClaimedAt; }
+    public String getDeliveryClaimedBy() { return deliveryClaimedBy; }
+    public void setDeliveryClaimedBy(String deliveryClaimedBy) { this.deliveryClaimedBy = deliveryClaimedBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }

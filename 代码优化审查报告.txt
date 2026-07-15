@@ -611,3 +611,46 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - 已知环境提示：本机 JDK 26 与 JaCoCo 0.8.13 仍产生 major version 70 插桩告警，但测试进程退出码为 0，应用测试全部通过；该工具链问题按后续 P2 项处理。
 
 验收结论：手动重试已经由“无条件更新并在事务内直接发布”调整为“失败状态 CAS 领取并在事务提交后发布”，本项达到完成标准。
+
+
+进度记录 02
+
+完成时间：2026-07-15 17:10:49 +08:00（Asia/Shanghai）
+优化项：P1 通知投递原子领取、领取租约与完成栅栏
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 新增 delivery_claimed_at、delivery_claimed_by 字段和联合查询索引，Flyway 迁移版本为 V55。
+2. 消费者只接受 PUBLISHED 事件，并通过单条条件更新完成 PUBLISHED -> DELIVERING；只有影响一行的消费者取得投递所有权。
+3. 为每个应用实例生成独立领取标识，领取时间和领取者写入数据库；重复消息或并发消费者丢失 CAS 后直接跳过外部发送。
+4. DELIVERED、DELIVERY_FAILED、DEAD 等完成状态更新均携带 eventId、DELIVERING 状态、delivery_claimed_at 和 delivery_claimed_by 条件，过期执行者不能覆盖新执行者结果。
+5. 完成或失败后清理投递领取字段；重新发布和手动重试路径也会清理历史投递领取信息。
+6. 新增超时领取补偿任务。默认领取租约 300000ms，每 60000ms 扫描最多 20 条过期 DELIVERING 事件，通过同一所有权栅栏转为 DELIVERY_FAILED 或 DEAD，再由现有发布补偿链路按退避时间重新投递。
+7. 保留渠道级成功记录检查。事件级 CAS 已消除应用内部两个消费者同时进入同一绑定发送窗口；外部渠道仍建议在后续支持幂等键时传递 eventId/bindingId。
+
+新增配置：
+
+- REPOGUARD_NOTIFICATION_DELIVERY_CLAIM_LEASE_MS，默认 300000。
+- REPOGUARD_NOTIFICATION_DELIVERY_RECOVERY_INTERVAL_MS，默认 60000。
+- REPOGUARD_NOTIFICATION_DELIVERY_RECOVERY_BATCH_SIZE，默认 20，代码限制在 1~1000。
+
+主要涉及文件：
+
+- repoguard-backend/src/main/resources/db/migration/V55__notification_delivery_claim.sql
+- repoguard-backend/src/main/java/com/repoguard/agent/entity/NotificationEvent.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryClaim.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryClaimService.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryEventStateUpdater.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryRecoveryCompensator.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryWorker.java
+
+验证结果：
+
+- 生产代码编译：BUILD SUCCESS，657 个生产类。
+- 定向测试：领取、恢复、worker、状态更新、完成服务、发布状态、手动重试及 Spring 构造器共 27 个测试，0 failure，0 error。
+- 后端全量测试：1,601 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- git diff --check：通过。
+- 本机 JDK 26/JaCoCo 0.8.13 的 major version 70 告警仍存在，不影响测试退出结果，继续留待 P2 工具链项处理。
+
+验收结论：同一通知事件只有取得数据库领取所有权的消费者能够调用外部渠道；完成更新受领取标识保护，消费者崩溃后可通过租约超时恢复，本项达到完成标准。

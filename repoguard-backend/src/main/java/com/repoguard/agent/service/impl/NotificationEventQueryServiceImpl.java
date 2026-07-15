@@ -88,6 +88,8 @@ public class NotificationEventQueryServiceImpl implements NotificationEventQuery
                 .set("last_error", null)
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
                 .set("updated_at", now)
         );
         if (updated != 1) {
