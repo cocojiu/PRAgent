@@ -789,3 +789,34 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：快速输入不会产生逐字符请求风暴，旧请求无法覆盖最新筛选结果，组件卸载后不会写回状态，本项达到完成标准。
+
+进度记录 07
+
+完成时间：2026-07-15 17:40:10 +08:00（Asia/Shanghai）
+优化项：P1 任务详情路由切换的乱序响应覆盖
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 详情加载和状态轮询使用同一个递增请求序号，只有最新请求可以写入任务详情、错误、轮询计数和刷新时间。
+2. 路由切换触发新详情请求后，旧任务即使更晚返回，也不会覆盖当前路由对应的任务。
+3. 旧请求的异常被抑制，不会清空新任务、显示过期错误或干扰最新轮询状态。
+4. loading 与 silentRefreshing 仅由最新请求收尾，旧请求完成时不会提前结束新请求的加载状态。
+5. 页面卸载时主动使所有在途详情请求失效并清理加载状态，避免卸载后继续写入响应式数据。
+
+涉及文件：
+
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.ts
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.test.ts
+- repoguard-frontend/src/pages/ReviewDetailPage.vue
+
+验证结果：
+
+- 新增详情加载器单元测试：2 个测试通过，覆盖旧响应晚到、旧异常和卸载取消。
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：20 个测试文件、67 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,329 个模块。
+- git diff --check：通过。
+
+验收结论：路由快速切换时，旧任务响应、旧错误和旧加载收尾均无法覆盖当前任务状态，页面卸载后也不会写回详情状态，本项达到完成标准。

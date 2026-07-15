@@ -348,6 +348,7 @@ function afterDetailSummaryLoaded() {
 }
 
 const {
+  cancelPendingRequests,
   errorMessage,
   lastRefreshedAt,
   loading,
@@ -727,6 +728,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  cancelPendingRequests();
   stopGithubCommentPublishPolling();
   cleanupPolling();
 });

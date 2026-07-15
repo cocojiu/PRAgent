@@ -43,6 +43,10 @@ export const useReviewDetailLoader = ({
   const pollFailureCount = ref(0);
   const lastRefreshedAt = ref("");
   const selectedTask = ref<ReviewTaskDetail | null>(null);
+  let requestSequence = 0;
+
+  const beginRequest = () => ++requestSequence;
+  const isLatestRequest = (sequence: number) => sequence === requestSequence;
 
   const clearNonTerminalGithubCommentData = (status: ReviewStatus | string) => {
     if (isTerminalReviewStatus(status)) {
@@ -54,6 +58,7 @@ export const useReviewDetailLoader = ({
   const loadDetail = async (options: LoadDetailOptions = {}) => {
     const id = getTaskId();
     if (!Number.isFinite(id)) {
+      requestSequence += 1;
       ElMessage.error("审查任务 ID 无效");
       return;
     }
@@ -61,6 +66,8 @@ export const useReviewDetailLoader = ({
     if (options.silent && silentRefreshing.value && !options.force) {
       return;
     }
+
+    const sequence = beginRequest();
 
     if (options.silent) {
       silentRefreshing.value = true;
@@ -73,6 +80,9 @@ export const useReviewDetailLoader = ({
     }
     try {
       const task = normalizeReviewTaskDetail(await fetchReviewDetail(id));
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       selectedTask.value = task;
       afterDetailLoaded?.(task);
       pollErrorMessage.value = "";
@@ -81,6 +91,9 @@ export const useReviewDetailLoader = ({
       clearNonTerminalGithubCommentData(task.status);
       syncPolling();
     } catch (error) {
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       if (!options.silent) {
         selectedTask.value = null;
       }
@@ -98,8 +111,10 @@ export const useReviewDetailLoader = ({
         }
       }
     } finally {
-      loading.value = false;
-      silentRefreshing.value = false;
+      if (isLatestRequest(sequence)) {
+        loading.value = false;
+        silentRefreshing.value = false;
+      }
     }
   };
 
@@ -112,9 +127,13 @@ export const useReviewDetailLoader = ({
       return;
     }
 
+    const sequence = beginRequest();
     silentRefreshing.value = true;
     try {
       const status = await fetchReviewStatus(id);
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       if (selectedTask.value) {
         selectedTask.value = applyReviewStatusSnapshot(selectedTask.value, status);
       }
@@ -127,6 +146,9 @@ export const useReviewDetailLoader = ({
       }
       syncPolling();
     } catch (error) {
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       pollFailureCount.value += 1;
       const message = getErrorMessage(error, "请求失败");
       if (pollFailureCount.value >= maxPollFailures) {
@@ -137,8 +159,16 @@ export const useReviewDetailLoader = ({
         syncPolling();
       }
     } finally {
-      silentRefreshing.value = false;
+      if (isLatestRequest(sequence)) {
+        silentRefreshing.value = false;
+      }
     }
+  };
+
+  const cancelPendingRequests = () => {
+    requestSequence += 1;
+    loading.value = false;
+    silentRefreshing.value = false;
   };
 
   const refreshDetail = () => {
@@ -155,6 +185,7 @@ export const useReviewDetailLoader = ({
     pollFailureCount,
     selectedTask,
     silentRefreshing,
+    cancelPendingRequests,
     loadDetail,
     pollReviewStatus,
     refreshDetail
