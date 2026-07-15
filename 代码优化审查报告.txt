@@ -654,3 +654,34 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - 本机 JDK 26/JaCoCo 0.8.13 的 major version 70 告警仍存在，不影响测试退出结果，继续留待 P2 工具链项处理。
 
 验收结论：同一通知事件只有取得数据库领取所有权的消费者能够调用外部渠道；完成更新受领取标识保护，消费者崩溃后可通过租约超时恢复，本项达到完成标准。
+
+
+进度记录 03
+
+完成时间：2026-07-15 17:16:52 +08:00（Asia/Shanghai）
+优化项：P1 数据清理审计及租约的事务完成时序
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 清理响应生成后不再立即提交 COMPLETED 审计；存在真实 Spring 事务时，在 afterCommit 回调中通过现有 REQUIRES_NEW 审计事务记录完成状态和成功指标。
+2. 如果清理逻辑已经返回、但外层数据库事务在提交阶段回滚或提交失败，afterCompletion 会把审计记录更新为 FAILED，并记录失败指标，避免“数据未清理但审计显示完成”。
+3. 数据库清理租约不再在业务方法 finally 中提前释放；存在真实事务时，在 afterCompletion 中通过 REQUIRES_NEW 释放。
+4. 进程内 ReentrantLock 与数据库租约在同一事务完成回调中释放，避免同一实例在数据库提交窗口内启动下一轮清理。
+5. 参数校验失败、租约获取失败以及没有事务同步的直接调用继续使用同步释放兜底，避免锁泄漏并保持单元测试和非代理调用的确定性。
+6. 清理主体内部发生异常时，原有 FAILED 审计和失败指标行为保持不变；外层事务完成后再释放租约。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/DataRetentionServiceImplTest.java
+
+验证结果：
+
+- 定向测试：DataRetentionServiceImplTest、DataRetentionCleanupAuditRecorderTest、DataRetentionCleanupLeaseStoreTest、SpringBeanConstructorSelectionTest，共 33 个测试，0 failure，0 error。
+- 新增事务同步测试覆盖提交成功和提交回滚两条路径，并验证审计、指标及租约释放的先后关系。
+- 后端全量测试：1,603 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- git diff --check：通过。
+- 本机 JDK 26/JaCoCo 0.8.13 插桩告警继续留待 P2 工具链项处理。
+
+验收结论：成功审计和成功指标只会在清理事务真正提交后产生；提交失败会留下 FAILED 审计；数据库租约及进程锁在事务完成后才释放，本项达到完成标准。

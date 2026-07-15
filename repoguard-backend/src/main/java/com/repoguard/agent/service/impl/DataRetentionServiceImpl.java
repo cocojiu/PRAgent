@@ -36,6 +36,8 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class DataRetentionServiceImpl implements DataRetentionService {
@@ -125,8 +127,9 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         } finally {
-            leaseStore.release(lease);
-            cleanupLock.unlock();
+            if (!deferCleanupReleaseUntilTransactionCompletion(lease)) {
+                releaseCleanupResources(lease);
+            }
         }
     }
 
@@ -189,7 +192,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 .toList();
 
             if (!execute || taskIds.isEmpty()) {
-                return completed(cleanupBatchId, response(
+                return completedAfterCommit(cleanupBatchId, execute, response(
                     false,
                     cleanupBatchId,
                     retentionDays,
@@ -231,7 +234,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, taskIds)
             );
 
-            return completed(cleanupBatchId, response(
+            return completedAfterCommit(cleanupBatchId, execute, response(
                 true,
                 cleanupBatchId,
                 retentionDays,
@@ -375,8 +378,60 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         return response;
     }
 
-    private DataRetentionCleanupResponse completed(Long cleanupBatchId, DataRetentionCleanupResponse response) {
-        auditRecorder.complete(cleanupBatchId, response);
-        return recorded(response);
+    private DataRetentionCleanupResponse completedAfterCommit(
+        Long cleanupBatchId,
+        boolean execute,
+        DataRetentionCleanupResponse response
+    ) {
+        if (!transactionSynchronizationActive()) {
+            auditRecorder.complete(cleanupBatchId, response);
+            return recorded(response);
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                auditRecorder.complete(cleanupBatchId, response);
+                metricsRecorder.record(response);
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                IllegalStateException failure = new IllegalStateException(
+                    "Data retention cleanup transaction did not commit"
+                );
+                auditRecorder.fail(cleanupBatchId, failure);
+                metricsRecorder.recordFailure(execute, failure);
+            }
+        });
+        return response;
+    }
+
+    private boolean deferCleanupReleaseUntilTransactionCompletion(DataRetentionCleanupLeaseStore.Lease lease) {
+        if (lease == null || !transactionSynchronizationActive()) {
+            return false;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                releaseCleanupResources(lease);
+            }
+        });
+        return true;
+    }
+
+    private boolean transactionSynchronizationActive() {
+        return TransactionSynchronizationManager.isActualTransactionActive()
+            && TransactionSynchronizationManager.isSynchronizationActive();
+    }
+
+    private void releaseCleanupResources(DataRetentionCleanupLeaseStore.Lease lease) {
+        try {
+            leaseStore.release(lease);
+        } finally {
+            cleanupLock.unlock();
+        }
     }
 }

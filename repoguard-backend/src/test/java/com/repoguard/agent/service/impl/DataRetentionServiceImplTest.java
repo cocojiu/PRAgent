@@ -42,6 +42,8 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class DataRetentionServiceImplTest {
 
@@ -316,6 +318,69 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
+    void cleanupCompletesAuditAndReleasesLeaseOnlyAfterTransactionCommit() {
+        stubLeaseAcquired();
+        stubAuditStart(106L);
+        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
+        when(reviewTaskMapper.selectCount(any())).thenReturn(0L);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        List<TransactionSynchronization> synchronizations = List.of();
+        boolean transactionCompleted = false;
+        beginTransactionSynchronization();
+        try {
+            var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
+            synchronizations = TransactionSynchronizationManager.getSynchronizations();
+
+            verify(auditRecorder, never()).complete(106L, response);
+            verify(metricsRecorder, never()).record(response);
+            verify(leaseStore, never()).release(any());
+
+            synchronizations.forEach(TransactionSynchronization::afterCommit);
+            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
+            transactionCompleted = true;
+
+            verify(auditRecorder).complete(106L, response);
+            verify(metricsRecorder).record(response);
+            verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
+            verify(auditRecorder, never()).fail(org.mockito.Mockito.eq(106L), any());
+        } finally {
+            finishTransactionSynchronization(synchronizations, transactionCompleted);
+        }
+    }
+
+    @Test
+    void cleanupMarksAuditFailedAndReleasesLeaseWhenCommitRollsBack() {
+        stubLeaseAcquired();
+        stubAuditStart(107L);
+        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
+        when(reviewTaskMapper.selectCount(any())).thenReturn(0L);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        List<TransactionSynchronization> synchronizations = List.of();
+        boolean transactionCompleted = false;
+        beginTransactionSynchronization();
+        try {
+            var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
+            synchronizations = TransactionSynchronizationManager.getSynchronizations();
+
+            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+            transactionCompleted = true;
+
+            verify(auditRecorder, never()).complete(107L, response);
+            verify(auditRecorder).fail(
+                org.mockito.Mockito.eq(107L),
+                org.mockito.ArgumentMatchers.isA(IllegalStateException.class)
+            );
+            verify(metricsRecorder).recordFailure(
+                org.mockito.Mockito.eq(false),
+                org.mockito.ArgumentMatchers.isA(IllegalStateException.class)
+            );
+            verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
+        } finally {
+            finishTransactionSynchronization(synchronizations, transactionCompleted);
+        }
+    }
+
+    @Test
     void cleanupRejectsWhenDatabaseLeaseIsOwnedByAnotherInstance() {
         when(leaseStore.acquire()).thenReturn(null);
 
@@ -575,6 +640,24 @@ class DataRetentionServiceImplTest {
 
     private void stubLeaseAcquired() {
         when(leaseStore.acquire()).thenReturn(new DataRetentionCleanupLeaseStore.Lease("owner-1"));
+    }
+
+    private void beginTransactionSynchronization() {
+        TransactionSynchronizationManager.setActualTransactionActive(true);
+        TransactionSynchronizationManager.initSynchronization();
+    }
+
+    private void finishTransactionSynchronization(
+        List<TransactionSynchronization> synchronizations,
+        boolean transactionCompleted
+    ) {
+        if (!transactionCompleted) {
+            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
+        }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+        TransactionSynchronizationManager.setActualTransactionActive(false);
     }
 
     private void stubAuditStart(Long cleanupBatchId) {
