@@ -45,6 +45,21 @@ class RoleAuthorizationInterceptorTest {
     }
 
     @Test
+    void allowsViewerWhenEndpointExplicitlyAcceptsViewerOrAdmin() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/observability/frontend/performance");
+        request.setAttribute(
+            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+            new AuthTokenService.AuthenticatedUser(1002L, "viewer", "VIEWER", 9999999999L)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        boolean allowed = interceptor.preHandle(request, response, handlerMethod("adminOrViewer"));
+
+        assertThat(allowed).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void rejectsMissingAuthenticatedUserWhenRoleRequired() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/config/system-settings");
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -74,6 +89,10 @@ class RoleAuthorizationInterceptorTest {
     private static class DemoController {
         @RequireRole("ADMIN")
         void adminOnly() {
+        }
+
+        @RequireRole({"ADMIN", "VIEWER"})
+        void adminOrViewer() {
         }
 
         void readOnly() {

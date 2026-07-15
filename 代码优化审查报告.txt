@@ -1213,3 +1213,42 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
 
 验收结论：客户端获得可供排障关联的安全 errorId，服务端恢复完整可诊断异常链且不会把连接地址或凭据写入日志；响应契约和现有用户提示保持稳定，本项达到本地完成标准。
+
+进度记录 20
+
+完成时间：2026-07-15 21:08:28 +08:00（Asia/Shanghai）
+优化项：P2 认证授权策略精确化与双向契约
+状态：本地实现、定向权限测试、全量后端验证和仓库治理门禁均已完成，准备提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 将注册、登录、刷新、刷新令牌重置、退出和 GitHub webhook 六个匿名入口从 `ANY_METHOD` 收紧为精确 `POST`；相同路径的 GET、DELETE 等非映射方法不再绕过访问令牌过滤器。
+2. 新增 `@AllowAnonymous` 语义标记并应用到六个真实 Controller 方法；匿名策略表与 Controller 映射通过 HTTP method + path 完整集合比较，任何单边新增、删除或方法漂移都会使契约测试失败。
+3. 非匿名写接口必须显式声明 `@RequireRole`；前端性能上报明确允许 `ADMIN/VIEWER` 访问，替代原先测试中的方法名白名单，同时保持其必须携带有效用户访问令牌的现有边界。
+4. Admin API Key 契约改为双向检查：所有 ADMIN-only Controller 映射必须被策略覆盖，每个策略项必须至少对应一个真实映射，且策略不得匹配非 ADMIN-only 接口。
+5. 移除没有任何 Controller 映射的 `/api/v1/config` 精确策略项；保留 `/api/v1/config/**` 对现有配置接口的保护，后续若新增根路径接口，双向测试会要求显式补充策略。
+6. 明确 Admin API Key 只覆盖 ADMIN-only 管理接口，不因普通接口同时允许 ADMIN 与 VIEWER 就自动扩权；性能上报仍不能使用 Admin API Key 建立管理员身份。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AllowAnonymous.java
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenAccessPolicy.java
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AdminApiKeyAccessPolicy.java
+- repoguard-backend/src/main/java/com/repoguard/agent/controller/AuthController.java
+- repoguard-backend/src/main/java/com/repoguard/agent/controller/GithubWebhookController.java
+- repoguard-backend/src/main/java/com/repoguard/agent/controller/FrontendPerformanceController.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/AuthTokenAccessPolicyTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/AuthTokenFilterTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/AdminApiKeyAccessPolicyTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/security/RoleAuthorizationInterceptorTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/controller/ControllerAuthorizationContractTest.java
+
+验证结果：
+
+- 权限策略与过滤器定向测试：31 个测试全部通过，0 failure，0 error。
+- 后端全量 `mvn verify`：1,611 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：匿名访问面已精确到真实 Controller 方法与 HTTP method，普通用户写接口和管理员专用接口具备可读的权限声明；访问令牌策略、RBAC 映射和 Admin API Key 策略均由双向契约约束，本项达到本地完成标准。

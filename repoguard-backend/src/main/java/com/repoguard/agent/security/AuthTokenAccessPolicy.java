@@ -5,16 +5,15 @@ import java.util.Locale;
 
 final class AuthTokenAccessPolicy {
 
-    private static final String ANY_METHOD = "*";
     private static final String API_PREFIX = "/api/v1";
 
     private static final List<PublicEndpoint> PUBLIC_ENDPOINTS = List.of(
-        new PublicEndpoint(ANY_METHOD, "/api/v1/auth/register", "User registration"),
-        new PublicEndpoint(ANY_METHOD, "/api/v1/auth/login", "User login"),
-        new PublicEndpoint(ANY_METHOD, "/api/v1/auth/refresh", "Refresh token exchange"),
-        new PublicEndpoint(ANY_METHOD, "/api/v1/auth/refresh-token/reset", "Refresh token reset"),
-        new PublicEndpoint(ANY_METHOD, "/api/v1/auth/logout", "Refresh token logout"),
-        new PublicEndpoint(ANY_METHOD, "/api/v1/github/webhooks", "GitHub webhook ingress")
+        new PublicEndpoint("POST", "/api/v1/auth/register", "User registration"),
+        new PublicEndpoint("POST", "/api/v1/auth/login", "User login"),
+        new PublicEndpoint("POST", "/api/v1/auth/refresh", "Refresh token exchange"),
+        new PublicEndpoint("POST", "/api/v1/auth/refresh-token/reset", "Refresh token reset"),
+        new PublicEndpoint("POST", "/api/v1/auth/logout", "Refresh token logout"),
+        new PublicEndpoint("POST", "/api/v1/github/webhooks", "GitHub webhook ingress")
     );
 
     private AuthTokenAccessPolicy() {
@@ -53,8 +52,7 @@ final class AuthTokenAccessPolicy {
     record PublicEndpoint(String method, String pathPattern, String description) {
 
         boolean matches(String actualMethod, String actualPath) {
-            return (ANY_METHOD.equals(method) || method.equals(actualMethod))
-                && pathPattern.equals(actualPath);
+            return method.equals(actualMethod) && pathPattern.equals(actualPath);
         }
     }
 }

@@ -18,7 +18,6 @@ class AdminApiKeyAccessPolicyTest {
         assertThat(AdminApiKeyAccessPolicy.protectedEndpoints())
             .extracting(endpoint -> endpoint.method() + " " + endpoint.pathPattern())
             .containsExactly(
-                "* /api/v1/config",
                 "* /api/v1/config/**",
                 "* /api/v1/message-queue/**",
                 "* /api/v1/notification-events",
@@ -49,6 +48,7 @@ class AdminApiKeyAccessPolicyTest {
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("PUT", "/api/v1/config/system-settings")).isTrue();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/config/data-retention/cleanup")).isTrue();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/config/data-retention/cleanup-audits")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/observability/frontend/performance")).isFalse();
         assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/reviews/42")).isFalse();
     }
 
@@ -58,7 +58,7 @@ class AdminApiKeyAccessPolicyTest {
 
         for (Class<?> controller : ControllerEndpointCatalog.discoverControllers(CONTROLLER_BASE_PACKAGE)) {
             for (Endpoint endpoint : ControllerEndpointCatalog.endpoints(controller)) {
-                if (!requiresAdminRole(endpoint.controller(), endpoint.method())) {
+                if (!requiresAdminOnlyRole(endpoint.controller(), endpoint.method())) {
                     continue;
                 }
                 if (!AdminApiKeyAccessPolicy.requiresAdminKey(endpoint.httpMethod(), concretePath(endpoint.path()))) {
@@ -68,22 +68,53 @@ class AdminApiKeyAccessPolicyTest {
         }
 
         assertThat(uncoveredEndpoints)
-            .as("Admin API key policy must cover every @RequireRole(\"ADMIN\") controller endpoint")
+            .as("Admin API key policy must cover every ADMIN-only controller endpoint")
             .isEmpty();
     }
 
-    private boolean requiresAdminRole(Class<?> controller, Method method) {
-        RequireRole methodRole = method.getAnnotation(RequireRole.class);
-        if (methodRole != null) {
-            return containsAdmin(methodRole);
+    @Test
+    void policyContainsNoUnmappedOrNonAdminControllerScope() throws ClassNotFoundException {
+        List<Endpoint> controllerEndpoints = new ArrayList<>();
+        for (Class<?> controller : ControllerEndpointCatalog.discoverControllers(CONTROLLER_BASE_PACKAGE)) {
+            controllerEndpoints.addAll(ControllerEndpointCatalog.endpoints(controller));
         }
-        RequireRole controllerRole = controller.getAnnotation(RequireRole.class);
-        return controllerRole != null && containsAdmin(controllerRole);
+
+        List<String> unmappedPolicyEntries = AdminApiKeyAccessPolicy.protectedEndpoints().stream()
+            .filter(policy -> controllerEndpoints.stream().noneMatch(endpoint -> policy.matches(
+                endpoint.httpMethod(),
+                concretePath(endpoint.path())
+            )))
+            .map(policy -> policy.method() + " " + policy.pathPattern())
+            .toList();
+        List<String> nonAdminMatches = controllerEndpoints.stream()
+            .filter(endpoint -> !requiresAdminOnlyRole(endpoint.controller(), endpoint.method()))
+            .filter(endpoint -> AdminApiKeyAccessPolicy.requiresAdminKey(
+                endpoint.httpMethod(),
+                concretePath(endpoint.path())
+            ))
+            .map(endpoint -> endpoint.httpMethod() + " " + endpoint.path())
+            .toList();
+
+        assertThat(unmappedPolicyEntries)
+            .as("Every Admin API key policy entry must match at least one controller mapping")
+            .isEmpty();
+        assertThat(nonAdminMatches)
+            .as("Admin API key policy must not grant an ADMIN identity to non-admin controller mappings")
+            .isEmpty();
     }
 
-    private boolean containsAdmin(RequireRole requireRole) {
-        return List.of(requireRole.value()).stream()
-            .anyMatch(role -> "ADMIN".equalsIgnoreCase(role));
+    private boolean requiresAdminOnlyRole(Class<?> controller, Method method) {
+        RequireRole methodRole = method.getAnnotation(RequireRole.class);
+        if (methodRole != null) {
+            return containsOnlyAdmin(methodRole);
+        }
+        RequireRole controllerRole = controller.getAnnotation(RequireRole.class);
+        return controllerRole != null && containsOnlyAdmin(controllerRole);
+    }
+
+    private boolean containsOnlyAdmin(RequireRole requireRole) {
+        List<String> roles = List.of(requireRole.value());
+        return !roles.isEmpty() && roles.stream().allMatch(role -> "ADMIN".equalsIgnoreCase(role));
     }
 
     private String concretePath(String path) {
