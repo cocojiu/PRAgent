@@ -8,7 +8,7 @@ import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.config.ReviewPolicyProvider;
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.dto.SystemHealthItemDto;
-import com.repoguard.agent.service.impl.RabbitRuntimeHealthProbe;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;

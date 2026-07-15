@@ -1,16 +1,16 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.messaging;
 
+import com.repoguard.agent.concurrency.AsyncExecutorProperties;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.stereotype.Component;
-import java.util.concurrent.Executor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import com.repoguard.agent.concurrency.AsyncExecutorProperties;
+import org.springframework.stereotype.Component;
 
 @Component
 public class RabbitRuntimeHealthProbe {
@@ -25,6 +25,15 @@ public class RabbitRuntimeHealthProbe {
 
     public RabbitRuntimeHealthProbe(RabbitTemplate rabbitTemplate, RabbitReviewQueueProperties properties) {
         this(rabbitTemplate, properties, Runnable::run, new AsyncExecutorProperties());
+    }
+
+    public static RabbitRuntimeHealthProbe forTesting(
+        RabbitTemplate rabbitTemplate,
+        RabbitReviewQueueProperties properties,
+        Executor executor,
+        AsyncExecutorProperties asyncProperties
+    ) {
+        return new RabbitRuntimeHealthProbe(rabbitTemplate, properties, executor, asyncProperties);
     }
 
     @Autowired

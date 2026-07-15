@@ -39,6 +39,7 @@ import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;

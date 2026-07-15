@@ -6,6 +6,7 @@ import com.repoguard.agent.dto.ActiveRabbitMqConfigDto;
 import com.repoguard.agent.dto.RabbitMqTopologyDto;
 import com.repoguard.agent.dto.RetryCompensationStatusDto;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;

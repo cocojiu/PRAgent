@@ -1417,3 +1417,45 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：指标采集公共契约保持稳定，Review、External、HTTP/SQL/Frontend 与 Rabbit 四类变化已具备独立内聚边界，并共享一套 Tag 基数和空值策略；队列 Gauge 可变状态不再污染其他指标领域，本阶段达到本地完成标准。
+
+进度记录 25
+
+完成时间：2026-07-16 01:08:08 +08:00（Asia/Shanghai）
+优化项：P2 自动化架构边界与渐进式循环依赖门禁（复杂模块第四阶段）
+状态：本地实现、架构契约、受影响调用链回归、全量后端验证和仓库治理门禁均已完成，准备提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 新增 `ApplicationArchitectureTest`，直接使用 JDK 编译器语法树解析全部生产 Java 源码，不引入新的第三方架构测试依赖，也不会把注释或字符串误识别为代码依赖。
+2. 固化 Controller 边界：`controller` 包及其子包不得直接引用 `mapper`，新增接口必须通过应用服务或领域边界访问持久化层。
+3. 固化实现包可见性：任何 `impl` 包只能被自身包及其子包引用，其他领域不得跨包依赖具体实现类；规则同时覆盖普通 import、static import 和源码中的全限定类型引用。
+4. 对领域顶层包建立有向依赖图并计算可达路径；现有 24 条参与循环的依赖边作为已审查技术债基线，删除旧边可直接收敛，任何新边只要形成循环就会使测试失败，避免为一次性清零历史循环而进行高风险大重构。
+5. 审计发现 `DashboardSystemHealthProbe` 直接依赖 `service.impl.RabbitRuntimeHealthProbe`；将 Rabbit 运行时探针和专属执行器配置迁移至 `messaging` 领域，使 Dashboard、通知和消息队列应用服务共同依赖稳定消息基础设施边界。
+6. Rabbit 探针的缓存、并发 in-flight 复用、超时、失败退避和线程池 Bean 语义保持不变；四参数 Spring 构造器继续保持包内可见，跨包测试通过显式 `forTesting` 工厂注入执行器，未扩大生产构造 API。
+7. 现有 Controller→Mapper 引用为 0，领域外引用 `service.impl` 为 0；Dashboard/Retention 等已收敛领域没有被纳入任何新增循环。
+8. 未新增 Maven 依赖，未新增或提交任何测试辅助脚本，也未提交 README 工作区中的既有修改。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/messaging/RabbitRuntimeHealthProbe.java
+- repoguard-backend/src/main/java/com/repoguard/agent/messaging/RabbitHealthProbeExecutorConfig.java
+- repoguard-backend/src/main/java/com/repoguard/agent/dashboard/DashboardSystemHealthProbe.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/MessageQueueRuntimeConfigAssembler.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/NotificationServiceImpl.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/RabbitMqConnectionProbe.java
+- repoguard-backend/src/test/java/com/repoguard/agent/architecture/ApplicationArchitectureTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/dashboard/DashboardSystemHealthProbeTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/DashboardServiceImplTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/MessageQueueHealthServiceImplTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/MessageQueueRuntimeConfigAssemblerTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/NotificationServiceImplTest.java
+
+验证结果：
+
+- 架构规则、Rabbit 探针、Dashboard/通知/消息队列调用方与 Spring Bean 构造选择定向回归：43 个测试全部通过；最终构造 API 可见性收紧后核心 16 个测试再次通过。
+- 后端全量 `mvn verify`：1,637 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：复杂模块前三阶段形成的边界已由可执行架构契约保护；Controller 无法绕过服务层、具体实现包不再跨域泄漏，历史领域循环以显式债务基线渐进收敛且不会继续扩张，本阶段达到本地完成标准。
