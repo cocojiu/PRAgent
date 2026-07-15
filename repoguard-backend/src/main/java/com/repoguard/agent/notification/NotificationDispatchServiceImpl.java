@@ -57,7 +57,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             || NotificationEventStatus.PUBLISHED == eventStatus) {
             return;
         }
-        publishCoordinator.publish(event);
+        publishCoordinator.publishAfterCommit(event);
     }
 
     private void createAndPublish(ReviewTask task, NotificationDispatchRequest request) {

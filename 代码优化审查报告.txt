@@ -1,0 +1,613 @@
+RepoGuard Agent 全量代码审查与优化报告
+
+审查日期：2026-07-13
+审查分支：PRAgent-test
+审查范围：后端 Java/SQL/YAML、前端 Vue/TypeScript/CSS、Docker/Nginx/Caddy、GitHub Actions 与测试体系
+文档格式说明：根据“除 README.md 外不得提交 Markdown 文档、测试脚本不得提交 Git”的仓库约束，本报告使用 TXT，且本次不执行 Git 暂存或提交。
+
+一、结论摘要
+
+项目已经具备较好的生产化基础，不属于需要推倒重构的状态。认证链路采用内存访问令牌、HttpOnly 刷新 Cookie、CSRF 校验和刷新令牌轮换；外部请求有主机/端口策略；Docker 镜像使用非 root 用户；RabbitMQ 发布确认、补偿、任务抢占、数据库归档、指标基数限制、API 契约快照和 MySQL/RabbitMQ 集成 CI 均已落地。
+
+当前最应优先处理的不是代码风格，而是以下四类问题：
+
+1. 通知手动重试在数据库事务提交前直接发布 RabbitMQ，且没有状态白名单和并发抢占，存在重复通知及“消息已发、事务回滚”的一致性风险。
+2. 前端部分异步流程缺少请求序号或取消机制，慢响应可能覆盖新路由、新搜索条件；集成配置的四接口并发保存可能形成部分成功。
+3. 大表迁移、逐行插入和首屏公共依赖仍有明确的扩容与性能成本。
+4. 构建版本、覆盖率门禁、真实浏览器验收和依赖治理尚未形成完全可复现的闭环。
+
+建议先完成 P0 和 P1，确认行为正确后再进行架构收敛。不要为了减少文件数而先做大规模重构。
+
+二、规模与验证基线
+
+代码规模：
+
+- 后端生产 Java：653 个文件，约 35,774 行。
+- 后端测试 Java：359 个文件，约 36,614 行。
+- 前端 TypeScript：95 个文件，约 8,443 行。
+- 前端 Vue：39 个文件，约 6,056 行。
+- Flyway 迁移：54 个文件。
+- 后端 service.impl：99 个文件，平均约 101.8 行；其中 13 个超过 200 行。
+
+本次验证结果：
+
+- mvn test：1,617 个测试，0 failure，0 error，2 skipped；跳过项为依赖真实 MySQL/RabbitMQ 环境的生产上下文集成测试。
+- JaCoCo：line 89.9%，branch 72.1%，method 90.0%，class 96.0%。
+- 前端 vue-tsc：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：17 个测试文件、61 个测试全部通过。
+- 前端 Vite 生产构建：通过，3,327 个模块完成转换。
+- Maven dependency:analyze：构建通过；编译器提示生产代码存在 deprecated API，测试代码另有 deprecated/unchecked 提示。Starter 项目会让 dependency:analyze 产生较多“间接依赖被直接使用”的噪声，不应机械地把所有传递依赖改成直接依赖。
+
+验证限制：
+
+- 本地 JDK 为 26，项目 POM、CI 和运行镜像目标为 Java 25。JaCoCo 0.8.13 对 JDK 26 系统类出现 major version 70 插桩错误，但 Maven 仍返回成功；应用类覆盖率报告仍生成。应在 CI 之外也强制 Java 25，或升级兼容的 JaCoCo 后再使用 JDK 26。
+- 本次未连接真实 GitHub、LLM、生产 MySQL/RabbitMQ，也未执行真实浏览器和压力测试。
+- 结论以静态审查、现有测试、构建结果和配置拓扑为依据；涉及容量的项需要用生产量级数据复测。
+
+三、优先级定义
+
+- P0：可能造成重复外部副作用、数据/消息不一致，优先阻断发布。
+- P1：会产生错误展示、部分保存、竞态、明显性能或扩容风险，应在近期迭代处理。
+- P2：工程治理、可维护性、可访问性和长期成本优化，可分阶段推进。
+
+四、P0 优化项
+
+P0-1 通知手动重试需要改为“受控状态迁移 + 提交后发布”
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java:68
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java:76
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java:77
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDispatchServiceImpl.java:50
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDispatchServiceImpl.java:60
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationEventPublishCoordinator.java:35
+
+现状：retryEvent() 带 @Transactional，先无条件把事件改为 PENDING，再调用 publishExistingEvent()；后者直接执行 publish()，没有使用项目已经存在的 publishAfterCommit()。更新条件也没有限制原状态或声明抢占者。
+
+风险：
+
+- 两个并发重试请求都可能发布同一个事件。
+- 已经 DELIVERED/PUBLISHED 的事件也能被 API 再次改为 PENDING 并发布。
+- RabbitMQ 已确认后，如果后续 select/组装响应抛异常，数据库事务回滚，但消息无法回滚，补偿任务可能再次发布。
+- 当前单测只验证“重置并调用发布”，没有覆盖并发、事务回滚和已完成状态。
+
+建议：
+
+1. 增加单条条件更新：仅允许 PUBLISH_FAILED/DELIVERY_FAILED 等可重试状态转为 PENDING，并通过版本号或 publish_claimed_at/publish_claimed_by 完成 CAS 抢占。
+2. 事务内只保存重试意图；提交后调用 publishAfterCommit()，或完全交给现有补偿 worker 扫描 PENDING 事件。
+3. API 返回 queued/accepted 语义，不要把 RabbitMQ 发布成功与最终通知送达混为一体。
+4. 消费端继续以 eventKey/eventId 做幂等，防止消息系统的至少一次投递转化为重复外部通知。
+
+验收标准：
+
+- 同一事件 20 个并发重试请求最多一个获得发布权。
+- DELIVERED/PUBLISHED 事件返回 409 或业务拒绝，不改变状态。
+- 强制事务回滚时 RabbitMQ 不出现消息。
+- after-commit 发布失败时事件保留为可补偿状态，并能被 recovery worker 恢复。
+
+五、P1 优化项
+
+P1-1 集成配置“保存全部”存在部分成功
+
+证据：
+
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts:88
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts:94
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts:102
+
+现状：GitHub、MySQL、RabbitMQ、Review Policy 四个独立 PUT 通过 Promise.all 并发执行。任意一个失败时，其余请求不会取消，已经成功的配置仍然持久化，但页面只显示整体失败且不应用成功响应。
+
+建议二选一：
+
+- 交互改为每张集成卡独立保存、独立反馈，这是改动最小且语义最清楚的方案。
+- 如果业务必须“全部保存”，增加后端批量命令，在同一数据库事务内校验并更新全部配置；外部连接测试与持久化分离。
+
+同时把 loadConfig() 的 Promise.all 改为 Promise.allSettled，允许成功配置先展示，并在具体卡片标记失败。保存失败后主动重新拉取服务端状态，避免页面与数据库不一致。
+
+验收标准：构造四个请求中任一失败，用户能明确看到每项结果；页面最终状态与数据库一致，不出现静默部分保存。
+
+P1-2 任务详情主请求可能被旧路由响应覆盖
+
+证据：
+
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.ts:54
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.ts:75
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.ts:76
+- repoguard-frontend/src/pages/ReviewDetailPage.vue:716
+
+现状：loadDetail() 在请求前读取 id，但响应回来后没有确认当前路由 id 仍然相同，也没有 requestSeq/AbortController。快速从任务 A 导航到任务 B 时，A 的慢响应可能最后写入 selectedTask；旧请求的 finally 也可能提前关闭新请求的 loading 状态。
+
+建议：复用 useReviewTasksList 已有的 requestSeq 模式，或在 API 层支持 AbortSignal。只有“请求序号仍是最新且 id 等于当前路由”时才允许写状态、错误和 loading。pollReviewStatus() 同样应用该规则。
+
+验收标准：人为让 A 延迟、B 快速返回，最终 URL、详情、轮询对象和 loading 必须全部属于 B。
+
+P1-3 用户搜索存在请求风暴和乱序覆盖
+
+证据：
+
+- repoguard-frontend/src/pages/UserManagementPage.vue:262
+- repoguard-frontend/src/pages/UserManagementPage.vue:270
+- repoguard-frontend/src/pages/UserManagementPage.vue:454
+
+现状：keyword 每次输入都会立即调用服务端查询，没有 debounce，也没有请求序号。快速输入可能产生多次数据库 LIKE 查询，旧关键字的慢响应还能覆盖新关键字结果。分页和过滤刷新期间 loading 也没有统一覆盖。
+
+建议：增加 300~400ms debounce、requestSeq/AbortController，并把所有列表入口收敛为一个 loadUsers({ reason })。后端对 username/email 模糊查询结合真实数据量核对索引和执行计划；数据量较大时考虑前缀搜索或专用检索字段。
+
+验收标准：连续输入 10 个字符只触发 1~2 次请求；乱序响应不改变最终列表；切页和筛选时有一致的加载状态。
+
+P1-4 用户统计卡片把“当前页”误当成“全量账号”
+
+证据：
+
+- repoguard-frontend/src/pages/UserManagementPage.vue:213
+- repoguard-frontend/src/pages/UserManagementPage.vue:238
+- repoguard-frontend/src/pages/UserManagementPage.vue:249
+- repoguard-frontend/src/pages/UserManagementPage.vue:255
+- repoguard-frontend/src/pages/UserManagementPage.vue:271
+
+现状：接口已经返回 usersTotal，但“账号总数、启用账号、管理员、禁用账号”全部基于当前页 users 数组计算。页大小默认为 20，因此账号总数最多显示 20；其他分类数也只是当前页分布。filteredUsers 又对已经由服务端筛选过的当前页重复筛选。
+
+建议：
+
+- 账号总数至少使用 usersTotal。
+- 增加后端聚合接口一次返回 total/active/admin/disabled，或明确把卡片文案改为“当前页”。推荐前者。
+- 删除当前页重复过滤，保持服务端分页和筛选为单一事实来源。
+
+验收标准：准备 50 个账号并使用 20 条分页时，账号总数显示 50；各分类与数据库聚合一致。
+
+P1-5 审查结果和变更文件使用逐行 INSERT
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/worker/ReviewFindingReplacementService.java:29
+- repoguard-backend/src/main/java/com/repoguard/agent/worker/ReviewFindingReplacementService.java:32
+- repoguard-backend/src/main/java/com/repoguard/agent/worker/ChangedFileReplacementService.java:21
+- repoguard-backend/src/main/java/com/repoguard/agent/worker/ChangedFileReplacementService.java:23
+
+现状：删除旧记录后，在事务内对每个 finding/file 单独调用 mapper.insert()。大 PR 会产生 N 次数据库往返，并延长持锁时间；事务并发冲突时整个批次还可能重试。
+
+建议：增加显式 batchInsert SQL（foreach values）或受控的 MyBatis batch executor，按 100~500 条分批；依据字段大小和 max_allowed_packet 调整批次。保留去重和整体事务语义，并记录 batch size、SQL 时长和失败批次。
+
+验收标准：500 文件、1,000 findings 的持久化 SQL 次数从约 1,500 次降到个位数或低两位数；结果数量和事务回滚语义不变。
+
+P1-6 大表 DDL 不宜直接绑定应用启动
+
+证据：
+
+- repoguard-backend/src/main/resources/application-prod.yml:7
+- repoguard-backend/src/main/resources/db/migration/V45__dashboard_normalized_generated_columns.sql:9
+- repoguard-backend/src/main/resources/db/migration/V45__dashboard_normalized_generated_columns.sql:129
+- repoguard-backend/src/main/resources/db/migration/V45__dashboard_normalized_generated_columns.sql:144
+- repoguard-backend/src/main/resources/db/migration/V47__review_task_list_keyset_indexes.sql:9
+- repoguard-backend/src/main/resources/db/migration/V54__admin_audit_and_operational_retention.sql:34
+
+现状：生产 profile 默认启用 Flyway；V45 对 review_task/review_finding 连续增加多个 STORED 生成列和索引，V47/V51~V54 继续增加索引。随着审查数据增长，启动时 DDL 可能持有 metadata lock、重建表或超过健康检查窗口。
+
+建议：
+
+1. 发布流程增加独立 migrator 阶段，应用实例不并发争抢迁移。
+2. 在生产量级副本上记录每条 DDL 的耗时、锁等待、临时空间和回滚方案。
+3. 大表采用 expand/backfill/index/contract 分阶段迁移；必要时使用 MySQL online DDL 或在线变更工具。
+4. 对 DDL 设置锁等待上限，发布前检查长事务；失败时停止发布而不是无限重启。
+
+验收标准：使用生产量级数据完成迁移演练，明确最大锁等待和停机窗口；迁移失败不会让所有应用副本同时重启。
+
+P1-7 应用限流只在单 JVM 内有效
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AuthAttemptLimiter.java:20
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AuthAttemptLimiter.java:47
+- repoguard-backend/src/main/java/com/repoguard/agent/github/webhook/GithubWebhookRateLimiter.java:20
+- repoguard-backend/src/main/java/com/repoguard/agent/github/webhook/GithubWebhookRateLimiter.java:50
+
+现状：认证和 webhook 限流均使用进程内 ConcurrentHashMap，并对整张 map 加 synchronized。多实例时限额按实例数放大；单实例高并发时所有 key 竞争同一把锁。当前 Nginx 还有边缘限流，可以降低风险，但应用层语义仍依赖单实例拓扑。
+
+建议：生产多实例使用 Redis/Bucket4j 或网关集中限流；如果近期保持单实例，则在配置和运行检查中明确限制，并把同步 map 改为按 key 原子计算/有界缓存。统一可信代理解析，后端只信任来自受信代理的 X-Real-IP。
+
+验收标准：两实例压测下总限额不随实例数翻倍；2 万离散 key 压测不出现明显全局锁排队或无界内存增长。
+
+P1-8 首屏公共依赖和全局 CSS 偏重
+
+证据：
+
+- repoguard-frontend/src/main.ts:3
+- repoguard-frontend/src/main.ts:23
+- repoguard-frontend/src/main.ts:25
+- repoguard-frontend/src/main.ts:44
+- repoguard-frontend/dist/index.html（本地构建产物，不提交）
+
+本次构建中，index.html 首屏预加载的 JS/CSS 原始体积约 931KB，gzip 后约 239KB。Element Plus JS 约 287KB、CSS 约 357KB；main.ts 还全局导入所有功能域 CSS，使登录页也承担管理页样式成本。Dashboard 再按路由加载 ECharts core 约 392KB 和 zrender 约 176KB。
+
+建议：
+
+- Element Plus 改为组件级注册和组件样式导入，避免完整 index.css。
+- 功能域 CSS 由对应路由页/组件导入，保留真正的全局 token/reset/layout CSS。
+- 检查 vendor 手工分包是否造成不必要的首屏 modulepreload；以真实网络 waterfall 决定，而不是只按包名拆分。
+- 为首屏 gzip JS/CSS、最大异步 chunk 设置 CI 预算。
+
+验收标准：登录页不下载 review-detail、notification、message-queue 等功能样式；首屏 gzip 体积至少下降 25%，低端设备 LCP/INP 不回退。
+
+P1-9 消息队列自动刷新可能重叠
+
+证据：
+
+- repoguard-frontend/src/features/message-queue/composables/useMessageQueueHealth.ts:48
+- repoguard-frontend/src/features/message-queue/composables/useMessageQueueHealth.ts:104
+- repoguard-frontend/src/features/message-queue/composables/useMessageQueueHealth.ts:107
+
+现状：setInterval 每 30 秒直接调用 loadHealth()，没有 loading 守卫、请求取消或 document.visibilityState 判断。请求超过 30 秒时会重叠，旧响应可能覆盖新响应，并重复弹出错误。
+
+建议：改为“请求完成后再 setTimeout”的串行调度；页面隐藏时暂停，恢复时立即刷新；增加 requestSeq/AbortController，并将自动刷新失败展示为页面状态而非每轮 toast。
+
+验收标准：慢接口场景任意时刻最多一个请求；切换后台 5 分钟不持续轮询；恢复页面后只触发一次刷新。
+
+六、P2 优化项
+
+P2-1 图表缺少容器级自适应和可访问名称
+
+证据：
+
+- repoguard-frontend/src/components/EChartPanel.vue:2
+- repoguard-frontend/src/components/EChartPanel.vue:28
+- repoguard-frontend/src/components/EChartPanel.vue:32
+- repoguard-frontend/src/layouts/RepoGuardLayout.vue:14
+- repoguard-frontend/src/layouts/RepoGuardLayout.vue:22
+
+现状：图表只监听 window.resize。侧栏收起、父容器尺寸改变不一定触发 window resize，Canvas 可能保持旧宽度。图表容器没有 role/aria-label，两个侧栏图标按钮也缺少稳定的可访问名称。
+
+建议：EChartPanel 使用 ResizeObserver 监听容器，卸载时 disconnect；prop 增加 accessibleLabel/summary，并启用 ECharts aria 或提供数据表替代。图标按钮补 aria-label、type="button" 和 tooltip。
+
+P2-2 当前“E2E”实际是 JSDOM 路由冒烟
+
+证据：
+
+- repoguard-frontend/package.json:11
+- repoguard-frontend/src/e2e/appRouteSmoke.test.ts:26
+- repoguard-frontend/src/e2e/appRouteSmoke.test.ts:71
+
+现状：测试验证路由解析和 fetch mock，不会挂载真实页面，也不覆盖浏览器布局、Cookie、CSP、Nginx 代理、图表 Canvas、键盘操作和主要管理流程。
+
+建议：补充真实浏览器验收，至少覆盖登录/刷新 Cookie、任务列表到详情、人工复核、评论发布确认、集成保存失败、用户筛选和移动端布局。遵循仓库约束，本次不提交测试脚本；若要长期纳入 Git 门禁，需要先明确调整“测试脚本不得提交”的治理规则，或将脚本放到独立测试仓库/受控 CI 资产中。
+
+P2-3 API 契约维护链路过于定制
+
+证据：
+
+- repoguard-frontend/src/api/contracts.ts:142
+- repoguard-frontend/src/api/contracts.ts:571
+- repoguard-frontend/src/api/apiEnvelope.ts:14
+- repoguard-backend/src/test/java/com/repoguard/agent/testsupport/FrontendApiContractCatalog.java:16
+- repoguard-backend/src/test/java/com/repoguard/agent/testsupport/FrontendApiContractCatalog.java:37
+- repoguard-backend/src/test/java/com/repoguard/agent/testsupport/FrontendApiContractCatalog.java:217
+
+现状：项目已经有很强的 API 快照与前端签名校验，但后端测试通过正则解析 TypeScript 源码，并维护 Java/TypeScript 类型别名表；前端成功响应仍通过泛型断言直接信任 JSON。contracts.ts 格式变化、复杂类型或重命名会增加维护成本。
+
+建议：逐步以标准 OpenAPI 文档作为单一事实来源，在 CI 临时生成 TypeScript client/type 后执行 typecheck 和差异检查；保留少量手写领域适配层。对认证、配置、审查详情等关键响应可增加轻量运行时 schema 校验，至少在开发/灰度环境开启。
+
+P2-4 构建版本与质量门禁需要收口
+
+证据：
+
+- repoguard-backend/pom.xml:21
+- repoguard-backend/pom.xml:137
+- repoguard-frontend/package.json:17
+- repoguard-frontend/package.json:29
+- .nvmrc:1
+- .github/workflows/pr-quality.yml:23
+- .github/workflows/pr-quality.yml:44
+
+现状：
+
+- Java 目标是 25，CI/Docker 也是 25，但本地可用 JDK 26 直接构建；仓库没有 Maven Wrapper/Enforcer。
+- JaCoCo 只生成并上传报告，没有 check 阈值；前端也没有 coverage 门禁。
+- Node CI/.nvmrc 为 22，但 @types/node 使用 25。
+- 当前工作树中 README 的 Java/Spring Boot 版本描述与 POM/CI/Docker 存在漂移风险，应以构建文件为准自动生成或校验。
+
+建议：增加 Maven Wrapper 和 Enforcer（Java 25、Maven 版本），对错误 JDK fail fast；升级/配置 JaCoCo 以兼容允许的 JDK；从当前基线开始设置渐进式 branch/line 门禁。前端对核心 composable/API 设置覆盖率门禁，并把 @types/node 对齐 Node 22。
+
+P2-5 容器内重复写文件日志
+
+证据：
+
+- repoguard-backend/src/main/resources/logback-spring.xml:17
+- repoguard-backend/src/main/resources/logback-spring.xml:27
+- repoguard-backend/src/main/resources/logback-spring.xml:31
+- docker-compose.prod.yml:48
+- docker-compose.observability.yml:24
+
+现状：后端同时写 console 和 /app/logs/backend 滚动文件，文件上限 2GB；生产 Compose 没有挂载该目录，而 Promtail 通过 Docker socket 抓 stdout。文件日志因此重复消耗 I/O 和容器 writable layer，容器重建后也不可作为可靠存档。
+
+建议：prod profile 只写结构化 console，由容器日志链路采集；本地 profile 才启用 rolling file。若必须保留文件日志，则挂载持久卷并明确轮转、容量告警和采集来源，避免双采集。
+
+P2-6 未处理异常日志缺少完整诊断链
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/common/GlobalExceptionHandler.java:55
+- repoguard-backend/src/main/java/com/repoguard/agent/common/GlobalExceptionHandler.java:57
+- repoguard-backend/src/main/java/com/repoguard/agent/common/GlobalExceptionHandler.java:76
+
+现状：统一异常处理只记录异常类型、脱敏消息和第一帧位置，没有把 exception 作为日志参数写入堆栈。安全性较好，但复杂异步/事务异常可能无法还原根因。
+
+建议：响应继续使用安全固定文案；日志增加稳定 errorId。受控生产日志记录异常链和堆栈，同时通过 TurboFilter/专用 converter 对消息、SQL URL、token 等做脱敏。测试环境降低预期异常的日志级别，减少当前超长测试输出。
+
+P2-7 自建认证授权策略存在多处同步维护成本
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AuthTokenAccessPolicy.java:11
+- repoguard-backend/src/main/java/com/repoguard/agent/security/AdminApiKeyAccessPolicy.java:10
+- repoguard-backend/src/main/java/com/repoguard/agent/security/RoleAuthorizationInterceptor.java:32
+- repoguard-backend/src/test/java/com/repoguard/agent/controller/ControllerAuthorizationContractTest.java:18
+
+现状：新增接口时可能需要同步公开端点表、Admin API Key 端点表、@RequireRole 和测试白名单。现有契约测试已经显著降低遗漏概率，但策略分散仍增加认知负担；公开端点目前还使用 ANY_METHOD，范围比真实 POST 映射更宽。
+
+建议：短期把公开端点改为精确 HTTP method，并增加“Controller 映射与策略表双向一致”测试。长期评估使用 Spring Security 标准 filter chain、Authentication/AuthorizationManager 和方法授权，Admin API Key 作为独立 AuthenticationProvider，减少自定义安全基础设施。
+
+P2-8 默认 profile 应避免隐式进入 dev,local
+
+证据：
+
+- repoguard-backend/src/main/resources/application.yml:12
+- repoguard-backend/src/main/resources/application-dev.yml:4
+- docker-compose.prod.yml:58
+
+现状：基础 application.yml 在未设置环境变量时自动启用 dev,local。正式 Compose 显式设置 prod，当前部署路径安全；但直接运行 jar、遗漏环境变量或其他编排方式可能意外使用本地数据库/CORS/默认密钥配置。
+
+建议：基础配置不设置 active profile；本地通过 IDE、脚本或环境文件显式设置 dev,local。非 dev/test 环境缺少 profile、数据库凭据、加密 key、token secret 时启动失败。把生产准出检查放到所有部署入口，而不仅是 Compose。
+
+P2-9 复杂模块需要按内聚边界收敛，而不是按文件数重构
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java:70（15 个构造依赖）
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DashboardServiceImpl.java:53（12 个构造依赖）
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/AuthServiceImpl.java:62（9 个构造依赖）
+- repoguard-backend/src/main/java/com/repoguard/agent/observability/RepoGuardMetrics.java:19（约 372 行）
+
+现状：后端 653 个生产类中存在较多小型 helper，同时少数 orchestrator 依赖很多组件。细粒度设计提升了单测能力，但跨包跳转、构造器装配和修改影响面开始增加。
+
+建议：先用包依赖/变更耦合数据识别真实边界，再处理：
+
+- Data Retention 分为 candidate query、archive writer、delete executor、audit/lease 四个稳定端口。
+- Dashboard 按 overview/quality/snapshot 分 facade，避免一个服务注入所有 assembler。
+- RepoGuardMetrics 按 review/github/rabbit/frontend 域拆 recorder，但共享统一 tag policy。
+- 增加架构规则限制 controller 直连 mapper、领域包环依赖和跨域 impl 引用。
+
+不要把只被一个调用点使用、没有独立策略的微型类继续拆小，也不要仅为了减少构造参数引入“依赖大对象”掩盖耦合。
+
+P2-10 供应链治理仍可加强
+
+现状亮点：生产镜像按 digest 固定，release workflow 已包含 npm audit、SBOM 和 Trivy，PR 也有 dependency review。
+
+待优化：
+
+- checkout/setup-java/setup-node/github-script/dependency-review 等 Action 多数仍使用浮动主版本标签。
+- 没有看到 Dependabot/Renovate 配置，基础镜像和 Maven/npm 依赖升级主要依赖人工。
+- npm audit 只在 release 检查生产依赖；Maven 现存依赖的持续漏洞扫描不够直观。
+
+建议：关键 Action 固定 commit SHA 并由自动化更新；启用 Dependabot/Renovate 分组升级；增加 Maven/文件系统 SCA，对 high/critical 建立例外到期机制，避免只在发布阶段发现问题。
+
+P2-11 前端文案和错误状态需统一
+
+证据：
+
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts:82
+- repoguard-frontend/src/features/integrations/composables/useIntegrationConfigPersistence.ts:101
+- repoguard-frontend/src/features/review-detail/composables/useReviewDetailLoader.ts:134
+
+现状：主要界面为中文，但部分配置保存、自动刷新错误仍是英文。错误有的使用页面 alert，有的只用 toast，自动任务失败可能重复提示。
+
+建议：集中维护用户可见文案和错误展示策略；加载失败保留可重试的页面状态，短操作结果使用 toast，后台轮询失败使用非打断式 banner。后端错误 code 映射为稳定中文文案，避免直接展示内部异常。
+
+七、建议实施顺序
+
+阶段 A：一致性与错误展示（1~3 天）
+
+1. 修复通知手动重试：状态白名单、CAS claim、after-commit、并发/回滚验证。
+2. 修复任务详情和用户搜索乱序响应。
+3. 修正用户统计口径。
+4. 集成配置先改为按卡片独立保存；若必须原子保存，再设计批量 API。
+
+阶段 B：性能与发布安全（3~7 天）
+
+1. findings/changed files 批量写入并做生产量级基准。
+2. Element Plus/CSS 按需加载，建立 bundle budget。
+3. 串行化自动刷新并加入页面可见性控制。
+4. 建立独立数据库迁移阶段和大表 DDL 演练。
+
+阶段 C：工程治理（1~2 个迭代）
+
+1. Maven Wrapper/Enforcer、JDK/Node 类型版本对齐、覆盖率门禁。
+2. 标准 OpenAPI 生成链路逐步替换正则解析。
+3. 生产 console-only 结构化日志和 errorId/安全堆栈。
+4. 分布式限流、标准 Spring Security、依赖自动更新按扩容计划推进。
+5. 建立真实浏览器验收方案；如需把脚本纳入仓库，先调整测试脚本提交约束。
+
+八、不建议立即做的事项
+
+- 不建议重写认证系统。当前访问令牌、刷新 Cookie、CSRF、sessionVersion 和刷新令牌 CAS 已有较完整防护；应先降低策略分散成本。
+- 不建议为了“类太多”批量合并所有 helper。应以变更耦合、调用关系和性能数据为依据。
+- 不建议先升级全部依赖再修一致性问题。Spring Boot/Java 主版本较新，优先稳定当前行为和构建基线。
+- 不建议把所有查询改成缓存。任务详情、通知状态和配置页对一致性要求高，应先定位真实慢 SQL。
+- 不建议只追求覆盖率百分比。P0 的并发、回滚、重复副作用测试比继续增加简单 getter/mapper 测试更重要。
+
+九、完成定义
+
+本轮优化可视为完成，应至少满足：
+
+- 通知重试并发与事务测试通过，无法重复发布已完成事件。
+- 集成配置不再静默部分保存。
+- 前端路由/筛选乱序测试通过，统计口径与服务端一致。
+- 大 PR 批量持久化基准达标，迁移在生产量级副本完成演练。
+- 首屏 gzip 预算、Java/Node 版本和 JaCoCo coverage check 成为 CI 门禁。
+- 生产日志只有一个权威采集路径，异常可通过 traceId/errorId 定位。
+- 所有新增验证资产遵守仓库的 Git 提交约束。
+
+
+十、增量复审记录
+
+复审时间：2026-07-15 16:39:03 +08:00（Asia/Shanghai）
+复审分支：PRAgent-test
+复审性质：在 2026-07-13 全量审查基础上的增量复核；本节保留原报告，不覆盖历史数据。
+
+10.1 复审结论
+
+项目整体工程质量依然较好，安全基线、任务状态机、数据库迁移、CI 和自动化测试比较完整，不需要大规模重构。本轮确认首轮报告中的通知重试、前端异步竞态和部分保存问题仍然存在，并补充发现通知投递领取、数据清理事务完成时序、最后一个管理员并发保护三个重要的一致性问题。
+
+当前优先级建议调整为：
+
+1. P0：通知手动重试的数据库事务与 RabbitMQ 发布一致性。
+2. P1：通知投递缺少原子领取，可能重复调用外部渠道。
+3. P1：数据清理成功审计和租约释放早于主事务完成。
+4. P1：最后一个有效管理员保护可被并发操作绕过。
+5. P1：前端统计口径、异步请求乱序和集成配置部分保存。
+6. P2：登录回跳、工具链可复现性、覆盖率门禁和渐进式模块收敛。
+
+10.2 新增重点问题
+
+P1-A 通知投递需要原子领取和完成栅栏
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryWorker.java:100-110
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliverableEventQuery.java:17-27
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDeliveryEventStateUpdater.java:27-35
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationBindingDeliveryService.java:37-43
+- repoguard-backend/src/main/resources/db/migration/V26__create_notification_delivery_logs.sql:42-59
+
+现状：消费者先读取事件，再把状态改为 DELIVERING，随后调用外部渠道。状态更新只排除 DELIVERED，没有限定必须从 PUBLISHED/DELIVERY_FAILED 等状态迁移，也没有检查数据库影响行数。DELIVERING 仍会被查询层视为可投递。投递日志在“检查成功记录”和“发送”之间也存在时间窗口，数据库没有可承担并发幂等语义的唯一约束。
+
+风险：RabbitMQ 的至少一次投递、消费者并发或消息重复均可能让两个执行者同时发送同一通知。即使事后只有一条成功日志，外部 webhook、邮件等副作用已经发生。
+
+建议：
+
+1. 使用条件更新原子领取：仅允许 PUBLISHED/DELIVERY_FAILED -> DELIVERING，并要求影响行数等于 1。
+2. 增加 claimed_at、claimed_by 和领取租约，支持宕机后的超时回收。
+3. 完成/失败更新携带领取令牌，拒绝过期执行者覆盖新执行者的结果。
+4. 明确渠道幂等键和投递日志唯一语义；不能做到严格 exactly-once 的渠道，至少要阻止应用内部并发重复发送。
+5. 增加重复消息、双消费者、执行者超时恢复的真实并发集成测试。
+
+P1-B 数据清理审计与租约生命周期早于主事务完成
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java:108-129
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java:211-234
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java:378-380
+- repoguard-backend/src/main/java/com/repoguard/agent/retention/DataRetentionCleanupAuditRecorder.java:57
+- repoguard-backend/src/main/java/com/repoguard/agent/retention/DataRetentionCleanupLeaseStore.java:30-45
+
+现状：cleanup() 的外层事务尚未由 Spring 代理提交时，成功审计已经通过 REQUIRES_NEW 独立提交；finally 中的租约释放也在外层事务真正完成前提交。
+
+风险：外层事务在提交阶段失败时，审计仍显示 COMPLETED；由于提交异常发生在方法返回之后，方法内 catch 无法可靠记录失败。租约提前释放还可能让另一实例在前一事务提交窗口内开始下一轮清理。
+
+建议：通过 TransactionSynchronization 在 afterCommit 中记录成功，在 afterCompletion 中记录失败并释放租约；或者将事务边界移动到独立执行器 bean，使调度层能够在事务代理返回后再处理审计和租约。补充强制提交失败及双实例争抢租约的 MySQL 集成测试。
+
+P1-C 最后一个有效管理员不变量需要数据库级串行化
+
+证据：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/UserManagementServiceImpl.java:144-186
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/UserManagementServiceImpl.java:197-204
+
+现状：角色降级或账号禁用前，代码通过普通 selectCount 检查是否还有其他 ACTIVE ADMIN，之后再更新目标用户。检查与更新处于同一业务事务，但没有行锁、守卫记录或乐观版本来串行化这个跨行不变量。
+
+风险：两个管理员并发降级或禁用时，都可能在检查阶段看到对方仍为有效管理员并通过校验，随后同时提交，最终系统中没有有效管理员。
+
+建议：通过固定管理员守卫行 SELECT ... FOR UPDATE，或按固定顺序锁定有效管理员集合，把检查和修改置于同一锁保护范围；角色和状态两个入口必须共用同一保护机制。使用真实 MySQL 并发测试验证两次操作中必须有一次被拒绝。
+
+10.3 首轮问题复核结果
+
+1. 通知手动重试问题仍存在。retryEvent() 仍在数据库事务提交前直接调用 publishExistingEvent()，且缺少可重试状态白名单、CAS 抢占和影响行数判断。应复用现有 NotificationEventPublishCoordinator.publishAfterCommit()。
+2. 用户管理统计口径问题仍存在。UserManagementPage.vue:249-258 的总数、启用数、管理员数和禁用数均从当前页 users 数组计算；总数应使用 usersTotal，其他指标应由聚合接口提供或明确标记为“本页统计”。
+3. 用户搜索请求竞态仍存在。UserManagementPage.vue:454-457 每次输入立即加载，没有防抖、AbortController 或请求序号，旧响应可能覆盖新结果。项目现有 useReviewTasksList.ts 已有 debounce 和 taskRequestSeq，可复用同一模式。
+4. 任务详情加载竞态仍存在。useReviewDetailLoader.ts 写入 selectedTask 前没有校验当前路由 id 或请求序号，快速切换任务时旧响应可能覆盖新页面。
+5. 集成配置部分保存问题仍存在。useIntegrationConfigPersistence.ts:88-105 通过 Promise.all 并行执行四个独立 PUT；一个失败不会回滚其他成功项，但界面只反馈整体失败。
+6. 登录回跳仍未闭环。LoginPage.vue 登录成功后固定进入概览页，没有消费路由守卫保存的 redirect；应只接受经过校验的站内 /repoguard/... 路径，防止开放重定向。
+
+10.4 本轮验证基线
+
+- 后端 mvn test：1,595 个测试，0 failure，0 error，2 skipped。
+- JaCoCo 汇总：instruction 约 90.25%，branch 约 72.18%。
+- 前端 vue-tsc：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：17 个测试文件、61 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,327 个模块。
+- git diff --check：通过。
+
+工具链限制：本机实际运行 JDK 26.0.1，而项目 POM、CI 和 Docker 目标为 Java 25。JaCoCo 0.8.13 对 major version 70 的 JDK 类和部分动态类产生大量插桩异常，Maven 最终仍报告成功。因此覆盖率数值仅作趋势参考，不能视为完全干净的 Java 25 基线。
+
+建议使用 Maven Enforcer 或 Maven Toolchains 将本地和 CI 强制到 Java 25，并在兼容升级 JaCoCo 后增加适度门禁，例如 branch 不低于 70%、instruction/line 不低于当前稳定基线，再逐步提高。仓库当前只有覆盖率报告，没有阻断回退的 check 规则。
+
+10.5 前端构建与维护建议
+
+生产构建已完成路由拆分，但公共依赖仍较大：Element Plus JavaScript 约 287.32 KB（gzip 94.20 KB）、Element Plus CSS 约 357.06 KB（gzip 47.77 KB）、ECharts core 约 392.41 KB（gzip 135.96 KB）、zrender 约 175.65 KB（gzip 58.45 KB）。建议先建立首屏和路由 bundle budget，再按测量结果进行 Element Plus 组件/样式按需加载与图表延迟加载，不建议盲目拆包。
+
+ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多职责，但项目已有子组件和 composable 基础。建议按变更频率和领域边界渐进拆分，例如把 findings、changed files、missing files、timeline 的分页加载器移入独立 composable；不要仅为降低文件行数进行广泛重写。
+
+10.6 更新后的实施顺序与验收标准
+
+阶段一：事务与并发一致性
+
+1. 通知手动重试改为状态白名单、CAS 和提交后发布。
+2. 通知消费者增加原子领取、领取租约和完成栅栏。
+3. 数据清理审计与租约迁移到事务完成回调。
+4. 管理员角色/状态修改增加数据库级串行化。
+
+验收：重复消息和并发重试不能产生应用内部重复投递；清理事务回滚时不能留下 COMPLETED 审计；两个管理员并发降级时至少有一个操作被拒绝。
+
+阶段二：前端正确性
+
+1. 修正用户统计口径。
+2. 用户搜索增加 300~400ms 防抖和最新请求保护。
+3. 任务详情加载校验路由 id/请求序号。
+4. 集成配置改为逐卡片保存或显示每项保存结果；若产品承诺原子保存，则实现后端批量事务接口。
+5. 登录成功后安全恢复站内 redirect。
+
+验收：延迟响应测试中旧请求不能覆盖新状态；统计值与服务端全量数据一致；部分保存必须明确展示并重新同步服务端状态。
+
+阶段三：构建与维护治理
+
+1. 强制 Java 25 工具链，消除 JaCoCo class-version 噪声并增加覆盖率回退门禁。
+2. 建立前端 bundle budget，再按数据优化公共依赖。
+3. 按领域和变更耦合渐进收敛大型页面/服务，不做全量重构。
+4. 如需引入浏览器端到端验证，先与“测试相关脚本不得提交 Git”的仓库约束协调，或将验证资产放在获准的外部 CI 位置。
+
+本次文档更新仅记录复审结果，不修改业务代码、测试文件或 README.md，也不执行 Git 暂存和提交。
+
+
+十一、优化实施进度
+
+进度记录 01
+
+完成时间：2026-07-15 16:52:53 +08:00（Asia/Shanghai）
+优化项：P0 通知手动重试的状态白名单、并发 CAS 与事务提交后发布
+状态：已完成，准备随本记录提交并推送至 PRAgent-test。
+
+实施内容：
+
+1. 手动重试只允许 PUBLISH_FAILED、DELIVERY_FAILED、DEAD 三种失败状态，拒绝 PENDING、PUBLISHED、DELIVERING、DELIVERED 和未知状态。
+2. 使用单条条件更新完成失败状态到 PENDING 的迁移，并要求 publish_claimed_at 为空及影响行数等于 1；并发请求或补偿 worker 已领取时，后续请求被拒绝。
+3. 成功领取后重置 retry_count、next_retry_at、last_error 和历史发布领取信息。
+4. publishExistingEvent() 改为调用 publishAfterCommit()；存在事务时仅注册提交后回调，数据库回滚时不会发布 RabbitMQ 消息，无事务时保持立即发布行为。
+5. 更新现有单元测试，覆盖成功重试、已完成事件拒绝、并发状态变化拒绝、已发布事件跳过和待发布事件提交后发布。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java
+- repoguard-backend/src/main/java/com/repoguard/agent/notification/NotificationDispatchServiceImpl.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/NotificationEventQueryServiceImplTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/notification/NotificationDispatchServiceImplTest.java
+
+验证结果：
+
+- 定向测试：NotificationEventQueryServiceImplTest、NotificationDispatchServiceImplTest、NotificationEventPublishCoordinatorTest，共 11 个测试，0 failure，0 error。
+- 后端全量测试：1,598 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- git diff --check：通过。
+- 已知环境提示：本机 JDK 26 与 JaCoCo 0.8.13 仍产生 major version 70 插桩告警，但测试进程退出码为 0，应用测试全部通过；该工具链问题按后续 P2 项处理。
+
+验收结论：手动重试已经由“无条件更新并在事务内直接发布”调整为“失败状态 CAS 领取并在事务提交后发布”，本项达到完成标准。

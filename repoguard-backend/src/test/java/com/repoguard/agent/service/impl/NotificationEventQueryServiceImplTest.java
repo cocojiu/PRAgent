@@ -1,11 +1,14 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
@@ -59,18 +62,45 @@ class NotificationEventQueryServiceImplTest {
         event.setRetryCount(3);
         event.setNextRetryAt(LocalDateTime.of(2026, 6, 15, 10, 30));
         event.setLastError("timeout");
-        when(eventMapper.selectById(1L)).thenReturn(event);
+        NotificationEvent refreshed = event();
+        refreshed.setStatus(NotificationEventStatus.PENDING.code());
+        refreshed.setNextRetryAt(LocalDateTime.of(2026, 6, 15, 10, 31));
+        when(eventMapper.selectById(1L)).thenReturn(event, refreshed);
+        when(eventMapper.update(any())).thenReturn(1);
         when(deliveryLogMapper.selectList(any())).thenReturn(List.of());
 
         var result = service.retryEvent(1L);
 
-        assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.PENDING.code());
-        assertThat(event.getRetryCount()).isZero();
-        assertThat(event.getNextRetryAt()).isNotNull();
-        assertThat(event.getLastError()).isNull();
         assertThat(result.status()).isEqualTo(NotificationEventStatus.PENDING.code());
-        verify(eventMapper).updateById(event);
+        verify(eventMapper).update(any());
         verify(dispatchService).publishExistingEvent(1L);
+    }
+
+    @Test
+    void retryEventRejectsCompletedEvent() {
+        NotificationEvent event = event();
+        when(eventMapper.selectById(1L)).thenReturn(event);
+
+        assertThatThrownBy(() -> service.retryEvent(1L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("not retryable");
+
+        verify(eventMapper, never()).update(any());
+        verify(dispatchService, never()).publishExistingEvent(any());
+    }
+
+    @Test
+    void retryEventRejectsConcurrentStateChange() {
+        NotificationEvent event = event();
+        event.setStatus(NotificationEventStatus.PUBLISH_FAILED.code());
+        when(eventMapper.selectById(1L)).thenReturn(event);
+        when(eventMapper.update(any())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.retryEvent(1L))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("already being processed");
+
+        verify(dispatchService, never()).publishExistingEvent(any());
     }
 
     @Test

@@ -57,7 +57,19 @@ class NotificationDispatchServiceImplTest {
 
         service.publishExistingEvent(99L);
 
-        verify(publishCoordinator, never()).publish(any(NotificationEvent.class));
+        verify(publishCoordinator, never()).publishAfterCommit(any(NotificationEvent.class));
+    }
+
+    @Test
+    void publishExistingEventPublishesPendingEventAfterCommit() {
+        NotificationEvent event = new NotificationEvent();
+        event.setId(99L);
+        event.setStatus(NotificationEventStatus.PENDING.code());
+        when(eventMapper.selectById(99L)).thenReturn(event);
+
+        service.publishExistingEvent(99L);
+
+        verify(publishCoordinator).publishAfterCommit(event);
     }
 
     private ReviewTask task(String status) {
