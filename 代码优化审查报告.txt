@@ -1077,3 +1077,35 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：图表能够随真实容器尺寸变化自适应，卸载后不保留观察器或窗口监听；读屏用户可获得稳定名称与数据摘要，侧栏图标控件也具备明确可访问名称，本项达到完成标准。
+
+进度记录 16
+
+完成时间：2026-07-15 19:46:15 +08:00（Asia/Shanghai）
+优化项：P2 关键 API 成功响应运行时契约校验
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 保留项目现有 OpenAPI 3.1 文档、前端端点目录和生成客户端契约测试作为静态单一事实源，在此基础上为认证、审查详情、GitHub/MySQL/RabbitMQ 集成配置和审查策略等关键成功响应增加轻量运行时校验。
+2. API 请求层统一先将成功响应视为 unknown；只有通过端点声明的类型守卫后才向业务层返回，未配置校验器的非关键端点维持原有行为，避免一次性扩大改造范围。
+3. HTTP 200 但结构不完整或字段类型错误时，统一抛出状态码为 200、错误码为 INVALID_API_RESPONSE 的 RequestError，不将异常载荷泄漏给页面状态。
+4. 响应校验发生在成功观测之前；契约异常会被前端可观测性记录为 failed，并保留 operation、status 与耗时，避免把格式错误误计为成功请求。
+5. 新增关键响应的正反例单元测试，并在 API 请求层验证畸形登录响应会被拒绝且写入失败观测；同步将既有测试桩调整为满足已公开契约的有效响应。
+
+涉及文件：
+
+- repoguard-frontend/src/api/responseValidation.ts
+- repoguard-frontend/src/api/responseValidation.test.ts
+- repoguard-frontend/src/api/contracts.ts
+- repoguard-frontend/src/api/contracts.test.ts
+
+验证结果：
+
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：25 个测试文件、86 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,392 个模块。
+- 构建预算：首屏 JavaScript gzip 180.3/190.0 KiB，首屏 CSS gzip 27.1/32.0 KiB，最大异步 JavaScript gzip 133.9/140.0 KiB，全部通过。
+- 后端跨语言/API 契约定向测试：4 个测试类、36 个测试全部通过，BUILD SUCCESS。
+
+验收结论：关键成功响应现在同时受静态 OpenAPI 契约和运行时边界校验保护；服务端返回格式漂移会在进入页面状态前以稳定错误码失败并留下观测记录，本项达到本地完成标准。
