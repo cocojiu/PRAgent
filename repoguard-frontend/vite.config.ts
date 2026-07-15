@@ -8,7 +8,7 @@ const KIB = 1024;
 
 const bundleBudgets = {
   initialJavaScriptGzip: 190 * KIB,
-  initialCssGzip: 60 * KIB,
+  initialCssGzip: 32 * KIB,
   maxAsyncJavaScriptGzip: 140 * KIB
 } as const;
 

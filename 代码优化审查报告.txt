@@ -979,3 +979,33 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：生产构建现在能够持续阻断首屏 JavaScript、首屏 CSS 和最大异步 JavaScript 的明显体积回退，同时保留约 5% 至 11% 的合理构建波动空间，本项达到完成标准。
+
+进度记录 13
+
+完成时间：2026-07-15 18:57:15 +08:00（Asia/Shanghai）
+优化项：P2 Element Plus 按需样式与首屏 CSS 减重
+状态：已完成，准备随本记录提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核生产构建和镜像发布链路。
+
+实施内容：
+
+1. 移除入口中的 Element Plus 完整主题 `element-plus/dist/index.css`，改为项目实际使用组件对应的官方 `style/css.mjs` 样式入口。
+2. 覆盖 alert、button、dialog、form、table、select 等模板组件，同时保留 loading 指令、message、message-box 等编程式组件样式。
+3. 通过 Element Plus 官方样式入口递归加载 base、overlay、popper、scrollbar 等内部依赖，避免直接拼接 theme-chalk 文件造成隐式样式缺失。
+4. Element Plus CSS 从 357.06 kB（gzip 47.77 kB）降至 152.58 kB（gzip 20.36 kB），原始体积和 gzip 体积均减少约 57%。
+5. 首屏 CSS gzip 从 53.9 KiB 降至 27.1 KiB，减少约 49.7%；同步将构建预算从 60 KiB 收紧至 32 KiB，确保不能退回完整主题。
+
+涉及文件：
+
+- repoguard-frontend/src/main.ts
+- repoguard-frontend/vite.config.ts
+
+验证结果：
+
+- 前端 TypeScript：通过。
+- 前端 ESLint：通过。
+- 前端 Vitest：22 个测试文件、79 个测试全部通过。
+- 前端 Vite 生产构建：通过，共转换 3,389 个模块。
+- 构建预算：首屏 JavaScript gzip 179.7/190.0 KiB，首屏 CSS gzip 27.1/32.0 KiB，最大异步 JavaScript gzip 132.8/140.0 KiB，全部通过。
+- git diff --check：通过。
+
+验收结论：未使用的 Element Plus 主题样式不再进入首屏，实际组件及其隐式依赖样式均由官方入口保留，且新的 CSS 基线已由构建门禁固化，本项达到完成标准。
