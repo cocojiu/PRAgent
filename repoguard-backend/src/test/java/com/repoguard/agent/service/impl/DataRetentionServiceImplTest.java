@@ -9,7 +9,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.config.DataRetentionProperties;
 import com.repoguard.agent.config.SystemSettings;
@@ -17,22 +16,9 @@ import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.entity.GithubCommentPublication;
-import com.repoguard.agent.entity.GithubCommentPublicationBatch;
-import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
-import com.repoguard.agent.entity.ReviewFinding;
-import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.retention.DataRetentionArchiveWriter;
+import com.repoguard.agent.retention.DataRetentionCandidateQuery;
+import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -47,15 +33,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 class DataRetentionServiceImplTest {
 
-    private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
-    private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
-    private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
-    private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
-    private final GithubCommentPublicationMapper githubCommentPublicationMapper = org.mockito.Mockito.mock(GithubCommentPublicationMapper.class);
-    private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchMapper.class);
-    private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper = org.mockito.Mockito.mock(GithubCommentPublicationBatchItemMapper.class);
-    private final ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper =
-        org.mockito.Mockito.mock(ReviewTaskArchiveSummaryMapper.class);
+    private final DataRetentionCandidateQuery candidateQuery = org.mockito.Mockito.mock(DataRetentionCandidateQuery.class);
+    private final DataRetentionArchiveWriter archiveWriter = org.mockito.Mockito.mock(DataRetentionArchiveWriter.class);
+    private final DataRetentionDeleteExecutor deleteExecutor = org.mockito.Mockito.mock(DataRetentionDeleteExecutor.class);
     private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
     private final DataRetentionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(DataRetentionMetricsRecorder.class);
     private final DataRetentionCleanupAuditRecorder auditRecorder = org.mockito.Mockito.mock(DataRetentionCleanupAuditRecorder.class);
@@ -65,16 +45,10 @@ class DataRetentionServiceImplTest {
     private final DataRetentionCleanupLeaseStore leaseStore = org.mockito.Mockito.mock(DataRetentionCleanupLeaseStore.class);
     private final DataRetentionProperties dataRetentionProperties = new DataRetentionProperties();
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
-        reviewTaskMapper,
-        changedFileMapper,
-        reviewFindingMapper,
-        reviewTimelineMapper,
-        githubCommentPublicationMapper,
-        githubCommentPublicationBatchMapper,
-        githubCommentPublicationBatchItemMapper,
-        reviewTaskArchiveSummaryMapper,
+        candidateQuery,
+        archiveWriter,
+        deleteExecutor,
         systemSettingsProvider,
-        new ReviewTaskStateMachine(),
         metricsRecorder,
         auditRecorder,
         auditQueryService,
@@ -87,8 +61,8 @@ class DataRetentionServiceImplTest {
         stubLeaseAcquired();
         stubAuditStart(101L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(reviewTaskMapper.selectCount(any())).thenReturn(2L);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(1L), task(2L)));
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(2L, List.of(1L, 2L)));
 
         var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
 
@@ -101,33 +75,29 @@ class DataRetentionServiceImplTest {
         verify(auditRecorder).complete(101L, response);
         verify(metricsRecorder).record(response);
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
-        verify(reviewTaskArchiveSummaryMapper, never()).insertArchiveSummaries(
+        verify(archiveWriter, never()).write(
             org.mockito.Mockito.anyLong(),
             org.mockito.Mockito.any(),
             org.mockito.Mockito.anyList()
         );
-        verify(changedFileMapper, never()).delete(any(Wrapper.class));
-        verify(reviewTaskMapper, never()).delete(any(Wrapper.class));
+        verify(deleteExecutor, never()).delete(org.mockito.Mockito.anyList());
     }
 
     @Test
     void cleanupExecuteArchivesBeforeDeletingChildrenAndTasks() {
         stubLeaseAcquired();
         stubAuditStart(102L);
-        when(reviewTaskMapper.selectCount(any())).thenReturn(1L);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(9L)));
-        when(reviewTaskArchiveSummaryMapper.insertArchiveSummaries(
-            org.mockito.Mockito.eq(102L),
-            org.mockito.Mockito.eq("backup://mysql/prod/2026-07-07T22:00:00"),
-            org.mockito.Mockito.eq(List.of(9L))
-        )).thenReturn(1);
-        when(githubCommentPublicationBatchItemMapper.delete(any())).thenReturn(3);
-        when(githubCommentPublicationMapper.delete(any())).thenReturn(2);
-        when(githubCommentPublicationBatchMapper.delete(any())).thenReturn(1);
-        when(changedFileMapper.delete(any())).thenReturn(4);
-        when(reviewTimelineMapper.delete(any())).thenReturn(5);
-        when(reviewFindingMapper.delete(any())).thenReturn(6);
-        when(reviewTaskMapper.delete(any())).thenReturn(1);
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(50)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(1L, List.of(9L)));
+        when(deleteExecutor.delete(List.of(9L))).thenReturn(new DataRetentionDeleteExecutor.DeletionResult(
+            3,
+            2,
+            1,
+            4,
+            5,
+            6,
+            1
+        ));
 
         var response = service.cleanup(new DataRetentionCleanupRequest(
             7,
@@ -145,42 +115,27 @@ class DataRetentionServiceImplTest {
         verify(auditRecorder).complete(102L, response);
         verify(metricsRecorder).record(response);
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
-        InOrder order = inOrder(
-            reviewTaskArchiveSummaryMapper,
-            githubCommentPublicationBatchItemMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            changedFileMapper,
-            reviewTimelineMapper,
-            reviewFindingMapper,
-            reviewTaskMapper
-        );
-        order.verify(reviewTaskArchiveSummaryMapper).insertArchiveSummaries(
+        InOrder order = inOrder(archiveWriter, deleteExecutor);
+        order.verify(archiveWriter).write(
             102L,
             "backup://mysql/prod/2026-07-07T22:00:00",
             List.of(9L)
         );
-        order.verify(githubCommentPublicationBatchItemMapper).delete(any());
-        order.verify(githubCommentPublicationMapper).delete(any());
-        order.verify(githubCommentPublicationBatchMapper).delete(any());
-        order.verify(changedFileMapper).delete(any());
-        order.verify(reviewTimelineMapper).delete(any());
-        order.verify(reviewFindingMapper).delete(any());
-        order.verify(reviewTaskMapper).delete(any());
+        order.verify(deleteExecutor).delete(List.of(9L));
     }
 
     @Test
     void cleanupExecuteDoesNotDeleteWhenArchiveSummaryFails() {
         stubLeaseAcquired();
         stubAuditStart(105L);
-        when(reviewTaskMapper.selectCount(any())).thenReturn(1L);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task(11L)));
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(50)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(1L, List.of(11L)));
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("archive unavailable");
-        when(reviewTaskArchiveSummaryMapper.insertArchiveSummaries(
-            org.mockito.Mockito.eq(105L),
-            org.mockito.Mockito.eq("backup://mysql/prod/2026-07-07T22:00:00"),
-            org.mockito.Mockito.eq(List.of(11L))
-        )).thenThrow(failure);
+        org.mockito.Mockito.doThrow(failure).when(archiveWriter).write(
+            105L,
+            "backup://mysql/prod/2026-07-07T22:00:00",
+            List.of(11L)
+        );
 
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
             7,
@@ -193,13 +148,7 @@ class DataRetentionServiceImplTest {
 
         verify(auditRecorder).fail(105L, failure);
         verify(metricsRecorder).recordFailure(true, failure);
-        verify(githubCommentPublicationBatchItemMapper, never()).delete(any());
-        verify(githubCommentPublicationMapper, never()).delete(any());
-        verify(githubCommentPublicationBatchMapper, never()).delete(any());
-        verify(changedFileMapper, never()).delete(any());
-        verify(reviewTimelineMapper, never()).delete(any());
-        verify(reviewFindingMapper, never()).delete(any());
-        verify(reviewTaskMapper, never()).delete(any(Wrapper.class));
+        verify(deleteExecutor, never()).delete(org.mockito.Mockito.anyList());
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
     }
 
@@ -306,7 +255,7 @@ class DataRetentionServiceImplTest {
         stubAuditStart(103L);
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(reviewTaskMapper.selectCount(any())).thenThrow(failure);
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100))).thenThrow(failure);
 
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null)))
             .isSameAs(failure);
@@ -322,8 +271,8 @@ class DataRetentionServiceImplTest {
         stubLeaseAcquired();
         stubAuditStart(106L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(reviewTaskMapper.selectCount(any())).thenReturn(0L);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(0L, List.of()));
         List<TransactionSynchronization> synchronizations = List.of();
         boolean transactionCompleted = false;
         beginTransactionSynchronization();
@@ -353,8 +302,8 @@ class DataRetentionServiceImplTest {
         stubLeaseAcquired();
         stubAuditStart(107L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(reviewTaskMapper.selectCount(any())).thenReturn(0L);
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(0L, List.of()));
         List<TransactionSynchronization> synchronizations = List.of();
         boolean transactionCompleted = false;
         beginTransactionSynchronization();
@@ -409,12 +358,11 @@ class DataRetentionServiceImplTest {
         CountDownLatch firstCleanupEnteredQuery = new CountDownLatch(1);
         CountDownLatch releaseFirstCleanup = new CountDownLatch(1);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(reviewTaskMapper.selectCount(any())).thenAnswer(invocation -> {
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100))).thenAnswer(invocation -> {
             firstCleanupEnteredQuery.countDown();
             assertThat(releaseFirstCleanup.await(5, TimeUnit.SECONDS)).isTrue();
-            return 0L;
+            return new DataRetentionCandidateQuery.CandidateSelection(0L, List.of());
         });
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of());
 
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
@@ -478,18 +426,12 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
-    void constructorRejectsMissingStateMachine() {
+    void constructorRejectsMissingCandidateQuery() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
-            systemSettingsProvider,
             null,
+            archiveWriter,
+            deleteExecutor,
+            systemSettingsProvider,
             metricsRecorder,
             auditRecorder,
             auditQueryService,
@@ -497,22 +439,16 @@ class DataRetentionServiceImplTest {
             dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("reviewTaskStateMachine");
+            .hasMessage("candidateQuery");
     }
 
     @Test
-    void constructorRejectsMissingArchiveSummaryMapper() {
+    void constructorRejectsMissingArchiveWriter() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
+            candidateQuery,
             null,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             metricsRecorder,
             auditRecorder,
             auditQueryService,
@@ -520,22 +456,33 @@ class DataRetentionServiceImplTest {
             dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("reviewTaskArchiveSummaryMapper");
+            .hasMessage("archiveWriter");
+    }
+
+    @Test
+    void constructorRejectsMissingDeleteExecutor() {
+        assertThatThrownBy(() -> new DataRetentionServiceImpl(
+            candidateQuery,
+            archiveWriter,
+            null,
+            systemSettingsProvider,
+            metricsRecorder,
+            auditRecorder,
+            auditQueryService,
+            leaseStore,
+            dataRetentionProperties
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("deleteExecutor");
     }
 
     @Test
     void constructorRejectsMissingMetricsRecorder() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
+            candidateQuery,
+            archiveWriter,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             null,
             auditRecorder,
             auditQueryService,
@@ -549,16 +496,10 @@ class DataRetentionServiceImplTest {
     @Test
     void constructorRejectsMissingAuditRecorder() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
+            candidateQuery,
+            archiveWriter,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             metricsRecorder,
             null,
             auditQueryService,
@@ -572,16 +513,10 @@ class DataRetentionServiceImplTest {
     @Test
     void constructorRejectsMissingAuditQueryService() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
+            candidateQuery,
+            archiveWriter,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             metricsRecorder,
             auditRecorder,
             null,
@@ -595,16 +530,10 @@ class DataRetentionServiceImplTest {
     @Test
     void constructorRejectsMissingLeaseStore() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
+            candidateQuery,
+            archiveWriter,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             metricsRecorder,
             auditRecorder,
             auditQueryService,
@@ -618,16 +547,10 @@ class DataRetentionServiceImplTest {
     @Test
     void constructorRejectsMissingDataRetentionProperties() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            reviewTaskMapper,
-            changedFileMapper,
-            reviewFindingMapper,
-            reviewTimelineMapper,
-            githubCommentPublicationMapper,
-            githubCommentPublicationBatchMapper,
-            githubCommentPublicationBatchItemMapper,
-            reviewTaskArchiveSummaryMapper,
+            candidateQuery,
+            archiveWriter,
+            deleteExecutor,
             systemSettingsProvider,
-            new ReviewTaskStateMachine(),
             metricsRecorder,
             auditRecorder,
             auditQueryService,
@@ -668,12 +591,6 @@ class DataRetentionServiceImplTest {
             org.mockito.Mockito.any(),
             org.mockito.Mockito.any()
         )).thenReturn(cleanupBatchId);
-    }
-
-    private ReviewTask task(Long id) {
-        ReviewTask task = new ReviewTask();
-        task.setId(id);
-        return task;
     }
 
     private SystemSettings systemSettings(Integer retentionDays) {

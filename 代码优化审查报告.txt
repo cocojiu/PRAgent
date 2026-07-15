@@ -1301,3 +1301,40 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - git diff --check：通过。
 
 验收结论：基础配置不再静默降级为开发/本地环境，弱默认值仅在显式本地或测试 profile 下可用；未知部署环境默认继承生产强校验，混合 profile 会被提前拒绝，本项达到本地完成标准。
+
+进度记录 22
+
+完成时间：2026-07-15 22:02:04 +08:00（Asia/Shanghai）
+优化项：P2 Data Retention 持久化内聚边界收敛（复杂模块第一阶段）
+状态：本地实现、持久化顺序回归测试、全量后端验证和仓库治理门禁均已完成，准备提交并推送至 PRAgent-test，由 PR Quality 与 Release Images 复核。
+
+实施内容：
+
+1. 根据变更耦合审计选择 Data Retention 作为复杂模块收敛的第一阶段：该编排器在最近 8 天连续发生 12 次相关变更，候选查询、归档写入和级联删除是反复共同变化且可独立验证的真实边界。
+2. 新建 `com.repoguard.agent.retention` 领域包，将“按状态和截止时间统计并选择最老任务”收敛到 `DataRetentionCandidateQuery`，以不可变 `CandidateSelection` 返回总候选数和本次任务编号。
+3. 将归档摘要写入收敛到 `DataRetentionArchiveWriter`；空任务集合在访问 Mapper 前失败，避免未来调用点意外生成无意义归档 SQL。
+4. 将七类子表和任务主表的级联删除顺序收敛到 `DataRetentionDeleteExecutor`，以不可变 `DeletionResult` 返回每类删除数量；子表先于任务主表的外键安全顺序由独立测试锁定。
+5. `DataRetentionServiceImpl` 不再直接注入 8 个持久化 Mapper 和状态机，只编排候选查询、归档、删除三个领域组件，并继续负责参数策略、事务、审计、指标和租约生命周期；构造依赖由 15 个降至 9 个，文件由 437 行降至 371 行。
+6. 编排器测试改为面向领域边界验证，保留归档先于删除、归档失败不删除、事务提交后完成审计、回滚失败审计、跨实例租约和进程内并发互斥等既有语义；各持久化组件新增独立行为测试。
+7. 未新增或提交任何测试辅助脚本，也未为减少文件数合并现有单一职责组件；本阶段只处理有变更耦合证据和独立策略的边界。
+
+涉及文件：
+
+- repoguard-backend/src/main/java/com/repoguard/agent/retention/DataRetentionCandidateQuery.java
+- repoguard-backend/src/main/java/com/repoguard/agent/retention/DataRetentionArchiveWriter.java
+- repoguard-backend/src/main/java/com/repoguard/agent/retention/DataRetentionDeleteExecutor.java
+- repoguard-backend/src/main/java/com/repoguard/agent/service/impl/DataRetentionServiceImpl.java
+- repoguard-backend/src/test/java/com/repoguard/agent/retention/DataRetentionCandidateQueryTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/retention/DataRetentionArchiveWriterTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/retention/DataRetentionDeleteExecutorTest.java
+- repoguard-backend/src/test/java/com/repoguard/agent/service/impl/DataRetentionServiceImplTest.java
+
+验证结果：
+
+- Data Retention 领域组件、编排器和 Spring Bean 构造器定向测试：29 个测试全部通过，0 failure，0 error。
+- 后端全量 `mvn verify`：1,634 个测试，0 failure，0 error，2 skipped，BUILD SUCCESS。
+- JaCoCo 0.8.15：覆盖率门禁全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：数据保留编排器已从具体 Mapper 调用细节解耦，候选选择、归档和级联删除分别具备清晰输入输出与顺序契约；事务、审计和租约语义保持不变，修改持久化步骤时无需再改动整个编排器测试，本阶段达到本地完成标准。
