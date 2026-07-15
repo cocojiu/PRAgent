@@ -1109,3 +1109,32 @@ ReviewDetailPage.vue、contracts.ts 和 AuthServiceImpl 等文件承担了较多
 - 后端跨语言/API 契约定向测试：4 个测试类、36 个测试全部通过，BUILD SUCCESS。
 
 验收结论：关键成功响应现在同时受静态 OpenAPI 契约和运行时边界校验保护；服务端返回格式漂移会在进入页面状态前以稳定错误码失败并留下观测记录，本项达到本地完成标准。
+
+进度记录 17
+
+完成时间：2026-07-15 19:53:56 +08:00（Asia/Shanghai）
+优化项：P2 Release Images 密钥泄漏门禁测试桩兼容修复
+状态：本地修复与同源门禁验证已完成，准备提交并推送至 PRAgent-test，等待 GitHub Actions 复核。
+
+问题定位：
+
+- GitHub Actions `Release Images` run 29413007985 在 `Repository governance guard` 失败，镜像构建与扫描尚未开始。
+- `gh run view --log-failed` 定位到 repoguard-frontend/src/api/contracts.test.ts 的伪 accessToken；测试值 `new-access-token` 满足仓库密钥泄漏启发式规则，被正确阻断。
+
+实施内容：
+
+1. 将测试桩令牌改为扫描规则明确允许的 `test-` 前缀伪凭据，保留认证成功响应结构与契约校验覆盖。
+2. 不放宽 secret/token 启发式规则，不排除测试源文件，也不增加例外清单，确保真实高熵凭据仍会阻断发布。
+3. 未新增或提交任何测试辅助脚本；本地复用仓库现有 production-readiness-check.ps1 验证与 Actions 相同的治理门禁。
+
+涉及文件：
+
+- repoguard-frontend/src/api/contracts.test.ts
+
+验证结果：
+
+- API 请求层定向 Vitest：1 个测试文件、12 个测试全部通过。
+- Production readiness quick guard：空白检查、跟踪文件治理、Flyway 命名/重复版本、演示数据隔离、secret/token 泄漏扫描全部通过。
+- git diff --check：通过。
+
+验收结论：测试伪凭据不再误触发布密钥门禁，同时门禁强度与扫描范围保持不变；本项达到本地完成标准，最终完成以新一轮 Release Images 全绿为准。

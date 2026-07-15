@@ -144,7 +144,7 @@ describe("apiRequest", () => {
       {},
       {},
       {
-        accessToken: "new-access-token",
+        accessToken: "test-access-token-value",
         tokenType: "Bearer",
         accessTokenExpiresInSeconds: 900,
         refreshTokenExpiresInSeconds: 604800,
