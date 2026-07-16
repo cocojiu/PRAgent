@@ -94,10 +94,21 @@ SMOKE_RABBITMQ_PASSWORD=$(openssl rand -hex 32)
 SMOKE_RABBITMQ_VHOST=/repoguard
 SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)
 SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)
+SMOKE_WORKER_ENABLED=false
 EOF
 
 compose() {
   docker compose --env-file "$production_env" --env-file "$env_file" -f "$compose_file" -p "$project" "$@"
+}
+
+wait_for_backend() {
+  for _ in $(seq 1 90); do
+    if curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health" | grep -q '"status":"UP"'; then
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
 }
 
 echo "smoke_project=$project"
@@ -130,13 +141,7 @@ gzip -dc "$backup_path" \
       'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' >/dev/null
 
 compose up -d backend
-for _ in $(seq 1 90); do
-  if curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health" | grep -q '"status":"UP"'; then
-    break
-  fi
-  sleep 5
-done
-curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health" | grep -q '"status":"UP"' || {
+wait_for_backend || {
   echo "Isolated backend did not become healthy" >&2
   exit 1
 }
@@ -156,10 +161,25 @@ test "$production_policy_rows" = "1" || {
   exit 1
 }
 docker exec "$production_mysql_container" sh -lc \
-  'exec mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction --skip-lock-tables --skip-add-locks --no-create-info --replace --skip-comments --compact --set-gtid-purged=OFF --where="id = 1" "$MYSQL_DATABASE" review_policy_config' \
+  'exec mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction --skip-lock-tables --skip-add-locks --no-tablespaces --no-create-info --replace --skip-comments --compact --set-gtid-purged=OFF --where="id = 1" "$MYSQL_DATABASE" review_policy_config' \
   | docker exec -i "$mysql_container" sh -lc \
       'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' >/dev/null
 echo "smoke_review_policy_source=production_encrypted_row"
+
+stale_task_count="$(docker exec "$mysql_container" sh -lc \
+  'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT COUNT(*) FROM review_task WHERE status IN (\"QUEUED\", \"REVIEWING\", \"PUBLISH_FAILED\", \"EXECUTION_TIMEOUT\", \"REQUEUE_PENDING\")"')"
+if [ "$stale_task_count" -gt 0 ]; then
+  docker exec "$mysql_container" sh -lc \
+    'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE review_task SET status = \"FAILED\", llm_status = \"FAILED\", finished_at = COALESCE(finished_at, NOW()) WHERE status IN (\"QUEUED\", \"REVIEWING\", \"PUBLISH_FAILED\", \"EXECUTION_TIMEOUT\", \"REQUEUE_PENDING\")"' >/dev/null
+fi
+echo "smoke_stale_tasks_neutralized=$stale_task_count"
+
+sed -i 's/^SMOKE_WORKER_ENABLED=false$/SMOKE_WORKER_ENABLED=true/' "$env_file"
+compose up -d --force-recreate backend
+wait_for_backend || {
+  echo "Isolated backend did not become healthy with worker enabled" >&2
+  exit 1
+}
 
 admin_key="$(sed -n 's/^SMOKE_ADMIN_API_KEY=//p' "$env_file")"
 REPOGUARD_ADMIN_API_KEY="$admin_key" "$task_runner" \
