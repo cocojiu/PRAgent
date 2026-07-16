@@ -1,0 +1,93 @@
+package com.repoguard.agent.quality;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.fail;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+import org.yaml.snakeyaml.Yaml;
+
+class IsolatedRealChainSmokeContractTest {
+
+    @Test
+    void smokeComposeAndWorkflowsAreValidYamlDocuments() throws IOException {
+        Yaml yaml = new Yaml();
+
+        assertInstanceOf(Map.class, yaml.load(read("docker-compose.smoke.yml")));
+        assertInstanceOf(Map.class, yaml.load(read(".github/workflows/release-images.yml")));
+        assertInstanceOf(Map.class, yaml.load(read(".github/workflows/real-chain-smoke.yml")));
+    }
+
+    @Test
+    void smokeComposeKeepsInfrastructurePrivateAndProjectScoped() throws IOException {
+        String compose = read("docker-compose.smoke.yml");
+
+        assertThat(compose)
+            .doesNotContain("container_name:")
+            .doesNotContain("repoguard_mysql_data")
+            .doesNotContain("repoguard_rabbitmq_data")
+            .doesNotContain("3306:3306")
+            .doesNotContain("5672:5672")
+            .doesNotContain("15672:15672")
+            .contains("127.0.0.1:${SMOKE_BACKEND_PORT}:8081");
+    }
+
+    @Test
+    void lifecycleRunnerTargetsOnlyTheUniqueComposeProject() throws IOException {
+        String lifecycle = read("performance/remote/run-isolated-real-chain-smoke.sh");
+        String taskRunner = read("performance/remote/run-real-chain-smoke.sh");
+
+        assertThat(lifecycle)
+            .contains("repoguard-smoke-${run_id}-${run_attempt}")
+            .contains("compose down --volumes --remove-orphans")
+            .contains("trap cleanup EXIT")
+            .contains("trap 'exit 130' INT TERM")
+            .doesNotContain("docker system prune")
+            .doesNotContain("repoguard-mysql")
+            .doesNotContain("repoguard-backend");
+        assertThat(taskRunner)
+            .contains("mysql_container=\"${2:-}\"")
+            .contains("compose_project=\"${3:-}\"")
+            .doesNotContain("docker exec repoguard-mysql")
+            .doesNotContain("docker exec repoguard-backend");
+    }
+
+    @Test
+    void workflowsPublishAndInvokeCurrentIsolatedAssets() throws IOException {
+        String release = read(".github/workflows/release-images.yml");
+        String smoke = read(".github/workflows/real-chain-smoke.yml");
+
+        assertThat(release)
+            .contains("docker-compose.smoke.yml")
+            .contains("performance/remote/run-isolated-real-chain-smoke.sh")
+            .contains("performance/remote/run-real-chain-smoke.sh")
+            .contains("chmod 0700");
+        assertThat(smoke)
+            .contains("inputs.backend_image")
+            .contains("github.run_id")
+            .contains("github.run_attempt")
+            .contains("run-isolated-real-chain-smoke.sh")
+            .contains("Verify production health after isolated smoke");
+    }
+
+    private static String read(String relativePath) throws IOException {
+        return Files.readString(repositoryRoot().resolve(relativePath), StandardCharsets.UTF_8);
+    }
+
+    private static Path repositoryRoot() {
+        Path current = Path.of("").toAbsolutePath();
+        while (current != null) {
+            if (Files.isDirectory(current.resolve(".git")) && Files.isDirectory(current.resolve("repoguard-backend"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        fail("Cannot locate repository root");
+        throw new IllegalStateException("unreachable");
+    }
+}
