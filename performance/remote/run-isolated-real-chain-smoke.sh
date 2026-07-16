@@ -10,6 +10,7 @@ run_attempt="${5:-}"
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 deploy_path="$(CDPATH= cd -- "$script_dir/../.." && pwd)"
 compose_file="$deploy_path/docker-compose.smoke.yml"
+production_compose_file="$deploy_path/docker-compose.prod.yml"
 production_env="$deploy_path/.env"
 task_runner="$script_dir/run-real-chain-smoke.sh"
 project="repoguard-smoke-${run_id}-${run_attempt}"
@@ -51,6 +52,7 @@ esac
 test "$max_total_tokens" -gt 0 || { echo "max_total_tokens must be greater than zero" >&2; exit 2; }
 test -n "$backend_image" || { echo "backend image is required" >&2; exit 2; }
 test -f "$compose_file" || { echo "Missing smoke Compose file" >&2; exit 1; }
+test -f "$production_compose_file" || { echo "Missing production Compose file" >&2; exit 1; }
 test -x "$task_runner" || { echo "Missing executable real-chain task runner" >&2; exit 1; }
 test -f "$production_env" || { echo "Missing production environment file" >&2; exit 1; }
 
@@ -138,6 +140,26 @@ curl -fsS "http://127.0.0.1:${smoke_port}/actuator/health" | grep -q '"status":"
   echo "Isolated backend did not become healthy" >&2
   exit 1
 }
+
+production_mysql_container="$(
+  cd "$deploy_path"
+  docker compose --env-file "$production_env" -f "$production_compose_file" ps -q mysql
+)"
+test -n "$production_mysql_container" || {
+  echo "Production MySQL container is unavailable for the review policy overlay" >&2
+  exit 1
+}
+production_policy_rows="$(docker exec "$production_mysql_container" sh -lc \
+  'mysql -N -s -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -e "SELECT COUNT(*) FROM review_policy_config WHERE id = 1"')"
+test "$production_policy_rows" = "1" || {
+  echo "Expected exactly one production review policy row, found ${production_policy_rows:-0}" >&2
+  exit 1
+}
+docker exec "$production_mysql_container" sh -lc \
+  'exec mysqldump -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" --single-transaction --skip-lock-tables --skip-add-locks --no-create-info --replace --skip-comments --compact --set-gtid-purged=OFF --where="id = 1" "$MYSQL_DATABASE" review_policy_config' \
+  | docker exec -i "$mysql_container" sh -lc \
+      'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"' >/dev/null
+echo "smoke_review_policy_source=production_encrypted_row"
 
 admin_key="$(sed -n 's/^SMOKE_ADMIN_API_KEY=//p' "$env_file")"
 REPOGUARD_ADMIN_API_KEY="$admin_key" "$task_runner" \
