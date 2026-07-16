@@ -84,7 +84,7 @@ function Resolve-ToolCommand {
 }
 
 function Get-TrackedRepositoryFiles {
-    $trackedFiles = & git -C $Root ls-files
+    $trackedFiles = & git -c core.quotePath=false -C $Root ls-files
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to list tracked files"
     }
