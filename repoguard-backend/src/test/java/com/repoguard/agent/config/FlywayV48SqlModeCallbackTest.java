@@ -11,6 +11,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import org.flywaydb.core.api.callback.Context;
 import org.flywaydb.core.api.callback.Event;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -58,5 +59,14 @@ class FlywayV48SqlModeCallbackTest {
         assertThat(callback.supports(Event.AFTER_MIGRATE_ERROR, null)).isTrue();
         assertThat(callback.supports(Event.BEFORE_EACH_MIGRATE, null)).isFalse();
         assertThat(callback.supports(Event.BEFORE_VALIDATE, null)).isFalse();
+    }
+
+    @Test
+    void explicitlyRegistersItselfWithFlyway() {
+        FluentConfiguration configuration = mock(FluentConfiguration.class);
+
+        callback.customize(configuration);
+
+        verify(configuration).callbacks(callback);
     }
 }

@@ -13,14 +13,21 @@ import java.util.stream.Collectors;
 import org.flywaydb.core.api.callback.Callback;
 import org.flywaydb.core.api.callback.Context;
 import org.flywaydb.core.api.callback.Event;
+import org.flywaydb.core.api.configuration.FluentConfiguration;
+import org.springframework.boot.flyway.autoconfigure.FlywayConfigurationCustomizer;
 import org.springframework.stereotype.Component;
 
 @Component
-public class FlywayV48SqlModeCallback implements Callback {
+public class FlywayV48SqlModeCallback implements Callback, FlywayConfigurationCustomizer {
 
     private static final String STRICT_GROUPING_MODE = "ONLY_FULL_GROUP_BY";
 
     private final Map<Connection, String> originalSqlModes = Collections.synchronizedMap(new IdentityHashMap<>());
+
+    @Override
+    public void customize(FluentConfiguration configuration) {
+        configuration.callbacks(this);
+    }
 
     @Override
     public boolean supports(Event event, Context context) {
