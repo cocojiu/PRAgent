@@ -16,6 +16,7 @@ import com.repoguard.agent.security.AllowAnonymous;
 import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
@@ -94,6 +95,7 @@ public class AuthController {
         return ApiResponse.ok(authService.currentUser(user.id()));
     }
 
+    @RequireRole({"ADMIN", "VIEWER"})
     @PostMapping("/password/change")
     public ApiResponse<Void> changePassword(
         @Valid @RequestBody AuthPasswordChangeRequest passwordChangeRequest,

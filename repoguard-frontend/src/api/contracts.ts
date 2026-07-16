@@ -1,7 +1,7 @@
 import { requestWithMeta } from "@/api/client";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
-import type { AuthResponse, CurrentUser, LoginRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
+import type { AuthResponse, CurrentUser, LoginRequest, PasswordChangeRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import {
   isAuthResponse,
@@ -154,6 +154,7 @@ export type ApiContract = {
   login: ApiOperation<LoginRequest, AuthResponse>;
   register: ApiOperation<RegisterRequest, AuthResponse>;
   getCurrentUser: ApiOperation<undefined, CurrentUser>;
+  changePassword: ApiOperation<PasswordChangeRequest, void>;
   resetRefreshToken: ApiOperation<RefreshTokenResetRequest, AuthResponse>;
   logout: ApiOperation<undefined, void>;
   fetchDashboardOverview: ApiOperation<{ llmTrendDays: number }, DashboardOverview>;
@@ -266,6 +267,11 @@ const apiEndpoints: ApiEndpointMap = {
   getCurrentUser: {
     path: () => "/api/v1/auth/me",
     validateResponse: isCurrentUser
+  },
+  changePassword: {
+    method: "POST",
+    path: () => "/api/v1/auth/password/change",
+    body: input => input
   },
   resetRefreshToken: {
     method: "POST",
