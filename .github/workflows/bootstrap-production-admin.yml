@@ -1,0 +1,84 @@
+name: Bootstrap Production Admin
+
+on:
+  workflow_dispatch:
+    inputs:
+      username:
+        description: Username for the new production administrator
+        required: true
+        type: string
+      email:
+        description: Email for the new production administrator
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Create production administrator
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Prepare SSH key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -T 30 -p "${DEPLOY_PORT:-22}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Load runtime admin API key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          admin_key="$(ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "docker exec repoguard-backend printenv REPOGUARD_ADMIN_API_KEY")"
+          test -n "${admin_key}" || { echo "Missing runtime admin API key"; exit 1; }
+          echo "::add-mask::${admin_key}"
+          echo "ADMIN_API_KEY=${admin_key}" >> "${GITHUB_ENV}"
+
+      - name: Create and promote administrator
+        shell: bash
+        env:
+          APP_URL: https://pragent.top
+          BOOTSTRAP_PASSWORD: ${{ secrets.REPOGUARD_BOOTSTRAP_ADMIN_PASSWORD }}
+          EMAIL: ${{ inputs.email }}
+          USERNAME: ${{ inputs.username }}
+        run: |
+          set -euo pipefail
+          test -n "${BOOTSTRAP_PASSWORD}" || { echo "Missing REPOGUARD_BOOTSTRAP_ADMIN_PASSWORD"; exit 1; }
+          echo "::add-mask::${BOOTSTRAP_PASSWORD}"
+          payload="$(jq -n \
+            --arg username "${USERNAME}" \
+            --arg email "${EMAIL}" \
+            --arg password "${BOOTSTRAP_PASSWORD}" \
+            '{username: $username, email: $email, password: $password, confirmPassword: $password}')"
+          create_response="$(curl --fail-with-body --silent --show-error \
+            -H 'Content-Type: application/json' \
+            -H "X-RepoGuard-Admin-Key: ${ADMIN_API_KEY}" \
+            --data "${payload}" \
+            "${APP_URL}/api/v1/users")"
+          user_id="$(jq -er '.data.id' <<<"${create_response}")"
+          role_response="$(curl --fail-with-body --silent --show-error \
+            -X PUT \
+            -H 'Content-Type: application/json' \
+            -H "X-RepoGuard-Admin-Key: ${ADMIN_API_KEY}" \
+            --data '{"role":"ADMIN"}' \
+            "${APP_URL}/api/v1/users/${user_id}/role")"
+          jq -e '.success == true and .data.role == "ADMIN" and .data.status == "ACTIVE"' \
+            <<<"${role_response}" >/dev/null
+          echo "administrator_created username=${USERNAME} user_id=${user_id} role=ADMIN status=ACTIVE"
