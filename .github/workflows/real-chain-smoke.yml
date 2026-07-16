@@ -99,6 +99,12 @@ jobs:
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "backend_image='${BACKEND_IMAGE}'; \
              if [ -z \"\${backend_image}\" ]; then \
+               backend_container=\$(cd '${DEPLOY_PATH}' && docker compose --env-file .env -f docker-compose.prod.yml ps -q backend); \
+               if [ -n \"\${backend_container}\" ]; then \
+                 backend_image=\$(docker inspect \"\${backend_container}\" --format '{{.Config.Image}}'); \
+               fi; \
+             fi; \
+             if [ -z \"\${backend_image}\" ]; then \
                backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
              fi; \
              test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
