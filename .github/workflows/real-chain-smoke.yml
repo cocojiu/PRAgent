@@ -76,8 +76,8 @@ jobs:
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH"; exit 1; }
           test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "test -x '${DEPLOY_PATH}/performance/run-isolated-real-chain-smoke.sh' && \
-             test -x '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' && \
+            "test -x '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' && \
+             test -x '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh' && \
              test -f '${DEPLOY_PATH}/docker-compose.smoke.yml' || {
                echo 'Missing remote isolated smoke assets under ${DEPLOY_PATH}' >&2
                exit 1
@@ -102,7 +102,7 @@ jobs:
                backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
              fi; \
              test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
-             '${DEPLOY_PATH}/performance/run-isolated-real-chain-smoke.sh' \
+             '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
              '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
              '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"
 
