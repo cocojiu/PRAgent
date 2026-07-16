@@ -88,12 +88,13 @@ class ReviewExecutionLog {
         LocalDateTime startedAt
     ) {
         LOGGER.info(
-            "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} findingCount={} durationMs={} humanReviewRequired={}",
+            "Review task completed taskId={} repository={} prNumber={} operation=review_execute result=completed riskLevel={} llmStatus={} llmFallbackReason={} findingCount={} durationMs={} humanReviewRequired={}",
             task.getId(),
             logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             reviewResult.riskLevel(),
             reviewResult.llmStatus(),
+            reviewResult.statusDetail(),
             writeResult.findingCount(),
             Duration.between(startedAt, clock.now()).toMillis(),
             writeResult.humanReviewRequired()
