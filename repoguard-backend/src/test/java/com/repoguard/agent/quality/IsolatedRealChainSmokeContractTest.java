@@ -34,6 +34,8 @@ class IsolatedRealChainSmokeContractTest {
             .doesNotContain("3306:3306")
             .doesNotContain("5672:5672")
             .doesNotContain("15672:15672")
+            .doesNotContain("REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS: ${")
+            .contains("REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS: dashscope.aliyuncs.com,api.openai.com,token-plan-cn.xiaomimimo.com")
             .contains("127.0.0.1:${SMOKE_BACKEND_PORT}:8081");
     }
 
