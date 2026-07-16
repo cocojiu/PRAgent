@@ -1,3 +1,4 @@
+changePassword -> authControllerChangePassword // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup // POST /api/v1/config/data-retention/cleanup
 createNotificationBinding -> notificationIntegrationControllerCreateBinding // POST /api/v1/config/notification-bindings
 createReviewRule -> systemConfigControllerCreateReviewRule // POST /api/v1/config/review-rules

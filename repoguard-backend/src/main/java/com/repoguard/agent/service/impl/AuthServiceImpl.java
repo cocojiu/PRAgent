@@ -6,6 +6,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
@@ -197,6 +198,38 @@ public class AuthServiceImpl implements AuthService {
             user.getStatus(),
             user.getLastLoginAt()
         );
+    }
+
+    @Override
+    public void changePassword(Long userId, AuthPasswordChangeRequest request) {
+        UserAccount user = userAccountMapper.selectById(userId);
+        boolean currentPasswordMatches = passwordHashService.matchesOrDummy(
+            request.currentPassword(),
+            user == null ? null : user.getPasswordHash()
+        );
+        if (user == null || !STATUS_ACTIVE.equals(user.getStatus()) || !currentPasswordMatches) {
+            recordAuditInWriteTransaction(userId, user == null ? null : user.getUsername(), "PASSWORD_CHANGE", "bad credentials");
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Current password is incorrect");
+        }
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "New password and confirmation do not match");
+        }
+        if (!isStrongEnough(request.newPassword())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "New password must contain both letters and numbers");
+        }
+        if (passwordHashService.matchesOrDummy(request.newPassword(), user.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "New password must differ from the current password");
+        }
+
+        inWriteTransaction(() -> {
+            LocalDateTime now = LocalDateTime.now();
+            user.setPasswordHash(passwordHashService.hash(request.newPassword()));
+            sessionInvalidator.rotateSessionVersion(user, now);
+            userAccountMapper.updateById(user);
+            sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
+            recordAudit(user.getId(), user.getUsername(), "PASSWORD_CHANGE", AUDIT_SUCCESS, null);
+            return null;
+        });
     }
 
     @Override

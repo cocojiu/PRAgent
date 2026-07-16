@@ -13,6 +13,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
@@ -57,6 +58,13 @@ class AuthControllerTest {
                 "ACTIVE",
                 LocalDateTime.parse("2026-06-11T10:00:00")
             );
+        }
+
+        @Override
+        public void changePassword(Long userId, AuthPasswordChangeRequest request) {
+            if ("Wrong123".equals(request.currentPassword())) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "Current password is incorrect");
+            }
         }
 
         @Override
@@ -151,6 +159,42 @@ class AuthControllerTest {
     @Test
     void meWithoutAuthenticatedUserReturns401() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void changePasswordRequiresAuthenticationAndClearsAuthCookies() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password/change")
+                .requestAttr(
+                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "currentPassword": "Secure123",
+                      "newPassword": "Safer456",
+                      "confirmPassword": "Safer456"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(result -> expectSetCookieContains(result, "repoguard_refresh_token="))
+            .andExpect(result -> expectSetCookieContains(result, "Max-Age=0"));
+    }
+
+    @Test
+    void changePasswordWithoutAuthenticationReturns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/password/change")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "currentPassword": "Secure123",
+                      "newPassword": "Safer456",
+                      "confirmPassword": "Safer456"
+                    }
+                    """))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }

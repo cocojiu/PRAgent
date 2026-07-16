@@ -2,6 +2,7 @@ package com.repoguard.agent.service;
 
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
@@ -15,6 +16,8 @@ public interface AuthService {
     AuthResponse login(AuthLoginRequest request);
 
     AuthCurrentUserDto currentUser(Long userId);
+
+    void changePassword(Long userId, AuthPasswordChangeRequest request);
 
     AuthResponse refresh(AuthRefreshRequest request);
 

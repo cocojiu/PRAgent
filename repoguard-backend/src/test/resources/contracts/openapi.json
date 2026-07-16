@@ -153,6 +153,59 @@
         }
       }
     },
+    "/api/v1/auth/password/change" : {
+      "post" : {
+        "tags" : [ "Auth" ],
+        "operationId" : "authControllerChangePassword",
+        "x-controller-operation" : "AuthController#changePassword",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "AuthPasswordChangeRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AuthPasswordChangeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "Void",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "null"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/refresh" : {
       "post" : {
         "tags" : [ "Auth" ],
@@ -4285,6 +4338,28 @@
             "maxLength" : 512
           }
         }
+      },
+      "AuthPasswordChangeRequest" : {
+        "type" : "object",
+        "x-java-type" : "AuthPasswordChangeRequest",
+        "properties" : {
+          "currentPassword" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          },
+          "newPassword" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          },
+          "confirmPassword" : {
+            "type" : "string",
+            "minLength" : 8,
+            "maxLength" : 128
+          }
+        },
+        "required" : [ "currentPassword", "newPassword", "confirmPassword" ]
       },
       "AuthRefreshRequest" : {
         "type" : "object",

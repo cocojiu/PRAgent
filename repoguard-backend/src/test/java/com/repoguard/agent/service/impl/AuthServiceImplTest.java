@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
@@ -258,6 +259,44 @@ class AuthServiceImplTest {
         assertThat(profile.role()).isEqualTo("ADMIN");
         assertThat(profile.status()).isEqualTo("ACTIVE");
         assertThat(profile.lastLoginAt()).isEqualTo(LocalDateTime.parse("2026-06-11T10:00:00"));
+    }
+
+    @Test
+    void changePasswordRehashesPasswordAndRevokesExistingSessions() {
+        UserAccount user = existingUser();
+        user.setSessionVersion(4);
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Secure123",
+            "Safer456",
+            "Safer456"
+        ));
+
+        assertThat(passwordHashService.matchesOrDummy("Safer456", user.getPasswordHash())).isTrue();
+        assertThat(passwordHashService.matchesOrDummy("Secure123", user.getPasswordHash())).isFalse();
+        assertThat(user.getSessionVersion()).isEqualTo(5);
+        verify(userAccountMapper).updateById(user);
+        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void changePasswordRejectsIncorrectCurrentPassword() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Wrong123",
+            "Safer456",
+            "Safer456"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("Current password is incorrect");
+
+        verify(userAccountMapper, never()).updateById(any(UserAccount.class));
     }
 
     @Test
