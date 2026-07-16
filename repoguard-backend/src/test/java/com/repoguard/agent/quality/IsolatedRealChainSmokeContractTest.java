@@ -49,7 +49,10 @@ class IsolatedRealChainSmokeContractTest {
             .contains("compose down --volumes --remove-orphans")
             .contains("trap cleanup EXIT")
             .contains("trap 'exit 130' INT TERM")
+            .contains("--where=\"id = 1\"")
+            .contains("review_policy_config")
             .doesNotContain("docker system prune")
+            .doesNotContain("review_task")
             .doesNotContain("repoguard-mysql")
             .doesNotContain("repoguard-backend");
         assertThat(taskRunner)
