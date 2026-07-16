@@ -61,9 +61,40 @@ describe("useReviewDetailLoader", () => {
     expect(loader.loading.value).toBe(false);
     expect(showError).not.toHaveBeenCalled();
   });
+
+  it("keeps initial load failures in the retryable page state without a toast", async () => {
+    fetchReviewDetail.mockRejectedValueOnce(new Error("详情暂时不可用"));
+    const loader = createLoader(() => 1);
+
+    await loader.loadDetail();
+
+    expect(loader.errorMessage.value).toBe("详情暂时不可用");
+    expect(loader.selectedTask.value).toBeNull();
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("reports polling failures in a non-interruptive Chinese banner and pauses after the limit", async () => {
+    fetchReviewStatus.mockRejectedValue(new Error("状态暂时不可用"));
+    const stopPolling = vi.fn();
+    const syncPolling = vi.fn();
+    const loader = createLoader(() => 1, { stopPolling, syncPolling });
+
+    await loader.pollReviewStatus();
+    expect(loader.pollErrorMessage.value).toBe("自动刷新失败：状态暂时不可用");
+    expect(syncPolling).toHaveBeenCalledOnce();
+    expect(showError).not.toHaveBeenCalled();
+
+    await loader.pollReviewStatus();
+    await loader.pollReviewStatus();
+    expect(loader.pollErrorMessage.value).toBe("自动刷新连续失败 3 次，已暂停。请手动刷新。");
+    expect(stopPolling).toHaveBeenCalledOnce();
+  });
 });
 
-const createLoader = (getTaskId: () => number) =>
+const createLoader = (
+  getTaskId: () => number,
+  overrides: Partial<Parameters<typeof useReviewDetailLoader>[0]> = {}
+) =>
   useReviewDetailLoader({
     clearGithubCommentPreviewAndHistory: vi.fn(),
     getTaskId,
@@ -71,7 +102,8 @@ const createLoader = (getTaskId: () => number) =>
     maxPollFailures: 3,
     resetGithubCommentPublishResult: vi.fn(),
     stopPolling: vi.fn(),
-    syncPolling: vi.fn()
+    syncPolling: vi.fn(),
+    ...overrides
   });
 
 const task = (id: number) => ({ id, status: "pending" }) as ReviewTaskDetail;

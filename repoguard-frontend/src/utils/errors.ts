@@ -1,3 +1,5 @@
+import { commonUserMessages } from "@/utils/userMessages";
+
 export type RequestErrorOptions = {
   status?: number;
   code?: string;
@@ -21,18 +23,30 @@ export class RequestError extends Error {
   }
 }
 
-export const getErrorMessage = (error: unknown, fallback = "操作失败") => {
+const requestErrorMessages: Readonly<Record<string, string>> = {
+  BAD_REQUEST: commonUserMessages.badRequest,
+  FORBIDDEN: commonUserMessages.forbidden,
+  INTERNAL_ERROR: commonUserMessages.internalError,
+  INVALID_API_RESPONSE: commonUserMessages.invalidResponse,
+  NETWORK_ERROR: commonUserMessages.networkError,
+  PAYLOAD_TOO_LARGE: commonUserMessages.payloadTooLarge,
+  TASK_NOT_FOUND: commonUserMessages.taskNotFound,
+  TOO_MANY_REQUESTS: commonUserMessages.tooManyRequests,
+  UNAUTHORIZED: commonUserMessages.sessionExpired
+};
+
+export const getErrorMessage = (error: unknown, fallback: string = commonUserMessages.actionFailed) => {
   if (error instanceof RequestError) {
     if (error.status === 401) {
-      return "登录状态已失效，请重新登录";
+      return commonUserMessages.sessionExpired;
     }
     if (error.status === 403) {
-      return "当前账号权限不足，无法执行该操作";
+      return commonUserMessages.forbidden;
     }
     if (error.status === 0 || error.code === "NETWORK_ERROR") {
-      return "网络连接异常，请检查后重试";
+      return commonUserMessages.networkError;
     }
-    return error.message || fallback;
+    return (error.code && requestErrorMessages[error.code]) || fallback;
   }
   if (error instanceof Error) {
     return error.message || fallback;
@@ -40,12 +54,12 @@ export const getErrorMessage = (error: unknown, fallback = "操作失败") => {
   return fallback;
 };
 
-export const getAuthErrorMessage = (error: unknown, fallback = "认证失败") => {
+export const getAuthErrorMessage = (error: unknown, fallback: string = commonUserMessages.authFailed) => {
   if (error instanceof RequestError) {
     if (error.status === 0 || error.code === "NETWORK_ERROR") {
-      return "网络连接异常，请检查后重试";
+      return commonUserMessages.networkError;
     }
-    return error.message || fallback;
+    return (error.code && requestErrorMessages[error.code]) || fallback;
   }
   if (error instanceof Error) {
     return error.message || fallback;

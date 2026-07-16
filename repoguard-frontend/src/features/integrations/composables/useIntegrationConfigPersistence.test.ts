@@ -59,14 +59,16 @@ describe("useIntegrationConfigPersistence", () => {
     expect(persistence.mysqlConfig.value).toEqual(mysql);
     expect(persistence.rabbitMqConfig.value).toEqual(rabbitMq);
     expect(persistence.reviewPolicyConfig.value).toEqual(reviewPolicy);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("Succeeded: GitHub, RabbitMQ, Review Policy"));
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("Failed: MySQL (database unavailable)"));
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("Server state has been reloaded"));
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining("成功：GitHub、RabbitMQ、审查策略"));
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining("失败：MySQL（database unavailable）"));
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining("服务端状态已重新加载"));
     expect(showSuccess).not.toHaveBeenCalled();
   });
 
   it("loads available configs when one fetch fails", async () => {
     const github = githubConfig();
+    const mysql = serviceConfig("mysql");
+    const rabbitMq = serviceConfig("rabbitmq");
     const reviewPolicy = policyConfig();
     const applyGithubConfig = vi.fn();
     const persistence = useIntegrationConfigPersistence({
@@ -77,9 +79,9 @@ describe("useIntegrationConfigPersistence", () => {
       payloads: payloads(reviewPolicy),
       requests: {
         fetchGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
-        fetchMysqlIntegrationConfig: vi.fn().mockRejectedValue(new Error("offline")),
-        fetchRabbitMqIntegrationConfig: vi.fn().mockRejectedValue(new Error("offline")),
-        fetchReviewPolicyConfig: vi.fn().mockRejectedValue(new Error("offline")),
+        fetchMysqlIntegrationConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(mysql),
+        fetchRabbitMqIntegrationConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(rabbitMq),
+        fetchReviewPolicyConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(reviewPolicy),
         updateGithubIntegrationConfig: vi.fn(),
         updateMysqlIntegrationConfig: vi.fn(),
         updateRabbitMqIntegrationConfig: vi.fn(),
@@ -91,7 +93,11 @@ describe("useIntegrationConfigPersistence", () => {
 
     expect(applyGithubConfig).toHaveBeenCalledWith(github);
     expect(persistence.githubConfig.value).toEqual(github);
-    expect(showWarning).toHaveBeenCalledWith(expect.stringContaining("MySQL, RabbitMQ, Review Policy"));
+    expect(persistence.loadErrorMessage.value).toContain("MySQL、RabbitMQ、审查策略");
+    expect(showWarning).not.toHaveBeenCalled();
+
+    await persistence.loadConfig();
+    expect(persistence.loadErrorMessage.value).toBe("");
   });
 });
 

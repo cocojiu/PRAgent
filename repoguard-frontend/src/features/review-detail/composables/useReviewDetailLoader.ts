@@ -3,6 +3,7 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { fetchReviewDetail, fetchReviewStatus } from "@/api/reviews";
 import type { ReviewStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import { commonUserMessages, reviewDetailMessages } from "@/utils/userMessages";
 import { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "../reviewDetailTaskMappers";
 
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
@@ -59,7 +60,7 @@ export const useReviewDetailLoader = ({
     const id = getTaskId();
     if (!Number.isFinite(id)) {
       requestSequence += 1;
-      ElMessage.error("审查任务 ID 无效");
+      ElMessage.error(reviewDetailMessages.invalidTaskId);
       return;
     }
 
@@ -97,16 +98,14 @@ export const useReviewDetailLoader = ({
       if (!options.silent) {
         selectedTask.value = null;
       }
-      errorMessage.value = getErrorMessage(error, "请求失败");
-      if (!options.silent) {
-        ElMessage.error(errorMessage.value);
-      } else {
+      errorMessage.value = getErrorMessage(error, commonUserMessages.requestFailed);
+      if (options.silent) {
         pollFailureCount.value += 1;
         if (pollFailureCount.value >= maxPollFailures) {
           stopPolling();
-          pollErrorMessage.value = `自动刷新连续失败 ${maxPollFailures} 次，已暂停。请手动刷新。`;
+          pollErrorMessage.value = reviewDetailMessages.pollingPaused(maxPollFailures);
         } else {
-          pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
+          pollErrorMessage.value = reviewDetailMessages.pollFailed(errorMessage.value);
           syncPolling();
         }
       }
@@ -150,12 +149,12 @@ export const useReviewDetailLoader = ({
         return;
       }
       pollFailureCount.value += 1;
-      const message = getErrorMessage(error, "请求失败");
+      const message = getErrorMessage(error, commonUserMessages.requestFailed);
       if (pollFailureCount.value >= maxPollFailures) {
         stopPolling();
-        pollErrorMessage.value = `Automatic refresh failed ${maxPollFailures} times and has paused. Please refresh manually.`;
+        pollErrorMessage.value = reviewDetailMessages.pollingPaused(maxPollFailures);
       } else {
-        pollErrorMessage.value = `Automatic refresh failed: ${message}`;
+        pollErrorMessage.value = reviewDetailMessages.pollFailed(message);
         syncPolling();
       }
     } finally {
