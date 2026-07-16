@@ -7,6 +7,7 @@ import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
@@ -91,6 +92,21 @@ public class AuthController {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
         }
         return ApiResponse.ok(authService.currentUser(user.id()));
+    }
+
+    @PostMapping("/password/change")
+    public ApiResponse<Void> changePassword(
+        @Valid @RequestBody AuthPasswordChangeRequest passwordChangeRequest,
+        HttpServletRequest httpRequest,
+        HttpServletResponse httpResponse
+    ) {
+        Object authenticatedUser = httpRequest.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
+        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
+        }
+        authService.changePassword(user.id(), passwordChangeRequest);
+        cookieManager.clearAuthCookies(httpRequest, httpResponse);
+        return ApiResponse.ok(null);
     }
 
     @AllowAnonymous
