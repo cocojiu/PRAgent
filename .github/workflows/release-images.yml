@@ -248,7 +248,7 @@ jobs:
           test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/performance'"
+            "mkdir -p '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/performance/remote'"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
@@ -256,10 +256,10 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
             performance/remote/run-isolated-real-chain-smoke.sh \
             performance/remote/run-real-chain-smoke.sh \
-            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/"
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/remote/"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod 0700 '${DEPLOY_PATH}/performance/run-isolated-real-chain-smoke.sh' \
-                        '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh'"
+            "chmod 0700 '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
+                        '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
 
       - name: Pull and restart
         shell: bash
