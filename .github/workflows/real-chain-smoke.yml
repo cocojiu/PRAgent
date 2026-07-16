@@ -13,8 +13,8 @@ on:
         required: false
         type: string
       backend_image:
-        description: Full backend image reference already deployed and present on the production server
-        required: true
+        description: Optional full backend image reference; defaults to the image recorded in the deployment environment
+        required: false
         type: string
 
 permissions:
@@ -97,8 +97,13 @@ jobs:
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "'${DEPLOY_PATH}/performance/run-isolated-real-chain-smoke.sh' \
-             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' '${BACKEND_IMAGE}' \
+            "backend_image='${BACKEND_IMAGE}'; \
+             if [ -z \"\${backend_image}\" ]; then \
+               backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
+             fi; \
+             test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
+             '${DEPLOY_PATH}/performance/run-isolated-real-chain-smoke.sh' \
+             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
              '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"
 
       - name: Verify production health after isolated smoke
