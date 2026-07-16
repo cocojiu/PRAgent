@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -18,11 +19,25 @@ import org.junit.jupiter.api.Test;
 
 class SupplyChainPolicyTest {
 
-    private static final Pattern ACTION_REFERENCE = Pattern.compile("(?m)^\\s*uses:\\s*([^\\s#]+)");
+    private static final Pattern ACTION_REFERENCE = Pattern.compile("(?m)^\\s*-?\\s*uses:\\s*([^\\s#]+)");
     private static final Pattern COMMIT_SHA = Pattern.compile("[0-9a-f]{40}");
+    private static final Pattern VERSIONED_ACTION_REFERENCE = Pattern.compile(
+        "(?m)^\\s*-?\\s*uses:\\s*([^@\\s#]+)@[0-9a-f]{40}\\s+#\\s+v(\\d+)(?:\\.\\d+){0,2}\\s*$"
+    );
     private static final Pattern EXCEPTION_ID = Pattern.compile("^\\s*-\\s+id:\\s*(\\S+)\\s*$");
     private static final Pattern EXCEPTION_STATEMENT = Pattern.compile("^\\s+statement:\\s*(.+?)\\s*$");
     private static final Pattern EXCEPTION_EXPIRY = Pattern.compile("^\\s+expired_at:\\s*(\\d{4}-\\d{2}-\\d{2})\\s*$");
+    private static final Map<String, Integer> NODE_24_ACTION_MAJOR_BASELINES = Map.ofEntries(
+        Map.entry("actions/checkout", 7),
+        Map.entry("actions/dependency-review-action", 5),
+        Map.entry("actions/github-script", 9),
+        Map.entry("actions/setup-java", 5),
+        Map.entry("actions/setup-node", 7),
+        Map.entry("actions/upload-artifact", 7),
+        Map.entry("docker/build-push-action", 7),
+        Map.entry("docker/login-action", 4),
+        Map.entry("docker/setup-buildx-action", 4)
+    );
 
     @Test
     void externalActionsArePinnedToCommitShas() throws IOException {
@@ -49,6 +64,31 @@ class SupplyChainPolicyTest {
         assertThat(violations)
             .as("Every external GitHub Action must use an immutable 40-character commit SHA")
             .isEmpty();
+    }
+
+    @Test
+    void verifiedNode24ActionBaselinesDoNotRegress() throws IOException {
+        Path workflowDirectory = repositoryRoot().resolve(".github/workflows");
+        Map<String, Integer> observedMajors = new java.util.HashMap<>();
+        try (Stream<Path> paths = Files.list(workflowDirectory)) {
+            for (Path workflow : paths.filter(Files::isRegularFile).sorted().toList()) {
+                Matcher matcher = VERSIONED_ACTION_REFERENCE.matcher(
+                    Files.readString(workflow, StandardCharsets.UTF_8)
+                );
+                while (matcher.find()) {
+                    observedMajors.merge(matcher.group(1), Integer.parseInt(matcher.group(2)), Math::max);
+                }
+            }
+        }
+
+        assertThat(observedMajors)
+            .as("Every gh-verified Node 24 Action must remain at or above its reviewed major version")
+            .containsKeys(NODE_24_ACTION_MAJOR_BASELINES.keySet().toArray(String[]::new));
+        NODE_24_ACTION_MAJOR_BASELINES.forEach((action, minimumMajor) ->
+            assertThat(observedMajors.get(action))
+                .as(action + " major version")
+                .isGreaterThanOrEqualTo(minimumMajor)
+        );
     }
 
     @Test
