@@ -1,6 +1,6 @@
 package com.repoguard.agent.security;
 
-import java.util.Arrays;
+import com.repoguard.agent.config.RuntimeProfilePolicy;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "app.security.admin-api-key")
@@ -39,10 +39,9 @@ public class AdminApiKeyProperties {
     }
 
     public void validateForProfiles(String[] activeProfiles) {
-        boolean productionProfile = Arrays.stream(activeProfiles)
-            .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
+        boolean productionProfile = RuntimeProfilePolicy.isProductionLike(activeProfiles);
         if (productionProfile && !hasConfiguredKey()) {
-            throw new IllegalStateException("app.security.admin-api-key.key must be configured in prod profile");
+            throw new IllegalStateException("app.security.admin-api-key.key must be configured in a production-like profile");
         }
     }
 

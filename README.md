@@ -69,7 +69,7 @@ docker compose up -d
 
 ```bash
 cd repoguard-backend
-mvn spring-boot:run
+mvn spring-boot:run -Dspring-boot.run.profiles=dev,local
 ```
 
 默认后端地址：

@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.NotificationCenterDto;
 import com.repoguard.agent.dto.NotificationItemDto;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.NotificationService;

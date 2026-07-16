@@ -1,6 +1,8 @@
 package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
@@ -19,13 +21,21 @@ class NotificationDeliveryEventStateUpdaterTest {
     private final NotificationDeliveryEventStateUpdater updater = new NotificationDeliveryEventStateUpdater(eventMapper, clock);
 
     @Test
-    void markDeliveringKeepsDeliveredEventsProtected() {
-        updater.markDelivering(event());
+    void claimForDeliveryUsesPublishedStatusAndStoresOwnership() {
+        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        NotificationDeliveryClaim claim = new NotificationDeliveryClaim(
+            LocalDateTime.of(2026, 6, 18, 10, 30),
+            "worker-1"
+        );
+
+        assertThat(updater.claimForDelivery(event(), claim)).isTrue();
 
         UpdateWrapper<NotificationEvent> wrapper = capturedUpdate();
-        assertThat(wrapper.getSqlSet()).contains("status", "updated_at");
+        assertThat(wrapper.getSqlSegment()).contains("status", "delivery_claimed_at", "IS NULL");
+        assertThat(wrapper.getSqlSet()).contains("status", "delivery_claimed_at", "delivery_claimed_by", "updated_at");
         assertThat(wrapper.getParamNameValuePairs())
             .containsValue(NotificationEventStatus.DELIVERING.code())
+            .containsValue("worker-1")
             .containsValue(LocalDateTime.of(2026, 6, 18, 10, 30));
     }
 
@@ -41,7 +51,11 @@ class NotificationDeliveryEventStateUpdaterTest {
         updater.markFailed(event(), decision);
 
         UpdateWrapper<NotificationEvent> wrapper = capturedUpdate();
-        assertThat(wrapper.getSqlSet()).contains("status", "retry_count", "next_retry_at", "last_error", "updated_at");
+        assertThat(wrapper.getSqlSegment()).contains("status", "delivery_claimed_at", "delivery_claimed_by");
+        assertThat(wrapper.getSqlSet()).contains(
+            "status", "retry_count", "next_retry_at", "last_error",
+            "delivery_claimed_at", "delivery_claimed_by", "updated_at"
+        );
         assertThat(wrapper.getParamNameValuePairs())
             .containsValue(NotificationEventStatus.DELIVERY_FAILED.code())
             .containsValue(2)
@@ -55,7 +69,10 @@ class NotificationDeliveryEventStateUpdaterTest {
         updater.markDelivered(event());
 
         UpdateWrapper<NotificationEvent> wrapper = capturedUpdate();
-        assertThat(wrapper.getSqlSet()).contains("status", "next_retry_at", "last_error", "updated_at");
+        assertThat(wrapper.getSqlSegment()).contains("status", "delivery_claimed_at", "delivery_claimed_by");
+        assertThat(wrapper.getSqlSet()).contains(
+            "status", "next_retry_at", "last_error", "delivery_claimed_at", "delivery_claimed_by", "updated_at"
+        );
         assertThat(wrapper.getParamNameValuePairs())
             .containsValue(NotificationEventStatus.DELIVERED.code())
             .containsValue(LocalDateTime.of(2026, 6, 18, 10, 30));
@@ -71,6 +88,9 @@ class NotificationDeliveryEventStateUpdaterTest {
     private NotificationEvent event() {
         NotificationEvent event = new NotificationEvent();
         event.setId(11L);
+        event.setStatus(NotificationEventStatus.PUBLISHED.code());
+        event.setDeliveryClaimedAt(LocalDateTime.of(2026, 6, 18, 10, 25));
+        event.setDeliveryClaimedBy("worker-1");
         return event;
     }
 }

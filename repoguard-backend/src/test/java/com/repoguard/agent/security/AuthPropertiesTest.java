@@ -17,6 +17,15 @@ class AuthPropertiesTest {
     }
 
     @Test
+    void stagingProfileAlsoRejectsDefaultTokenSecret() {
+        AuthProperties properties = new AuthProperties();
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"staging"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("repoguard.auth.token-secret");
+    }
+
+    @Test
     void productionProfileRejectsShortTokenSecret() {
         AuthProperties properties = new AuthProperties();
         properties.setTokenSecret("short-production-secret");
@@ -35,10 +44,11 @@ class AuthPropertiesTest {
     }
 
     @Test
-    void nonProductionProfilesAllowDevelopmentTokenSecret() {
+    void localAndTestProfilesAllowDevelopmentTokenSecret() {
         AuthProperties properties = new AuthProperties();
 
         assertThatCode(() -> properties.validateForProfiles(new String[] {"dev", "local"})).doesNotThrowAnyException();
+        assertThatCode(() -> properties.validateForProfiles(new String[] {"test"})).doesNotThrowAnyException();
     }
 
     @Test

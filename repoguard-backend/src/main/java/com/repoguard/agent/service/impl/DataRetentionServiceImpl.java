@@ -1,6 +1,5 @@
 package com.repoguard.agent.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.DataRetentionProperties;
@@ -10,22 +9,9 @@ import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.entity.GithubCommentPublication;
-import com.repoguard.agent.entity.GithubCommentPublicationBatch;
-import com.repoguard.agent.entity.GithubCommentPublicationBatchItem;
-import com.repoguard.agent.entity.ReviewFinding;
-import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.mapper.ChangedFileMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
-import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
-import com.repoguard.agent.mapper.ReviewFindingMapper;
-import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
-import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.retention.DataRetentionArchiveWriter;
+import com.repoguard.agent.retention.DataRetentionCandidateQuery;
+import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import com.repoguard.agent.service.DataRetentionService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,6 +22,8 @@ import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class DataRetentionServiceImpl implements DataRetentionService {
@@ -49,16 +37,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     );
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final ReviewTaskMapper reviewTaskMapper;
-    private final ChangedFileMapper changedFileMapper;
-    private final ReviewFindingMapper reviewFindingMapper;
-    private final ReviewTimelineMapper reviewTimelineMapper;
-    private final GithubCommentPublicationMapper githubCommentPublicationMapper;
-    private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
-    private final GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper;
-    private final ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper;
+    private final DataRetentionCandidateQuery candidateQuery;
+    private final DataRetentionArchiveWriter archiveWriter;
+    private final DataRetentionDeleteExecutor deleteExecutor;
     private final SystemSettingsProvider systemSettingsProvider;
-    private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final DataRetentionMetricsRecorder metricsRecorder;
     private final DataRetentionCleanupAuditRecorder auditRecorder;
     private final DataRetentionCleanupAuditQueryService auditQueryService;
@@ -68,35 +50,20 @@ public class DataRetentionServiceImpl implements DataRetentionService {
 
     @Autowired
     public DataRetentionServiceImpl(
-        ReviewTaskMapper reviewTaskMapper,
-        ChangedFileMapper changedFileMapper,
-        ReviewFindingMapper reviewFindingMapper,
-        ReviewTimelineMapper reviewTimelineMapper,
-        GithubCommentPublicationMapper githubCommentPublicationMapper,
-        GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper,
-        GithubCommentPublicationBatchItemMapper githubCommentPublicationBatchItemMapper,
-        ReviewTaskArchiveSummaryMapper reviewTaskArchiveSummaryMapper,
+        DataRetentionCandidateQuery candidateQuery,
+        DataRetentionArchiveWriter archiveWriter,
+        DataRetentionDeleteExecutor deleteExecutor,
         SystemSettingsProvider systemSettingsProvider,
-        ReviewTaskStateMachine reviewTaskStateMachine,
         DataRetentionMetricsRecorder metricsRecorder,
         DataRetentionCleanupAuditRecorder auditRecorder,
         DataRetentionCleanupAuditQueryService auditQueryService,
         DataRetentionCleanupLeaseStore leaseStore,
         DataRetentionProperties dataRetentionProperties
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
-        this.changedFileMapper = changedFileMapper;
-        this.reviewFindingMapper = reviewFindingMapper;
-        this.reviewTimelineMapper = reviewTimelineMapper;
-        this.githubCommentPublicationMapper = githubCommentPublicationMapper;
-        this.githubCommentPublicationBatchMapper = githubCommentPublicationBatchMapper;
-        this.githubCommentPublicationBatchItemMapper = githubCommentPublicationBatchItemMapper;
-        this.reviewTaskArchiveSummaryMapper = Objects.requireNonNull(
-            reviewTaskArchiveSummaryMapper,
-            "reviewTaskArchiveSummaryMapper"
-        );
+        this.candidateQuery = Objects.requireNonNull(candidateQuery, "candidateQuery");
+        this.archiveWriter = Objects.requireNonNull(archiveWriter, "archiveWriter");
+        this.deleteExecutor = Objects.requireNonNull(deleteExecutor, "deleteExecutor");
         this.systemSettingsProvider = systemSettingsProvider;
-        this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
         this.auditQueryService = Objects.requireNonNull(auditQueryService, "auditQueryService");
@@ -125,8 +92,9 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         } finally {
-            leaseStore.release(lease);
-            cleanupLock.unlock();
+            if (!deferCleanupReleaseUntilTransactionCompletion(lease)) {
+                releaseCleanupResources(lease);
+            }
         }
     }
 
@@ -179,17 +147,12 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
         Long cleanupBatchId = auditRecorder.start(execute, retentionDays, maxTasks, backupReference, cutoff);
         try {
-            LambdaQueryWrapper<ReviewTask> candidateQuery = candidateTaskQuery(cutoff);
-            long candidateTasks = reviewTaskMapper.selectCount(candidateQuery);
-            List<Long> taskIds = reviewTaskMapper.selectList(candidateTaskQuery(cutoff)
-                    .orderByAsc(ReviewTask::getCreatedAt)
-                    .last("limit " + Math.max(1, maxTasks)))
-                .stream()
-                .map(ReviewTask::getId)
-                .toList();
+            DataRetentionCandidateQuery.CandidateSelection candidates = candidateQuery.select(cutoff, maxTasks);
+            long candidateTasks = candidates.candidateTasks();
+            List<Long> taskIds = candidates.taskIds();
 
             if (!execute || taskIds.isEmpty()) {
-                return completed(cleanupBatchId, response(
+                return completedAfterCommit(cleanupBatchId, execute, response(
                     false,
                     cleanupBatchId,
                     retentionDays,
@@ -208,30 +171,10 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 ));
             }
 
-            reviewTaskArchiveSummaryMapper.insertArchiveSummaries(cleanupBatchId, backupReference, taskIds);
-            int deletedBatchItems = githubCommentPublicationBatchItemMapper.delete(
-                new LambdaQueryWrapper<GithubCommentPublicationBatchItem>().in(GithubCommentPublicationBatchItem::getTaskId, taskIds)
-            );
-            int deletedPublications = githubCommentPublicationMapper.delete(
-                new LambdaQueryWrapper<GithubCommentPublication>().in(GithubCommentPublication::getTaskId, taskIds)
-            );
-            int deletedBatches = githubCommentPublicationBatchMapper.delete(
-                new LambdaQueryWrapper<GithubCommentPublicationBatch>().in(GithubCommentPublicationBatch::getTaskId, taskIds)
-            );
-            int deletedChangedFiles = changedFileMapper.delete(
-                new LambdaQueryWrapper<ChangedFile>().in(ChangedFile::getTaskId, taskIds)
-            );
-            int deletedTimelines = reviewTimelineMapper.delete(
-                new LambdaQueryWrapper<ReviewTimeline>().in(ReviewTimeline::getTaskId, taskIds)
-            );
-            int deletedFindings = reviewFindingMapper.delete(
-                new LambdaQueryWrapper<ReviewFinding>().in(ReviewFinding::getTaskId, taskIds)
-            );
-            int deletedTasks = reviewTaskMapper.delete(
-                new LambdaQueryWrapper<ReviewTask>().in(ReviewTask::getId, taskIds)
-            );
+            archiveWriter.write(cleanupBatchId, backupReference, taskIds);
+            DataRetentionDeleteExecutor.DeletionResult deletion = deleteExecutor.delete(taskIds);
 
-            return completed(cleanupBatchId, response(
+            return completedAfterCommit(cleanupBatchId, execute, response(
                 true,
                 cleanupBatchId,
                 retentionDays,
@@ -240,13 +183,13 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 cutoff,
                 candidateTasks,
                 taskIds.size(),
-                deletedBatchItems,
-                deletedPublications,
-                deletedBatches,
-                deletedChangedFiles,
-                deletedTimelines,
-                deletedFindings,
-                deletedTasks
+                deletion.deletedBatchItems(),
+                deletion.deletedPublications(),
+                deletion.deletedBatches(),
+                deletion.deletedChangedFiles(),
+                deletion.deletedTimelines(),
+                deletion.deletedFindings(),
+                deletion.deletedTasks()
             ));
         } catch (RuntimeException ex) {
             auditRecorder.fail(cleanupBatchId, ex);
@@ -328,12 +271,6 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         return value.trim();
     }
 
-    private LambdaQueryWrapper<ReviewTask> candidateTaskQuery(LocalDateTime cutoff) {
-        return new LambdaQueryWrapper<ReviewTask>()
-            .lt(ReviewTask::getCreatedAt, cutoff)
-            .in(ReviewTask::getStatus, reviewTaskStateMachine.dataRetentionCandidateStatuses());
-    }
-
     private DataRetentionCleanupResponse response(
         boolean executed,
         long cleanupBatchId,
@@ -375,8 +312,60 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         return response;
     }
 
-    private DataRetentionCleanupResponse completed(Long cleanupBatchId, DataRetentionCleanupResponse response) {
-        auditRecorder.complete(cleanupBatchId, response);
-        return recorded(response);
+    private DataRetentionCleanupResponse completedAfterCommit(
+        Long cleanupBatchId,
+        boolean execute,
+        DataRetentionCleanupResponse response
+    ) {
+        if (!transactionSynchronizationActive()) {
+            auditRecorder.complete(cleanupBatchId, response);
+            return recorded(response);
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                auditRecorder.complete(cleanupBatchId, response);
+                metricsRecorder.record(response);
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                IllegalStateException failure = new IllegalStateException(
+                    "Data retention cleanup transaction did not commit"
+                );
+                auditRecorder.fail(cleanupBatchId, failure);
+                metricsRecorder.recordFailure(execute, failure);
+            }
+        });
+        return response;
+    }
+
+    private boolean deferCleanupReleaseUntilTransactionCompletion(DataRetentionCleanupLeaseStore.Lease lease) {
+        if (lease == null || !transactionSynchronizationActive()) {
+            return false;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                releaseCleanupResources(lease);
+            }
+        });
+        return true;
+    }
+
+    private boolean transactionSynchronizationActive() {
+        return TransactionSynchronizationManager.isActualTransactionActive()
+            && TransactionSynchronizationManager.isSynchronizationActive();
+    }
+
+    private void releaseCleanupResources(DataRetentionCleanupLeaseStore.Lease lease) {
+        try {
+            leaseStore.release(lease);
+        } finally {
+            cleanupLock.unlock();
+        }
     }
 }

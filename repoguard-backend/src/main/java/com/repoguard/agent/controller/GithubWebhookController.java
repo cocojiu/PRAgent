@@ -11,6 +11,7 @@ import com.repoguard.agent.github.webhook.GithubWebhookProperties;
 import com.repoguard.agent.github.webhook.GithubWebhookRateLimiter;
 import com.repoguard.agent.github.webhook.GithubWebhookResponse;
 import com.repoguard.agent.github.webhook.GithubWebhookSignatureVerifier;
+import com.repoguard.agent.security.AllowAnonymous;
 import java.io.IOException;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,6 +61,7 @@ public class GithubWebhookController {
         this.rateLimiter = null;
     }
 
+    @AllowAnonymous
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<GithubWebhookResponse> receive(
         @RequestHeader(name = "X-GitHub-Event", required = false) String event,

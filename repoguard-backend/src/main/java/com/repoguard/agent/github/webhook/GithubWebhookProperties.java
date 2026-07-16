@@ -1,7 +1,7 @@
 package com.repoguard.agent.github.webhook;
 
+import com.repoguard.agent.config.RuntimeProfilePolicy;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.StringUtils;
@@ -109,19 +109,18 @@ public class GithubWebhookProperties {
         if (maxRequestsPerMinutePerIp <= 0 || maxRequestsPerMinutePerRepository <= 0) {
             throw new IllegalStateException("app.github.webhook rate limits must be positive");
         }
-        boolean productionProfile = Arrays.stream(activeProfiles)
-            .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
+        boolean productionProfile = RuntimeProfilePolicy.isProductionLike(activeProfiles);
         if (!productionProfile || !enabled) {
             return;
         }
         if (!requireSignature) {
-            throw new IllegalStateException("app.github.webhook.require-signature must be true in prod profile");
+            throw new IllegalStateException("app.github.webhook.require-signature must be true in a production-like profile");
         }
         if (!StringUtils.hasText(secret)) {
-            throw new IllegalStateException("app.github.webhook.secret must be configured in prod profile");
+            throw new IllegalStateException("app.github.webhook.secret must be configured in a production-like profile");
         }
         if (allowedRepositories.stream().noneMatch(StringUtils::hasText)) {
-            throw new IllegalStateException("app.github.webhook.allowed-repositories must not be empty in prod profile");
+            throw new IllegalStateException("app.github.webhook.allowed-repositories must not be empty in a production-like profile");
         }
     }
 }

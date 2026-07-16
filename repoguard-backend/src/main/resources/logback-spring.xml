@@ -2,10 +2,15 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
+    <conversionRule conversionWord="safeMsg"
+                    converterClass="com.repoguard.agent.common.SanitizingMessageConverter"/>
+    <conversionRule conversionWord="safeEx"
+                    converterClass="com.repoguard.agent.common.SanitizingThrowableConverter"/>
+
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="repoguard-backend"/>
     <property name="LOG_PATH" value="${REPOGUARD_LOG_PATH:-logs/backend}"/>
     <property name="LOG_PATTERN"
-              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId:-}] [taskId=%X{taskId:-}] [prNumber=%X{prNumber:-}] [repository=%X{repository:-}] %logger{36} - %msg%n"/>
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] [traceId=%X{traceId:-}] [errorId=%X{errorId:-}] [taskId=%X{taskId:-}] [prNumber=%X{prNumber:-}] [repository=%X{repository:-}] %logger{36} - %safeMsg%n%safeEx"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -14,22 +19,27 @@
         </encoder>
     </appender>
 
-    <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/${APP_NAME}.log</file>
-        <encoder>
-            <pattern>${LOG_PATTERN}</pattern>
-            <charset>UTF-8</charset>
-        </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
-            <maxFileSize>50MB</maxFileSize>
-            <maxHistory>14</maxHistory>
-            <totalSizeCap>2GB</totalSizeCap>
-        </rollingPolicy>
-    </appender>
-
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ROLLING_FILE"/>
     </root>
+
+    <springProfile name="(dev | local) &amp; !prod">
+        <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>${LOG_PATH}/${APP_NAME}.log</file>
+            <encoder>
+                <pattern>${LOG_PATTERN}</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>${LOG_PATH}/${APP_NAME}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+                <maxFileSize>50MB</maxFileSize>
+                <maxHistory>14</maxHistory>
+                <totalSizeCap>2GB</totalSizeCap>
+            </rollingPolicy>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="ROLLING_FILE"/>
+        </root>
+    </springProfile>
 </configuration>

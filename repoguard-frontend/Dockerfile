@@ -1,4 +1,4 @@
-FROM nginxinc/nginx-unprivileged:1.30.3-alpine3.23@sha256:b3f2436575bd5be7386518084d842dac414ab4962712afa31e99e0942a56e3b2
+FROM nginxinc/nginx-unprivileged:1.30.3-alpine-slim@sha256:3b24c4bfb2b9f60359b1475605ca1c8ed6e4963eb8369c6835be4d96bdb3ea81
 
 ARG OCI_VERSION
 ARG OCI_REVISION

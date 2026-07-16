@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
@@ -25,6 +26,12 @@ import org.springframework.util.StringUtils;
 
 @Service
 public class NotificationEventQueryServiceImpl implements NotificationEventQueryService {
+
+    private static final List<String> MANUAL_RETRYABLE_STATUSES = List.of(
+        NotificationEventStatus.PUBLISH_FAILED.code(),
+        NotificationEventStatus.DELIVERY_FAILED.code(),
+        NotificationEventStatus.DEAD.code()
+    );
 
     private final NotificationEventMapper eventMapper;
     private final NotificationDeliveryLogMapper deliveryLogMapper;
@@ -68,17 +75,44 @@ public class NotificationEventQueryServiceImpl implements NotificationEventQuery
     @Transactional
     public NotificationEventDto retryEvent(Long id) {
         NotificationEvent event = requireEvent(id);
-        event.setStatus(NotificationEventStatus.PENDING.code());
-        event.setRetryCount(0);
-        event.setNextRetryAt(LocalDateTime.now());
-        event.setLastError(null);
-        event.setUpdatedAt(LocalDateTime.now());
-        eventMapper.updateById(event);
+        ensureManualRetryAllowed(event);
+        LocalDateTime now = LocalDateTime.now();
+        int updated = eventMapper.update(
+            new UpdateWrapper<NotificationEvent>()
+                .eq("id", id)
+                .in("status", MANUAL_RETRYABLE_STATUSES)
+                .isNull("publish_claimed_at")
+                .set("status", NotificationEventStatus.PENDING.code())
+                .set("retry_count", 0)
+                .set("next_retry_at", now)
+                .set("last_error", null)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
+                .set("updated_at", now)
+        );
+        if (updated != 1) {
+            throw retryRejected(id);
+        }
         dispatchService.publishExistingEvent(event.getId());
         NotificationEvent refreshed = eventMapper.selectById(id);
         return responseAssembler.assembleEvent(
             refreshed,
             responseAssembler.summarizeDeliveries(loadDeliveries(refreshed == null ? null : refreshed.getId()))
+        );
+    }
+
+    private void ensureManualRetryAllowed(NotificationEvent event) {
+        if (!MANUAL_RETRYABLE_STATUSES.contains(event.getStatus()) || event.getPublishClaimedAt() != null) {
+            throw retryRejected(event.getId());
+        }
+    }
+
+    private BusinessException retryRejected(Long id) {
+        return new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "Notification event is not retryable or is already being processed: " + id
         );
     }
 

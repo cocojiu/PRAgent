@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;

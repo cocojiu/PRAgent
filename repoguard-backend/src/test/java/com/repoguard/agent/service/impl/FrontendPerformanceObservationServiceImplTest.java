@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 class FrontendPerformanceObservationServiceImplTest {
 
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
-    private final RepoGuardMetrics metrics = new RepoGuardMetrics(
+    private final RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
         meterRegistry,
         new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
     );
@@ -111,7 +111,7 @@ class FrontendPerformanceObservationServiceImplTest {
 
     @Test
     void recordsThresholdSignalsForSlowFrontendApiAndLongTask() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
+        RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             meterRegistry,
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );
@@ -154,7 +154,7 @@ class FrontendPerformanceObservationServiceImplTest {
 
     @Test
     void normalizesDynamicFrontendApiPathsBeforeRecordingMetricsAndThresholds() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
+        RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             meterRegistry,
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );
@@ -197,7 +197,7 @@ class FrontendPerformanceObservationServiceImplTest {
 
     @Test
     void appliesRouteSpecificFrontendPerformanceBudgets() {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
+        RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             meterRegistry,
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );

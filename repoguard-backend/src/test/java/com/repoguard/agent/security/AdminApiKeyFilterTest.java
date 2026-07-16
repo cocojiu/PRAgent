@@ -181,6 +181,15 @@ class AdminApiKeyFilterTest {
             .hasMessageContaining("admin-api-key.key");
     }
 
+    @Test
+    void stagingProfileRequiresConfiguredAdminKey() {
+        AdminApiKeyProperties properties = properties(" ");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"staging"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("admin-api-key.key");
+    }
+
     private AdminApiKeyProperties properties(String key) {
         AdminApiKeyProperties properties = new AdminApiKeyProperties();
         properties.setKey(key);

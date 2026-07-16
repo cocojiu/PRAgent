@@ -3,6 +3,16 @@ import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBu
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
 import type { AuthResponse, CurrentUser, LoginRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
+import {
+  isAuthResponse,
+  isCurrentUser,
+  isGithubIntegrationConfig,
+  isReviewPolicyConfig,
+  isReviewTaskSummary,
+  isServiceIntegrationConfig,
+  validateApiResponse,
+  type ApiResponseValidator
+} from "@/api/responseValidation";
 import type {
   ConnectionTestResult,
   ChartSlice,
@@ -70,12 +80,13 @@ type ApiOperation<Input, Response> = {
   response: Response;
 };
 
-type ApiEndpoint<Input> = {
+type ApiEndpoint<Input, Response> = {
   method?: HttpMethod;
   path: (input: Input) => string;
   query?: (input: Input) => QueryParams;
   body?: (input: Input) => unknown;
   observe?: boolean;
+  validateResponse?: ApiResponseValidator<Response>;
 };
 
 type NotificationPageInput = {
@@ -224,7 +235,10 @@ export type ApiContract = {
 };
 
 type ApiEndpointMap = {
-  [Operation in keyof ApiContract]: ApiEndpoint<ApiContract[Operation]["input"]>;
+  [Operation in keyof ApiContract]: ApiEndpoint<
+    ApiContract[Operation]["input"],
+    ApiContract[Operation]["response"]
+  >;
 };
 
 const idSegment = (value: number | string) => encodeURIComponent(String(value));
@@ -240,20 +254,24 @@ const apiEndpoints: ApiEndpointMap = {
   login: {
     method: "POST",
     path: () => "/api/v1/auth/login",
-    body: input => input
+    body: input => input,
+    validateResponse: isAuthResponse
   },
   register: {
     method: "POST",
     path: () => "/api/v1/auth/register",
-    body: input => input
+    body: input => input,
+    validateResponse: isAuthResponse
   },
   getCurrentUser: {
-    path: () => "/api/v1/auth/me"
+    path: () => "/api/v1/auth/me",
+    validateResponse: isCurrentUser
   },
   resetRefreshToken: {
     method: "POST",
     path: () => "/api/v1/auth/refresh-token/reset",
-    body: input => input
+    body: input => input,
+    validateResponse: isAuthResponse
   },
   logout: {
     method: "POST",
@@ -321,7 +339,8 @@ const apiEndpoints: ApiEndpointMap = {
     })
   },
   fetchReviewDetail: {
-    path: input => `/api/v1/reviews/${idSegment(input.id)}`
+    path: input => `/api/v1/reviews/${idSegment(input.id)}`,
+    validateResponse: isReviewTaskSummary
   },
   fetchReviewFindings: {
     path: input => `/api/v1/reviews/${idSegment(input.id)}/findings`,
@@ -394,36 +413,44 @@ const apiEndpoints: ApiEndpointMap = {
     body: input => input
   },
   fetchGithubIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/github"
+    path: () => "/api/v1/config/integrations/github",
+    validateResponse: isGithubIntegrationConfig
   },
   updateGithubIntegrationConfig: {
     method: "PUT",
     path: () => "/api/v1/config/integrations/github",
-    body: input => input
+    body: input => input,
+    validateResponse: isGithubIntegrationConfig
   },
   fetchMysqlIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/mysql"
+    path: () => "/api/v1/config/integrations/mysql",
+    validateResponse: isServiceIntegrationConfig
   },
   updateMysqlIntegrationConfig: {
     method: "PUT",
     path: () => "/api/v1/config/integrations/mysql",
-    body: input => input
+    body: input => input,
+    validateResponse: isServiceIntegrationConfig
   },
   fetchRabbitMqIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/rabbitmq"
+    path: () => "/api/v1/config/integrations/rabbitmq",
+    validateResponse: isServiceIntegrationConfig
   },
   updateRabbitMqIntegrationConfig: {
     method: "PUT",
     path: () => "/api/v1/config/integrations/rabbitmq",
-    body: input => input
+    body: input => input,
+    validateResponse: isServiceIntegrationConfig
   },
   fetchReviewPolicyConfig: {
-    path: () => "/api/v1/config/review-policy"
+    path: () => "/api/v1/config/review-policy",
+    validateResponse: isReviewPolicyConfig
   },
   updateReviewPolicyConfig: {
     method: "PUT",
     path: () => "/api/v1/config/review-policy",
-    body: input => input
+    body: input => input,
+    validateResponse: isReviewPolicyConfig
   },
   fetchSystemSettings: {
     path: () => "/api/v1/config/system-settings"
@@ -572,7 +599,10 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   operation: Operation,
   input: ApiContract[Operation]["input"]
 ): Promise<ApiContract[Operation]["response"]> => {
-  const endpoint = apiEndpoints[operation] as ApiEndpoint<ApiContract[Operation]["input"]>;
+  const endpoint = apiEndpoints[operation] as ApiEndpoint<
+    ApiContract[Operation]["input"],
+    ApiContract[Operation]["response"]
+  >;
   const options: RequestInit = {};
   const method = endpoint.method ?? "GET";
   const path = endpoint.path(input);
@@ -587,11 +617,12 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
   }
   const startedAtMs = currentTimeMs();
   try {
-    const response = await requestWithMeta<ApiContract[Operation]["response"]>(
+    const response = await requestWithMeta<unknown>(
       path,
       endpoint.query?.(input),
       options
     );
+    const data = validateApiResponse(String(operation), response.data, endpoint.validateResponse, response.status);
     if (shouldObserve) {
       observeFrontendApiRequest({
         operation: String(operation),
@@ -605,7 +636,7 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
         durationMs: currentTimeMs() - startedAtMs
       });
     }
-    return response.data;
+    return data;
   } catch (error) {
     if (shouldObserve) {
       observeFrontendApiRequest({

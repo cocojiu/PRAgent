@@ -24,6 +24,8 @@ class NotificationPublishEventStateUpdater {
                 .set("last_error", null)
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
     }
@@ -39,6 +41,8 @@ class NotificationPublishEventStateUpdater {
                 .set("last_error", decision.lastError())
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
     }

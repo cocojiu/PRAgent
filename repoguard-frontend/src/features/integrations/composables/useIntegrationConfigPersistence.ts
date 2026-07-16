@@ -9,6 +9,10 @@ import type {
   ServiceIntegrationConfigRequest
 } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import {
+  integrationConfigLabels,
+  integrationConfigMessages
+} from "@/utils/userMessages";
 
 type IntegrationConfigRequestActions = {
   fetchGithubIntegrationConfig: () => Promise<GithubIntegrationConfig>;
@@ -46,6 +50,7 @@ export const useIntegrationConfigPersistence = ({
   requests
 }: UseIntegrationConfigPersistenceOptions) => {
   const loading = ref(false);
+  const loadErrorMessage = ref("");
   const saving = ref(false);
   const githubConfig = ref<GithubIntegrationConfig>();
   const mysqlConfig = ref<ServiceIntegrationConfig>();
@@ -68,18 +73,51 @@ export const useIntegrationConfigPersistence = ({
     applyReviewPolicyConfig(reviewPolicy);
   };
 
+  const loadConfigResults = async () => {
+    const results = await Promise.allSettled([
+      requests.fetchGithubIntegrationConfig(),
+      requests.fetchMysqlIntegrationConfig(),
+      requests.fetchRabbitMqIntegrationConfig(),
+      requests.fetchReviewPolicyConfig()
+    ] as const);
+    const failed: string[] = [];
+
+    if (results[0].status === "fulfilled") {
+      githubConfig.value = results[0].value;
+      applyGithubConfig(results[0].value);
+    } else {
+      failed.push(integrationConfigLabels[0]);
+    }
+    if (results[1].status === "fulfilled") {
+      mysqlConfig.value = results[1].value;
+      applyServiceConfig("mysql", results[1].value);
+    } else {
+      failed.push(integrationConfigLabels[1]);
+    }
+    if (results[2].status === "fulfilled") {
+      rabbitMqConfig.value = results[2].value;
+      applyServiceConfig("rabbitmq", results[2].value);
+    } else {
+      failed.push(integrationConfigLabels[2]);
+    }
+    if (results[3].status === "fulfilled") {
+      reviewPolicyConfig.value = results[3].value;
+      applyReviewPolicyConfig(results[3].value);
+    } else {
+      failed.push(integrationConfigLabels[3]);
+    }
+
+    return failed;
+  };
+
   const loadConfig = async () => {
     loading.value = true;
+    loadErrorMessage.value = "";
     try {
-      const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
-        requests.fetchGithubIntegrationConfig(),
-        requests.fetchMysqlIntegrationConfig(),
-        requests.fetchRabbitMqIntegrationConfig(),
-        requests.fetchReviewPolicyConfig()
-      ]);
-      applyLoadedConfigs(github, mysql, rabbitMq, reviewPolicy);
-    } catch (error) {
-      ElMessage.warning(getErrorMessage(error, "Config load failed, using local defaults"));
+      const failed = await loadConfigResults();
+      if (failed.length > 0) {
+        loadErrorMessage.value = integrationConfigMessages.loadFailed(failed);
+      }
     } finally {
       loading.value = false;
     }
@@ -91,16 +129,40 @@ export const useIntegrationConfigPersistence = ({
     }
     saving.value = true;
     try {
-      const [github, mysql, rabbitMq, reviewPolicy] = await Promise.all([
+      const results = await Promise.allSettled([
         requests.updateGithubIntegrationConfig(payloads.githubPayload()),
         requests.updateMysqlIntegrationConfig(payloads.mysqlPayload()),
         requests.updateRabbitMqIntegrationConfig(payloads.rabbitMqPayload()),
         requests.updateReviewPolicyConfig(payloads.springAiPayload())
-      ]);
-      applyLoadedConfigs(github, mysql, rabbitMq, reviewPolicy);
-      ElMessage.success("Config saved");
-    } catch (error) {
-      ElMessage.error(getErrorMessage(error, "Config save failed"));
+      ] as const);
+      const succeeded = results
+        .map((result, index) => (result.status === "fulfilled" ? integrationConfigLabels[index] : undefined))
+        .filter((label): label is (typeof integrationConfigLabels)[number] => Boolean(label));
+      const failed = results
+        .map((result, index) =>
+          result.status === "rejected"
+            ? `${integrationConfigLabels[index]}（${getErrorMessage(result.reason)}）`
+            : undefined
+        )
+        .filter((label): label is string => Boolean(label));
+
+      if (
+        results[0].status === "fulfilled"
+        && results[1].status === "fulfilled"
+        && results[2].status === "fulfilled"
+        && results[3].status === "fulfilled"
+      ) {
+        applyLoadedConfigs(results[0].value, results[1].value, results[2].value, results[3].value);
+        loadErrorMessage.value = "";
+        ElMessage.success(integrationConfigMessages.saveSucceeded(succeeded));
+        return;
+      }
+
+      const syncFailed = await loadConfigResults();
+      loadErrorMessage.value = syncFailed.length > 0
+        ? integrationConfigMessages.loadFailed(syncFailed)
+        : "";
+      ElMessage.error(integrationConfigMessages.savePartiallyFailed({ failed, succeeded, syncFailed }));
     } finally {
       saving.value = false;
     }
@@ -108,6 +170,7 @@ export const useIntegrationConfigPersistence = ({
 
   return {
     githubConfig,
+    loadErrorMessage,
     loading,
     mysqlConfig,
     rabbitMqConfig,

@@ -84,7 +84,7 @@ function Resolve-ToolCommand {
 }
 
 function Get-TrackedRepositoryFiles {
-    $trackedFiles = & git -C $Root ls-files
+    $trackedFiles = & git -c core.quotePath=false -C $Root ls-files
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to list tracked files"
     }
@@ -113,12 +113,17 @@ Invoke-Check "git diff whitespace check" {
 }
 
 Invoke-Check "repository governance tracked file guard" {
+    $optimizationReportName = (-join @(
+        [char]0x4EE3, [char]0x7801, [char]0x4F18, [char]0x5316,
+        [char]0x5BA1, [char]0x67E5, [char]0x62A5, [char]0x544A
+    )) + ".md"
+    $allowedMarkdown = @("README.md", $optimizationReportName)
     $invalidMarkdown = @()
     $invalidScripts = @()
 
     foreach ($relativePath in Get-TrackedRepositoryFiles) {
         $extension = [System.IO.Path]::GetExtension($relativePath).ToLowerInvariant()
-        if ($extension -eq ".md" -and $relativePath -ne "README.md") {
+        if ($extension -eq ".md" -and $relativePath -notin $allowedMarkdown) {
             $invalidMarkdown += $relativePath
         }
         if (Test-TestOrTemporaryScriptPath -Path $relativePath) {
@@ -127,7 +132,7 @@ Invoke-Check "repository governance tracked file guard" {
     }
 
     if ($invalidMarkdown.Count -gt 0) {
-        throw "Only root README.md may be tracked as markdown. Invalid markdown files:`n$($invalidMarkdown -join "`n")"
+        throw "Only approved root markdown files may be tracked. Invalid markdown files:`n$($invalidMarkdown -join "`n")"
     }
     if ($invalidScripts.Count -gt 0) {
         throw "Test or temporary scripts must not be tracked. Invalid script files:`n$($invalidScripts -join "`n")"

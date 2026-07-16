@@ -19,30 +19,27 @@ public class NotificationDeliveryWorker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryWorker.class);
 
-    private final NotificationDeliverableEventQuery deliverableEventQuery;
+    private final NotificationDeliveryClaimService deliveryClaimService;
     private final NotificationEventPayloadParser payloadParser;
     private final NotificationBindingBatchDeliveryService bindingBatchDeliveryService;
     private final NotificationDeliveryCompletionService deliveryCompletionService;
-    private final NotificationDeliveryEventStateUpdater eventStateUpdater;
     private final NotificationDeliveryWorkerMetricsRecorder metricsRecorder;
     private final NotificationDeliveryFailureClassifier failureClassifier;
     private final NotificationDeliveryLogContextFormatter logContextFormatter;
 
     public NotificationDeliveryWorker(
-        NotificationDeliverableEventQuery deliverableEventQuery,
+        NotificationDeliveryClaimService deliveryClaimService,
         NotificationEventPayloadParser payloadParser,
         NotificationBindingBatchDeliveryService bindingBatchDeliveryService,
         NotificationDeliveryCompletionService deliveryCompletionService,
-        NotificationDeliveryEventStateUpdater eventStateUpdater,
         NotificationDeliveryWorkerMetricsRecorder metricsRecorder,
         NotificationDeliveryFailureClassifier failureClassifier,
         NotificationDeliveryLogContextFormatter logContextFormatter
     ) {
-        this.deliverableEventQuery = deliverableEventQuery;
+        this.deliveryClaimService = deliveryClaimService;
         this.payloadParser = payloadParser;
         this.bindingBatchDeliveryService = bindingBatchDeliveryService;
         this.deliveryCompletionService = deliveryCompletionService;
-        this.eventStateUpdater = eventStateUpdater;
         this.metricsRecorder = metricsRecorder;
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
         this.logContextFormatter = Objects.requireNonNull(logContextFormatter, "logContextFormatter");
@@ -98,14 +95,12 @@ public class NotificationDeliveryWorker {
     }
 
     void deliver(Long eventId) {
-        Optional<NotificationEvent> deliverableEvent = deliverableEventQuery.load(eventId);
+        Optional<NotificationEvent> deliverableEvent = deliveryClaimService.claim(eventId);
         if (deliverableEvent.isEmpty()) {
             return;
         }
         NotificationEvent event = deliverableEvent.get();
         NotificationMessage message = payloadParser.parse(event);
-        eventStateUpdater.markDelivering(event);
-
         NotificationDeliveryResultSummary resultSummary = bindingBatchDeliveryService.deliver(event, message);
         deliveryCompletionService.complete(event, resultSummary);
     }

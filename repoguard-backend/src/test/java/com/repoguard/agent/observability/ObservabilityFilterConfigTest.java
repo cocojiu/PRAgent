@@ -11,7 +11,7 @@ class ObservabilityFilterConfigTest {
     @Test
     void traceFilterRunsBeforeApiObservationAndSecurityFilters() {
         var traceRegistration = new TraceIdFilterConfig().traceIdFilterRegistration();
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
+        RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             new SimpleMeterRegistry(),
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );

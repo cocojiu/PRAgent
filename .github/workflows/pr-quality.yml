@@ -19,18 +19,30 @@ jobs:
     name: Backend unit and contract tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
           java-version: '25'
           cache: maven
       - name: Run backend tests
         working-directory: repoguard-backend
-        run: mvn -B test
+        run: mvn -B verify
+      - name: Scan backend libraries for high and critical CVEs
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: repoguard-backend/target
+          scanners: vuln
+          format: table
+          exit-code: '1'
+          ignore-unfixed: false
+          trivyignores: .trivyignore.yaml
+          vuln-type: library
+          severity: HIGH,CRITICAL
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: backend-jacoco
           path: repoguard-backend/target/site/jacoco
@@ -40,8 +52,8 @@ jobs:
     name: Frontend typecheck lint test build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: npm
@@ -98,8 +110,8 @@ jobs:
       REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
       REPOGUARD_ADMIN_API_KEY: Integration-Admin-Key-2026!abc123XYZ
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
           distribution: temurin
           java-version: '25'
@@ -112,7 +124,7 @@ jobs:
     name: Dependency review
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high

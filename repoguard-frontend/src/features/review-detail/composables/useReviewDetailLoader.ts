@@ -3,6 +3,7 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { fetchReviewDetail, fetchReviewStatus } from "@/api/reviews";
 import type { ReviewStatus, ReviewTaskDetail } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
+import { commonUserMessages, reviewDetailMessages } from "@/utils/userMessages";
 import { applyReviewStatusSnapshot, normalizeReviewTaskDetail } from "../reviewDetailTaskMappers";
 
 type LoadDetailOptions = { silent?: boolean; resetPublishResult?: boolean; force?: boolean };
@@ -43,6 +44,10 @@ export const useReviewDetailLoader = ({
   const pollFailureCount = ref(0);
   const lastRefreshedAt = ref("");
   const selectedTask = ref<ReviewTaskDetail | null>(null);
+  let requestSequence = 0;
+
+  const beginRequest = () => ++requestSequence;
+  const isLatestRequest = (sequence: number) => sequence === requestSequence;
 
   const clearNonTerminalGithubCommentData = (status: ReviewStatus | string) => {
     if (isTerminalReviewStatus(status)) {
@@ -54,13 +59,16 @@ export const useReviewDetailLoader = ({
   const loadDetail = async (options: LoadDetailOptions = {}) => {
     const id = getTaskId();
     if (!Number.isFinite(id)) {
-      ElMessage.error("审查任务 ID 无效");
+      requestSequence += 1;
+      ElMessage.error(reviewDetailMessages.invalidTaskId);
       return;
     }
 
     if (options.silent && silentRefreshing.value && !options.force) {
       return;
     }
+
+    const sequence = beginRequest();
 
     if (options.silent) {
       silentRefreshing.value = true;
@@ -73,6 +81,9 @@ export const useReviewDetailLoader = ({
     }
     try {
       const task = normalizeReviewTaskDetail(await fetchReviewDetail(id));
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       selectedTask.value = task;
       afterDetailLoaded?.(task);
       pollErrorMessage.value = "";
@@ -81,25 +92,28 @@ export const useReviewDetailLoader = ({
       clearNonTerminalGithubCommentData(task.status);
       syncPolling();
     } catch (error) {
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       if (!options.silent) {
         selectedTask.value = null;
       }
-      errorMessage.value = getErrorMessage(error, "请求失败");
-      if (!options.silent) {
-        ElMessage.error(errorMessage.value);
-      } else {
+      errorMessage.value = getErrorMessage(error, commonUserMessages.requestFailed);
+      if (options.silent) {
         pollFailureCount.value += 1;
         if (pollFailureCount.value >= maxPollFailures) {
           stopPolling();
-          pollErrorMessage.value = `自动刷新连续失败 ${maxPollFailures} 次，已暂停。请手动刷新。`;
+          pollErrorMessage.value = reviewDetailMessages.pollingPaused(maxPollFailures);
         } else {
-          pollErrorMessage.value = `自动刷新失败：${errorMessage.value}`;
+          pollErrorMessage.value = reviewDetailMessages.pollFailed(errorMessage.value);
           syncPolling();
         }
       }
     } finally {
-      loading.value = false;
-      silentRefreshing.value = false;
+      if (isLatestRequest(sequence)) {
+        loading.value = false;
+        silentRefreshing.value = false;
+      }
     }
   };
 
@@ -112,9 +126,13 @@ export const useReviewDetailLoader = ({
       return;
     }
 
+    const sequence = beginRequest();
     silentRefreshing.value = true;
     try {
       const status = await fetchReviewStatus(id);
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       if (selectedTask.value) {
         selectedTask.value = applyReviewStatusSnapshot(selectedTask.value, status);
       }
@@ -127,18 +145,29 @@ export const useReviewDetailLoader = ({
       }
       syncPolling();
     } catch (error) {
+      if (!isLatestRequest(sequence)) {
+        return;
+      }
       pollFailureCount.value += 1;
-      const message = getErrorMessage(error, "请求失败");
+      const message = getErrorMessage(error, commonUserMessages.requestFailed);
       if (pollFailureCount.value >= maxPollFailures) {
         stopPolling();
-        pollErrorMessage.value = `Automatic refresh failed ${maxPollFailures} times and has paused. Please refresh manually.`;
+        pollErrorMessage.value = reviewDetailMessages.pollingPaused(maxPollFailures);
       } else {
-        pollErrorMessage.value = `Automatic refresh failed: ${message}`;
+        pollErrorMessage.value = reviewDetailMessages.pollFailed(message);
         syncPolling();
       }
     } finally {
-      silentRefreshing.value = false;
+      if (isLatestRequest(sequence)) {
+        silentRefreshing.value = false;
+      }
     }
+  };
+
+  const cancelPendingRequests = () => {
+    requestSequence += 1;
+    loading.value = false;
+    silentRefreshing.value = false;
   };
 
   const refreshDetail = () => {
@@ -155,6 +184,7 @@ export const useReviewDetailLoader = ({
     pollFailureCount,
     selectedTask,
     silentRefreshing,
+    cancelPendingRequests,
     loadDetail,
     pollReviewStatus,
     refreshDetail

@@ -24,37 +24,67 @@ class NotificationDeliveryEventStateUpdater {
         this.clock = clock;
     }
 
-    void markDelivering(NotificationEvent event) {
-        eventMapper.update(
+    boolean claimForDelivery(NotificationEvent event, NotificationDeliveryClaim claim) {
+        int updated = eventMapper.update(
             new UpdateWrapper<NotificationEvent>()
                 .eq("id", event.getId())
-                .ne("status", NotificationEventStatus.DELIVERED.code())
+                .eq("status", NotificationEventStatus.PUBLISHED.code())
+                .isNull("delivery_claimed_at")
                 .set("status", NotificationEventStatus.DELIVERING.code())
-                .set("updated_at", now())
+                .set("delivery_claimed_at", claim.claimedAt())
+                .set("delivery_claimed_by", claim.claimedBy())
+                .set("updated_at", claim.claimedAt())
         );
+        return updated == 1;
     }
 
-    void markFailed(NotificationEvent event, NotificationDeliveryFailureDecision decision) {
-        eventMapper.update(
-            new UpdateWrapper<NotificationEvent>()
-                .eq("id", event.getId())
+    boolean markFailed(NotificationEvent event, NotificationDeliveryFailureDecision decision) {
+        int updated = eventMapper.update(
+            ownedDelivery(event)
                 .set("status", decision.status())
                 .set("retry_count", decision.retryCount())
                 .set("next_retry_at", decision.nextRetryAt())
                 .set("last_error", decision.lastError())
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
                 .set("updated_at", now())
         );
+        return updated == 1;
     }
 
-    void markDelivered(NotificationEvent event) {
-        eventMapper.update(
-            new UpdateWrapper<NotificationEvent>()
-                .eq("id", event.getId())
+    boolean markDelivered(NotificationEvent event) {
+        int updated = eventMapper.update(
+            ownedDelivery(event)
                 .set("status", NotificationEventStatus.DELIVERED.code())
                 .set("next_retry_at", null)
                 .set("last_error", null)
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
                 .set("updated_at", now())
         );
+        return updated == 1;
+    }
+
+    boolean recoverExpired(NotificationEvent event, NotificationDeliveryFailureDecision decision) {
+        int updated = eventMapper.update(
+            ownedDelivery(event)
+                .set("status", decision.status())
+                .set("retry_count", decision.retryCount())
+                .set("next_retry_at", decision.nextRetryAt())
+                .set("last_error", "Notification delivery claim expired")
+                .set("delivery_claimed_at", null)
+                .set("delivery_claimed_by", null)
+                .set("updated_at", now())
+        );
+        return updated == 1;
+    }
+
+    private UpdateWrapper<NotificationEvent> ownedDelivery(NotificationEvent event) {
+        return new UpdateWrapper<NotificationEvent>()
+            .eq("id", event.getId())
+            .eq("status", NotificationEventStatus.DELIVERING.code())
+            .eq("delivery_claimed_at", event.getDeliveryClaimedAt())
+            .eq("delivery_claimed_by", event.getDeliveryClaimedBy());
     }
 
     private LocalDateTime now() {

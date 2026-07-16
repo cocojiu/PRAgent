@@ -8,16 +8,14 @@ server:
 spring:
   application:
     name: repoguard-backend
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:dev,local}
   jackson:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
   rabbitmq:
-    host: ${SPRING_RABBITMQ_HOST:localhost}
+    host: ${SPRING_RABBITMQ_HOST}
     port: ${SPRING_RABBITMQ_PORT:5672}
-    username: ${SPRING_RABBITMQ_USERNAME:repoguard}
-    password: ${SPRING_RABBITMQ_PASSWORD:repoguard}
+    username: ${SPRING_RABBITMQ_USERNAME}
+    password: ${SPRING_RABBITMQ_PASSWORD}
     connection-timeout: ${SPRING_RABBITMQ_CONNECTION_TIMEOUT:3s}
     requested-heartbeat: ${SPRING_RABBITMQ_REQUESTED_HEARTBEAT:30s}
     publisher-confirm-type: correlated
@@ -162,14 +160,14 @@ repoguard:
         "[/api/v1/users]": ${REPOGUARD_OBSERVABILITY_USERS_RESPONSE_BYTES:65536}
         "[/api/v1/users/audits]": ${REPOGUARD_OBSERVABILITY_USER_AUDITS_RESPONSE_BYTES:65536}
   security:
-    encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
-    encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
+    encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
+    encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
   auth:
-    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:changeme-local-dev}
+    token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET}
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
-    registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}
+    registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}
     public-auth-requests-per-minute-per-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP:30}
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
 
@@ -215,8 +213,7 @@ app:
       allowed-repositories: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES:}
       allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:PRAgent-test}
   cors:
-    allowed-origins:
-      - http://localhost:5173
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
   external-call:
     resilience:
       github:
@@ -277,3 +274,6 @@ app:
       publish-compensation-batch-size: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_BATCH_SIZE:20}
       publish-compensation-interval-ms: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
       worker-concurrency: ${REPOGUARD_NOTIFICATION_WORKER_CONCURRENCY:1}
+      delivery-claim-lease-ms: ${REPOGUARD_NOTIFICATION_DELIVERY_CLAIM_LEASE_MS:300000}
+      delivery-recovery-interval-ms: ${REPOGUARD_NOTIFICATION_DELIVERY_RECOVERY_INTERVAL_MS:60000}
+      delivery-recovery-batch-size: ${REPOGUARD_NOTIFICATION_DELIVERY_RECOVERY_BATCH_SIZE:20}

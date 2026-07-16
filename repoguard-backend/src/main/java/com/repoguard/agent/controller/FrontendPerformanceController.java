@@ -3,6 +3,7 @@ package com.repoguard.agent.controller;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.FrontendPerformanceReportRequest;
+import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.FrontendPerformanceObservationService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,6 +22,7 @@ public class FrontendPerformanceController {
         this.observationService = observationService;
     }
 
+    @RequireRole({"ADMIN", "VIEWER"})
     @PostMapping("/performance")
     public ApiResponse<Void> recordPerformance(@Valid @RequestBody FrontendPerformanceReportRequest request) {
         observationService.record(request);

@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.concurrency.AsyncExecutorProperties;
 import com.repoguard.agent.concurrency.BoundedExecutorFactory;

@@ -8,7 +8,6 @@ final class AdminApiKeyAccessPolicy {
     private static final String ANY_METHOD = "*";
 
     private static final List<ProtectedEndpoint> PROTECTED_ENDPOINTS = List.of(
-        new ProtectedEndpoint(ANY_METHOD, "/api/v1/config", "Configuration read and write APIs"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/config/**", "Configuration read and write APIs"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/message-queue/**", "Message queue operations"),
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/notification-events", "Notification event operations"),

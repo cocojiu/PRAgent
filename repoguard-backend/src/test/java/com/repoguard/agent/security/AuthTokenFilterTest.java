@@ -39,6 +39,17 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void authEndpointWithUnmappedMethodStillRequiresToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/login");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
     void authMeEndpointRequiresToken() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
         MockHttpServletResponse response = new MockHttpServletResponse();

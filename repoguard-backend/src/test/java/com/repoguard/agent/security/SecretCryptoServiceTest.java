@@ -12,6 +12,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 
 class SecretCryptoServiceTest {
 
@@ -51,6 +52,16 @@ class SecretCryptoServiceTest {
     @Test
     void productionProfileRejectsDefaultDevelopmentKey() {
         assertThatThrownBy(() -> new SecretCryptoService("repoguard-local-dev-encryption-key", "primary", true))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Default encryption key is not allowed");
+    }
+
+    @Test
+    void stagingProfileRejectsDefaultDevelopmentKey() {
+        MockEnvironment environment = new MockEnvironment();
+        environment.setActiveProfiles("staging");
+
+        assertThatThrownBy(() -> new SecretCryptoService("repoguard-local-dev-encryption-key", "primary", environment))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Default encryption key is not allowed");
     }

@@ -11,9 +11,10 @@ import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
+import com.repoguard.agent.security.AllowAnonymous;
+import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
-import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
@@ -59,6 +60,7 @@ public class AuthController {
         this.attemptLimiter = null;
     }
 
+    @AllowAnonymous
     @PostMapping("/register")
     public ApiResponse<AuthResponse> register(
         @Valid @RequestBody AuthRegisterRequest request,
@@ -70,6 +72,7 @@ public class AuthController {
         return authResponse(response, httpRequest, httpResponse);
     }
 
+    @AllowAnonymous
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(
         @Valid @RequestBody AuthLoginRequest request,
@@ -90,6 +93,7 @@ public class AuthController {
         return ApiResponse.ok(authService.currentUser(user.id()));
     }
 
+    @AllowAnonymous
     @PostMapping("/refresh")
     public ApiResponse<AuthResponse> refresh(
         @Valid @RequestBody(required = false) AuthRefreshRequest request,
@@ -109,6 +113,7 @@ public class AuthController {
         }
     }
 
+    @AllowAnonymous
     @PostMapping("/refresh-token/reset")
     public ApiResponse<AuthResponse> resetRefreshToken(
         @Valid @RequestBody AuthRefreshTokenResetRequest request,
@@ -120,6 +125,7 @@ public class AuthController {
         return authResponse(response, httpRequest, httpResponse);
     }
 
+    @AllowAnonymous
     @PostMapping("/logout")
     public ApiResponse<Void> logout(
         @Valid @RequestBody(required = false) AuthLogoutRequest request,

@@ -20,7 +20,8 @@ class ConnectionProbeErrorMessageTest {
         );
 
         assertThat(ConnectionProbeErrorMessage.concise(failure))
-            .isEqualTo("jdbc:mysql://user:****@internal/repoguard password=**** token=**** Bearer ****");
+            .isEqualTo("jdbc:**** password=**** token=**** Bearer ****")
+            .doesNotContain("internal", "raw-password", "secret", "raw-token", "abc.def");
     }
 
     @Test

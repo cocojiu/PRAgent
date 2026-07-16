@@ -139,7 +139,19 @@ describe("apiRequest", () => {
   });
 
   it("keeps operational cache, data retention, and refresh reset endpoint contracts", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    const responseData = [
+      {},
+      {},
+      {},
+      {
+        accessToken: "test-access-token-value",
+        tokenType: "Bearer",
+        accessTokenExpiresInSeconds: 900,
+        refreshTokenExpiresInSeconds: 604800,
+        user: { id: 1, username: "admin", email: "admin@example.com", role: "ADMIN" }
+      }
+    ];
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse(responseData.shift() ?? {})));
     vi.stubGlobal("fetch", fetchMock);
 
     await apiRequest("fetchCacheStats", undefined);
@@ -393,8 +405,67 @@ describe("apiRequest", () => {
     }));
   });
 
+  it("rejects malformed critical responses and reports the contract failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(okResponse({ accessToken: "incomplete" })));
+
+    await expect(apiRequest("login", {
+      account: "admin",
+      password: "secret",
+      remember: false
+    })).rejects.toMatchObject({
+      code: "INVALID_API_RESPONSE",
+      status: 200
+    });
+    expect(frontendPerformance.observeFrontendApiRequest).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "login",
+      result: "failed",
+      status: 200
+    }));
+  });
+
   it("keeps system integration and review rule endpoint contracts", async () => {
-    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    const integrationResponse = { provider: "integration", status: "configured", baseUrl: "https://example.com" };
+    const responseData = [
+      integrationResponse,
+      integrationResponse,
+      integrationResponse,
+      integrationResponse,
+      integrationResponse,
+      integrationResponse,
+      {
+        llmEnabled: true,
+        llmProvider: "openai",
+        modelName: "gpt-4.1",
+        timeoutSeconds: 120,
+        temperature: 0.2,
+        maxTokens: 4096,
+        fallbackToRules: true,
+        workerConcurrency: 2,
+        chunkFileThreshold: 20,
+        chunkLineThreshold: 800,
+        chunkMaxFiles: 10,
+        chunkMaxLines: 1200,
+        inputTokenPricePerMillion: 2,
+        outputTokenPricePerMillion: 8
+      },
+      {
+        llmEnabled: true,
+        llmProvider: "openai",
+        modelName: "gpt-4.1",
+        timeoutSeconds: 120,
+        temperature: 0.2,
+        maxTokens: 4096,
+        fallbackToRules: true,
+        workerConcurrency: 2,
+        chunkFileThreshold: 20,
+        chunkLineThreshold: 800,
+        chunkMaxFiles: 10,
+        chunkMaxLines: 1200,
+        inputTokenPricePerMillion: 2,
+        outputTokenPricePerMillion: 8
+      }
+    ];
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse(responseData.shift() ?? {})));
     vi.stubGlobal("fetch", fetchMock);
 
     await apiRequest("fetchGithubIntegrationConfig", undefined);

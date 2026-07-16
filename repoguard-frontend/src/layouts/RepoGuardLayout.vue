@@ -6,12 +6,25 @@
         <strong v-if="!collapsed">RepoGuard Agent</strong>
       </div>
       <nav class="nav-list">
-        <RouterLink v-for="item in visibleNavItems" :key="item.path" class="nav-item" :to="item.path">
+        <RouterLink
+          v-for="item in visibleNavItems"
+          :key="item.path"
+          class="nav-item"
+          :to="item.path"
+          :aria-label="collapsed ? item.label : undefined"
+          :title="collapsed ? item.label : undefined"
+        >
           <component :is="item.icon" :size="20" />
           <span v-if="!collapsed">{{ item.label }}</span>
         </RouterLink>
       </nav>
-      <button class="collapse-btn" @click="collapsed = !collapsed">
+      <button
+        class="collapse-btn"
+        type="button"
+        :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
+        :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
+        @click="collapsed = !collapsed"
+      >
         <PanelLeftClose :size="18" />
         <span v-if="!collapsed">收起菜单</span>
       </button>
@@ -19,7 +32,13 @@
     </aside>
     <main class="rg-main">
       <header class="rg-topbar">
-        <button class="icon-button" @click="collapsed = !collapsed">
+        <button
+          class="icon-button"
+          type="button"
+          :aria-label="collapsed ? '展开侧边栏' : '收起侧边栏'"
+          :title="collapsed ? '展开侧边栏' : '收起侧边栏'"
+          @click="collapsed = !collapsed"
+        >
           <Menu :size="22" />
         </button>
         <div class="top-title">{{ currentTitle }}</div>

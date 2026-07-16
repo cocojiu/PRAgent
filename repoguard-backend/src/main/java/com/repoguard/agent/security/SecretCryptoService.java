@@ -1,5 +1,6 @@
 package com.repoguard.agent.security;
 
+import com.repoguard.agent.config.RuntimeProfilePolicy;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -11,7 +12,6 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -32,11 +32,15 @@ public class SecretCryptoService {
 
     @Autowired
     public SecretCryptoService(
-        @Value("${repoguard.security.encryption-key:" + DEFAULT_ENCRYPTION_KEY + "}") String encryptionKey,
-        @Value("${repoguard.security.encryption-key-id:" + DEFAULT_KEY_ID + "}") String activeKeyId,
+        @Value("${repoguard.security.encryption-key}") String encryptionKey,
+        @Value("${repoguard.security.encryption-key-id}") String activeKeyId,
         Environment environment
     ) {
-        this(encryptionKey, activeKeyId, environment != null && environment.acceptsProfiles(Profiles.of("prod")));
+        this(
+            encryptionKey,
+            activeKeyId,
+            environment != null && RuntimeProfilePolicy.isProductionLike(environment.getActiveProfiles())
+        );
     }
 
     public SecretCryptoService(String encryptionKey) {
@@ -155,16 +159,16 @@ public class SecretCryptoService {
             return;
         }
         if (!StringUtils.hasText(encryptionKey)) {
-            throw new IllegalStateException("repoguard.security.encryption-key must be configured in prod profile");
+            throw new IllegalStateException("repoguard.security.encryption-key must be configured in a production-like profile");
         }
         if (DEFAULT_ENCRYPTION_KEY.equals(encryptionKey.trim())) {
-            throw new IllegalStateException("Default encryption key is not allowed in prod profile");
+            throw new IllegalStateException("Default encryption key is not allowed in a production-like profile");
         }
         if (encryptionKey.trim().length() < PROD_MIN_KEY_LENGTH) {
-            throw new IllegalStateException("repoguard.security.encryption-key must be at least 32 characters in prod profile");
+            throw new IllegalStateException("repoguard.security.encryption-key must be at least 32 characters in a production-like profile");
         }
         if (!hasEnterpriseComplexity(encryptionKey.trim())) {
-            throw new IllegalStateException("repoguard.security.encryption-key must include letters, digits, and symbols in prod profile");
+            throw new IllegalStateException("repoguard.security.encryption-key must include letters, digits, and symbols in a production-like profile");
         }
     }
 
@@ -177,7 +181,7 @@ public class SecretCryptoService {
             throw new IllegalStateException("repoguard.security.encryption-key-id contains unsupported characters");
         }
         if (productionProfile && DEFAULT_KEY_ID.equals(normalizedKeyId)) {
-            throw new IllegalStateException("Default encryption key id is not allowed in prod profile");
+            throw new IllegalStateException("Default encryption key id is not allowed in a production-like profile");
         }
     }
 

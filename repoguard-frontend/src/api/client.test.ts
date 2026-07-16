@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RequestError } from "@/utils/errors";
 import { clearAuthToken, hasAuthToken, request, requestWithMeta, resolveRefreshToken, saveAuthTokens } from "./client";
 
-const apiResponse = (data: unknown, status = 200, traceId?: string) =>
+const apiResponse = (data: unknown, status = 200, traceId?: string, errorId?: string) =>
   new Response(JSON.stringify({
     success: status >= 200 && status < 300,
     code: status >= 200 && status < 300 ? "OK" : "UNAUTHORIZED",
@@ -13,7 +13,8 @@ const apiResponse = (data: unknown, status = 200, traceId?: string) =>
     status,
     headers: {
       "Content-Type": "application/json",
-      ...(traceId ? { "X-Trace-Id": traceId } : {})
+      ...(traceId ? { "X-Trace-Id": traceId } : {}),
+      ...(errorId ? { "X-Error-Id": errorId } : {})
     }
   });
 
@@ -104,6 +105,18 @@ describe("auth token client", () => {
       name: "RequestError",
       status: 0,
       code: "NETWORK_ERROR"
+    });
+  });
+
+  it("keeps the server error correlation id on request errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(
+      apiResponse(null, 500, "server-trace-error", "server-error-1")
+    ));
+
+    await expect(request("/api/v1/failing")).rejects.toMatchObject({
+      name: "RequestError",
+      status: 500,
+      errorId: "server-error-1"
     });
   });
 

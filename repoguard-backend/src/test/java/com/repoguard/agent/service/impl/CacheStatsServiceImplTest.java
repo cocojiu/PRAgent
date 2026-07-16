@@ -176,7 +176,7 @@ class CacheStatsServiceImplTest {
     }
 
     private static CacheManager initializedCacheManager(SimpleMeterRegistry meterRegistry) {
-        RepoGuardMetrics metrics = new RepoGuardMetrics(
+        RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             meterRegistry,
             new com.repoguard.agent.worker.ReviewExecutionFailureClassifier()
         );

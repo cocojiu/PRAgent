@@ -4,9 +4,13 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.repoguard.agent.entity.UserAccount;
 import java.time.LocalDateTime;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 public interface UserAccountMapper extends BaseMapper<UserAccount> {
+
+    @Select("select lock_name from user_management_guard where lock_name = 'active_admin' for update")
+    String lockActiveAdminInvariant();
 
     @Update("""
         update user_account

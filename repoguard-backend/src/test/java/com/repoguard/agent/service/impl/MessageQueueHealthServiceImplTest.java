@@ -24,6 +24,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper.MessageQueueHealthSummary;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
@@ -56,7 +57,7 @@ class MessageQueueHealthServiceImplTest {
     private final ReviewTaskPublisher reviewTaskPublisher = org.mockito.Mockito.mock(ReviewTaskPublisher.class);
     private final RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
-    private final RabbitRuntimeHealthProbe runtimeHealthProbe = new RabbitRuntimeHealthProbe(
+    private final RabbitRuntimeHealthProbe runtimeHealthProbe = RabbitRuntimeHealthProbe.forTesting(
         rabbitTemplate,
         properties,
         rabbitHealthExecutor,

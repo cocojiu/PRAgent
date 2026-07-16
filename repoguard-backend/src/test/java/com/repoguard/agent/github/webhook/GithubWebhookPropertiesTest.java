@@ -17,6 +17,15 @@ class GithubWebhookPropertiesTest {
     }
 
     @Test
+    void stagingProfileRequiresSecretWhenSignatureVerificationIsEnabled() {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"staging"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("app.github.webhook.secret");
+    }
+
+    @Test
     void prodProfileAllowsMissingSecretWhenWebhookIsDisabled() {
         GithubWebhookProperties properties = new GithubWebhookProperties();
         properties.setEnabled(false);

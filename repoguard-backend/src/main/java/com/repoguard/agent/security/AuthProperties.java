@@ -1,6 +1,6 @@
 package com.repoguard.agent.security;
 
-import java.util.Arrays;
+import com.repoguard.agent.config.RuntimeProfilePolicy;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "repoguard.auth")
@@ -80,17 +80,16 @@ public class AuthProperties {
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-ip", publicAuthRequestsPerMinutePerIp);
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-account-ip", publicAuthRequestsPerMinutePerAccountIp);
 
-        boolean productionProfile = Arrays.stream(activeProfiles)
-            .anyMatch(profile -> "prod".equalsIgnoreCase(profile));
+        boolean productionProfile = RuntimeProfilePolicy.isProductionLike(activeProfiles);
         if (!productionProfile) {
             return;
         }
         String normalizedTokenSecret = tokenSecret == null ? "" : tokenSecret.trim();
         if (normalizedTokenSecret.isBlank() || DEFAULT_TOKEN_SECRET.equals(normalizedTokenSecret)) {
-            throw new IllegalStateException("repoguard.auth.token-secret must be configured in prod profile");
+            throw new IllegalStateException("repoguard.auth.token-secret must be configured in a production-like profile");
         }
         if (normalizedTokenSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
-            throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in prod profile");
+            throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in a production-like profile");
         }
     }
 

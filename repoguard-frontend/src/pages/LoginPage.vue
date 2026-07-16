@@ -40,18 +40,20 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ArrowLeft } from "lucide-vue-next";
 import { login, register } from "@/api/auth";
 import LoginForm from "@/components/LoginForm.vue";
 import LoginHeroPanel from "@/components/LoginHeroPanel.vue";
 import RegisterForm from "@/components/RegisterForm.vue";
+import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
 import { getAuthErrorMessage } from "@/utils/errors";
 
 type AuthMode = "login" | "register";
 
 const router = useRouter();
+const route = useRoute();
 const authMode = ref<AuthMode>("login");
 const submitting = ref(false);
 const registrationEnabled = import.meta.env.VITE_REGISTRATION_ENABLED === "true"
@@ -98,7 +100,7 @@ const handleLogin = async () => {
       remember: loginForm.value.remember
     });
     ElMessage.success("登录成功");
-    void router.push("/repoguard/overview");
+    void router.replace(resolveSafePostAuthRedirect(route.query.redirect));
   } catch (error) {
     ElMessage.error(getAuthErrorMessage(error, "登录失败"));
   } finally {
@@ -127,7 +129,7 @@ const handleRegister = async () => {
       confirmPassword: registerForm.value.confirmPassword
     });
     ElMessage.success("注册成功");
-    void router.push("/repoguard/overview");
+    void router.replace(resolveSafePostAuthRedirect(route.query.redirect));
   } catch (error) {
     ElMessage.error(getAuthErrorMessage(error, "注册失败"));
   } finally {

@@ -11,6 +11,19 @@
     </div>
 
     <el-alert
+      v-if="loadErrorMessage"
+      type="warning"
+      :closable="false"
+      show-icon
+      class="integration-alert"
+    >
+      <template #title>
+        <span>{{ loadErrorMessage }}</span>
+        <el-button link type="warning" :loading="loading" @click="loadConfig">重试</el-button>
+      </template>
+    </el-alert>
+
+    <el-alert
       title="GitHub 与 LLM 配置会参与审查链路；MySQL 与 RabbitMQ 配置用于页面检测和运维核对，保存后不会动态切换当前运行中的数据源或消息队列连接。密钥字段保存后只会显示脱敏值。"
       type="primary"
       :closable="false"
@@ -106,7 +119,7 @@ const { testConnection } = useIntegrationConnectionTest({
   testingConnections
 });
 
-const { loading, saving, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
+const { loadErrorMessage, loading, saving, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
   applyGithubConfig,
   applyReviewPolicyConfig,
   applyServiceConfig,
