@@ -35,7 +35,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { RefreshCw, Search } from "lucide-vue-next";
+import { RefreshCw, Search } from "@lucide/vue";
 import type { ReviewStatus, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 
 const props = defineProps<{

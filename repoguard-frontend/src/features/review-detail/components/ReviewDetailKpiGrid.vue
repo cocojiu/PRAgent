@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-import { Archive, Clock, Copy, GitBranch, MessagesSquare } from "lucide-vue-next";
+import { Archive, Clock, Copy, GitBranch, MessagesSquare } from "@lucide/vue";
 import type { ReviewTaskDetail } from "@/types";
 
 defineProps<{

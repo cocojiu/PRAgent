@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChevronDown, CircleCheck, Copy, Eye, RadioTower, TriangleAlert } from "lucide-vue-next";
+import { ChevronDown, CircleCheck, Copy, Eye, RadioTower, TriangleAlert } from "@lucide/vue";
 import type { Component } from "vue";
 import type { IntegrationConfig } from "@/types";
 

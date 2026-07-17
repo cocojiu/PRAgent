@@ -1,6 +1,5 @@
 import { fileURLToPath, URL } from "node:url";
 import { gzipSync } from "node:zlib";
-import type { GetManualChunk } from "rollup";
 import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
 
@@ -104,45 +103,6 @@ const bundleBudgetPlugin = (): Plugin => ({
   }
 });
 
-const manualChunks: GetManualChunk = (id) => {
-  const normalizedId = id.replace(/\\/g, "/");
-  if (!normalizedId.includes("/node_modules/")) {
-    return undefined;
-  }
-
-  if (normalizedId.includes("/node_modules/zrender/")) {
-    return "zrender";
-  }
-
-  if (normalizedId.includes("/node_modules/echarts/")) {
-    if (normalizedId.includes("/echarts/charts/")) {
-      return "echarts-charts";
-    }
-    if (normalizedId.includes("/echarts/components/")) {
-      return "echarts-components";
-    }
-    if (normalizedId.includes("/echarts/renderers/")) {
-      return "echarts-renderers";
-    }
-    return "echarts-core";
-  }
-
-  if (normalizedId.includes("/node_modules/element-plus/")) {
-    return "element-plus";
-  }
-
-  if (
-    normalizedId.includes("/node_modules/vue/")
-      || normalizedId.includes("/node_modules/@vue/")
-      || normalizedId.includes("/node_modules/vue-router/")
-      || normalizedId.includes("/node_modules/pinia/")
-  ) {
-    return "vue-vendor";
-  }
-
-  return "vendor";
-};
-
 export default defineConfig({
   plugins: [vue(), bundleBudgetPlugin()],
   server: {
@@ -161,7 +121,36 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks
+        codeSplitting: {
+          groups: [
+            {
+              name: "zrender",
+              test: /node_modules[\\/]zrender[\\/]/,
+              priority: 30
+            },
+            {
+              name: "echarts",
+              test: /node_modules[\\/]echarts[\\/]/,
+              maxSize: 350 * KIB,
+              priority: 30
+            },
+            {
+              name: "element-plus",
+              test: /node_modules[\\/]element-plus[\\/]/,
+              priority: 20
+            },
+            {
+              name: "vue-vendor",
+              test: /node_modules[\\/](?:@vue|vue|vue-router|pinia)[\\/]/,
+              priority: 20
+            },
+            {
+              name: "vendor",
+              test: /node_modules[\\/]/,
+              priority: 10
+            }
+          ]
+        }
       }
     }
   }

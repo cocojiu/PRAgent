@@ -49,7 +49,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive } from "vue";
-import { Hexagon, Save } from "lucide-vue-next";
+import { Hexagon, Save } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
 import {
   fetchGithubIntegrationConfig,

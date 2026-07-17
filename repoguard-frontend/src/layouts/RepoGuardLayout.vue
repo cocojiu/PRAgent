@@ -129,7 +129,7 @@ import {
   BellRing,
   ShieldCheck,
   Users
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import { logout } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";

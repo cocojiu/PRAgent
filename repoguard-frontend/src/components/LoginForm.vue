@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { LockKeyhole, UserRound } from "lucide-vue-next";
+import { LockKeyhole, UserRound } from "@lucide/vue";
 
 interface LoginFormModel {
   account: string;

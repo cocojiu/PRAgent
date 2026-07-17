@@ -1,5 +1,6 @@
 import type { Component } from "vue";
-import { Database, Github, Hexagon, RadioTower } from "lucide-vue-next";
+import { Database, Hexagon, RadioTower } from "@lucide/vue";
+import Github from "@/components/icons/GithubIcon.vue";
 import type { IntegrationConfig } from "@/types";
 
 export type IntegrationId = "github" | "mysql" | "rabbitmq" | "spring-ai";

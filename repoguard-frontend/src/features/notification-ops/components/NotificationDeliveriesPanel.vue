@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
 import {
   notificationStatusClass,
   notificationStatusText,
