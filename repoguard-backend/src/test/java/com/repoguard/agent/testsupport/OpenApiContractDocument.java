@@ -363,6 +363,10 @@ public final class OpenApiContractDocument {
     private static Map<String, Object> schemaForComponent(RecordComponent component, Set<Class<?>> schemaTypes) {
         Map<String, Object> schema = schemaForType(component.getGenericType(), schemaTypes);
         applyValidationConstraints(component, schema);
+        if (component.getType() == String.class
+            && component.getName().toLowerCase(Locale.ROOT).contains("password")) {
+            schema.put("format", "password");
+        }
         if (annotation(component, Valid.class).isPresent()) {
             schema.put("x-valid", true);
         }

@@ -65,6 +65,16 @@ class OpenApiPathsContractTest {
         assertThat(list(map(schemas.get("AuthRegisterRequest")).get("required")))
             .containsExactly("username", "email", "password", "confirmPassword");
 
+        Map<String, Object> passwordChangeProperties = map(
+            map(schemas.get("AuthPasswordChangeRequest")).get("properties")
+        );
+        assertThat(map(passwordChangeProperties.get("currentPassword")))
+            .containsEntry("format", "password");
+        assertThat(map(passwordChangeProperties.get("newPassword")))
+            .containsEntry("format", "password");
+        assertThat(map(passwordChangeProperties.get("confirmPassword")))
+            .containsEntry("format", "password");
+
         Map<String, Object> policyProperties = map(map(schemas.get("ReviewPolicyConfigRequest")).get("properties"));
         assertThat(map(policyProperties.get("timeoutSeconds")))
             .containsEntry("type", "integer")

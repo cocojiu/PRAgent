@@ -3,6 +3,8 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +14,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
@@ -258,6 +261,76 @@ class AuthServiceImplTest {
         assertThat(profile.role()).isEqualTo("ADMIN");
         assertThat(profile.status()).isEqualTo("ACTIVE");
         assertThat(profile.lastLoginAt()).isEqualTo(LocalDateTime.parse("2026-06-11T10:00:00"));
+    }
+
+    @Test
+    void changePasswordRehashesPasswordAndRevokesExistingSessions() {
+        UserAccount user = existingUser();
+        user.setSessionVersion(4);
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.updatePasswordAndRotateSession(eq(1001L), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(1);
+
+        authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Secure123",
+            "Safer456",
+            "Safer456"
+        ));
+
+        ArgumentCaptor<String> newPasswordHashCaptor = ArgumentCaptor.forClass(String.class);
+        verify(userAccountMapper).updatePasswordAndRotateSession(
+            eq(1001L),
+            eq(user.getPasswordHash()),
+            newPasswordHashCaptor.capture(),
+            any(LocalDateTime.class)
+        );
+        assertThat(passwordHashService.matchesOrDummy("Safer456", newPasswordHashCaptor.getValue())).isTrue();
+        assertThat(passwordHashService.matchesOrDummy("Secure123", newPasswordHashCaptor.getValue())).isFalse();
+        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void changePasswordRejectsConcurrentCredentialUpdateWithoutRevokingSessions() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.updatePasswordAndRotateSession(eq(1001L), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(0);
+
+        assertThatThrownBy(() -> authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Secure123",
+            "Safer456",
+            "Safer456"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("Password changed concurrently; sign in again");
+
+        verify(userRefreshTokenMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(userLoginAuditMapper, never()).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void changePasswordRejectsIncorrectCurrentPassword() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Wrong123",
+            "Safer456",
+            "Safer456"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("Current password is incorrect");
+
+        verify(userAccountMapper, never()).updatePasswordAndRotateSession(
+            any(Long.class),
+            anyString(),
+            anyString(),
+            any(LocalDateTime.class)
+        );
     }
 
     @Test

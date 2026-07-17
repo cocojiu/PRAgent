@@ -12,6 +12,10 @@ on:
         description: Optional absolute pre-D1 database backup path
         required: false
         type: string
+      backend_image:
+        description: Optional full backend image reference; defaults to the image recorded in the deployment environment
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -55,7 +59,13 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
-      - name: Verify remote smoke runner
+      - name: Verify production health before isolated smoke
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+        run: curl -fsS "http://${DEPLOY_HOST}/actuator/health"
+
+      - name: Verify remote isolated smoke assets
         shell: bash
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
@@ -66,26 +76,43 @@ jobs:
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH"; exit 1; }
           test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER"; exit 1; }
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "test -x '${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' || {
-               echo 'Missing executable remote smoke runner: ${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' >&2
+            "test -x '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' && \
+             test -x '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh' && \
+             test -f '${DEPLOY_PATH}/docker-compose.smoke.yml' || {
+               echo 'Missing remote isolated smoke assets under ${DEPLOY_PATH}' >&2
                exit 1
              }"
 
-      - name: Run three sequential real tasks
+      - name: Run three sequential real tasks in isolated stack
         shell: bash
         env:
           BACKUP_PATH: ${{ inputs.backup_path }}
+          BACKEND_IMAGE: ${{ inputs.backend_image }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
           MAX_TOTAL_TOKENS: ${{ inputs.max_total_tokens }}
+          SMOKE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "'${DEPLOY_PATH}/performance/run-real-chain-smoke.sh' \
-             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' 'http://127.0.0.1'"
+            "backend_image='${BACKEND_IMAGE}'; \
+             if [ -z \"\${backend_image}\" ]; then \
+               backend_container=\$(cd '${DEPLOY_PATH}' && docker compose --env-file .env -f docker-compose.prod.yml ps -q backend); \
+               if [ -n \"\${backend_container}\" ]; then \
+                 backend_image=\$(docker inspect \"\${backend_container}\" --format '{{.Config.Image}}'); \
+               fi; \
+             fi; \
+             if [ -z \"\${backend_image}\" ]; then \
+               backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
+             fi; \
+             test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
+             '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
+             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
+             '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"
 
-      - name: Verify service health
+      - name: Verify production health after isolated smoke
         if: always()
         shell: bash
         env:
