@@ -11,12 +11,15 @@ import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.ArrayDeque;
 import java.util.List;
+import java.util.Queue;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.support.SimpleCacheManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class CacheStatsServiceImplTest {
 
@@ -82,6 +85,55 @@ class CacheStatsServiceImplTest {
 
         eviction.evictDashboardReviewActivity();
 
+        Mockito.verify(snapshotService).refreshCurrentWindows();
+    }
+
+    @Test
+    void dashboardReviewActivityEvictionSubmitsAndCoalescesPersistedSnapshotRefresh() {
+        DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
+        Queue<Runnable> submitted = new ArrayDeque<>();
+        DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(submitted::add);
+        CacheEvictionService eviction = new CacheEvictionService(
+            cacheManager,
+            () -> snapshotService,
+            () -> snapshotStore
+        );
+
+        eviction.evictDashboardReviewActivity();
+        eviction.evictDashboardReviewActivity();
+
+        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+        assertThat(submitted).hasSize(1);
+        submitted.remove().run();
+        Mockito.verify(snapshotService).refreshCurrentWindows();
+    }
+
+    @Test
+    void dashboardReviewActivityTransactionCommitQueuesSnapshotRefreshWithoutRunningItInline() {
+        DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
+        Queue<Runnable> submitted = new ArrayDeque<>();
+        DashboardSnapshotStore snapshotStore = new DashboardSnapshotStore(submitted::add);
+        CacheEvictionService eviction = new CacheEvictionService(
+            cacheManager,
+            () -> snapshotService,
+            () -> snapshotStore
+        );
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            eviction.evictDashboardReviewActivity();
+            assertThat(submitted).isEmpty();
+
+            TransactionSynchronizationManager.getSynchronizations()
+                .forEach(synchronization -> synchronization.afterCommit());
+
+            Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+            assertThat(submitted).hasSize(1);
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        submitted.remove().run();
         Mockito.verify(snapshotService).refreshCurrentWindows();
     }
 

@@ -36,6 +36,7 @@ GET /api/v1/users operationId=UserManagementController#listUsers pathParams=[] q
 GET /api/v1/users/audits operationId=UserManagementController#listOperationAudits pathParams=[] queryParams=[page, pageSize] requestBody=- requestBodyRequired=false responseEnvelope=ApiResponse responseData=PageResponse<UserOperationAuditDto>
 POST /api/v1/auth/login operationId=AuthController#login pathParams=[] queryParams=[] requestBody=AuthLoginRequest requestBodyRequired=true responseEnvelope=ApiResponse responseData=AuthResponse
 POST /api/v1/auth/logout operationId=AuthController#logout pathParams=[] queryParams=[] requestBody=AuthLogoutRequest requestBodyRequired=false responseEnvelope=ApiResponse responseData=Void
+POST /api/v1/auth/password/change operationId=AuthController#changePassword pathParams=[] queryParams=[] requestBody=AuthPasswordChangeRequest requestBodyRequired=true responseEnvelope=ApiResponse responseData=Void
 POST /api/v1/auth/refresh operationId=AuthController#refresh pathParams=[] queryParams=[] requestBody=AuthRefreshRequest requestBodyRequired=false responseEnvelope=ApiResponse responseData=AuthResponse
 POST /api/v1/auth/refresh-token/reset operationId=AuthController#resetRefreshToken pathParams=[] queryParams=[] requestBody=AuthRefreshTokenResetRequest requestBodyRequired=true responseEnvelope=ApiResponse responseData=AuthResponse
 POST /api/v1/auth/register operationId=AuthController#register pathParams=[] queryParams=[] requestBody=AuthRegisterRequest requestBodyRequired=true responseEnvelope=ApiResponse responseData=AuthResponse
