@@ -106,6 +106,7 @@ public class AuthController {
         if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
         }
+        limit("password-change", user.username(), httpRequest);
         authService.changePassword(user.id(), passwordChangeRequest);
         cookieManager.clearAuthCookies(httpRequest, httpResponse);
         return ApiResponse.ok(null);

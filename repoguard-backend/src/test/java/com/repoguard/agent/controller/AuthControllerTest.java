@@ -2,6 +2,10 @@ package com.repoguard.agent.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -21,9 +25,11 @@ import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -182,6 +188,32 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(result -> expectSetCookieContains(result, "repoguard_refresh_token="))
             .andExpect(result -> expectSetCookieContains(result, "Max-Age=0"));
+    }
+
+    @Test
+    void changePasswordAppliesDedicatedAttemptLimitForAuthenticatedUser() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager(), limiter))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/password/change")
+                .requestAttr(
+                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
+                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                )
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "currentPassword": "Secure123",
+                      "newPassword": "Safer456",
+                      "confirmPassword": "Safer456"
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        verify(limiter).requireAllowed(eq("password-change"), eq("admin"), any(HttpServletRequest.class));
     }
 
     @Test
