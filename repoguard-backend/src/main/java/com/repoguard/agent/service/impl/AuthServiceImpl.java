@@ -221,11 +221,19 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "New password must differ from the current password");
         }
 
+        String currentPasswordHash = user.getPasswordHash();
+        String newPasswordHash = passwordHashService.hash(request.newPassword());
         inWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
-            user.setPasswordHash(passwordHashService.hash(request.newPassword()));
-            sessionInvalidator.rotateSessionVersion(user, now);
-            userAccountMapper.updateById(user);
+            int updated = userAccountMapper.updatePasswordAndRotateSession(
+                user.getId(),
+                currentPasswordHash,
+                newPasswordHash,
+                now
+            );
+            if (updated != 1) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "Password changed concurrently; sign in again");
+            }
             sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
             recordAudit(user.getId(), user.getUsername(), "PASSWORD_CHANGE", AUDIT_SUCCESS, null);
             return null;

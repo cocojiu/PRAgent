@@ -3,6 +3,8 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -267,6 +269,8 @@ class AuthServiceImplTest {
         user.setSessionVersion(4);
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.updatePasswordAndRotateSession(eq(1001L), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(1);
 
         authService.changePassword(1001L, new AuthPasswordChangeRequest(
             "Secure123",
@@ -274,12 +278,37 @@ class AuthServiceImplTest {
             "Safer456"
         ));
 
-        assertThat(passwordHashService.matchesOrDummy("Safer456", user.getPasswordHash())).isTrue();
-        assertThat(passwordHashService.matchesOrDummy("Secure123", user.getPasswordHash())).isFalse();
-        assertThat(user.getSessionVersion()).isEqualTo(5);
-        verify(userAccountMapper).updateById(user);
+        ArgumentCaptor<String> newPasswordHashCaptor = ArgumentCaptor.forClass(String.class);
+        verify(userAccountMapper).updatePasswordAndRotateSession(
+            eq(1001L),
+            eq(user.getPasswordHash()),
+            newPasswordHashCaptor.capture(),
+            any(LocalDateTime.class)
+        );
+        assertThat(passwordHashService.matchesOrDummy("Safer456", newPasswordHashCaptor.getValue())).isTrue();
+        assertThat(passwordHashService.matchesOrDummy("Secure123", newPasswordHashCaptor.getValue())).isFalse();
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
+    }
+
+    @Test
+    void changePasswordRejectsConcurrentCredentialUpdateWithoutRevokingSessions() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.updatePasswordAndRotateSession(eq(1001L), anyString(), anyString(), any(LocalDateTime.class)))
+            .thenReturn(0);
+
+        assertThatThrownBy(() -> authService.changePassword(1001L, new AuthPasswordChangeRequest(
+            "Secure123",
+            "Safer456",
+            "Safer456"
+        )))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("Password changed concurrently; sign in again");
+
+        verify(userRefreshTokenMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(userLoginAuditMapper, never()).insert(any(UserLoginAudit.class));
     }
 
     @Test
@@ -296,7 +325,12 @@ class AuthServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("Current password is incorrect");
 
-        verify(userAccountMapper, never()).updateById(any(UserAccount.class));
+        verify(userAccountMapper, never()).updatePasswordAndRotateSession(
+            any(Long.class),
+            anyString(),
+            anyString(),
+            any(LocalDateTime.class)
+        );
     }
 
     @Test
