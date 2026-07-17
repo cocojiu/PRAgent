@@ -1,0 +1,156 @@
+name: Production Observation 24h
+
+on:
+  schedule:
+    - cron: "10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: production-observation-24h
+  cancel-in-progress: false
+
+env:
+  OBSERVATION_START_UTC: "2026-07-17T12:06:11Z"
+  OBSERVATION_END_UTC: "2026-07-18T12:06:11Z"
+  PRODUCTION_BASE_URL: https://pragent.top
+
+jobs:
+  observe:
+    name: Observe production
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Determine observation window
+        id: window
+        shell: bash
+        run: |
+          set -euo pipefail
+          now_epoch="$(date -u +%s)"
+          start_epoch="$(date -u -d "${OBSERVATION_START_UTC}" +%s)"
+          end_epoch="$(date -u -d "${OBSERVATION_END_UTC}" +%s)"
+
+          if (( now_epoch < start_epoch )); then
+            echo "active=false" >> "${GITHUB_OUTPUT}"
+            echo "final=false" >> "${GITHUB_OUTPUT}"
+            echo "Observation window has not started." >> "${GITHUB_STEP_SUMMARY}"
+          elif (( now_epoch >= end_epoch )); then
+            echo "active=false" >> "${GITHUB_OUTPUT}"
+            echo "final=true" >> "${GITHUB_OUTPUT}"
+            echo "Observation window completed at ${OBSERVATION_END_UTC}." >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "active=true" >> "${GITHUB_OUTPUT}"
+            echo "final=false" >> "${GITHUB_OUTPUT}"
+            echo "Observation check at $(date -u +'%Y-%m-%dT%H:%M:%SZ')." >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+      - name: Check production endpoints
+        if: steps.window.outputs.active == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          health_payload="$(curl --fail --silent --show-error \
+            --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 \
+            "${PRODUCTION_BASE_URL}/actuator/health")"
+          health_status="$(jq -r '.status // empty' <<<"${health_payload}")"
+          if [[ "${health_status}" != "UP" ]]; then
+            echo "Production health is not UP: ${health_status:-missing}" >&2
+            exit 1
+          fi
+
+          for path in / /login; do
+            status_code="$(curl --silent --show-error --output /dev/null \
+              --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 \
+              --write-out '%{http_code}' "${PRODUCTION_BASE_URL}${path}")"
+            if [[ "${status_code}" != "200" ]]; then
+              echo "Unexpected HTTP ${status_code} for ${path}" >&2
+              exit 1
+            fi
+          done
+
+          {
+            echo "- Health: UP"
+            echo "- Home: HTTP 200"
+            echo "- Login: HTTP 200"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Check critical workflow failures
+        if: steps.window.outputs.active == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs_payload="$(curl --fail --silent --show-error \
+            --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100")"
+
+          failures="$(jq -r --arg start "${OBSERVATION_START_UTC}" '
+            [.workflow_runs[]
+              | select(.created_at >= $start)
+              | select(.name == "Release Images" or .name == "Real Chain Smoke")
+              | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")
+              | "\(.name) \(.html_url) conclusion=\(.conclusion)"]
+            | unique
+            | .[]
+          ' <<<"${runs_payload}")"
+
+          if [[ -n "${failures}" ]]; then
+            echo "Critical workflow failures detected since ${OBSERVATION_START_UTC}:" >&2
+            echo "${failures}" >&2
+            exit 1
+          fi
+
+          echo "- Critical workflow failures since start: 0" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Summarize completed observation
+        if: steps.window.outputs.final == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs_payload="$(curl --fail --silent --show-error \
+            --retry 2 --retry-delay 5 \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/production-observation.yml/runs?per_page=100")"
+
+          completed="$(jq --arg start "${OBSERVATION_START_UTC}" \
+            '[.workflow_runs[] | select(.created_at >= $start and .status == "completed")] | length' \
+            <<<"${runs_payload}")"
+          failed="$(jq --arg start "${OBSERVATION_START_UTC}" \
+            '[.workflow_runs[]
+              | select(.created_at >= $start and .status == "completed")
+              | select(.conclusion != "success" and .conclusion != "skipped")]
+             | length' <<<"${runs_payload}")"
+
+          {
+            echo "- Completed checks: ${completed}"
+            echo "- Failed checks: ${failed}"
+            echo "- Window: ${OBSERVATION_START_UTC} to ${OBSERVATION_END_UTC}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Disable completed observation workflow
+        if: always() && steps.window.outputs.final == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 2 --retry-delay 5 \
+            -X PUT \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/production-observation.yml/disable"
+          echo "- Workflow disabled after the observation window." >> "${GITHUB_STEP_SUMMARY}"
