@@ -18,6 +18,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class CacheEvictionService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheEvictionService.class);
+    private static final String REVIEW_ACTIVITY_REFRESH_KEY = "maintenance:daily-review-activity";
+    private static final String FEEDBACK_QUALITY_REFRESH_KEY = "maintenance:daily-feedback-quality";
 
     private final CacheManager cacheManager;
     private final Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier;
@@ -57,7 +59,10 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity() {
-        refreshDashboardSnapshotsAfterCommit(DashboardDailySnapshotService::refreshCurrentWindows);
+        refreshDashboardSnapshotsAfterCommit(
+            REVIEW_ACTIVITY_REFRESH_KEY,
+            DashboardDailySnapshotService::refreshCurrentWindows
+        );
         evictDashboardOverviewCompatibility();
         evictDashboardSummary();
         evictDashboardReviewTrend();
@@ -68,7 +73,10 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality() {
-        refreshDashboardSnapshotsAfterCommit(DashboardDailySnapshotService::refreshCurrentLlmQualityWindow);
+        refreshDashboardSnapshotsAfterCommit(
+            FEEDBACK_QUALITY_REFRESH_KEY,
+            DashboardDailySnapshotService::refreshCurrentLlmQualityWindow
+        );
         evictDashboardLlmQuality();
     }
 
@@ -137,19 +145,30 @@ public class CacheEvictionService {
     }
 
     private void refreshDashboardSnapshotsAfterCommit(
+        String refreshKey,
         java.util.function.Consumer<DashboardDailySnapshotService> refresher
     ) {
         Runnable refresh = () -> refreshDashboardSnapshots(refresher);
+        Runnable submit = () -> submitDashboardRefresh(refreshKey, refresh);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    refresh.run();
+                    submit.run();
                 }
             });
             return;
         }
-        refresh.run();
+        submit.run();
+    }
+
+    private void submitDashboardRefresh(String refreshKey, Runnable refresh) {
+        DashboardSnapshotStore snapshotStore = dashboardSnapshotStoreSupplier.get();
+        if (snapshotStore == null) {
+            refresh.run();
+            return;
+        }
+        snapshotStore.executeAsync(refreshKey, refresh);
     }
 
     private void refreshDashboardSnapshots(java.util.function.Consumer<DashboardDailySnapshotService> refresher) {

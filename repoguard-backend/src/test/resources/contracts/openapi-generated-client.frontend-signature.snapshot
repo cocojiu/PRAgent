@@ -1,3 +1,4 @@
+changePassword -> authControllerChangePassword(input: { body: AuthPasswordChangeRequest }): Promise<void>; // POST /api/v1/auth/password/change
 cleanupDataRetention -> dataRetentionControllerCleanup(input?: { body?: DataRetentionCleanupRequest }): Promise<DataRetentionCleanupResponse>; // POST /api/v1/config/data-retention/cleanup
 createNotificationBinding -> notificationIntegrationControllerCreateBinding(input: { body: NotificationBindingRequest }): Promise<NotificationBinding>; // POST /api/v1/config/notification-bindings
 createReviewRule -> systemConfigControllerCreateReviewRule(input: { body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules

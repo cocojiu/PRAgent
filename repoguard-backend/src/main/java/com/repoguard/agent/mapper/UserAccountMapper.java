@@ -28,4 +28,20 @@ public interface UserAccountMapper extends BaseMapper<UserAccount> {
         @Param("lockedUntil") LocalDateTime lockedUntil,
         @Param("updatedAt") LocalDateTime updatedAt
     );
+
+    @Update("""
+        update user_account
+        set password_hash = #{newPasswordHash},
+            session_version = coalesce(session_version, 0) + 1,
+            updated_at = #{updatedAt}
+        where id = #{id}
+          and status = 'ACTIVE'
+          and password_hash = #{currentPasswordHash}
+        """)
+    int updatePasswordAndRotateSession(
+        @Param("id") Long id,
+        @Param("currentPasswordHash") String currentPasswordHash,
+        @Param("newPasswordHash") String newPasswordHash,
+        @Param("updatedAt") LocalDateTime updatedAt
+    );
 }

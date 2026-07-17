@@ -34,6 +34,12 @@ export interface RegisterRequest {
   confirmPassword: string;
 }
 
+export interface PasswordChangeRequest {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 export interface RefreshTokenResetRequest {
   account: string;
   password: string;
@@ -53,6 +59,11 @@ export const register = async (payload: RegisterRequest) => {
 };
 
 export const getCurrentUser = () => apiRequest("getCurrentUser", undefined);
+
+export const changePassword = async (payload: PasswordChangeRequest) => {
+  await apiRequest("changePassword", payload);
+  clearAuthToken();
+};
 
 export const logout = async () => {
   if (hasAuthToken()) {

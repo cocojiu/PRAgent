@@ -1,3 +1,4 @@
+authControllerChangePassword(input: { body: AuthPasswordChangeRequest }): Promise<void>; // POST /api/v1/auth/password/change
 authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
 authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me

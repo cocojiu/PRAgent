@@ -1,6 +1,7 @@
 package com.repoguard.agent.dashboard;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -47,6 +48,28 @@ public class DashboardSnapshotStore {
         refreshingKeys.removeIf(key -> key.startsWith(prefix));
     }
 
+    public void executeAsync(String key, Runnable task) {
+        Objects.requireNonNull(key, "key must not be null");
+        Objects.requireNonNull(task, "task must not be null");
+        if (!refreshingKeys.add(key)) {
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    task.run();
+                } catch (RuntimeException ex) {
+                    LOGGER.warn("Dashboard async task failed key={}", key, ex);
+                } finally {
+                    refreshingKeys.remove(key);
+                }
+            });
+        } catch (RuntimeException ex) {
+            refreshingKeys.remove(key);
+            LOGGER.warn("Dashboard async task submission failed key={}", key, ex);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private <T> T snapshot(String key) {
         return (T) snapshots.get(key);
@@ -74,22 +97,6 @@ public class DashboardSnapshotStore {
     }
 
     private <T> void refreshAsync(String key, Supplier<T> loader) {
-        if (!refreshingKeys.add(key)) {
-            return;
-        }
-        try {
-            executor.execute(() -> {
-                try {
-                    loadAndStore(key, loader);
-                } catch (RuntimeException ex) {
-                    LOGGER.warn("Dashboard snapshot refresh failed key={}", key, ex);
-                } finally {
-                    refreshingKeys.remove(key);
-                }
-            });
-        } catch (RuntimeException ex) {
-            refreshingKeys.remove(key);
-            LOGGER.warn("Dashboard snapshot refresh submission failed key={}", key, ex);
-        }
+        executeAsync(key, () -> loadAndStore(key, loader));
     }
 }
