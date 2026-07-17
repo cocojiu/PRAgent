@@ -245,7 +245,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { Github } from "lucide-vue-next";
+import Github from "@/components/icons/GithubIcon.vue";
 import { RouterLink } from "vue-router";
 import {
   COMMENT_BODY_PREVIEW_CHARS,

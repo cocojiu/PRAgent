@@ -108,7 +108,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import { Copy, Github, ShieldAlert } from "lucide-vue-next";
+import { Copy, ShieldAlert } from "@lucide/vue";
+import Github from "@/components/icons/GithubIcon.vue";
 import type { ReviewTask } from "@/types";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";

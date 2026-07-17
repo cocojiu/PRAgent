@@ -1,4 +1,4 @@
-import { Bell, CheckCircle2, Mail, MessageCircle, RotateCcw, Send, XCircle } from "lucide-vue-next";
+import { Bell, CheckCircle2, Mail, MessageCircle, RotateCcw, Send, XCircle } from "@lucide/vue";
 import type { NotificationBinding, NotificationEvent } from "@/types";
 
 const FAILED_EVENT_STATUSES = ["PUBLISH_FAILED", "DELIVERY_FAILED", "FAILED", "DEAD"];

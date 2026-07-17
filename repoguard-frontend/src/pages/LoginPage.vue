@@ -42,7 +42,7 @@
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { ArrowLeft } from "lucide-vue-next";
+import { ArrowLeft } from "@lucide/vue";
 import { login, register } from "@/api/auth";
 import LoginForm from "@/components/LoginForm.vue";
 import LoginHeroPanel from "@/components/LoginHeroPanel.vue";

@@ -64,7 +64,8 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { Github, RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
+import Github from "@/components/icons/GithubIcon.vue";
 import type { GithubPullRequestOption } from "@/types";
 
 const props = defineProps<{

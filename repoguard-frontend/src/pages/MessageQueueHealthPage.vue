@@ -215,7 +215,7 @@ import {
   Server,
   Settings,
   Workflow
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import { useMessageQueueHealth } from "@/features/message-queue/composables/useMessageQueueHealth";

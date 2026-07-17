@@ -230,7 +230,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, watch } from "vue";
-import { ArrowLeft, ExternalLink, Github, RefreshCw, ShieldAlert } from "lucide-vue-next";
+import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
+import Github from "@/components/icons/GithubIcon.vue";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
 import {

@@ -195,7 +195,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "lucide-vue-next";
+import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "@lucide/vue";
 import { createUser, fetchUserOperationAudits, fetchUsers, updateUserRole, updateUserStatus } from "@/api/users";
 import type { ManagedUser, UserCreateRequest, UserOperationAudit, UserRole, UserStatus } from "@/api/users";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";

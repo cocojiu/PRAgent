@@ -100,7 +100,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
 import {
   boundedDetailItems,
   hiddenDetailItemCount,

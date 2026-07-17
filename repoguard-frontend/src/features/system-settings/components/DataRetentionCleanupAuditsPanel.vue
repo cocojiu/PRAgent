@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { fetchDataRetentionCleanupAudits } from "@/api/config";
 import {

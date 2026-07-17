@@ -56,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "@lucide/vue";
 import type { ReviewStatus, ReviewTaskDetail, RiskLevel, TimelineItem } from "@/types";
 
 defineProps<{

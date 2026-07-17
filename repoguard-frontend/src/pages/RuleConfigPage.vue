@@ -137,7 +137,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "lucide-vue-next";
+import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
 import {
   createReviewRule,

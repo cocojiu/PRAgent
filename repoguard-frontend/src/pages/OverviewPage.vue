@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { Clock, FileText, ShieldAlert, Wallet } from "lucide-vue-next";
+import { Clock, FileText, ShieldAlert, Wallet } from "@lucide/vue";
 import MetricGrid from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {

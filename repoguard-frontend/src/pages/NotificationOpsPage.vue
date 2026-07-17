@@ -219,7 +219,7 @@ import {
   Plus,
   RefreshCw,
   Send
-} from "lucide-vue-next";
+} from "@lucide/vue";
 import {
   buildNotificationMetricItems,
   canRetryNotificationEvent,

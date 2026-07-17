@@ -60,7 +60,7 @@
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { canManage } from "@/stores/authState";
-import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "lucide-vue-next";
+import { CheckCircle, Clock, GitPullRequestArrow, ListTodo, ShieldAlert, XCircle } from "@lucide/vue";
 import MetricGrid from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import {

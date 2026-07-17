@@ -59,7 +59,7 @@
 </template>
 
 <script setup lang="ts">
-import { LockKeyhole, Mail, UserRound } from "lucide-vue-next";
+import { LockKeyhole, Mail, UserRound } from "@lucide/vue";
 
 interface RegisterFormModel {
   username: string;
