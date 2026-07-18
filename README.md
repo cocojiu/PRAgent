@@ -23,7 +23,7 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 
 后端：
 
-- Java 26
+- Java 25
 - Spring Boot 4
 - MyBatis-Plus
 - MySQL 8 + Flyway
@@ -49,8 +49,8 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 
 ## 环境要求
 
-- JDK：26
-- Maven：3.9+
+- JDK：25
+- Maven：3.9.9+（低于 4.0.0）
 - Node.js：建议使用 Node 22，最低要求 `>=20.19.0`
 - Docker / Docker Compose：用于启动 MySQL、RabbitMQ 和本地观测组件
 

@@ -83,6 +83,23 @@ class IsolatedRealChainSmokeContractTest {
             .contains("Verify production health after isolated smoke");
     }
 
+    @Test
+    void documentationAndReleaseBuildStayOnTheEnforcedBackendToolchain() throws IOException {
+        String readme = read("README.md");
+        String release = read(".github/workflows/release-images.yml");
+
+        assertThat(readme)
+            .contains("- Java 25")
+            .contains("- JDK：25")
+            .contains("- Maven：3.9.9+（低于 4.0.0）")
+            .doesNotContain("Java 26")
+            .doesNotContain("JDK：26");
+        assertThat(release)
+            .contains("java-version: \"25\"")
+            .contains("run: mvn -B verify")
+            .doesNotContain("run: mvn -B package");
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(repositoryRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }
