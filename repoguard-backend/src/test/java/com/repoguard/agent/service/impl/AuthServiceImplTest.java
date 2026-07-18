@@ -22,6 +22,8 @@ import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
+import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
+import com.repoguard.agent.identity.internal.DefaultIdentityCredentialAuthenticator;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
@@ -50,6 +52,8 @@ class AuthServiceImplTest {
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
     private final UserLoginAuditRecorder loginAuditRecorder = new UserLoginAuditRecorder(userLoginAuditMapper);
     private final PasswordHashService passwordHashService = new PasswordHashService();
+    private final IdentityCredentialAuthenticator credentialAuthenticator =
+        new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, loginAuditRecorder);
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
     private final UserAccountSessionInvalidator sessionInvalidator =
@@ -60,6 +64,7 @@ class AuthServiceImplTest {
         userRefreshTokenMapper,
         loginAuditRecorder,
         passwordHashService,
+        credentialAuthenticator,
         authProperties,
         authTokenService,
         sessionInvalidator,
@@ -451,6 +456,7 @@ class AuthServiceImplTest {
             userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
@@ -559,6 +565,7 @@ class AuthServiceImplTest {
             userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             null,
@@ -575,6 +582,7 @@ class AuthServiceImplTest {
             userRefreshTokenMapper,
             null,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
@@ -591,6 +599,7 @@ class AuthServiceImplTest {
             userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
@@ -598,6 +607,23 @@ class AuthServiceImplTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("metrics");
+    }
+
+    @Test
+    void constructorRequiresCredentialAuthenticator() {
+        assertThatThrownBy(() -> new AuthServiceImpl(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            loginAuditRecorder,
+            passwordHashService,
+            null,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("credentialAuthenticator");
     }
 
     private UserRefreshToken activeRefreshToken(String refreshToken, LocalDateTime expiresAt) {
