@@ -10,6 +10,6 @@ import org.springframework.context.annotation.Conditional;
 @Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@Conditional(RuntimeRoleConditions.Api.class)
-public @interface ApiRuntimeEnabled {
+@Conditional(RuntimeRoleConditions.Scheduler.class)
+public @interface SchedulerRuntimeEnabled {
 }

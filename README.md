@@ -142,6 +142,9 @@ npm run dev
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
 - `REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE`
 - `REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT`
+- `REPOGUARD_RUNTIME_ROLE`
+- `REPOGUARD_DEPLOYMENT_MODE`
+- `REPOGUARD_API_INSTANCE_COUNT`
 - `REPOGUARD_REVIEW_WORKER_CONCURRENCY`
 
 敏感配置要求：
@@ -149,6 +152,14 @@ npm run dev
 - GitHub Token、LLM API Key、数据库密码、RabbitMQ 密码等不得提交到仓库。
 - 本地 `application-local.yml`、真实 `.env`、真实密钥文件不得提交。
 - 生产环境必须使用独立加密密钥、认证 Token 密钥和 GitHub Webhook Secret。
+
+运行角色与横向扩展边界：
+
+- `REPOGUARD_RUNTIME_ROLE` 只接受 `combined`、`api`、`worker`。`combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库栅栏保护的定时任务；`worker` 同时承载消费者与这些定时任务。
+- `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
+- 当前认证/Webhook 限流和 Dashboard 快照仍是进程本地状态，因此 API/combined 角色要求 `REPOGUARD_API_INSTANCE_COUNT=1`。迁移到共享限流与跨节点缓存失效前，不允许横向扩展 API。
+- Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
+- 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 
 ## 镜像发布与回滚
 
@@ -261,6 +272,7 @@ RepoGuard / RepoGuard Review Observability
 
 ## 优化进度
 
+- 2026-07-19 00:56（Asia/Shanghai）：完成 P2-1 第一阶段横向扩展契约。运行配置由两个独立布尔开关收敛为互斥 `api|worker|combined` 角色，并增加 `monolith|split` 部署模式、单 API 实例硬约束、Worker/Scheduler 装配边界和旧开关迁移校验；生产 Compose 与部署脚本同步更新，隔离烟测保留旧开关兼容路径且未修改测试脚本。仓库治理同时收紧为仅允许跟踪 `README.md`，详细优化报告保留在本地忽略文件和 Git 历史中。已在 JDK 25 下通过后端全量 `mvn verify`（1675 项测试、覆盖率门禁通过）以及完整生产就绪检查（前端 106 项测试和生产包体预算通过）。
 - 2026-07-10：完成 P3 前端性能上报输入约束优化，在 API 边界限制观测批次数量、文本长度、HTTP 状态码、耗时、字节数和计数范围；已通过 `mvn "-Dtest=FrontendPerformanceControllerTest,FrontendPerformanceObservationServiceImplTest,ApiContractTest,ControllerAuthorizationContractTest" test`。
 
 ## License
