@@ -15,6 +15,8 @@ import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserRefreshToken;
+import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
+import com.repoguard.agent.identity.IdentityCredentialAuthenticator.AuthenticationOperation;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -46,13 +48,11 @@ public class AuthServiceImpl implements AuthService {
     private static final String TOKEN_TYPE_BEARER = "Bearer";
     private static final String AUDIT_SUCCESS = "SUCCESS";
     private static final String AUDIT_FAILURE = "FAILURE";
-    private static final int MAX_FAILED_LOGIN_ATTEMPTS = 20;
-    private static final long ACCOUNT_LOCK_MINUTES = 5;
-
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
     private final UserLoginAuditRecorder loginAuditRecorder;
     private final PasswordHashService passwordHashService;
+    private final IdentityCredentialAuthenticator credentialAuthenticator;
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
     private final UserAccountSessionInvalidator sessionInvalidator;
@@ -65,6 +65,7 @@ public class AuthServiceImpl implements AuthService {
         UserRefreshTokenMapper userRefreshTokenMapper,
         UserLoginAuditRecorder loginAuditRecorder,
         PasswordHashService passwordHashService,
+        IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         UserAccountSessionInvalidator sessionInvalidator,
@@ -76,6 +77,7 @@ public class AuthServiceImpl implements AuthService {
             userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
@@ -89,6 +91,7 @@ public class AuthServiceImpl implements AuthService {
         UserRefreshTokenMapper userRefreshTokenMapper,
         UserLoginAuditRecorder loginAuditRecorder,
         PasswordHashService passwordHashService,
+        IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         UserAccountSessionInvalidator sessionInvalidator,
@@ -99,6 +102,7 @@ public class AuthServiceImpl implements AuthService {
             userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
+            credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
@@ -112,6 +116,7 @@ public class AuthServiceImpl implements AuthService {
         UserRefreshTokenMapper userRefreshTokenMapper,
         UserLoginAuditRecorder loginAuditRecorder,
         PasswordHashService passwordHashService,
+        IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         UserAccountSessionInvalidator sessionInvalidator,
@@ -122,6 +127,10 @@ public class AuthServiceImpl implements AuthService {
         this.userRefreshTokenMapper = userRefreshTokenMapper;
         this.loginAuditRecorder = Objects.requireNonNull(loginAuditRecorder, "loginAuditRecorder must not be null");
         this.passwordHashService = passwordHashService;
+        this.credentialAuthenticator = Objects.requireNonNull(
+            credentialAuthenticator,
+            "credentialAuthenticator must not be null"
+        );
         this.authProperties = authProperties;
         this.authTokenService = authTokenService;
         this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
@@ -175,11 +184,19 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(AuthLoginRequest request) {
-        UserAccount user = verifyCredentials(request.account(), request.password(), "LOGIN");
+        UserAccount user = credentialAuthenticator.authenticate(
+            request.account(),
+            request.password(),
+            AuthenticationOperation.LOGIN
+        );
         return inWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
-            clearLoginFailures(user, now);
-            recordAudit(user.getId(), request.account(), "LOGIN", AUDIT_SUCCESS, null);
+            credentialAuthenticator.recordSuccess(
+                user,
+                request.account(),
+                AuthenticationOperation.LOGIN,
+                now
+            );
             return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
         });
     }
@@ -296,7 +313,11 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse resetRefreshToken(AuthRefreshTokenResetRequest request) {
-        UserAccount user = verifyCredentials(request.account(), request.password(), "TOKEN_RESET");
+        UserAccount user = credentialAuthenticator.authenticate(
+            request.account(),
+            request.password(),
+            AuthenticationOperation.TOKEN_RESET
+        );
         return inWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
             userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
@@ -306,7 +327,12 @@ public class AuthServiceImpl implements AuthService {
                 .set("revoked_at", now)
                 .set("updated_at", now));
             rotateSessionVersionAndPersist(user, now);
-            recordAudit(user.getId(), request.account(), "TOKEN_RESET", AUDIT_SUCCESS, null);
+            credentialAuthenticator.recordSuccess(
+                user,
+                request.account(),
+                AuthenticationOperation.TOKEN_RESET,
+                now
+            );
             return issueTokenPair(user, Boolean.TRUE.equals(request.remember()));
         });
     }
@@ -318,28 +344,6 @@ public class AuthServiceImpl implements AuthService {
         LocalDateTime now = LocalDateTime.now();
         invalidateLogoutSession(storedToken, now);
         recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "LOGOUT", AUDIT_SUCCESS, null);
-    }
-
-    private UserAccount verifyCredentials(String accountValue, String password, String eventType) {
-        String account = accountValue.trim();
-        UserAccount user = account.contains("@") ? findByEmail(account.toLowerCase(Locale.ROOT)) : findByUsername(account);
-        boolean passwordMatches = passwordHashService.matchesOrDummy(
-            password,
-            user == null ? null : user.getPasswordHash()
-        );
-        if (user != null && isLocked(user)) {
-            recordAuditInWriteTransaction(user.getId(), account, eventType, "account locked");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
-        }
-        if (user == null || !passwordMatches) {
-            handleFailedCredentialAttempt(user, account, eventType, "bad credentials");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
-        }
-        if (!STATUS_ACTIVE.equals(user.getStatus())) {
-            recordAuditInWriteTransaction(user.getId(), account, eventType, "account disabled");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号或密码错误");
-        }
-        return user;
     }
 
     private AuthResponse issueTokenPair(UserAccount user, boolean remember) {
@@ -483,47 +487,6 @@ public class AuthServiceImpl implements AuthService {
 
     private int safeSessionVersion(UserRefreshToken refreshToken) {
         return refreshToken.getSessionVersion() == null ? 0 : refreshToken.getSessionVersion();
-    }
-
-    private void handleFailedCredentialAttempt(UserAccount user, String account, String eventType, String reason) {
-        if (user == null) {
-            recordAuditInWriteTransaction(null, account, eventType, reason);
-            return;
-        }
-        LocalDateTime now = LocalDateTime.now();
-        int failedCount = (user.getFailedLoginCount() == null ? 0 : user.getFailedLoginCount()) + 1;
-        LocalDateTime lockedUntil = now.plusMinutes(ACCOUNT_LOCK_MINUTES);
-        inWriteTransaction(() -> {
-            userAccountMapper.recordFailedLogin(
-                user.getId(),
-                MAX_FAILED_LOGIN_ATTEMPTS,
-                lockedUntil,
-                now
-            );
-            recordAudit(user.getId(), account, eventType, AUDIT_FAILURE, reason);
-            return null;
-        });
-        user.setFailedLoginCount(failedCount);
-        user.setLockedUntil(failedCount >= MAX_FAILED_LOGIN_ATTEMPTS ? lockedUntil : null);
-        user.setUpdatedAt(now);
-    }
-
-    private void clearLoginFailures(UserAccount user, LocalDateTime now) {
-        user.setLastLoginAt(now);
-        user.setFailedLoginCount(0);
-        user.setLockedUntil(null);
-        user.setUpdatedAt(now);
-        UpdateWrapper<UserAccount> update = new UpdateWrapper<UserAccount>()
-            .eq("id", user.getId())
-            .set("last_login_at", now)
-            .set("failed_login_count", 0)
-            .set("locked_until", null)
-            .set("updated_at", now);
-        userAccountMapper.update(null, update);
-    }
-
-    private boolean isLocked(UserAccount user) {
-        return user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now());
     }
 
     private void recordAudit(Long userId, String account, String eventType, String result, String failureReason) {

@@ -32,6 +32,9 @@ class ApplicationArchitectureTest {
 
     private static final String BASE_PACKAGE = "com.repoguard.agent";
     private static final String CONTROLLER_PACKAGE = BASE_PACKAGE + ".controller";
+    private static final String ENTITY_PACKAGE = BASE_PACKAGE + ".entity";
+    private static final String IDENTITY_PACKAGE = BASE_PACKAGE + ".identity";
+    private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
@@ -76,7 +79,7 @@ class ApplicationArchitectureTest {
     private static final List<SourceUnit> SOURCES = loadSourceUnits();
 
     @Test
-    void controllersDoNotDependDirectlyOnMapperLayer() {
+    void controllersDoNotDependDirectlyOnPersistenceLayer() {
         List<String> controllers = SOURCES.stream()
             .filter(source -> isInPackage(source.packageName(), CONTROLLER_PACKAGE))
             .map(SourceUnit::path)
@@ -84,15 +87,37 @@ class ApplicationArchitectureTest {
         List<String> violations = SOURCES.stream()
             .filter(source -> isInPackage(source.packageName(), CONTROLLER_PACKAGE))
             .flatMap(source -> source.dependencies().stream()
-                .filter(dependency -> isInPackage(dependency, MAPPER_PACKAGE))
-                .map(ignored -> source.path() + " -> " + MAPPER_PACKAGE))
+                .filter(dependency -> isInPackage(dependency, MAPPER_PACKAGE)
+                    || isInPackage(dependency, ENTITY_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
             .distinct()
             .sorted()
             .toList();
 
         assertThat(controllers).as("controller source discovery").isNotEmpty();
         assertThat(violations)
-            .as("Controllers must call application services instead of persistence mappers")
+            .as("Controllers must call application services instead of persistence types")
+            .isEmpty();
+    }
+
+    @Test
+    void identityInternalsArePrivateToTheIdentityBoundary() {
+        List<String> identitySources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), IDENTITY_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> !isInPackage(source.packageName(), IDENTITY_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, IDENTITY_INTERNAL_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(identitySources).as("identity source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Other domains may depend on identity application ports, never identity internals")
             .isEmpty();
     }
 
@@ -126,7 +151,7 @@ class ApplicationArchitectureTest {
 
         assertThat(dependencies.keySet())
             .as("domain package discovery")
-            .contains("dashboard", "notification", "observability", "retention", "review", "worker");
+            .contains("dashboard", "identity", "notification", "observability", "retention", "review", "worker");
         assertThat(unexpectedCycles)
             .as("New cyclic domain dependency edges are forbidden; break the dependency or document a migration first")
             .isEmpty();
