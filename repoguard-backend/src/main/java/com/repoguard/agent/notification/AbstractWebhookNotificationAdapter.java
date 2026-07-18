@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -64,7 +65,8 @@ abstract class AbstractWebhookNotificationAdapter implements NotificationChannel
                 .body(payload)
                 .exchange((httpRequest, httpResponse) -> responseReader.readSuccessfulBody(
                     httpResponse,
-                    "Webhook HTTP request failed"
+                    "Webhook HTTP request failed",
+                    ExternalHttpResponseProfile.NOTIFICATION
                 ));
             return responseEvaluator.evaluate(response == null ? "" : new String(response, StandardCharsets.UTF_8));
         } catch (RuntimeException ex) {

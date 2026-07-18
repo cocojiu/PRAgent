@@ -97,6 +97,13 @@ class RepoGuardMetricsTest {
     }
 
     @Test
+    void recordsRefreshTokenConcurrentReplay() {
+        metrics.refreshTokenConcurrentReplay();
+
+        assertThat(counter("repoguard.auth.refresh_token.concurrent_replay")).isEqualTo(1.0);
+    }
+
+    @Test
     void recordsGithubApiRequestsWithOperationAndResultTags() {
         metrics.githubApiRequest(Duration.ofMillis(55), "FETCH_DIFF", "SUCCESS", null, null);
         metrics.githubApiRequest(Duration.ofMillis(20), "PUBLISH_COMMENTS", "FAILED", "github_rate_limited", "429");

@@ -1,6 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.entity.IntegrationConfig;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
@@ -81,7 +82,8 @@ public class GithubConnectionProbe implements ConnectionProbe<IntegrationConfig>
         request.header("X-GitHub-Api-Version", "2022-11-28")
             .exchange((httpRequest, httpResponse) -> responseReader.readSuccessfulBody(
                 httpResponse,
-                "GitHub connection test failed"
+                "GitHub connection test failed",
+                ExternalHttpResponseProfile.CONNECTION_PROBE
             ));
         return new ConnectionProbeResult(true, "connected", "GitHub connection test succeeded");
     }

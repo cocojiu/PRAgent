@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
@@ -244,7 +245,12 @@ public class GithubCommentWriter {
         Class<T> responseType,
         String operation
     ) throws IOException {
-        return jsonResponseReader.readSuccessfulJson(response, responseType, "GitHub " + operation + " failed");
+        return jsonResponseReader.readSuccessfulJson(
+            response,
+            responseType,
+            "GitHub " + operation + " failed",
+            ExternalHttpResponseProfile.GITHUB
+        );
     }
 
     private boolean containsUnresolvableLineSignal(String value) {

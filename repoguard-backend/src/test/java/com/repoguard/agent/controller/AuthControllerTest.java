@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -98,7 +99,7 @@ class AuthControllerTest {
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager()))
+        .standaloneSetup(new AuthController(authService, cookieManager()))
         .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
         .build();
 
@@ -194,7 +195,7 @@ class AuthControllerTest {
     void changePasswordAppliesDedicatedAttemptLimitForAuthenticatedUser() throws Exception {
         AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
         MockMvc limitedMockMvc = MockMvcBuilders
-            .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager(), limiter))
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
             .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
             .build();
 
@@ -229,6 +230,30 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void refreshAppliesAttemptLimitUsingTheCookieToken() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        doThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "Too many authentication attempts"))
+            .when(limiter)
+            .requireAllowed(eq("refresh"), eq("refresh-token-value"), any(HttpServletRequest.class));
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+
+        verify(limiter).requireAllowed(
+            eq("refresh"),
+            eq("refresh-token-value"),
+            any(HttpServletRequest.class)
+        );
     }
 
     @Test
@@ -330,14 +355,12 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshWithInvalidCookieTokenClearsAuthCookies() throws Exception {
+    void refreshWithInvalidCookieTokenDoesNotClearPotentiallyRotatedCookies() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "invalid-refresh-token"), csrfCookie())
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isUnauthorized())
-            .andExpect(result -> expectSetCookieContains(result, "repoguard_refresh_token="))
-            .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="))
-            .andExpect(result -> expectSetCookieContains(result, "Max-Age=0"));
+            .andExpect(result -> assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty());
     }
 
     @Test
@@ -541,6 +564,10 @@ class AuthControllerTest {
 
     private static Cookie refreshCookie() {
         return new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value");
+    }
+
+    private static AuthSessionCookieManager cookieManager() {
+        return new AuthSessionCookieManager(false);
     }
 
     private static Cookie csrfCookie() {

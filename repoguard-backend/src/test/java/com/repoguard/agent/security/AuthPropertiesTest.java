@@ -39,8 +39,19 @@ class AuthPropertiesTest {
     void productionProfileAllowsStrongTokenSecret() {
         AuthProperties properties = new AuthProperties();
         properties.setTokenSecret("0123456789abcdef0123456789abcdef");
+        properties.setSecureCookies(true);
 
         assertThatCode(() -> properties.validateForProfiles(new String[] {"prod"})).doesNotThrowAnyException();
+    }
+
+    @Test
+    void productionProfileRejectsInsecureCookies() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("0123456789abcdef0123456789abcdef");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("repoguard.auth.secure-cookies");
     }
 
     @Test
@@ -79,5 +90,15 @@ class AuthPropertiesTest {
         assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("remember-token-ttl-seconds");
+    }
+
+    @Test
+    void rejectsNegativeRefreshConcurrencyGrace() {
+        AuthProperties properties = new AuthProperties();
+        properties.setRefreshConcurrencyGraceSeconds(-1);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("refresh-concurrency-grace-seconds");
     }
 }

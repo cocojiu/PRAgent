@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.review.LlmChatCompletionResponseExtractor;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
@@ -142,6 +143,26 @@ class LlmConnectionProbeTest {
                 "responseBody=<html>LLM upstream failed token=****"
             );
             assertThat(result.message()).doesNotContain("raw-token-value");
+        }
+    }
+
+    @Test
+    void probeRejectsOversizedResponseWithoutIncludingItsBody() throws Exception {
+        String oversizedBody = "x".repeat(ExternalHttpResponseProfile.CONNECTION_PROBE.maxBytes() + 1);
+        try (ProbeServer server = startProbeServer(oversizedBody)) {
+            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            config.setBaseUrl(server.baseUrl());
+
+            ConnectionProbeResult result = probe.probe(config);
+
+            assertThat(result.healthy()).isFalse();
+            assertThat(result.status()).isEqualTo("failed");
+            assertThat(result.message()).contains(
+                "llm_response_too_large",
+                "profile=connection_probe",
+                "maxBytes=262144"
+            );
+            assertThat(result.message()).doesNotContain("x".repeat(32));
         }
     }
 

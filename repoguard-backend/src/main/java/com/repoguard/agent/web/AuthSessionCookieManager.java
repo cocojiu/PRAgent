@@ -10,6 +10,7 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.Base64;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,11 @@ public class AuthSessionCookieManager {
     private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/v1/auth";
     private static final String CSRF_TOKEN_COOKIE_PATH = "/";
     private static final SecureRandom CSRF_TOKEN_RANDOM = new SecureRandom();
+    private final boolean forceSecureCookies;
+
+    public AuthSessionCookieManager(@Value("${repoguard.auth.secure-cookies:false}") boolean forceSecureCookies) {
+        this.forceSecureCookies = forceSecureCookies;
+    }
 
     public void writeRefreshTokenCookies(
         AuthResponse authResponse,
@@ -77,7 +83,7 @@ public class AuthSessionCookieManager {
     private ResponseCookie.ResponseCookieBuilder refreshTokenCookieBuilder(HttpServletRequest request, String value) {
         return ResponseCookie.from(REFRESH_TOKEN_COOKIE_NAME, value)
             .httpOnly(true)
-            .secure(isSecureRequest(request))
+            .secure(shouldUseSecureCookies(request))
             .sameSite("Lax")
             .path(REFRESH_TOKEN_COOKIE_PATH);
     }
@@ -85,7 +91,7 @@ public class AuthSessionCookieManager {
     private ResponseCookie.ResponseCookieBuilder csrfTokenCookieBuilder(HttpServletRequest request, String value) {
         return ResponseCookie.from(CSRF_TOKEN_COOKIE_NAME, value)
             .httpOnly(false)
-            .secure(isSecureRequest(request))
+            .secure(shouldUseSecureCookies(request))
             .sameSite("Lax")
             .path(CSRF_TOKEN_COOKIE_PATH);
     }
@@ -103,8 +109,9 @@ public class AuthSessionCookieManager {
         );
     }
 
-    private boolean isSecureRequest(HttpServletRequest request) {
-        return request != null
+    private boolean shouldUseSecureCookies(HttpServletRequest request) {
+        return forceSecureCookies
+            || request != null
             && (request.isSecure() || "https".equalsIgnoreCase(request.getHeader("X-Forwarded-Proto")));
     }
 }

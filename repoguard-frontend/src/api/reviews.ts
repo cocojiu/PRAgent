@@ -1,4 +1,4 @@
-import { apiRequest } from "@/api/contracts";
+import { apiRequest, type ApiRequestOptions } from "@/api/contracts";
 import type {
   FindingFeedbackRequest,
   HumanReviewRequest,
@@ -15,7 +15,8 @@ export const fetchReviews = (query: ReviewQuery) =>
 /**
  * 查询单个评审任务首屏 summary；findings/files/missing-tests/timeline 通过分页接口加载。
  */
-export const fetchReviewDetail = (id: number) => apiRequest("fetchReviewDetail", { id });
+export const fetchReviewDetail = (id: number, options?: ApiRequestOptions) =>
+  apiRequest("fetchReviewDetail", { id }, options);
 
 export const fetchReviewFindings = (
   id: number,
@@ -40,7 +41,8 @@ export const fetchReviewTimeline = (
 export const fetchReviewRepositories = () =>
   apiRequest("fetchReviewRepositories", undefined);
 
-export const fetchReviewStatus = (id: number) => apiRequest("fetchReviewStatus", { id });
+export const fetchReviewStatus = (id: number, options?: ApiRequestOptions) =>
+  apiRequest("fetchReviewStatus", { id }, options);
 
 export const fetchGithubCommentPreview = (
   id: number,

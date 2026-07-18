@@ -1,4 +1,5 @@
 import type { ComputedRef, Ref } from "vue";
+import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 
 type UseReviewDetailPollingOptions = {
   currentPollIntervalMs: ComputedRef<number>;
@@ -15,42 +16,16 @@ export const useReviewDetailPolling = ({
   pollReviewStatus,
   shouldPollTask
 }: UseReviewDetailPollingOptions) => {
-  let pollTimer: ReturnType<typeof setTimeout> | undefined;
-
-  const stopPolling = () => {
-    if (!pollTimer) {
-      return;
-    }
-    clearTimeout(pollTimer);
-    pollTimer = undefined;
-  };
-
-  const startPolling = () => {
-    if (pollTimer || !shouldPollTask.value) {
-      return;
-    }
-    if (pollFailureCount.value >= maxPollFailures) {
-      stopPolling();
-      return;
-    }
-    pollTimer = setTimeout(() => {
-      pollTimer = undefined;
-      void pollReviewStatus();
-    }, currentPollIntervalMs.value);
-  };
-
-  const syncPolling = () => {
-    if (shouldPollTask.value) {
-      startPolling();
-    } else {
-      stopPolling();
-    }
-  };
+  const poller = createPageAwarePoller({
+    intervalMs: () => currentPollIntervalMs.value,
+    isEnabled: () => shouldPollTask.value && pollFailureCount.value < maxPollFailures,
+    poll: pollReviewStatus
+  });
 
   return {
-    cleanupPolling: stopPolling,
-    startPolling,
-    stopPolling,
-    syncPolling
+    cleanupPolling: poller.dispose,
+    startPolling: poller.start,
+    stopPolling: poller.stop,
+    syncPolling: poller.sync
   };
 };

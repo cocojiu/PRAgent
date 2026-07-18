@@ -26,6 +26,8 @@ class ApplicationProfileConfigurationTest {
             .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET}");
         assertThat(base.getProperty("repoguard.auth.registration-enabled"))
             .isEqualTo("${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}");
+        assertThat(base.getProperty("repoguard.auth.refresh-concurrency-grace-seconds"))
+            .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:5}");
         assertThat(base.getProperty("app.cors.allowed-origins")).isEqualTo("${APP_CORS_ALLOWED_ORIGINS:}");
     }
 
@@ -48,6 +50,14 @@ class ApplicationProfileConfigurationTest {
             assertThat(profile.getProperty("repoguard.auth.registration-enabled"))
                 .isEqualTo("${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}");
         }
+    }
+
+    @Test
+    void productionProfileForcesSecureAuthenticationCookiesByDefault() throws IOException {
+        PropertySource<?> production = load("application-prod.yml");
+
+        assertThat(production.getProperty("repoguard.auth.secure-cookies"))
+            .isEqualTo("${REPOGUARD_AUTH_SECURE_COOKIES:true}");
     }
 
     private PropertySource<?> load(String resource) throws IOException {

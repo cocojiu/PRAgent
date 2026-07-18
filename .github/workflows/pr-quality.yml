@@ -15,6 +15,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  edge-config:
+    name: Production edge configuration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Validate production Compose configuration
+        run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+      - name: Validate production Caddy configuration
+        run: >-
+          docker run --rm
+          -e REPOGUARD_FRONTEND_SERVER_NAME=repoguard.example
+          -v "${{ github.workspace }}/Caddyfile:/etc/caddy/Caddyfile:ro"
+          caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
   backend-unit:
     name: Backend unit and contract tests
     runs-on: ubuntu-latest

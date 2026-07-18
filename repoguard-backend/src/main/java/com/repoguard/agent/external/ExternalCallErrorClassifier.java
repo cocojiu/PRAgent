@@ -12,6 +12,10 @@ public final class ExternalCallErrorClassifier {
         if (ex instanceof ExternalCallException externalCallException) {
             return externalCallException;
         }
+        ExternalHttpResponseTooLargeException tooLarge = responseTooLargeCause(ex);
+        if (tooLarge != null) {
+            return failure("GitHub", "github_response_too_large", false, null, tooLarge.getMessage(), ex);
+        }
         Integer statusCode = statusCode(ex);
         String detail = detail(ex);
         if (statusCode != null) {
@@ -38,6 +42,10 @@ public final class ExternalCallErrorClassifier {
     public static ExternalCallException llm(RuntimeException ex) {
         if (ex instanceof ExternalCallException externalCallException) {
             return externalCallException;
+        }
+        ExternalHttpResponseTooLargeException tooLarge = responseTooLargeCause(ex);
+        if (tooLarge != null) {
+            return failure("LLM", "llm_response_too_large", false, null, tooLarge.getMessage(), ex);
         }
         Integer statusCode = statusCode(ex);
         String detail = detail(ex);
@@ -81,6 +89,21 @@ public final class ExternalCallErrorClassifier {
 
     private static boolean isTimeout(RuntimeException ex, String detail) {
         return ExternalFailureSignals.hasTimeoutSignal(ex, detail, false);
+    }
+
+    private static ExternalHttpResponseTooLargeException responseTooLargeCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof ExternalHttpResponseTooLargeException tooLarge) {
+                return tooLarge;
+            }
+            Throwable cause = current.getCause();
+            if (cause == current) {
+                break;
+            }
+            current = cause;
+        }
+        return null;
     }
 
     private static String detail(RuntimeException ex) {

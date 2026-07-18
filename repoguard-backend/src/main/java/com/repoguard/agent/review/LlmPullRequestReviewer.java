@@ -8,6 +8,7 @@ import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.github.GithubPullRequestDiff;
@@ -127,7 +128,8 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
                 .body(payload)
                 .exchange((request, clientResponse) -> responseReader.readSuccessfulTree(
                     clientResponse,
-                    "LLM request failed"
+                    "LLM request failed",
+                    ExternalHttpResponseProfile.LLM
                 )));
             metrics.llmRequestDuration(Duration.ofNanos(System.nanoTime() - startedAt), "success");
             return extractLlmCallResult(response);

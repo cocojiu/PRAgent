@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
@@ -110,7 +111,8 @@ public class LlmConnectionProbe implements ConnectionProbe<ReviewPolicyConfig> {
                 ))
                 .exchange((request, response) -> responseReader.readSuccessfulBody(
                     response,
-                    "LLM connection test failed"
+                    "LLM connection test failed",
+                    ExternalHttpResponseProfile.CONNECTION_PROBE
                 ));
             String response = responseBytes == null ? "" : new String(responseBytes, StandardCharsets.UTF_8);
             String content = responseParser.extractReviewContent(response);

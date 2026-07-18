@@ -44,10 +44,25 @@ export const useReviewDetailLoader = ({
   const pollFailureCount = ref(0);
   const lastRefreshedAt = ref("");
   const selectedTask = ref<ReviewTaskDetail | null>(null);
+  let activeRequest: { controller: AbortController; sequence: number } | undefined;
   let requestSequence = 0;
 
-  const beginRequest = () => ++requestSequence;
+  const beginRequest = () => {
+    activeRequest?.controller.abort();
+    const request = {
+      controller: new AbortController(),
+      sequence: ++requestSequence
+    };
+    activeRequest = request;
+    return request;
+  };
   const isLatestRequest = (sequence: number) => sequence === requestSequence;
+
+  const completeRequest = (sequence: number) => {
+    if (activeRequest?.sequence === sequence) {
+      activeRequest = undefined;
+    }
+  };
 
   const clearNonTerminalGithubCommentData = (status: ReviewStatus | string) => {
     if (isTerminalReviewStatus(status)) {
@@ -68,7 +83,8 @@ export const useReviewDetailLoader = ({
       return;
     }
 
-    const sequence = beginRequest();
+    const request = beginRequest();
+    const { sequence } = request;
 
     if (options.silent) {
       silentRefreshing.value = true;
@@ -80,7 +96,7 @@ export const useReviewDetailLoader = ({
       resetGithubCommentPublishResult();
     }
     try {
-      const task = normalizeReviewTaskDetail(await fetchReviewDetail(id));
+      const task = normalizeReviewTaskDetail(await fetchReviewDetail(id, { signal: request.controller.signal }));
       if (!isLatestRequest(sequence)) {
         return;
       }
@@ -114,6 +130,7 @@ export const useReviewDetailLoader = ({
         loading.value = false;
         silentRefreshing.value = false;
       }
+      completeRequest(sequence);
     }
   };
 
@@ -126,10 +143,11 @@ export const useReviewDetailLoader = ({
       return;
     }
 
-    const sequence = beginRequest();
+    const request = beginRequest();
+    const { sequence } = request;
     silentRefreshing.value = true;
     try {
-      const status = await fetchReviewStatus(id);
+      const status = await fetchReviewStatus(id, { signal: request.controller.signal });
       if (!isLatestRequest(sequence)) {
         return;
       }
@@ -161,10 +179,13 @@ export const useReviewDetailLoader = ({
       if (isLatestRequest(sequence)) {
         silentRefreshing.value = false;
       }
+      completeRequest(sequence);
     }
   };
 
   const cancelPendingRequests = () => {
+    activeRequest?.controller.abort();
+    activeRequest = undefined;
     requestSequence += 1;
     loading.value = false;
     silentRefreshing.value = false;

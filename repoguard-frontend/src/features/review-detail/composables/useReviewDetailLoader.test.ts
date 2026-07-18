@@ -52,7 +52,10 @@ describe("useReviewDetailLoader", () => {
     const loader = createLoader(() => 1);
     const pending = loader.loadDetail();
 
+    const requestOptions = fetchReviewDetail.mock.calls[0]?.[1] as { signal?: AbortSignal };
+
     loader.cancelPendingRequests();
+    expect(requestOptions.signal?.aborted).toBe(true);
     request.reject(new Error("stale"));
     await pending;
 
