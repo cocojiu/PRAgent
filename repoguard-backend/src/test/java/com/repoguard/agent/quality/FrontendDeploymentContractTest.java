@@ -63,6 +63,10 @@ class FrontendDeploymentContractTest {
             .isEqualTo("${REPOGUARD_AUTH_SECURE_COOKIES:-true}");
         assertThat(workerEnvironment.get("REPOGUARD_AUTH_SECURE_COOKIES"))
             .isEqualTo("${REPOGUARD_AUTH_SECURE_COOKIES:-true}");
+        assertThat(backendEnvironment.get("REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS"))
+            .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}");
+        assertThat(workerEnvironment.get("REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS"))
+            .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}");
         assertThat(frontendEnvironment.get("REPOGUARD_FRONTEND_SERVER_NAME"))
             .isEqualTo("${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}");
         assertThat(caddyEnvironment.get("REPOGUARD_FRONTEND_SERVER_NAME"))

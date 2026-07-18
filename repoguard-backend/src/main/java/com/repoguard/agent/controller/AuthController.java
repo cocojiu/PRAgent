@@ -123,13 +123,8 @@ public class AuthController {
     ) {
         rejectBodyRefreshToken(request);
         cookieManager.validateCookieTokenCsrf(cookieRefreshToken, csrfCookieToken, httpRequest);
-        try {
-            AuthResponse response = authService.refresh(new AuthRefreshRequest(cookieRefreshToken));
-            return authResponse(response, httpRequest, httpResponse);
-        } catch (RuntimeException ex) {
-            cookieManager.clearAuthCookies(httpRequest, httpResponse);
-            throw ex;
-        }
+        AuthResponse response = authService.refresh(new AuthRefreshRequest(cookieRefreshToken));
+        return authResponse(response, httpRequest, httpResponse);
     }
 
     @AllowAnonymous

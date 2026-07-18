@@ -57,6 +57,10 @@ public class ReviewMetricsRecorder {
         metrics.counter("repoguard.auth.refresh_token.reuse_detected").increment();
     }
 
+    void refreshTokenConcurrentReplay() {
+        metrics.counter("repoguard.auth.refresh_token.concurrent_replay").increment();
+    }
+
     void dataRetentionCleanup(boolean executed, long candidateTasks, int selectedTasks, int deletedTasks) {
         String mode = executed ? "execute" : "dry_run";
         metrics.counter(

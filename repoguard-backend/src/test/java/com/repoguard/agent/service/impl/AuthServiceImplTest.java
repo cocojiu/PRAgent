@@ -387,6 +387,7 @@ class AuthServiceImplTest {
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
         storedToken.setStatus("REVOKED");
         storedToken.setSessionVersion(2);
+        storedToken.setLastUsedAt(LocalDateTime.now().minusSeconds(6));
         UserAccount user = existingUser();
         user.setSessionVersion(2);
         when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
@@ -404,6 +405,34 @@ class AuthServiceImplTest {
         ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getFailureReason()).isEqualTo("refresh token reuse detected");
+    }
+
+    @Test
+    void refreshTreatsRecentlyRotatedTokenAsConcurrentReplayWithoutInvalidatingSession() {
+        String refreshToken = "refresh-token";
+        UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        storedToken.setStatus("REVOKED");
+        storedToken.setSessionVersion(2);
+        storedToken.setLastUsedAt(LocalDateTime.now().minusSeconds(1));
+        UserAccount user = existingUser();
+        user.setSessionVersion(2);
+        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+
+        assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("登录状态已过期，请重新登录");
+
+        assertThat(user.getSessionVersion()).isEqualTo(2);
+        verify(userAccountMapper, never()).updateById(any(UserAccount.class));
+        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper, never()).insert(any(UserRefreshToken.class));
+        verify(metrics).refreshTokenConcurrentReplay();
+        verify(metrics, never()).refreshTokenReuseDetected();
+        ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
+        verify(userLoginAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getFailureReason())
+            .isEqualTo("refresh token replay within concurrency grace");
     }
 
     @Test

@@ -13,6 +13,7 @@ public class AuthProperties {
     private long accessTokenTtlSeconds = 900;
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
+    private long refreshConcurrencyGraceSeconds = 5;
     private boolean registrationEnabled = true;
     private boolean secureCookies;
     private int publicAuthRequestsPerMinutePerIp = 30;
@@ -48,6 +49,14 @@ public class AuthProperties {
 
     public void setRememberTokenTtlSeconds(long rememberTokenTtlSeconds) {
         this.rememberTokenTtlSeconds = rememberTokenTtlSeconds;
+    }
+
+    public long getRefreshConcurrencyGraceSeconds() {
+        return refreshConcurrencyGraceSeconds;
+    }
+
+    public void setRefreshConcurrencyGraceSeconds(long refreshConcurrencyGraceSeconds) {
+        this.refreshConcurrencyGraceSeconds = refreshConcurrencyGraceSeconds;
     }
 
     public boolean isRegistrationEnabled() {
@@ -86,6 +95,7 @@ public class AuthProperties {
         requirePositive("repoguard.auth.access-token-ttl-seconds", accessTokenTtlSeconds);
         requirePositive("repoguard.auth.refresh-token-ttl-seconds", refreshTokenTtlSeconds);
         requirePositive("repoguard.auth.remember-token-ttl-seconds", rememberTokenTtlSeconds);
+        requireNonNegative("repoguard.auth.refresh-concurrency-grace-seconds", refreshConcurrencyGraceSeconds);
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-ip", publicAuthRequestsPerMinutePerIp);
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-account-ip", publicAuthRequestsPerMinutePerAccountIp);
 
@@ -108,6 +118,12 @@ public class AuthProperties {
     private void requirePositive(String propertyName, long value) {
         if (value <= 0) {
             throw new IllegalStateException(propertyName + " must be greater than 0");
+        }
+    }
+
+    private void requireNonNegative(String propertyName, long value) {
+        if (value < 0) {
+            throw new IllegalStateException(propertyName + " must be greater than or equal to 0");
         }
     }
 }

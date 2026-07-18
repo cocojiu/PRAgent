@@ -330,14 +330,12 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshWithInvalidCookieTokenClearsAuthCookies() throws Exception {
+    void refreshWithInvalidCookieTokenDoesNotClearPotentiallyRotatedCookies() throws Exception {
         mockMvc.perform(post("/api/v1/auth/refresh")
                 .cookie(new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "invalid-refresh-token"), csrfCookie())
                 .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
             .andExpect(status().isUnauthorized())
-            .andExpect(result -> expectSetCookieContains(result, "repoguard_refresh_token="))
-            .andExpect(result -> expectSetCookieContains(result, "repoguard_csrf_token="))
-            .andExpect(result -> expectSetCookieContains(result, "Max-Age=0"));
+            .andExpect(result -> assertThat(result.getResponse().getHeaders(HttpHeaders.SET_COOKIE)).isEmpty());
     }
 
     @Test

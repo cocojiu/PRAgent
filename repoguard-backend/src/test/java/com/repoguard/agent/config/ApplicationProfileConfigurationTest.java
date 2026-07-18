@@ -26,6 +26,8 @@ class ApplicationProfileConfigurationTest {
             .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET}");
         assertThat(base.getProperty("repoguard.auth.registration-enabled"))
             .isEqualTo("${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}");
+        assertThat(base.getProperty("repoguard.auth.refresh-concurrency-grace-seconds"))
+            .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:5}");
         assertThat(base.getProperty("app.cors.allowed-origins")).isEqualTo("${APP_CORS_ALLOWED_ORIGINS:}");
     }
 

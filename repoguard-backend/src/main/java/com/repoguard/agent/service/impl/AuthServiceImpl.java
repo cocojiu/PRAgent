@@ -259,7 +259,11 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (!STATUS_ACTIVE.equals(storedToken.getStatus())) {
-            handleRefreshTokenReuse(storedToken, now);
+            if (isRefreshConcurrencyReplay(storedToken, now)) {
+                handleRefreshConcurrencyReplay(storedToken, now);
+            } else {
+                handleRefreshTokenReuse(storedToken, now);
+            }
             return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
         if (!storedToken.getExpiresAt().isAfter(now)) {
@@ -424,6 +428,29 @@ public class AuthServiceImpl implements AuthService {
             "TOKEN_REFRESH",
             AUDIT_FAILURE,
             "refresh token reuse detected"
+        );
+    }
+
+    private boolean isRefreshConcurrencyReplay(UserRefreshToken storedToken, LocalDateTime now) {
+        long graceSeconds = authProperties.getRefreshConcurrencyGraceSeconds();
+        return graceSeconds > 0
+            && storedToken.getLastUsedAt() != null
+            && !storedToken.getLastUsedAt().isBefore(now.minusSeconds(graceSeconds));
+    }
+
+    private void handleRefreshConcurrencyReplay(UserRefreshToken storedToken, LocalDateTime now) {
+        metrics.refreshTokenConcurrentReplay();
+        storedToken.setUpdatedAt(now);
+        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("id", storedToken.getId())
+            .set("updated_at", now));
+        UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
+        recordAudit(
+            storedToken.getUserId(),
+            user == null ? null : user.getUsername(),
+            "TOKEN_REFRESH",
+            AUDIT_FAILURE,
+            "refresh token replay within concurrency grace"
         );
     }
 

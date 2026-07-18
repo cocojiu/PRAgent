@@ -72,6 +72,10 @@ public class RepoGuardMetrics {
         reviewMetrics.refreshTokenReuseDetected();
     }
 
+    public void refreshTokenConcurrentReplay() {
+        reviewMetrics.refreshTokenConcurrentReplay();
+    }
+
     public void githubApiRequest(Duration duration, String operation, String result, String category, String status) {
         externalMetrics.githubApiRequest(duration, operation, result, category, status);
     }

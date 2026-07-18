@@ -91,4 +91,14 @@ class AuthPropertiesTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("remember-token-ttl-seconds");
     }
+
+    @Test
+    void rejectsNegativeRefreshConcurrencyGrace() {
+        AuthProperties properties = new AuthProperties();
+        properties.setRefreshConcurrencyGraceSeconds(-1);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("refresh-concurrency-grace-seconds");
+    }
 }
