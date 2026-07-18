@@ -18,3 +18,4 @@ repoguard:
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:}
   auth:
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}
+    secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}

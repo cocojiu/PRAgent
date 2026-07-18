@@ -14,6 +14,7 @@ public class AuthProperties {
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
     private boolean registrationEnabled = true;
+    private boolean secureCookies;
     private int publicAuthRequestsPerMinutePerIp = 30;
     private int publicAuthRequestsPerMinutePerAccountIp = 10;
 
@@ -57,6 +58,14 @@ public class AuthProperties {
         this.registrationEnabled = registrationEnabled;
     }
 
+    public boolean isSecureCookies() {
+        return secureCookies;
+    }
+
+    public void setSecureCookies(boolean secureCookies) {
+        this.secureCookies = secureCookies;
+    }
+
     public int getPublicAuthRequestsPerMinutePerIp() {
         return publicAuthRequestsPerMinutePerIp;
     }
@@ -90,6 +99,9 @@ public class AuthProperties {
         }
         if (normalizedTokenSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
             throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in a production-like profile");
+        }
+        if (!secureCookies) {
+            throw new IllegalStateException("repoguard.auth.secure-cookies must be true in a production-like profile");
         }
     }
 

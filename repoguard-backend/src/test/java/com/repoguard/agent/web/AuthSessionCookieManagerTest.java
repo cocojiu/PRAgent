@@ -15,7 +15,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 class AuthSessionCookieManagerTest {
 
-    private final AuthSessionCookieManager manager = new AuthSessionCookieManager();
+    private final AuthSessionCookieManager manager = new AuthSessionCookieManager(false);
 
     @Test
     void writeRefreshTokenCookiesUsesHttpOnlyRefreshAndReadableCsrfCookies() {
@@ -48,6 +48,17 @@ class AuthSessionCookieManagerTest {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         manager.writeRefreshTokenCookies(authResponse(7200L), request, response);
+
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE))
+            .allSatisfy(cookie -> assertThat(cookie).contains("Secure"));
+    }
+
+    @Test
+    void writeRefreshTokenCookiesForcesSecureFromConfigurationOnPlainHttp() {
+        AuthSessionCookieManager secureManager = new AuthSessionCookieManager(true);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        secureManager.writeRefreshTokenCookies(authResponse(7200L), new MockHttpServletRequest(), response);
 
         assertThat(response.getHeaders(HttpHeaders.SET_COOKIE))
             .allSatisfy(cookie -> assertThat(cookie).contains("Secure"));

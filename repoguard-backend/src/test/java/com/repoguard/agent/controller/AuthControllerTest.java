@@ -98,7 +98,7 @@ class AuthControllerTest {
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager()))
+        .standaloneSetup(new AuthController(authService, cookieManager()))
         .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
         .build();
 
@@ -194,7 +194,7 @@ class AuthControllerTest {
     void changePasswordAppliesDedicatedAttemptLimitForAuthenticatedUser() throws Exception {
         AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
         MockMvc limitedMockMvc = MockMvcBuilders
-            .standaloneSetup(new AuthController(authService, new AuthSessionCookieManager(), limiter))
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
             .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
             .build();
 
@@ -541,6 +541,10 @@ class AuthControllerTest {
 
     private static Cookie refreshCookie() {
         return new Cookie(AuthController.REFRESH_TOKEN_COOKIE_NAME, "refresh-token-value");
+    }
+
+    private static AuthSessionCookieManager cookieManager() {
+        return new AuthSessionCookieManager(false);
     }
 
     private static Cookie csrfCookie() {

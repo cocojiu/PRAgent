@@ -50,6 +50,14 @@ class ApplicationProfileConfigurationTest {
         }
     }
 
+    @Test
+    void productionProfileForcesSecureAuthenticationCookiesByDefault() throws IOException {
+        PropertySource<?> production = load("application-prod.yml");
+
+        assertThat(production.getProperty("repoguard.auth.secure-cookies"))
+            .isEqualTo("${REPOGUARD_AUTH_SECURE_COOKIES:true}");
+    }
+
     private PropertySource<?> load(String resource) throws IOException {
         return new YamlPropertySourceLoader()
             .load(resource, new ClassPathResource(resource))
