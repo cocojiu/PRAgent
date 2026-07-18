@@ -3,11 +3,13 @@ import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { ElMessageBox } from "element-plus/es/components/message-box/index.mjs";
 import { fetchMessageQueueHealth, requeueMessageQueueTask } from "@/api/messageQueue";
 import { useFilterPagination } from "@/composables/useFilterPagination";
+import { createPageAwarePoller } from "@/composables/pageAwarePoller";
 import { canRequeueMessageQueueStatus } from "@/features/message-queue/messageQueueDisplay";
 import type { MessageQueueExceptionTask, MessageQueueHealth } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 
 const AUTO_REFRESH_INTERVAL_MS = 30000;
+const AUTO_REFRESH_MAX_INTERVAL_MS = 300000;
 const DEFAULT_PAGE_SIZE = 10;
 
 export const useMessageQueueHealth = () => {
@@ -21,7 +23,9 @@ export const useMessageQueueHealth = () => {
   const requeueingTaskId = ref<number>();
   const currentPage = ref(1);
   const pageSize = ref(DEFAULT_PAGE_SIZE);
-  let refreshTimer: ReturnType<typeof setInterval> | undefined;
+  let autoRefreshFailureCount = 0;
+  let healthRequest: { controller: AbortController; sequence: number } | undefined;
+  let requestSequence = 0;
 
   const repositories = computed(() =>
     Array.from(new Set((health.value?.exceptionTasks ?? []).map((task) => task.repository).filter(Boolean) as string[])).sort()
@@ -45,18 +49,47 @@ export const useMessageQueueHealth = () => {
     pageSize
   });
 
-  const loadHealth = async () => {
-    loading.value = true;
+  const executeLoadHealth = async (background: boolean) => {
+    if (background && healthRequest) {
+      return;
+    }
+    healthRequest?.controller.abort();
+    const request = {
+      controller: new AbortController(),
+      sequence: ++requestSequence
+    };
+    healthRequest = request;
+    if (!background) {
+      loading.value = true;
+    }
     errorMessage.value = "";
     try {
-      health.value = await fetchMessageQueueHealth();
+      const response = await fetchMessageQueueHealth({ signal: request.controller.signal });
+      if (request.sequence !== requestSequence) {
+        return;
+      }
+      health.value = response;
+      autoRefreshFailureCount = 0;
     } catch (error) {
+      if (request.sequence !== requestSequence) {
+        return;
+      }
+      if (background) {
+        autoRefreshFailureCount += 1;
+      }
       errorMessage.value = getErrorMessage(error, "消息队列健康数据加载失败");
-      ElMessage.error(errorMessage.value);
+      if (!background) {
+        ElMessage.error(errorMessage.value);
+      }
     } finally {
-      loading.value = false;
+      if (request.sequence === requestSequence) {
+        loading.value = false;
+        healthRequest = undefined;
+      }
     }
   };
+
+  const loadHealth = () => executeLoadHealth(false);
 
   const canRequeue = (status: MessageQueueExceptionTask["status"]) => canRequeueMessageQueueStatus(status);
 
@@ -94,24 +127,32 @@ export const useMessageQueueHealth = () => {
     }
   };
 
-  const stopAutoRefresh = () => {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = undefined;
-    }
-  };
+  const autoRefreshPoller = createPageAwarePoller({
+    intervalMs: () => Math.min(
+      AUTO_REFRESH_INTERVAL_MS * 2 ** autoRefreshFailureCount,
+      AUTO_REFRESH_MAX_INTERVAL_MS
+    ),
+    isEnabled: () => autoRefresh.value,
+    poll: () => executeLoadHealth(true)
+  });
 
   watch(autoRefresh, (enabled) => {
-    stopAutoRefresh();
     if (enabled) {
-      refreshTimer = setInterval(() => {
-        void loadHealth();
-      }, AUTO_REFRESH_INTERVAL_MS);
+      autoRefreshPoller.start();
+    } else {
+      autoRefreshFailureCount = 0;
+      autoRefreshPoller.stop();
     }
   });
 
   onMounted(loadHealth);
-  onBeforeUnmount(stopAutoRefresh);
+  onBeforeUnmount(() => {
+    autoRefreshPoller.dispose();
+    healthRequest?.controller.abort();
+    healthRequest = undefined;
+    requestSequence += 1;
+    loading.value = false;
+  });
 
   return {
     autoRefresh,

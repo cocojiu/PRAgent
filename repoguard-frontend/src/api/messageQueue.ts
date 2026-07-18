@@ -1,6 +1,7 @@
-import { apiRequest } from "@/api/contracts";
+import { apiRequest, type ApiRequestOptions } from "@/api/contracts";
 
-export const fetchMessageQueueHealth = () => apiRequest("fetchMessageQueueHealth", undefined);
+export const fetchMessageQueueHealth = (options?: ApiRequestOptions) =>
+  apiRequest("fetchMessageQueueHealth", undefined, options);
 
 export const requeueMessageQueueTask = (taskId: number) =>
   apiRequest("requeueMessageQueueTask", { taskId });

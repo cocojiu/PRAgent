@@ -5,6 +5,7 @@ import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
 
 const KIB = 1024;
+const BUNDLE_BUDGET_WARNING_RATIO = 0.9;
 
 const bundleBudgets = {
   initialJavaScriptGzip: 190 * KIB,
@@ -98,6 +99,16 @@ const bundleBudgetPlugin = (): Plugin => ({
 
     if (violations.length > 0) {
       this.error(`[bundle-budget] Budget exceeded. ${summary}`);
+    }
+
+    const lowHeadroomMeasurements = measurements.filter(
+      ({ actual, budget }) => actual >= budget * BUNDLE_BUDGET_WARNING_RATIO
+    );
+    if (lowHeadroomMeasurements.length > 0) {
+      const warningSummary = lowHeadroomMeasurements
+        .map(({ label, actual, budget }) => `${label}: ${formatKiB(actual)} / ${formatKiB(budget)}`)
+        .join("; ");
+      this.warn(`[bundle-budget] Headroom below 10%. ${warningSummary}`);
     }
 
     this.info(`[bundle-budget] ${summary}`);

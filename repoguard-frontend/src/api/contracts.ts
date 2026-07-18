@@ -75,6 +75,10 @@ import { RequestError } from "@/utils/errors";
 type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 type QueryParams = Record<string, string | number | undefined>;
 
+export type ApiRequestOptions = {
+  signal?: AbortSignal;
+};
+
 type ApiOperation<Input, Response> = {
   input: Input;
   response: Response;
@@ -603,13 +607,14 @@ const apiEndpoints: ApiEndpointMap = {
 
 export const apiRequest = async <Operation extends keyof ApiContract>(
   operation: Operation,
-  input: ApiContract[Operation]["input"]
+  input: ApiContract[Operation]["input"],
+  requestOptions: ApiRequestOptions = {}
 ): Promise<ApiContract[Operation]["response"]> => {
   const endpoint = apiEndpoints[operation] as ApiEndpoint<
     ApiContract[Operation]["input"],
     ApiContract[Operation]["response"]
   >;
-  const options: RequestInit = {};
+  const options: RequestInit = { signal: requestOptions.signal };
   const method = endpoint.method ?? "GET";
   const path = endpoint.path(input);
   const observationPath = stableObservationPath(path);

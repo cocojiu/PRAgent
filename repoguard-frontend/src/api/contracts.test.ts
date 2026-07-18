@@ -62,6 +62,17 @@ describe("apiRequest", () => {
     expect(init.method).toBeUndefined();
   });
 
+  it("forwards cancellation signals through the typed API contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+
+    await apiRequest("fetchMessageQueueHealth", undefined, { signal: controller.signal });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
+  });
+
   it("serializes request bodies from the typed operation contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({
       taskId: 9,
