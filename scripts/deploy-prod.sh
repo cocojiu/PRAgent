@@ -230,20 +230,50 @@ running_service_image_id() {
 }
 
 validate_split_runtime_mode() {
-  if ! has_compose_service backend-worker; then
-    return 0
-  fi
   api_worker_enabled="${REPOGUARD_WORKER_ENABLED:-}"
   if [ -z "$api_worker_enabled" ]; then
     api_worker_enabled="$(read_env_value REPOGUARD_WORKER_ENABLED)"
   fi
+
+  if has_compose_service backend-worker; then
+    case "$api_worker_enabled" in
+      false|FALSE|False|0)
+        return 0
+        ;;
+    esac
+    echo "Split deployment requires REPOGUARD_WORKER_ENABLED=false for the API service." >&2
+    return 1
+  fi
+
   case "$api_worker_enabled" in
-    false|FALSE|False|0)
+    ""|true|TRUE|True|1)
       return 0
       ;;
   esac
-  echo "Split deployment requires REPOGUARD_WORKER_ENABLED=false for the API service." >&2
+  echo "Monolithic deployment requires REPOGUARD_WORKER_ENABLED=true for the API service." >&2
   return 1
+}
+
+stop_inactive_split_worker() {
+  if has_compose_service backend-worker; then
+    return 0
+  fi
+
+  worker_container_id="$(docker ps -aq --filter 'name=^/repoguard-backend-worker$' | head -n 1)"
+  if [ -z "$worker_container_id" ]; then
+    return 0
+  fi
+
+  worker_service="$(docker inspect "$worker_container_id" --format '{{index .Config.Labels "com.docker.compose.service"}}' 2>/dev/null || true)"
+  if [ "$worker_service" != "backend-worker" ]; then
+    echo "Refusing to stop unexpected container named repoguard-backend-worker." >&2
+    return 1
+  fi
+
+  if [ "$(docker inspect "$worker_container_id" --format '{{.State.Running}}' 2>/dev/null || true)" = "true" ]; then
+    echo "Stopping inactive split Worker; the API service is handling Worker duties."
+    docker stop -t 20 "$worker_container_id" >/dev/null
+  fi
 }
 
 rollback_deployment() {
@@ -339,6 +369,7 @@ echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
 validate_production_data_routing
 validate_split_runtime_mode
+stop_inactive_split_worker
 deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
   deploy_services="mysql rabbitmq backend backend-worker frontend caddy"
