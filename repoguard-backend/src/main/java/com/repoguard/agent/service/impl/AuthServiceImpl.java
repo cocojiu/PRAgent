@@ -241,46 +241,53 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional
     public AuthResponse refresh(AuthRefreshRequest request) {
+        RefreshTransactionResult result = inWriteTransaction(() -> refreshInWriteTransaction(request));
+        if (result.failureMessage() != null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, result.failureMessage());
+        }
+        return result.response();
+    }
+
+    private RefreshTransactionResult refreshInWriteTransaction(AuthRefreshRequest request) {
         UserRefreshToken storedToken = findRefreshToken(request.refreshToken());
         LocalDateTime now = LocalDateTime.now();
         if (storedToken == null) {
             revokeIfPresent(storedToken, now);
             recordAudit(storedToken == null ? null : storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token expired or invalid");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+            return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
 
         if (!STATUS_ACTIVE.equals(storedToken.getStatus())) {
             handleRefreshTokenReuse(storedToken, now);
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+            return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
         if (!storedToken.getExpiresAt().isAfter(now)) {
             revokeIfPresent(storedToken, now);
             recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token expired or invalid");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+            return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
 
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user == null || !STATUS_ACTIVE.equals(user.getStatus())) {
             revokeIfPresent(storedToken, now);
             recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "account unavailable");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "账号不可用，请重新登录");
+            return RefreshTransactionResult.failure("账号不可用，请重新登录");
         }
         if (safeSessionVersion(storedToken) != safeSessionVersion(user)) {
             revokeIfPresent(storedToken, now);
             recordAudit(storedToken.getUserId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_FAILURE, "session version changed");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+            return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
 
         if (!revokeActiveRefreshToken(storedToken, now)) {
             recordAudit(storedToken.getUserId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_FAILURE, "refresh token already used");
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态已过期，请重新登录");
+            return RefreshTransactionResult.failure("登录状态已过期，请重新登录");
         }
 
         boolean remember = storedToken.getExpiresAt().isAfter(now.plusSeconds(authTokenService.refreshTokenTtlSeconds(false)));
         recordAudit(user.getId(), user.getUsername(), "TOKEN_REFRESH", AUDIT_SUCCESS, null);
-        return issueTokenPair(user, remember);
+        return RefreshTransactionResult.success(issueTokenPair(user, remember));
     }
 
     @Override
@@ -534,5 +541,16 @@ public class AuthServiceImpl implements AuthService {
 
     private boolean isStrongEnough(String password) {
         return password.chars().anyMatch(Character::isLetter) && password.chars().anyMatch(Character::isDigit);
+    }
+
+    private record RefreshTransactionResult(AuthResponse response, String failureMessage) {
+
+        private static RefreshTransactionResult success(AuthResponse response) {
+            return new RefreshTransactionResult(Objects.requireNonNull(response, "response must not be null"), null);
+        }
+
+        private static RefreshTransactionResult failure(String failureMessage) {
+            return new RefreshTransactionResult(null, Objects.requireNonNull(failureMessage, "failureMessage must not be null"));
+        }
     }
 }

@@ -37,6 +37,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.AbstractPlatformTransactionManager;
+import org.springframework.transaction.support.DefaultTransactionStatus;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -404,6 +407,37 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void refreshCommitsReuseInvalidationBeforeThrowingUnauthorized() {
+        String refreshToken = "refresh-token";
+        UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
+        storedToken.setStatus("REVOKED");
+        storedToken.setSessionVersion(2);
+        UserAccount user = existingUser();
+        user.setSessionVersion(2);
+        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+        AuthServiceImpl transactionalAuthService = new AuthServiceImpl(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            loginAuditRecorder,
+            passwordHashService,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics,
+            transactionManager
+        );
+
+        assertThatThrownBy(() -> transactionalAuthService.refresh(new AuthRefreshRequest(refreshToken)))
+            .isInstanceOf(BusinessException.class)
+            .hasMessage("登录状态已过期，请重新登录");
+
+        assertThat(transactionManager.commitCount).isEqualTo(1);
+        assertThat(transactionManager.rollbackCount).isZero();
+    }
+
+    @Test
     void refreshRejectsExpiredRefreshToken() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().minusSeconds(1));
@@ -558,5 +592,30 @@ class AuthServiceImplTest {
         user.setFailedLoginCount(0);
         user.setSessionVersion(0);
         return user;
+    }
+
+    private static final class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        private int commitCount;
+        private int rollbackCount;
+
+        @Override
+        protected Object doGetTransaction() {
+            return new Object();
+        }
+
+        @Override
+        protected void doBegin(Object transaction, TransactionDefinition definition) {
+        }
+
+        @Override
+        protected void doCommit(DefaultTransactionStatus status) {
+            commitCount++;
+        }
+
+        @Override
+        protected void doRollback(DefaultTransactionStatus status) {
+            rollbackCount++;
+        }
     }
 }
