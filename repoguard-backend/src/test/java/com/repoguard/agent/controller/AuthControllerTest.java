@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -229,6 +230,30 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void refreshAppliesAttemptLimitUsingTheCookieToken() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        doThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "Too many authentication attempts"))
+            .when(limiter)
+            .requireAllowed(eq("refresh"), eq("refresh-token-value"), any(HttpServletRequest.class));
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/refresh")
+                .cookie(refreshCookie(), csrfCookie())
+                .header(AuthController.CSRF_TOKEN_HEADER_NAME, "csrf-token-value"))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.code").value("TOO_MANY_REQUESTS"));
+
+        verify(limiter).requireAllowed(
+            eq("refresh"),
+            eq("refresh-token-value"),
+            any(HttpServletRequest.class)
+        );
     }
 
     @Test

@@ -113,7 +113,7 @@ describe("AuthSessionRefreshCoordinator", () => {
       type: "auth-refresh-completed",
       completedAt: Date.now(),
       success: true,
-      accessToken: "must-not-be-restored"
+      accessToken: "test-must-not-be-restored"
     });
 
     expect(resolveAccessToken()).toBe("");

@@ -121,6 +121,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
+        limit("refresh", cookieRefreshToken, httpRequest);
         rejectBodyRefreshToken(request);
         cookieManager.validateCookieTokenCsrf(cookieRefreshToken, csrfCookieToken, httpRequest);
         AuthResponse response = authService.refresh(new AuthRefreshRequest(cookieRefreshToken));
