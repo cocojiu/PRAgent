@@ -21,18 +21,20 @@ public class ExternalHttpJsonResponseReader {
     public <T> T readSuccessfulJson(
         ClientHttpResponse response,
         Class<T> responseType,
-        String failureMessagePrefix
+        String failureMessagePrefix,
+        ExternalHttpResponseProfile profile
     ) throws IOException {
         Objects.requireNonNull(responseType, "responseType");
-        byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix);
+        byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix, profile);
         return body == null || body.length == 0 ? null : objectMapper.readValue(body, responseType);
     }
 
     public JsonNode readSuccessfulTree(
         ClientHttpResponse response,
-        String failureMessagePrefix
+        String failureMessagePrefix,
+        ExternalHttpResponseProfile profile
     ) throws IOException {
-        byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix);
+        byte[] body = responseReader.readSuccessfulBody(response, failureMessagePrefix, profile);
         return body == null || body.length == 0 ? null : objectMapper.readTree(body);
     }
 }

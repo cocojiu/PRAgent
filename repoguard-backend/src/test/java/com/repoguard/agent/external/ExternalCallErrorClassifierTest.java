@@ -160,6 +160,29 @@ class ExternalCallErrorClassifierTest {
     }
 
     @Test
+    void classifiesOversizedResponsesAsNonRetryableWithoutResponseBody() {
+        ExternalHttpResponseTooLargeException oversized = new ExternalHttpResponseTooLargeException(
+            "External request failed",
+            ExternalHttpResponseProfile.LLM,
+            ExternalHttpResponseProfile.LLM.maxBytes(),
+            ExternalHttpResponseProfile.LLM.maxBytes() + 1L,
+            "stream"
+        );
+        ResourceAccessException wrapped = new ResourceAccessException("I/O error", oversized);
+
+        ExternalCallException github = ExternalCallErrorClassifier.github(wrapped);
+        ExternalCallException llm = ExternalCallErrorClassifier.llm(wrapped);
+
+        assertThat(github.getCategory()).isEqualTo("github_response_too_large");
+        assertThat(github.isRetryable()).isFalse();
+        assertThat(llm.getCategory()).isEqualTo("llm_response_too_large");
+        assertThat(llm.isRetryable()).isFalse();
+        assertThat(llm.getMessage())
+            .contains("profile=llm", "maxBytes=", "detection=stream")
+            .doesNotContain("responseBody");
+    }
+
+    @Test
     void keepsExistingExternalCallExceptionUnchanged() {
         ExternalCallException original = new ExternalCallException(
             "GitHub",

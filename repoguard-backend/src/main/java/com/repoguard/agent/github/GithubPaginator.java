@@ -3,6 +3,7 @@ package com.repoguard.agent.github;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
+import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
@@ -129,7 +130,8 @@ public class GithubPaginator {
         T[] parsedBody = jsonResponseReader.readSuccessfulJson(
             response,
             responseType,
-            "GitHub " + operation + " failed"
+            "GitHub " + operation + " failed",
+            ExternalHttpResponseProfile.GITHUB
         );
         HttpHeaders headers = new HttpHeaders();
         headers.putAll(response.getHeaders());

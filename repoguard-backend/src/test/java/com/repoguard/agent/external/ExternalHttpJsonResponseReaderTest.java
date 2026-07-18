@@ -23,7 +23,12 @@ class ExternalHttpJsonResponseReaderTest {
     void readSuccessfulJsonParsesObjectBody() throws IOException {
         MockClientHttpResponse response = response(HttpStatus.OK, "{\"name\":\"octocat\"}");
 
-        SampleResponse result = reader.readSuccessfulJson(response, SampleResponse.class, "GitHub request failed");
+        SampleResponse result = reader.readSuccessfulJson(
+            response,
+            SampleResponse.class,
+            "GitHub request failed",
+            ExternalHttpResponseProfile.GITHUB
+        );
 
         assertThat(result.name()).isEqualTo("octocat");
     }
@@ -32,7 +37,12 @@ class ExternalHttpJsonResponseReaderTest {
     void readSuccessfulJsonReturnsNullForEmptyBody() throws IOException {
         MockClientHttpResponse response = response(HttpStatus.NO_CONTENT, "");
 
-        SampleResponse result = reader.readSuccessfulJson(response, SampleResponse.class, "GitHub request failed");
+        SampleResponse result = reader.readSuccessfulJson(
+            response,
+            SampleResponse.class,
+            "GitHub request failed",
+            ExternalHttpResponseProfile.GITHUB
+        );
 
         assertThat(result).isNull();
     }
@@ -41,7 +51,11 @@ class ExternalHttpJsonResponseReaderTest {
     void readSuccessfulTreeParsesJsonNodeBody() throws IOException {
         MockClientHttpResponse response = response(HttpStatus.OK, "{\"choices\":[{\"message\":{\"content\":\"ok\"}}]}");
 
-        JsonNode result = reader.readSuccessfulTree(response, "LLM request failed");
+        JsonNode result = reader.readSuccessfulTree(
+            response,
+            "LLM request failed",
+            ExternalHttpResponseProfile.LLM
+        );
 
         assertThat(result.at("/choices/0/message/content").asText()).isEqualTo("ok");
     }
@@ -50,7 +64,11 @@ class ExternalHttpJsonResponseReaderTest {
     void readSuccessfulTreeReturnsNullForEmptyBody() throws IOException {
         MockClientHttpResponse response = response(HttpStatus.NO_CONTENT, "");
 
-        JsonNode result = reader.readSuccessfulTree(response, "LLM request failed");
+        JsonNode result = reader.readSuccessfulTree(
+            response,
+            "LLM request failed",
+            ExternalHttpResponseProfile.LLM
+        );
 
         assertThat(result).isNull();
     }
@@ -60,7 +78,12 @@ class ExternalHttpJsonResponseReaderTest {
         MockClientHttpResponse response = response(HttpStatus.TOO_MANY_REQUESTS, "{\"message\":\"rate limited\"}");
         response.getHeaders().add("Retry-After", "30");
 
-        assertThatThrownBy(() -> reader.readSuccessfulJson(response, SampleResponse.class, "GitHub request failed"))
+        assertThatThrownBy(() -> reader.readSuccessfulJson(
+            response,
+            SampleResponse.class,
+            "GitHub request failed",
+            ExternalHttpResponseProfile.GITHUB
+        ))
             .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {
                 assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
                 assertThat(ex.getResponseHeaders()).isNotNull();
@@ -74,7 +97,11 @@ class ExternalHttpJsonResponseReaderTest {
         MockClientHttpResponse response = response(HttpStatus.UNAUTHORIZED, "{\"error\":\"bad token\"}");
         response.getHeaders().add("X-Request-Id", "req-123");
 
-        assertThatThrownBy(() -> reader.readSuccessfulTree(response, "LLM request failed"))
+        assertThatThrownBy(() -> reader.readSuccessfulTree(
+            response,
+            "LLM request failed",
+            ExternalHttpResponseProfile.LLM
+        ))
             .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {
                 assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
                 assertThat(ex.getResponseHeaders()).isNotNull();
@@ -87,7 +114,12 @@ class ExternalHttpJsonResponseReaderTest {
     void readSuccessfulJsonRejectsMissingResponseType() {
         MockClientHttpResponse response = response(HttpStatus.OK, "{}");
 
-        assertThatThrownBy(() -> reader.readSuccessfulJson(response, null, "GitHub request failed"))
+        assertThatThrownBy(() -> reader.readSuccessfulJson(
+            response,
+            null,
+            "GitHub request failed",
+            ExternalHttpResponseProfile.GITHUB
+        ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("responseType");
     }
