@@ -27,7 +27,7 @@ class ProductionRuntimeContextIntegrationTest {
 
     @Test
     void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() {
-        try (ConfigurableApplicationContext context = start(true, false)) {
+        try (ConfigurableApplicationContext context = start("api")) {
             assertThat(context.getBeansOfType(ReviewController.class)).hasSize(1);
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).isEmpty();
             assertProductionInfrastructure(context);
@@ -36,7 +36,7 @@ class ProductionRuntimeContextIntegrationTest {
 
     @Test
     void workerOnlyContextRunsAllMigrationsAndExcludesApiControllers() {
-        try (ConfigurableApplicationContext context = start(false, true)) {
+        try (ConfigurableApplicationContext context = start("worker")) {
             assertThat(context.getBeansOfType(ReviewController.class)).isEmpty();
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).hasSize(1);
             assertProductionInfrastructure(context);
@@ -45,7 +45,7 @@ class ProductionRuntimeContextIntegrationTest {
 
     @Test
     void refreshTokenReuseInvalidationCommitsBeforeUnauthorizedResponse() {
-        try (ConfigurableApplicationContext context = start(true, false)) {
+        try (ConfigurableApplicationContext context = start("api")) {
             JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
             AuthService authService = context.getBean(AuthService.class);
             AuthTokenService authTokenService = context.getBean(AuthTokenService.class);
@@ -135,13 +135,13 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
-    private ConfigurableApplicationContext start(boolean apiEnabled, boolean workerEnabled) {
+    private ConfigurableApplicationContext start(String runtimeRole) {
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)
             .profiles("prod")
             .run(
-                "--app.runtime.api.enabled=" + apiEnabled,
-                "--app.runtime.worker.enabled=" + workerEnabled,
+                "--app.runtime.role=" + runtimeRole,
+                "--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1),
                 "--app.github.webhook.enabled=false",
                 "--app.security.admin-api-key.enabled=false",
                 "--app.cors.allowed-origins[0]=https://integration.local",

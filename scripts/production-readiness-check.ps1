@@ -113,11 +113,7 @@ Invoke-Check "git diff whitespace check" {
 }
 
 Invoke-Check "repository governance tracked file guard" {
-    $optimizationReportName = (-join @(
-        [char]0x4EE3, [char]0x7801, [char]0x4F18, [char]0x5316,
-        [char]0x5BA1, [char]0x67E5, [char]0x62A5, [char]0x544A
-    )) + ".md"
-    $allowedMarkdown = @("README.md", $optimizationReportName)
+    $allowedMarkdown = @("README.md")
     $invalidMarkdown = @()
     $invalidScripts = @()
 

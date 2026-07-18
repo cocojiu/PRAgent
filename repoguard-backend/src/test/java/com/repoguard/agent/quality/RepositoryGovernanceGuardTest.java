@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 
 class RepositoryGovernanceGuardTest {
 
-    private static final Set<String> ALLOWED_MARKDOWN = Set.of("README.md", "代码优化审查报告.md");
+    private static final Set<String> ALLOWED_MARKDOWN = Set.of("README.md");
     private static final List<String> SCRIPT_EXTENSIONS = List.of(".sh", ".ps1", ".bat", ".cmd");
 
     @Test
@@ -48,7 +48,7 @@ class RepositoryGovernanceGuardTest {
     @Test
     void governanceClassifierAllowsApprovedRootMarkdownOnly() {
         assertFalse(isInvalidMarkdown("README.md"));
-        assertFalse(isInvalidMarkdown("代码优化审查报告.md"));
+        assertTrue(isInvalidMarkdown("代码优化审查报告.md"));
         assertTrue(isInvalidMarkdown("docs/release/checklist.md"));
         assertTrue(isInvalidMarkdown("repoguard-frontend/README.md"));
         assertTrue(isInvalidMarkdown("README.zh.md"));

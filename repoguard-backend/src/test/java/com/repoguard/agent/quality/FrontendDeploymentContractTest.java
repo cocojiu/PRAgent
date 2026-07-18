@@ -73,6 +73,33 @@ class FrontendDeploymentContractTest {
             .isEqualTo("${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}");
     }
 
+    @Test
+    void productionComposeUsesExclusiveRuntimeRolesAndSingleApiInstance() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        Map<String, Object> compose = yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
+        Map<String, Object> services = map(compose.get("services"));
+        Map<String, Object> backendEnvironment = map(map(services.get("backend")).get("environment"));
+        Map<String, Object> workerEnvironment = map(map(services.get("backend-worker")).get("environment"));
+        String deployScript = read(repositoryRoot.resolve("scripts/deploy-prod.sh"));
+
+        assertThat(backendEnvironment)
+            .containsEntry("REPOGUARD_RUNTIME_ROLE", "${REPOGUARD_RUNTIME_ROLE:-combined}")
+            .containsEntry("REPOGUARD_DEPLOYMENT_MODE", "${REPOGUARD_DEPLOYMENT_MODE:-monolith}")
+            .containsEntry("REPOGUARD_API_INSTANCE_COUNT", "${REPOGUARD_API_INSTANCE_COUNT:-1}")
+            .doesNotContainKeys("REPOGUARD_API_ENABLED", "REPOGUARD_WORKER_ENABLED");
+        assertThat(workerEnvironment)
+            .containsEntry("REPOGUARD_RUNTIME_ROLE", "worker")
+            .containsEntry("REPOGUARD_DEPLOYMENT_MODE", "${REPOGUARD_DEPLOYMENT_MODE:-monolith}")
+            .containsEntry("REPOGUARD_API_INSTANCE_COUNT", 0)
+            .doesNotContainKeys("REPOGUARD_API_ENABLED", "REPOGUARD_WORKER_ENABLED");
+        assertThat(deployScript)
+            .contains("Split deployment requires REPOGUARD_RUNTIME_ROLE=api")
+            .contains("Monolithic deployment requires REPOGUARD_RUNTIME_ROLE=combined")
+            .contains("Compose services require REPOGUARD_DEPLOYMENT_MODE=$expected_deployment_mode")
+            .contains("REPOGUARD_API_INSTANCE_COUNT=1")
+            .contains("REPOGUARD_WORKER_ENABLED is deprecated");
+    }
+
     private Path findRepositoryRoot() {
         Path current = Path.of("").toAbsolutePath();
         while (current != null) {

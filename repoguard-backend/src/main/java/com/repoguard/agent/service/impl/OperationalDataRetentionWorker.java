@@ -1,7 +1,7 @@
 package com.repoguard.agent.service.impl;
 
 import com.repoguard.agent.config.OperationalDataRetentionProperties;
-import com.repoguard.agent.config.WorkerRuntimeEnabled;
+import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.mapper.OperationalDataRetentionMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.LocalDateTime;
@@ -13,7 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@WorkerRuntimeEnabled
+@SchedulerRuntimeEnabled
 public class OperationalDataRetentionWorker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OperationalDataRetentionWorker.class);

@@ -1,6 +1,6 @@
 package com.repoguard.agent.messaging;
 
-import com.repoguard.agent.config.WorkerRuntimeEnabled;
+import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
@@ -16,7 +16,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@WorkerRuntimeEnabled
+@SchedulerRuntimeEnabled
 public class ReviewTaskPublishCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ReviewTaskPublishCompensator.class);

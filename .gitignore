@@ -1,9 +1,8 @@
-# Only approved repository-root Markdown documents may be tracked.
+# README.md is the only Markdown document permitted in Git.
 # Existing tracked Markdown files must be removed from the index with:
 # git rm --cached <path>
 *.md
 !/README.md
-!/代码优化审查报告.md
 
 node_modules/
 dist/

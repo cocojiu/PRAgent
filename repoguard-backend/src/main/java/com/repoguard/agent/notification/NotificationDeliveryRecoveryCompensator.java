@@ -2,7 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
-import com.repoguard.agent.config.WorkerRuntimeEnabled;
+import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import java.time.Clock;
@@ -15,7 +15,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
-@WorkerRuntimeEnabled
+@SchedulerRuntimeEnabled
 class NotificationDeliveryRecoveryCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryRecoveryCompensator.class);

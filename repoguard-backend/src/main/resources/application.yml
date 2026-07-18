@@ -174,10 +174,10 @@ repoguard:
 
 app:
   runtime:
+    role: ${REPOGUARD_RUNTIME_ROLE:}
+    deployment-mode: ${REPOGUARD_DEPLOYMENT_MODE:}
     api:
-      enabled: ${REPOGUARD_API_ENABLED:true}
-    worker:
-      enabled: ${REPOGUARD_WORKER_ENABLED:true}
+      instance-count: ${REPOGUARD_API_INSTANCE_COUNT:}
   security:
     admin-api-key:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}

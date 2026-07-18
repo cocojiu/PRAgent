@@ -230,27 +230,103 @@ running_service_image_id() {
 }
 
 validate_split_runtime_mode() {
-  api_worker_enabled="${REPOGUARD_WORKER_ENABLED:-}"
-  if [ -z "$api_worker_enabled" ]; then
-    api_worker_enabled="$(read_env_value REPOGUARD_WORKER_ENABLED)"
+  split_runtime="false"
+  if has_compose_service backend-worker; then
+    split_runtime="true"
   fi
 
-  if has_compose_service backend-worker; then
-    case "$api_worker_enabled" in
+  runtime_role="${REPOGUARD_RUNTIME_ROLE:-}"
+  if [ -z "$runtime_role" ]; then
+    runtime_role="$(read_env_value REPOGUARD_RUNTIME_ROLE)"
+  fi
+
+  if [ -z "$runtime_role" ]; then
+    legacy_worker_enabled="${REPOGUARD_WORKER_ENABLED:-}"
+    if [ -z "$legacy_worker_enabled" ]; then
+      legacy_worker_enabled="$(read_env_value REPOGUARD_WORKER_ENABLED)"
+    fi
+    case "$legacy_worker_enabled" in
       false|FALSE|False|0)
-        return 0
+        runtime_role="api"
+        ;;
+      "")
+        if [ "$split_runtime" = "true" ]; then
+          runtime_role="api"
+        else
+          runtime_role="combined"
+        fi
+        ;;
+      true|TRUE|True|1)
+        runtime_role="combined"
+        ;;
+      *)
+        echo "REPOGUARD_WORKER_ENABLED must be true, false, 1, or 0." >&2
+        return 1
         ;;
     esac
-    echo "Split deployment requires REPOGUARD_WORKER_ENABLED=false for the API service." >&2
+    if [ -n "$legacy_worker_enabled" ]; then
+      echo "REPOGUARD_WORKER_ENABLED is deprecated; resolved REPOGUARD_RUNTIME_ROLE=$runtime_role." >&2
+    fi
+  fi
+
+  case "$runtime_role" in
+    api|worker|combined)
+      ;;
+    *)
+      echo "REPOGUARD_RUNTIME_ROLE must be api, worker, or combined." >&2
+      return 1
+      ;;
+  esac
+
+  deployment_mode="${REPOGUARD_DEPLOYMENT_MODE:-}"
+  if [ -z "$deployment_mode" ]; then
+    deployment_mode="$(read_env_value REPOGUARD_DEPLOYMENT_MODE)"
+  fi
+  expected_deployment_mode="monolith"
+  if [ "$split_runtime" = "true" ]; then
+    expected_deployment_mode="split"
+  fi
+  deployment_mode="${deployment_mode:-$expected_deployment_mode}"
+  if [ "$deployment_mode" != "$expected_deployment_mode" ]; then
+    echo "Compose services require REPOGUARD_DEPLOYMENT_MODE=$expected_deployment_mode." >&2
     return 1
   fi
 
-  case "$api_worker_enabled" in
-    ""|true|TRUE|True|1)
-      return 0
+  api_instance_count="${REPOGUARD_API_INSTANCE_COUNT:-}"
+  if [ -z "$api_instance_count" ]; then
+    api_instance_count="$(read_env_value REPOGUARD_API_INSTANCE_COUNT)"
+  fi
+  api_instance_count="${api_instance_count:-1}"
+  case "$api_instance_count" in
+    *[!0-9]*|"")
+      echo "REPOGUARD_API_INSTANCE_COUNT must be a non-negative integer." >&2
+      return 1
       ;;
   esac
-  echo "Monolithic deployment requires REPOGUARD_WORKER_ENABLED=true for the API service." >&2
+  if [ "$api_instance_count" -ne 1 ]; then
+    echo "The production API currently requires REPOGUARD_API_INSTANCE_COUNT=1 because API state is process-local." >&2
+    return 1
+  fi
+
+  REPOGUARD_RUNTIME_ROLE="$runtime_role"
+  REPOGUARD_DEPLOYMENT_MODE="$deployment_mode"
+  REPOGUARD_API_INSTANCE_COUNT="$api_instance_count"
+  export REPOGUARD_RUNTIME_ROLE
+  export REPOGUARD_DEPLOYMENT_MODE
+  export REPOGUARD_API_INSTANCE_COUNT
+
+  if [ "$split_runtime" = "true" ]; then
+    if [ "$runtime_role" = "api" ]; then
+      return 0
+    fi
+    echo "Split deployment requires REPOGUARD_RUNTIME_ROLE=api for the API service." >&2
+    return 1
+  fi
+
+  if [ "$runtime_role" = "combined" ]; then
+    return 0
+  fi
+  echo "Monolithic deployment requires REPOGUARD_RUNTIME_ROLE=combined for the API service." >&2
   return 1
 }
 
@@ -367,8 +443,8 @@ echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
-validate_production_data_routing
 validate_split_runtime_mode
+validate_production_data_routing
 stop_inactive_split_worker
 deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
