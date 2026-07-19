@@ -32,12 +32,21 @@ public class AuthTokenService {
     }
 
     public TokenIssue issueAccessToken(UserAccount user) {
+        return issueAccessToken(
+            user.getId(),
+            user.getUsername(),
+            user.getRole(),
+            safeSessionVersion(user)
+        );
+    }
+
+    public TokenIssue issueAccessToken(Long userId, String username, String role, int sessionVersion) {
         long ttlSeconds = authProperties.getAccessTokenTtlSeconds();
         long expiresAt = Instant.now(clock).plusSeconds(ttlSeconds).getEpochSecond();
-        String payload = user.getId() + ":"
-            + user.getUsername() + ":"
-            + user.getRole() + ":"
-            + safeSessionVersion(user) + ":"
+        String payload = userId + ":"
+            + username + ":"
+            + role + ":"
+            + sessionVersion + ":"
             + expiresAt;
         String encodedPayload = Base64.getUrlEncoder().withoutPadding().encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         String signature = sign(encodedPayload);

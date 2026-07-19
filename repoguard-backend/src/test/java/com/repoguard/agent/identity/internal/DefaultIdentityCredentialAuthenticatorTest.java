@@ -14,6 +14,7 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserLoginAudit;
+import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator.AuthenticationOperation;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
@@ -71,11 +72,8 @@ class DefaultIdentityCredentialAuthenticatorTest {
         user.setLockedUntil(LocalDateTime.now().minusMinutes(1));
         LocalDateTime occurredAt = LocalDateTime.parse("2026-07-19T01:30:00");
 
-        authenticator.recordSuccess(user, "admin", AuthenticationOperation.LOGIN, occurredAt);
+        authenticator.recordSuccess(identityAccount(user), "admin", AuthenticationOperation.LOGIN, occurredAt);
 
-        assertThat(user.getFailedLoginCount()).isZero();
-        assertThat(user.getLockedUntil()).isNull();
-        assertThat(user.getLastLoginAt()).isEqualTo(occurredAt);
         verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         ArgumentCaptor<UserLoginAudit> audit = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(audit.capture());
@@ -89,7 +87,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
         user.setFailedLoginCount(3);
 
         authenticator.recordSuccess(
-            user,
+            identityAccount(user),
             "admin",
             AuthenticationOperation.TOKEN_RESET,
             LocalDateTime.parse("2026-07-19T01:31:00")
@@ -189,14 +187,26 @@ class DefaultIdentityCredentialAuthenticatorTest {
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
 
-        UserAccount authenticated = authenticator.authenticate(
+        IdentityAccount authenticated = authenticator.authenticate(
             "ADMIN@REPOGUARD.DEV",
             "Secure123",
             AuthenticationOperation.TOKEN_RESET
         );
 
-        assertThat(authenticated).isSameAs(user);
+        assertThat(authenticated.id()).isEqualTo(user.getId());
+        assertThat(authenticated.username()).isEqualTo(user.getUsername());
+        assertThat(authenticated.sessionVersion()).isZero();
         verify(userAccountMapper).selectOne(any(Wrapper.class));
+    }
+
+    private IdentityAccount identityAccount(UserAccount user) {
+        return new IdentityAccount(
+            user.getId(),
+            user.getUsername(),
+            user.getEmail(),
+            user.getRole(),
+            user.getSessionVersion() == null ? 0 : user.getSessionVersion()
+        );
     }
 
     private UserAccount activeUser() {

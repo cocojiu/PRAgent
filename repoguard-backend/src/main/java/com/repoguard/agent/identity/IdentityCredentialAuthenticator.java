@@ -1,6 +1,5 @@
 package com.repoguard.agent.identity;
 
-import com.repoguard.agent.entity.UserAccount;
 import java.time.LocalDateTime;
 
 /**
@@ -8,11 +7,11 @@ import java.time.LocalDateTime;
  */
 public interface IdentityCredentialAuthenticator {
 
-    UserAccount authenticate(String account, String password, AuthenticationOperation operation);
+    IdentityAccount authenticate(String account, String password, AuthenticationOperation operation);
 
     void recordSuccess(
-        UserAccount user,
-        String account,
+        IdentityAccount account,
+        String presentedAccount,
         AuthenticationOperation operation,
         LocalDateTime occurredAt
     );
