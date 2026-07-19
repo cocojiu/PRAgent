@@ -2,13 +2,16 @@ import { fileURLToPath, URL } from "node:url";
 import { gzipSync } from "node:zlib";
 import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
+import Components from "unplugin-vue-components/vite";
+import { ElementPlusResolver } from "unplugin-vue-components/resolvers";
 
 const KIB = 1024;
-const BUNDLE_BUDGET_WARNING_RATIO = 0.9;
+const BUNDLE_BUDGET_WARNING_RATIO = 0.85;
+const BUNDLE_BUDGET_MINIMUM_HEADROOM_PERCENT = Math.round((1 - BUNDLE_BUDGET_WARNING_RATIO) * 100);
 
 const bundleBudgets = {
-  initialJavaScriptGzip: 190 * KIB,
-  initialCssGzip: 32 * KIB,
+  initialJavaScriptGzip: 150 * KIB,
+  initialCssGzip: 24 * KIB,
   maxAsyncJavaScriptGzip: 140 * KIB
 } as const;
 
@@ -107,7 +110,9 @@ const bundleBudgetPlugin = (): Plugin => ({
       const warningSummary = lowHeadroomMeasurements
         .map(({ label, actual, budget }) => `${label}: ${formatKiB(actual)} / ${formatKiB(budget)}`)
         .join("; ");
-      this.warn(`[bundle-budget] Headroom below 10%. ${warningSummary}`);
+      this.warn(
+        `[bundle-budget] Headroom below ${BUNDLE_BUDGET_MINIMUM_HEADROOM_PERCENT}%. ${warningSummary}`
+      );
     }
 
     this.info(`[bundle-budget] ${summary}`);
@@ -115,7 +120,18 @@ const bundleBudgetPlugin = (): Plugin => ({
 });
 
 export default defineConfig({
-  plugins: [vue(), bundleBudgetPlugin()],
+  plugins: [
+    vue(),
+    Components({
+      dts: false,
+      resolvers: [
+        ElementPlusResolver({
+          importStyle: "css"
+        })
+      ]
+    }),
+    bundleBudgetPlugin()
+  ],
   server: {
     proxy: {
       "/api": {
@@ -146,18 +162,13 @@ export default defineConfig({
               priority: 30
             },
             {
-              name: "element-plus",
-              test: /node_modules[\\/]element-plus[\\/]/,
-              priority: 20
-            },
-            {
               name: "vue-vendor",
               test: /node_modules[\\/](?:@vue|vue|vue-router|pinia)[\\/]/,
               priority: 20
             },
             {
               name: "vendor",
-              test: /node_modules[\\/]/,
+              test: /node_modules[\\/](?!(?:element-plus|@element-plus)[\\/])/,
               priority: 10
             }
           ]
