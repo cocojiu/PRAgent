@@ -3,6 +3,8 @@ package com.repoguard.agent.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import jakarta.servlet.ServletException;
@@ -71,8 +73,8 @@ class AuthTokenFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(chain.getRequest()).isSameAs(request);
-        assertThat(request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE))
-            .isInstanceOf(AuthTokenService.AuthenticatedUser.class);
+        assertThat(request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL))
+            .isInstanceOf(AuthenticatedPrincipal.class);
     }
 
     @Test
@@ -116,8 +118,8 @@ class AuthTokenFilterTest {
     void protectedApiAllowsExistingAuthenticatedUserAttribute() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain chain = new MockFilterChain();
@@ -151,8 +153,8 @@ class AuthTokenFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(chain.getRequest()).isSameAs(request);
-        assertThat(request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE))
-            .isInstanceOf(AuthTokenService.AuthenticatedUser.class);
+        assertThat(request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL))
+            .isInstanceOf(AuthenticatedPrincipal.class);
     }
 
     @Test
@@ -202,8 +204,8 @@ class AuthTokenFilterTest {
         filter.doFilter(request, response, chain);
 
         assertThat(response.getStatus()).isEqualTo(200);
-        assertThat(request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE))
-            .isInstanceOfSatisfying(AuthTokenService.AuthenticatedUser.class, authenticatedUser -> {
+        assertThat(request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL))
+            .isInstanceOfSatisfying(AuthenticatedPrincipal.class, authenticatedUser -> {
                 assertThat(authenticatedUser.id()).isEqualTo(1001L);
                 assertThat(authenticatedUser.username()).isEqualTo("admin");
                 assertThat(authenticatedUser.role()).isEqualTo("VIEWER");

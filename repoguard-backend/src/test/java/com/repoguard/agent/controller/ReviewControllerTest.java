@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.GlobalExceptionHandler;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
 import com.repoguard.agent.dto.FindingFeedbackResponse;
@@ -41,8 +43,6 @@ import com.repoguard.agent.dto.ReviewTaskListItem;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.ReviewService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -895,7 +895,7 @@ class ReviewControllerTest {
     @Test
     void submitHumanReviewReturnsDecision() throws Exception {
         mockMvc.perform(post("/api/v1/reviews/512/human-review")
-                .requestAttr(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE, authenticatedUser())
+                .requestAttr(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -915,7 +915,7 @@ class ReviewControllerTest {
     @Test
     void updateFindingFeedbackReturnsDecision() throws Exception {
         mockMvc.perform(post("/api/v1/reviews/512/findings/1/feedback")
-                .requestAttr(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE, authenticatedUser())
+                .requestAttr(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, authenticatedUser())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -932,7 +932,7 @@ class ReviewControllerTest {
             .andExpect(jsonPath("$.data.feedbackBy").value("review-lead"));
     }
 
-    private AuthTokenService.AuthenticatedUser authenticatedUser() {
-        return new AuthTokenService.AuthenticatedUser(1001L, "review-lead", "ADMIN", 9999999999L);
+    private AuthenticatedPrincipal authenticatedUser() {
+        return new AuthenticatedPrincipal(1001L, "review-lead", "ADMIN", 9999999999L);
     }
 }

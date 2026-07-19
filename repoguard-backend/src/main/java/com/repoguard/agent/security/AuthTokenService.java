@@ -1,5 +1,6 @@
 package com.repoguard.agent.security;
 
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.entity.UserAccount;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -73,7 +74,7 @@ public class AuthTokenService {
         }
     }
 
-    public Optional<AuthenticatedUser> verify(String token) {
+    public Optional<AuthenticatedPrincipal> verify(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
@@ -108,7 +109,13 @@ public class AuthTokenService {
         if (Instant.now(clock).getEpochSecond() >= expiresAt) {
             return Optional.empty();
         }
-        return Optional.of(new AuthenticatedUser(userId, payloadParts[1], payloadParts[2], expiresAt, sessionVersion));
+        return Optional.of(new AuthenticatedPrincipal(
+            userId,
+            payloadParts[1],
+            payloadParts[2],
+            expiresAt,
+            sessionVersion
+        ));
     }
 
     private int safeSessionVersion(UserAccount user) {
@@ -133,11 +140,5 @@ public class AuthTokenService {
     }
 
     public record TokenIssue(String token, long expiresInSeconds) {
-    }
-
-    public record AuthenticatedUser(Long id, String username, String role, long expiresAt, int sessionVersion) {
-        public AuthenticatedUser(Long id, String username, String role, long expiresAt) {
-            this(id, username, role, expiresAt, 0);
-        }
     }
 }

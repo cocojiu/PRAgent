@@ -14,12 +14,11 @@ import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.security.AllowAnonymous;
 import com.repoguard.agent.security.AuthAttemptLimiter;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuditClientIpResolver;
 import com.repoguard.agent.web.AuthSessionCookieManager;
+import com.repoguard.agent.web.RequestAuthentication;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -89,10 +88,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ApiResponse<AuthCurrentUserDto> me(HttpServletRequest request) {
-        Object authenticatedUser = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
-        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
-        }
+        var user = RequestAuthentication.require(request);
         return ApiResponse.ok(authService.currentUser(user.id()));
     }
 
@@ -103,10 +99,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
-        Object authenticatedUser = httpRequest.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
-        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
-        }
+        var user = RequestAuthentication.require(httpRequest);
         limit("password-change", user.username(), httpRequest);
         authService.changePassword(user.id(), passwordChangeRequest);
         cookieManager.clearAuthCookies(httpRequest, httpResponse);

@@ -3,6 +3,8 @@ package com.repoguard.agent.security;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -17,8 +19,8 @@ class RoleAuthorizationInterceptorTest {
     void allowsAdminWhenAdminRoleRequired() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/config/system-settings");
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L)
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -32,8 +34,8 @@ class RoleAuthorizationInterceptorTest {
     void rejectsViewerWhenAdminRoleRequired() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/config/system-settings");
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(1002L, "viewer", "VIEWER", 9999999999L)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1002L, "viewer", "VIEWER", 9999999999L)
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
 
@@ -48,8 +50,8 @@ class RoleAuthorizationInterceptorTest {
     void allowsViewerWhenEndpointExplicitlyAcceptsViewerOrAdmin() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/observability/frontend/performance");
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(1002L, "viewer", "VIEWER", 9999999999L)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1002L, "viewer", "VIEWER", 9999999999L)
         );
         MockHttpServletResponse response = new MockHttpServletResponse();
 

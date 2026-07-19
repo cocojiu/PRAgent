@@ -1,23 +1,31 @@
 package com.repoguard.agent.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.repoguard.agent.dto.UserManagementItemDto;
-import com.repoguard.agent.dto.UserOperationAuditContext;
-import com.repoguard.agent.dto.UserOperationAuditDto;
-import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
-import com.repoguard.agent.service.UserManagementService;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
+import com.repoguard.agent.user.UserManagementLifecycle;
+import com.repoguard.agent.user.UserManagementLifecycle.AuditContext;
+import com.repoguard.agent.user.UserManagementLifecycle.CreateCommand;
+import com.repoguard.agent.user.UserManagementLifecycle.ManagedUser;
+import com.repoguard.agent.user.UserManagementLifecycle.OperationAudit;
+import com.repoguard.agent.user.UserManagementLifecycle.PageRequest;
+import com.repoguard.agent.user.UserManagementLifecycle.PageResult;
+import com.repoguard.agent.user.UserManagementLifecycle.RoleChangeCommand;
+import com.repoguard.agent.user.UserManagementLifecycle.StatusChangeCommand;
+import com.repoguard.agent.user.UserManagementLifecycle.UserSearch;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,16 +33,17 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class UserManagementControllerTest {
 
-    private final UserManagementService userManagementService = Mockito.mock(UserManagementService.class);
+    private final UserManagementLifecycle lifecycle = Mockito.mock(UserManagementLifecycle.class);
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new UserManagementController(userManagementService))
+        .standaloneSetup(new UserManagementController(lifecycle))
         .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
         .build();
 
     @Test
     void listUsersReturnsUsers() throws Exception {
-        Mockito.when(userManagementService.listUsers(2, 10, "ADMIN", "ACTIVE", "adm"))
-            .thenReturn(new PageResponse<>(List.of(item(1001L, "admin", "ADMIN", "ACTIVE")), 21L));
+        UserSearch search = new UserSearch(2, 10, "ADMIN", "ACTIVE", "adm");
+        when(lifecycle.listUsers(search))
+            .thenReturn(new PageResult<>(List.of(user(1001L, "admin", "ADMIN", "ACTIVE")), 21L));
 
         mockMvc.perform(get("/api/v1/users")
                 .param("page", "2")
@@ -46,12 +55,14 @@ class UserManagementControllerTest {
             .andExpect(jsonPath("$.data.total").value(21))
             .andExpect(jsonPath("$.data.items[0].username").value("admin"))
             .andExpect(jsonPath("$.data.items[0].role").value("ADMIN"));
+
+        verify(lifecycle).listUsers(search);
     }
 
     @Test
     void listOperationAuditsReturnsAuditItems() throws Exception {
-        Mockito.when(userManagementService.listOperationAudits(1, 20))
-            .thenReturn(new PageResponse<>(List.of(audit()), 1L));
+        when(lifecycle.listOperationAudits(new PageRequest(1, 20)))
+            .thenReturn(new PageResult<>(List.of(audit()), 1L));
 
         mockMvc.perform(get("/api/v1/users/audits"))
             .andExpect(status().isOk())
@@ -62,15 +73,12 @@ class UserManagementControllerTest {
     }
 
     @Test
-    void createUserPassesAuthenticatedOperator() throws Exception {
-        Mockito.when(userManagementService.createUser(ArgumentMatchers.any(UserOperationAuditContext.class), ArgumentMatchers.any()))
-            .thenReturn(item(1002L, "viewer", "VIEWER", "ACTIVE"));
+    void createUserMapsAuthenticatedOperatorAndCommand() throws Exception {
+        when(lifecycle.createUser(any(AuditContext.class), any(CreateCommand.class)))
+            .thenReturn(user(1002L, "viewer", "VIEWER", "ACTIVE"));
 
         mockMvc.perform(post("/api/v1/users")
-                .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
-                )
+                .requestAttr(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, principal())
                 .header("X-Forwarded-For", "10.0.0.8, 10.0.0.9")
                 .header("X-Real-IP", "10.0.0.7")
                 .with(request -> {
@@ -90,22 +98,26 @@ class UserManagementControllerTest {
             .andExpect(jsonPath("$.data.username").value("viewer"))
             .andExpect(jsonPath("$.data.role").value("VIEWER"));
 
-        ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
-        Mockito.verify(userManagementService).createUser(contextCaptor.capture(), ArgumentMatchers.any());
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
+        ArgumentCaptor<AuditContext> contextCaptor = ArgumentCaptor.forClass(AuditContext.class);
+        ArgumentCaptor<CreateCommand> commandCaptor = ArgumentCaptor.forClass(CreateCommand.class);
+        verify(lifecycle).createUser(contextCaptor.capture(), commandCaptor.capture());
+        assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
+        assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
+        assertThat(commandCaptor.getValue()).isEqualTo(new CreateCommand(
+            "viewer",
+            "viewer@repoguard.dev",
+            "Secure123",
+            "Secure123"
+        ));
     }
 
     @Test
-    void updateRolePassesAuthenticatedOperator() throws Exception {
-        Mockito.when(userManagementService.updateRole(ArgumentMatchers.any(UserOperationAuditContext.class), ArgumentMatchers.eq(1002L), ArgumentMatchers.eq("VIEWER")))
-            .thenReturn(item(1002L, "viewer", "VIEWER", "ACTIVE"));
+    void updateRoleMapsAuthenticatedOperatorAndCommand() throws Exception {
+        when(lifecycle.updateRole(any(AuditContext.class), any(RoleChangeCommand.class)))
+            .thenReturn(user(1002L, "viewer", "VIEWER", "ACTIVE"));
 
         mockMvc.perform(put("/api/v1/users/1002/role")
-                .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
-                )
+                .requestAttr(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, principal())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -116,21 +128,20 @@ class UserManagementControllerTest {
             .andExpect(jsonPath("$.data.id").value(1002))
             .andExpect(jsonPath("$.data.role").value("VIEWER"));
 
-        ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
-        Mockito.verify(userManagementService).updateRole(contextCaptor.capture(), ArgumentMatchers.eq(1002L), ArgumentMatchers.eq("VIEWER"));
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
+        ArgumentCaptor<AuditContext> contextCaptor = ArgumentCaptor.forClass(AuditContext.class);
+        ArgumentCaptor<RoleChangeCommand> commandCaptor = ArgumentCaptor.forClass(RoleChangeCommand.class);
+        verify(lifecycle).updateRole(contextCaptor.capture(), commandCaptor.capture());
+        assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
+        assertThat(commandCaptor.getValue()).isEqualTo(new RoleChangeCommand(1002L, "VIEWER"));
     }
 
     @Test
-    void updateStatusPassesAuthenticatedOperator() throws Exception {
-        Mockito.when(userManagementService.updateStatus(ArgumentMatchers.any(UserOperationAuditContext.class), ArgumentMatchers.eq(1002L), ArgumentMatchers.eq("DISABLED")))
-            .thenReturn(item(1002L, "viewer", "VIEWER", "DISABLED"));
+    void updateStatusMapsAuthenticatedOperatorAndCommand() throws Exception {
+        when(lifecycle.updateStatus(any(AuditContext.class), any(StatusChangeCommand.class)))
+            .thenReturn(user(1002L, "viewer", "VIEWER", "DISABLED"));
 
         mockMvc.perform(put("/api/v1/users/1002/status")
-                .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
-                )
+                .requestAttr(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, principal())
                 .header("X-Forwarded-For", "10.0.0.8, 10.0.0.9")
                 .header("X-Real-IP", "10.0.0.7")
                 .header("User-Agent", "JUnit")
@@ -147,11 +158,13 @@ class UserManagementControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.status").value("DISABLED"));
 
-        ArgumentCaptor<UserOperationAuditContext> contextCaptor = ArgumentCaptor.forClass(UserOperationAuditContext.class);
-        Mockito.verify(userManagementService).updateStatus(contextCaptor.capture(), ArgumentMatchers.eq(1002L), ArgumentMatchers.eq("DISABLED"));
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
-        org.assertj.core.api.Assertions.assertThat(contextCaptor.getValue().userAgent()).isEqualTo("JUnit");
+        ArgumentCaptor<AuditContext> contextCaptor = ArgumentCaptor.forClass(AuditContext.class);
+        ArgumentCaptor<StatusChangeCommand> commandCaptor = ArgumentCaptor.forClass(StatusChangeCommand.class);
+        verify(lifecycle).updateStatus(contextCaptor.capture(), commandCaptor.capture());
+        assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
+        assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
+        assertThat(contextCaptor.getValue().userAgent()).isEqualTo("JUnit");
+        assertThat(commandCaptor.getValue()).isEqualTo(new StatusChangeCommand(1002L, "DISABLED"));
     }
 
     @Test
@@ -167,8 +180,12 @@ class UserManagementControllerTest {
             .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
-    private UserManagementItemDto item(Long id, String username, String role, String status) {
-        return new UserManagementItemDto(
+    private AuthenticatedPrincipal principal() {
+        return new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L);
+    }
+
+    private ManagedUser user(Long id, String username, String role, String status) {
+        return new ManagedUser(
             id,
             username,
             username + "@repoguard.dev",
@@ -182,8 +199,8 @@ class UserManagementControllerTest {
         );
     }
 
-    private UserOperationAuditDto audit() {
-        return new UserOperationAuditDto(
+    private OperationAudit audit() {
+        return new OperationAudit(
             9001L,
             1001L,
             "admin",

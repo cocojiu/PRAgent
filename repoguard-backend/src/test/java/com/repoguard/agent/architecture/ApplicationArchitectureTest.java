@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 class ApplicationArchitectureTest {
 
     private static final String BASE_PACKAGE = "com.repoguard.agent";
+    private static final String AUTHENTICATION_PACKAGE = BASE_PACKAGE + ".authentication";
     private static final String CONTROLLER_PACKAGE = BASE_PACKAGE + ".controller";
     private static final String DTO_PACKAGE = BASE_PACKAGE + ".dto";
     private static final String ENTITY_PACKAGE = BASE_PACKAGE + ".entity";
@@ -99,6 +100,63 @@ class ApplicationArchitectureTest {
         assertThat(violations)
             .as("Controllers must call application services instead of persistence types")
             .isEmpty();
+    }
+
+    @Test
+    void authenticationContractHasNoProjectImplementationDependencies() {
+        List<String> authenticationSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), AUTHENTICATION_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), AUTHENTICATION_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> dependency.startsWith(BASE_PACKAGE + ".")
+                    && !isInPackage(dependency, AUTHENTICATION_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(authenticationSources).as("authentication contract source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Authenticated request values must stay independent of project implementations")
+            .isEmpty();
+    }
+
+    @Test
+    void webAdaptersDoNotDependOnSecurityTokenImplementations() {
+        Set<String> forbiddenTypes = Set.of(
+            SECURITY_PACKAGE + ".AuthTokenFilter",
+            SECURITY_PACKAGE + ".AuthTokenService"
+        );
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), CONTROLLER_PACKAGE)
+                || isInPackage(source.packageName(), WEB_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> forbiddenTypes.stream()
+                    .anyMatch(type -> dependency.equals(type) || dependency.startsWith(type + ".")))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("HTTP adapters consume the neutral principal contract, never token implementation types")
+            .isEmpty();
+    }
+
+    @Test
+    void userManagementControllerUsesTheUserApplicationPortDirectly() {
+        SourceUnit controller = SOURCES.stream()
+            .filter(source -> source.path().endsWith("controller/UserManagementController.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("UserManagementController source was not discovered"));
+
+        assertThat(controller.dependencies())
+            .contains(USER_PACKAGE + ".UserManagementLifecycle")
+            .noneMatch(dependency -> dependency.equals(BASE_PACKAGE + ".service.UserManagementService")
+                || dependency.startsWith(BASE_PACKAGE + ".service.impl.UserManagementServiceImpl"));
     }
 
     @Test

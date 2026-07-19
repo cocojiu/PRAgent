@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
@@ -24,8 +26,6 @@ import com.repoguard.agent.dto.AuthRefreshTokenResetRequest;
 import com.repoguard.agent.dto.AuthRegisterRequest;
 import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
@@ -150,8 +150,8 @@ class AuthControllerTest {
     void meReturnsAuthenticatedUserProfile() throws Exception {
         mockMvc.perform(get("/api/v1/auth/me")
                 .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                    RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+                    new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L)
                 ))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.id").value(1001))
@@ -173,8 +173,8 @@ class AuthControllerTest {
     void changePasswordRequiresAuthenticationAndClearsAuthCookies() throws Exception {
         mockMvc.perform(post("/api/v1/auth/password/change")
                 .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                    RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+                    new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L)
                 )
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -200,8 +200,8 @@ class AuthControllerTest {
 
         limitedMockMvc.perform(post("/api/v1/auth/password/change")
                 .requestAttr(
-                    AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-                    new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+                    RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+                    new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L)
                 )
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
