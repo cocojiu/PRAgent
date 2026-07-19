@@ -44,4 +44,15 @@ public interface UserAccountMapper extends BaseMapper<UserAccount> {
         @Param("newPasswordHash") String newPasswordHash,
         @Param("updatedAt") LocalDateTime updatedAt
     );
+
+    @Update("""
+        update user_account
+        set session_version = coalesce(session_version, 0) + 1,
+            updated_at = #{updatedAt}
+        where id = #{id}
+        """)
+    int rotateSessionVersion(
+        @Param("id") Long id,
+        @Param("updatedAt") LocalDateTime updatedAt
+    );
 }

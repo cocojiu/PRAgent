@@ -6,6 +6,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityAccountLifecycle;
+import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidationMode;
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
@@ -191,7 +192,11 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             if (updated != 1) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "Password changed concurrently; sign in again");
             }
-            sessionLifecycle.revokeActiveSessions(user.getId(), now);
+            sessionLifecycle.invalidateAccountSessions(
+                user.getId(),
+                SessionInvalidationMode.REFRESH_TOKENS_ONLY,
+                now
+            );
             recordAudit(user.getId(), user.getUsername(), "PASSWORD_CHANGE", AUDIT_SUCCESS, null);
             return null;
         });

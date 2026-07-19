@@ -14,6 +14,7 @@ import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityAccountLifecycle.PasswordChangeCommand;
 import com.repoguard.agent.identity.IdentityAccountLifecycle.RegistrationCommand;
+import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidationMode;
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
@@ -152,6 +153,31 @@ class DefaultIdentityAccountLifecycleTest {
         )))
             .isInstanceOf(BusinessException.class)
             .hasMessage("New password must differ from the current password");
+    }
+
+    @Test
+    void passwordChangeRevokesRefreshTokensAfterAtomicPasswordAndVersionUpdate() {
+        UserAccount user = activeUserWithPassword("Secure123");
+        when(userAccountMapper.selectById(1001L)).thenReturn(user);
+        when(userAccountMapper.updatePasswordAndRotateSession(
+            eq(1001L),
+            eq(user.getPasswordHash()),
+            any(String.class),
+            any(LocalDateTime.class)
+        )).thenReturn(1);
+
+        lifecycle.changePassword(1001L, new PasswordChangeCommand(
+            "Secure123",
+            "Safer456",
+            "Safer456"
+        ));
+
+        verify(sessionLifecycle).invalidateAccountSessions(
+            eq(1001L),
+            eq(SessionInvalidationMode.REFRESH_TOKENS_ONLY),
+            any(LocalDateTime.class)
+        );
+        verify(auditRecorder).record(1001L, "admin", "PASSWORD_CHANGE", "SUCCESS", null);
     }
 
     @Test

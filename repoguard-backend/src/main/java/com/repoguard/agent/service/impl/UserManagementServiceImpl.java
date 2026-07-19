@@ -11,11 +11,12 @@ import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
+import com.repoguard.agent.identity.IdentitySessionInvalidator;
+import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidationMode;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
 import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.service.UserManagementService;
-import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import com.repoguard.agent.user.UserManagementDisplayMapper;
 import com.repoguard.agent.user.UserOperationAuditRecorder;
 import com.repoguard.agent.user.UserRoleStatusPolicy;
@@ -40,7 +41,7 @@ public class UserManagementServiceImpl implements UserManagementService {
     private final PasswordHashService passwordHashService;
     private final UserManagementDisplayMapper displayMapper;
     private final UserOperationAuditRecorder auditRecorder;
-    private final UserAccountSessionInvalidator sessionInvalidator;
+    private final IdentitySessionInvalidator sessionInvalidator;
     private final UserRoleStatusPolicy roleStatusPolicy;
 
     public UserManagementServiceImpl(
@@ -49,7 +50,7 @@ public class UserManagementServiceImpl implements UserManagementService {
         PasswordHashService passwordHashService,
         UserManagementDisplayMapper displayMapper,
         UserOperationAuditRecorder auditRecorder,
-        UserAccountSessionInvalidator sessionInvalidator,
+        IdentitySessionInvalidator sessionInvalidator,
         UserRoleStatusPolicy roleStatusPolicy
     ) {
         this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
@@ -153,9 +154,9 @@ public class UserManagementServiceImpl implements UserManagementService {
         }
         user.setRole(normalizedRole);
         LocalDateTime now = LocalDateTime.now();
-        sessionInvalidator.rotateSessionVersion(user, now);
+        user.setUpdatedAt(now);
         userAccountMapper.updateById(user);
-        sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
+        sessionInvalidator.invalidateAccountSessions(user.getId(), SessionInvalidationMode.ALL_SESSIONS, now);
         auditRecorder.record(auditContext, user, ACTION_ROLE_UPDATE, beforeRole, normalizedRole);
         return displayMapper.toUserItem(user);
     }
@@ -176,15 +177,16 @@ public class UserManagementServiceImpl implements UserManagementService {
         }
         user.setStatus(normalizedStatus);
         LocalDateTime now = LocalDateTime.now();
-        sessionInvalidator.rotateSessionVersion(user, now);
+        user.setUpdatedAt(now);
         if (roleStatusPolicy.isActiveStatus(normalizedStatus)) {
             user.setFailedLoginCount(0);
             user.setLockedUntil(null);
         }
         userAccountMapper.updateById(user);
-        if (roleStatusPolicy.isDisabledStatus(normalizedStatus)) {
-            sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
-        }
+        SessionInvalidationMode invalidationMode = roleStatusPolicy.isDisabledStatus(normalizedStatus)
+            ? SessionInvalidationMode.ALL_SESSIONS
+            : SessionInvalidationMode.SESSION_VERSION_ONLY;
+        sessionInvalidator.invalidateAccountSessions(user.getId(), invalidationMode, now);
         auditRecorder.record(auditContext, user, ACTION_STATUS_UPDATE, beforeStatus, normalizedStatus);
         return displayMapper.toUserItem(user);
     }
