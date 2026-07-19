@@ -1,10 +1,9 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.web;
 
 import com.repoguard.agent.entity.AdminOperationAudit;
 import com.repoguard.agent.mapper.AdminOperationAuditMapper;
 import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
-import com.repoguard.agent.web.AuditClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
@@ -41,7 +40,9 @@ public class AdminOperationAuditRecorder {
             audit.setClientIp(AuditClientIpResolver.resolve(request));
             audit.setUserAgent(truncate(request.getHeader("User-Agent"), 512));
             audit.setResult(status < 400 && failure == null ? "SUCCESS" : "FAILED");
-            audit.setFailureCategory(failure == null ? httpFailure(status) : truncate(failure.getClass().getSimpleName(), 128));
+            audit.setFailureCategory(
+                failure == null ? httpFailure(status) : truncate(failure.getClass().getSimpleName(), 128)
+            );
             audit.setCreatedAt(LocalDateTime.now());
             mapper.insert(audit);
         } catch (RuntimeException ex) {

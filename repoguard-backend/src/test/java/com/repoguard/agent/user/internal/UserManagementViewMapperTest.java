@@ -1,20 +1,20 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.user.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.dto.UserManagementItemDto;
-import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
+import com.repoguard.agent.user.UserManagementLifecycle.ManagedUser;
+import com.repoguard.agent.user.UserManagementLifecycle.OperationAudit;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
-class UserManagementDisplayMapperTest {
+class UserManagementViewMapperTest {
 
-    private final UserManagementDisplayMapper mapper = new UserManagementDisplayMapper();
+    private final UserManagementViewMapper mapper = new UserManagementViewMapper();
 
     @Test
-    void mapsUserAccountToManagementItem() {
+    void mapsUserAccountToManagedUser() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 6, 17, 9, 30);
         LocalDateTime updatedAt = LocalDateTime.of(2026, 6, 18, 10, 15);
         LocalDateTime lockedUntil = LocalDateTime.of(2026, 6, 19, 11, 0);
@@ -31,9 +31,9 @@ class UserManagementDisplayMapperTest {
         user.setCreatedAt(createdAt);
         user.setUpdatedAt(updatedAt);
 
-        UserManagementItemDto result = mapper.toUserItem(user);
+        ManagedUser result = mapper.toManagedUser(user);
 
-        assertThat(result).isEqualTo(new UserManagementItemDto(
+        assertThat(result).isEqualTo(new ManagedUser(
             42L,
             "alice",
             "alice@example.com",
@@ -48,7 +48,7 @@ class UserManagementDisplayMapperTest {
     }
 
     @Test
-    void mapsOperationAuditToAuditItem() {
+    void mapsOperationAuditToAuditView() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 6, 17, 9, 30);
         UserOperationAudit audit = new UserOperationAudit();
         audit.setId(7L);
@@ -63,9 +63,9 @@ class UserManagementDisplayMapperTest {
         audit.setUserAgent("JUnit");
         audit.setCreatedAt(createdAt);
 
-        UserOperationAuditDto result = mapper.toAuditItem(audit);
+        OperationAudit result = mapper.toOperationAudit(audit);
 
-        assertThat(result).isEqualTo(new UserOperationAuditDto(
+        assertThat(result).isEqualTo(new OperationAudit(
             7L,
             1001L,
             "admin",

@@ -4,11 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.credential.PasswordHasher;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
 import com.repoguard.agent.mapper.UserAccountMapper;
-import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
@@ -30,20 +30,20 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
     private static final long ACCOUNT_LOCK_MINUTES = 5;
 
     private final UserAccountMapper userAccountMapper;
-    private final PasswordHashService passwordHashService;
+    private final PasswordHasher passwordHasher;
     private final IdentityAuditRecorder auditRecorder;
     private final TransactionTemplate failureWriteTransaction;
 
     @Autowired
     public DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentityAuditRecorder auditRecorder,
         PlatformTransactionManager transactionManager
     ) {
         this(
             userAccountMapper,
-            passwordHashService,
+            passwordHasher,
             auditRecorder,
             buildWriteTransaction(transactionManager)
         );
@@ -51,20 +51,20 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
 
     public DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentityAuditRecorder auditRecorder
     ) {
-        this(userAccountMapper, passwordHashService, auditRecorder, (TransactionTemplate) null);
+        this(userAccountMapper, passwordHasher, auditRecorder, (TransactionTemplate) null);
     }
 
     private DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentityAuditRecorder auditRecorder,
         TransactionTemplate failureWriteTransaction
     ) {
         this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
-        this.passwordHashService = Objects.requireNonNull(passwordHashService, "passwordHashService must not be null");
+        this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher must not be null");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
         this.failureWriteTransaction = failureWriteTransaction;
     }
@@ -80,7 +80,7 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
         UserAccount user = account.contains("@")
             ? findByEmail(account.toLowerCase(Locale.ROOT))
             : findByUsername(account);
-        boolean passwordMatches = passwordHashService.matchesOrDummy(
+        boolean passwordMatches = passwordHasher.matchesOrDummy(
             password,
             user == null ? null : user.getPasswordHash()
         );

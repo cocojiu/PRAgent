@@ -32,11 +32,15 @@ class ApplicationArchitectureTest {
 
     private static final String BASE_PACKAGE = "com.repoguard.agent";
     private static final String CONTROLLER_PACKAGE = BASE_PACKAGE + ".controller";
+    private static final String DTO_PACKAGE = BASE_PACKAGE + ".dto";
     private static final String ENTITY_PACKAGE = BASE_PACKAGE + ".entity";
     private static final String IDENTITY_PACKAGE = BASE_PACKAGE + ".identity";
     private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
+    private static final String SECURITY_PACKAGE = BASE_PACKAGE + ".security";
     private static final String USER_PACKAGE = BASE_PACKAGE + ".user";
+    private static final String USER_INTERNAL_PACKAGE = USER_PACKAGE + ".internal";
+    private static final String WEB_PACKAGE = BASE_PACKAGE + ".web";
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -65,10 +69,6 @@ class ApplicationArchitectureTest {
         "review->external",
         "review->github",
         "review->observability",
-        "security->web",
-        "user->security",
-        "user->web",
-        "web->user",
         "worker->external",
         "worker->github",
         "worker->messaging",
@@ -157,6 +157,69 @@ class ApplicationArchitectureTest {
 
         assertThat(violations)
             .as("Identity owns authentication and session behavior and must not depend on user implementations")
+            .isEmpty();
+    }
+
+    @Test
+    void userInternalsArePrivateToTheUserBoundary() {
+        List<String> userSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), USER_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> !isInPackage(source.packageName(), USER_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, USER_INTERNAL_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(userSources).as("user source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Other boundaries may depend on user application ports, never user internals")
+            .isEmpty();
+    }
+
+    @Test
+    void userPublicApiDoesNotExposeTechnicalOrPersistenceTypes() {
+        List<String> publicUserSources = SOURCES.stream()
+            .filter(source -> source.packageName().equals(USER_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> source.packageName().equals(USER_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, DTO_PACKAGE)
+                    || isInPackage(dependency, ENTITY_PACKAGE)
+                    || isInPackage(dependency, MAPPER_PACKAGE)
+                    || isInPackage(dependency, SECURITY_PACKAGE)
+                    || isInPackage(dependency, WEB_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(publicUserSources).as("public user API source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("User application ports must expose user-owned values without technical dependencies")
+            .isEmpty();
+    }
+
+    @Test
+    void userBoundaryDoesNotDependOnSecurityOrWebImplementations() {
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), USER_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, SECURITY_PACKAGE)
+                    || isInPackage(dependency, WEB_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("User management depends on neutral or identity ports, never security or web implementations")
             .isEmpty();
     }
 

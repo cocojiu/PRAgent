@@ -18,6 +18,7 @@ import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.web.AuditClientIpResolver;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -179,7 +180,7 @@ public class AuthController {
 
     private void limit(String operation, String account, HttpServletRequest request) {
         if (attemptLimiter != null) {
-            attemptLimiter.requireAllowed(operation, account, request);
+            attemptLimiter.requireAllowed(operation, account, AuditClientIpResolver.resolve(request));
         }
     }
 

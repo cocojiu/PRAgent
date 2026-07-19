@@ -1,16 +1,14 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.user.internal;
 
-import com.repoguard.agent.dto.UserManagementItemDto;
-import com.repoguard.agent.dto.UserOperationAuditDto;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
-import org.springframework.stereotype.Component;
+import com.repoguard.agent.user.UserManagementLifecycle.ManagedUser;
+import com.repoguard.agent.user.UserManagementLifecycle.OperationAudit;
 
-@Component
-public class UserManagementDisplayMapper {
+final class UserManagementViewMapper {
 
-    public UserManagementItemDto toUserItem(UserAccount user) {
-        return new UserManagementItemDto(
+    ManagedUser toManagedUser(UserAccount user) {
+        return new ManagedUser(
             user.getId(),
             user.getUsername(),
             user.getEmail(),
@@ -24,8 +22,8 @@ public class UserManagementDisplayMapper {
         );
     }
 
-    public UserOperationAuditDto toAuditItem(UserOperationAudit audit) {
-        return new UserOperationAuditDto(
+    OperationAudit toOperationAudit(UserOperationAudit audit) {
+        return new OperationAudit(
             audit.getId(),
             audit.getOperatorUserId(),
             audit.getOperatorUsername(),

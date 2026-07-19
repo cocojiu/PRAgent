@@ -1,16 +1,14 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.user.internal;
 
-import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
+import com.repoguard.agent.user.UserManagementLifecycle.AuditContext;
 import java.time.LocalDateTime;
 import java.util.Objects;
-import org.springframework.stereotype.Component;
 
-@Component
-public class UserOperationAuditRecorder {
+final class UserOperationAuditRecorder {
 
     private static final int CLIENT_IP_MAX_LENGTH = 64;
     private static final int USER_AGENT_MAX_LENGTH = 512;
@@ -18,7 +16,7 @@ public class UserOperationAuditRecorder {
     private final UserAccountMapper userAccountMapper;
     private final UserOperationAuditMapper userOperationAuditMapper;
 
-    public UserOperationAuditRecorder(
+    UserOperationAuditRecorder(
         UserAccountMapper userAccountMapper,
         UserOperationAuditMapper userOperationAuditMapper
     ) {
@@ -27,8 +25,8 @@ public class UserOperationAuditRecorder {
             Objects.requireNonNull(userOperationAuditMapper, "userOperationAuditMapper must not be null");
     }
 
-    public void record(
-        UserOperationAuditContext auditContext,
+    void record(
+        AuditContext auditContext,
         UserAccount targetUser,
         String action,
         String beforeValue,

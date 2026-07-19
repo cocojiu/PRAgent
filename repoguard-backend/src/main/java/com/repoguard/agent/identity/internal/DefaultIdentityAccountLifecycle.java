@@ -3,6 +3,7 @@ package com.repoguard.agent.identity.internal;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.credential.PasswordHasher;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityAccountLifecycle;
@@ -11,7 +12,6 @@ import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.security.AuthProperties;
-import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
@@ -34,7 +34,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
 
     private final UserAccountMapper userAccountMapper;
     private final IdentityAuditRecorder auditRecorder;
-    private final PasswordHashService passwordHashService;
+    private final PasswordHasher passwordHasher;
     private final IdentitySessionLifecycle sessionLifecycle;
     private final AuthProperties authProperties;
     private final TransactionTemplate accountWriteTransaction;
@@ -43,7 +43,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
     public DefaultIdentityAccountLifecycle(
         UserAccountMapper userAccountMapper,
         IdentityAuditRecorder auditRecorder,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
         AuthProperties authProperties,
         PlatformTransactionManager transactionManager
@@ -51,7 +51,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         this(
             userAccountMapper,
             auditRecorder,
-            passwordHashService,
+            passwordHasher,
             sessionLifecycle,
             authProperties,
             buildWriteTransaction(transactionManager)
@@ -61,14 +61,14 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
     public DefaultIdentityAccountLifecycle(
         UserAccountMapper userAccountMapper,
         IdentityAuditRecorder auditRecorder,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
         AuthProperties authProperties
     ) {
         this(
             userAccountMapper,
             auditRecorder,
-            passwordHashService,
+            passwordHasher,
             sessionLifecycle,
             authProperties,
             (TransactionTemplate) null
@@ -78,14 +78,14 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
     private DefaultIdentityAccountLifecycle(
         UserAccountMapper userAccountMapper,
         IdentityAuditRecorder auditRecorder,
-        PasswordHashService passwordHashService,
+        PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
         AuthProperties authProperties,
         TransactionTemplate accountWriteTransaction
     ) {
         this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
-        this.passwordHashService = Objects.requireNonNull(passwordHashService, "passwordHashService must not be null");
+        this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher must not be null");
         this.sessionLifecycle = Objects.requireNonNull(sessionLifecycle, "sessionLifecycle must not be null");
         this.authProperties = Objects.requireNonNull(authProperties, "authProperties must not be null");
         this.accountWriteTransaction = accountWriteTransaction;
@@ -112,7 +112,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             throw new BusinessException(ErrorCode.BAD_REQUEST, "邮箱已存在");
         }
 
-        String passwordHash = passwordHashService.hash(command.password());
+        String passwordHash = passwordHasher.hash(command.password());
         LocalDateTime now = LocalDateTime.now();
         UserAccount user = new UserAccount();
         user.setUsername(username);
@@ -156,7 +156,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
     public void changePassword(Long userId, PasswordChangeCommand command) {
         Objects.requireNonNull(command, "command must not be null");
         UserAccount user = userAccountMapper.selectById(userId);
-        boolean currentPasswordMatches = passwordHashService.matchesOrDummy(
+        boolean currentPasswordMatches = passwordHasher.matchesOrDummy(
             command.currentPassword(),
             user == null ? null : user.getPasswordHash()
         );
@@ -175,12 +175,12 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         if (!isStrongEnough(command.newPassword())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "New password must contain both letters and numbers");
         }
-        if (passwordHashService.matchesOrDummy(command.newPassword(), user.getPasswordHash())) {
+        if (passwordHasher.matchesOrDummy(command.newPassword(), user.getPasswordHash())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "New password must differ from the current password");
         }
 
         String currentPasswordHash = user.getPasswordHash();
-        String newPasswordHash = passwordHashService.hash(command.newPassword());
+        String newPasswordHash = passwordHasher.hash(command.newPassword());
         inWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
             int updated = userAccountMapper.updatePasswordAndRotateSession(
