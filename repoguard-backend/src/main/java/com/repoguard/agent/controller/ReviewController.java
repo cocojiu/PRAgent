@@ -24,9 +24,8 @@ import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.RequireRole;
+import com.repoguard.agent.web.RequestAuthentication;
 import com.repoguard.agent.service.ReviewService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -240,11 +239,7 @@ public class ReviewController {
     }
 
     private String authenticatedUsername(HttpServletRequest request) {
-        Object authenticatedUser = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
-        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "Authentication token is required");
-        }
-        return user.username();
+        return RequestAuthentication.require(request).username();
     }
 
     private String checkedParam(String name, String value, int maxLength) {

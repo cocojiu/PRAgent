@@ -1,6 +1,8 @@
 package com.repoguard.agent.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.mapper.UserAccountMapper;
@@ -19,7 +21,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 public class AuthTokenFilter extends OncePerRequestFilter {
 
-    public static final String AUTHENTICATED_USER_ATTRIBUTE = "repoguard.authenticatedUser";
     private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final AuthTokenService authTokenService;
@@ -46,7 +47,8 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
             return;
         }
-        if (request.getAttribute(AUTHENTICATED_USER_ATTRIBUTE) instanceof AuthTokenService.AuthenticatedUser) {
+        if (request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL)
+            instanceof AuthenticatedPrincipal) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -70,7 +72,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
-        request.setAttribute(AUTHENTICATED_USER_ATTRIBUTE, new AuthTokenService.AuthenticatedUser(
+        request.setAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL, new AuthenticatedPrincipal(
             currentUser.getId(),
             currentUser.getUsername(),
             currentUser.getRole(),

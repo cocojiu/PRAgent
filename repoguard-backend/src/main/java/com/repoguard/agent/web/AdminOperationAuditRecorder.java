@@ -2,8 +2,6 @@ package com.repoguard.agent.web;
 
 import com.repoguard.agent.entity.AdminOperationAudit;
 import com.repoguard.agent.mapper.AdminOperationAuditMapper;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import org.slf4j.Logger;
@@ -27,11 +25,10 @@ public class AdminOperationAuditRecorder {
     public void record(HttpServletRequest request, int status, Exception failure) {
         try {
             AdminOperationAudit audit = new AdminOperationAudit();
-            Object principal = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
-            if (principal instanceof AuthTokenService.AuthenticatedUser user) {
+            RequestAuthentication.find(request).ifPresent(user -> {
                 audit.setActorUserId(user.id());
                 audit.setActorUsername(truncate(user.username(), 255));
-            }
+            });
             audit.setAction(truncate(request.getMethod() + " " + request.getRequestURI(), 128));
             audit.setTargetType("ADMIN_API");
             audit.setTargetId(truncate(request.getRequestURI(), 255));

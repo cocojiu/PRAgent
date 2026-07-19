@@ -6,10 +6,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.entity.AdminOperationAudit;
 import com.repoguard.agent.mapper.AdminOperationAuditMapper;
-import com.repoguard.agent.security.AuthTokenFilter;
-import com.repoguard.agent.security.AuthTokenService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -31,8 +31,8 @@ class AdminOperationAuditRecorderTest {
     void recordsAuthenticatedAdminRequestContext() {
         MockHttpServletRequest request = request();
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(1001L, "admin", "ADMIN", 9999999999L)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L)
         );
         request.addHeader("X-Real-IP", "203.0.113.10");
         request.addHeader("User-Agent", "JUnit");

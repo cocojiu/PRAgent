@@ -1,6 +1,8 @@
 package com.repoguard.agent.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -33,8 +35,8 @@ public class RoleAuthorizationInterceptor implements HandlerInterceptor {
         if (requireRole == null) {
             return true;
         }
-        Object authenticatedUser = request.getAttribute(AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE);
-        if (!(authenticatedUser instanceof AuthTokenService.AuthenticatedUser user)) {
+        Object authenticatedUser = request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL);
+        if (!(authenticatedUser instanceof AuthenticatedPrincipal user)) {
             writeError(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Authentication token is required");
             return false;
         }

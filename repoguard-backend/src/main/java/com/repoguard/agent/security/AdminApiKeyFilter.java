@@ -1,6 +1,8 @@
 package com.repoguard.agent.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.ErrorCode;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -51,8 +53,8 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
             return;
         }
         request.setAttribute(
-            AuthTokenFilter.AUTHENTICATED_USER_ATTRIBUTE,
-            new AuthTokenService.AuthenticatedUser(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
+            RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+            new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
         );
         filterChain.doFilter(request, response);
     }
