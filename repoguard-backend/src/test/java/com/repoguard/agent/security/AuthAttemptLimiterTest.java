@@ -12,7 +12,6 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
 
 class AuthAttemptLimiterTest {
 
@@ -22,19 +21,19 @@ class AuthAttemptLimiterTest {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MutableClock clock = new MutableClock();
         AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock);
-        MockHttpServletRequest request = requestFrom("203.0.113.10");
+        String clientIp = "203.0.113.10";
 
-        limiter.requireAllowed("LOGIN", " User@Example.com ", request);
-        limiter.requireAllowed("login", "user@example.com", request);
+        limiter.requireAllowed("LOGIN", " User@Example.com ", clientIp);
+        limiter.requireAllowed("login", "user@example.com", clientIp);
 
-        assertThatThrownBy(() -> limiter.requireAllowed("login", "USER@EXAMPLE.COM", request))
+        assertThatThrownBy(() -> limiter.requireAllowed("login", "USER@EXAMPLE.COM", clientIp))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
         assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(1.0);
 
         clock.advance(Duration.ofMinutes(1));
 
-        limiter.requireAllowed("login", "user@example.com", request);
+        limiter.requireAllowed("login", "user@example.com", clientIp);
     }
 
     @Test
@@ -45,19 +44,19 @@ class AuthAttemptLimiterTest {
         AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock);
 
         for (int index = 0; index < 10_000; index++) {
-            limiter.requireAllowed("login", "account-" + index, requestFrom("client-" + index));
+            limiter.requireAllowed("login", "account-" + index, "client-" + index);
         }
 
-        MockHttpServletRequest overflowRequest = requestFrom("overflow-client");
-        assertThatThrownBy(() -> limiter.requireAllowed("login", "overflow-account", overflowRequest))
+        String overflowClient = "overflow-client";
+        assertThatThrownBy(() -> limiter.requireAllowed("login", "overflow-account", overflowClient))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
 
-        limiter.requireAllowed("login", "account-0", requestFrom("client-0"));
+        limiter.requireAllowed("login", "account-0", "client-0");
 
         clock.advance(Duration.ofMinutes(1));
 
-        limiter.requireAllowed("login", "overflow-account", overflowRequest);
+        limiter.requireAllowed("login", "overflow-account", overflowClient);
         assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(1.0);
     }
 
@@ -66,12 +65,6 @@ class AuthAttemptLimiterTest {
         properties.setPublicAuthRequestsPerMinutePerIp(perIp);
         properties.setPublicAuthRequestsPerMinutePerAccountIp(perAccountIp);
         return properties;
-    }
-
-    private MockHttpServletRequest requestFrom(String ip) {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
-        request.setRemoteAddr(ip);
-        return request;
     }
 
     private static final class MutableClock extends Clock {

@@ -2,9 +2,7 @@ package com.repoguard.agent.security;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.web.AuditClientIpResolver;
 import io.micrometer.core.instrument.MeterRegistry;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,8 +29,8 @@ public class AuthAttemptLimiter {
         this.clock = clock;
     }
 
-    public void requireAllowed(String operation, String account, HttpServletRequest request) {
-        String ip = normalize(AuditClientIpResolver.resolve(request));
+    public void requireAllowed(String operation, String account, String clientIp) {
+        String ip = normalize(clientIp);
         String normalizedOperation = normalize(operation);
         if (!acquire("ip:" + normalizedOperation + ":" + ip, properties.getPublicAuthRequestsPerMinutePerIp())
             || !acquire(

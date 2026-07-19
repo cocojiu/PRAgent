@@ -1,4 +1,4 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.user.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

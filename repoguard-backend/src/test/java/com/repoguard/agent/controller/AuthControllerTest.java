@@ -30,7 +30,6 @@ import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.web.AuthSessionCookieManager;
 import jakarta.servlet.http.Cookie;
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -214,7 +213,7 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isOk());
 
-        verify(limiter).requireAllowed(eq("password-change"), eq("admin"), any(HttpServletRequest.class));
+        verify(limiter).requireAllowed(eq("password-change"), eq("admin"), any(String.class));
     }
 
     @Test
@@ -237,7 +236,7 @@ class AuthControllerTest {
         AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
         doThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "Too many authentication attempts"))
             .when(limiter)
-            .requireAllowed(eq("refresh"), eq("refresh-token-value"), any(HttpServletRequest.class));
+            .requireAllowed(eq("refresh"), eq("refresh-token-value"), any(String.class));
         MockMvc limitedMockMvc = MockMvcBuilders
             .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
             .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
@@ -252,7 +251,7 @@ class AuthControllerTest {
         verify(limiter).requireAllowed(
             eq("refresh"),
             eq("refresh-token-value"),
-            any(HttpServletRequest.class)
+            any(String.class)
         );
     }
 

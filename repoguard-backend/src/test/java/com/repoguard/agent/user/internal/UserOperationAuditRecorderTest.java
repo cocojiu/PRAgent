@@ -1,4 +1,4 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.user.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -6,11 +6,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
+import com.repoguard.agent.user.UserManagementLifecycle.AuditContext;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -33,7 +33,7 @@ class UserOperationAuditRecorderTest {
         String longUserAgent = "A".repeat(600);
 
         recorder.record(
-            new UserOperationAuditContext(1001L, longClientIp, longUserAgent),
+            new AuditContext(1001L, longClientIp, longUserAgent),
             target,
             "ROLE_UPDATE",
             "VIEWER",
