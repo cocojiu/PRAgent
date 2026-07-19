@@ -23,10 +23,13 @@ import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.identity.IdentityAccount;
+import com.repoguard.agent.identity.IdentityAccountLifecycle;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
+import com.repoguard.agent.identity.internal.DefaultIdentityAccountLifecycle;
 import com.repoguard.agent.identity.internal.DefaultIdentityCredentialAuthenticator;
 import com.repoguard.agent.identity.internal.DefaultIdentitySessionLifecycle;
+import com.repoguard.agent.identity.internal.IdentityAuditRecorder;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
@@ -34,8 +37,6 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
-import com.repoguard.agent.user.UserAccountSessionInvalidator;
-import com.repoguard.agent.user.UserLoginAuditRecorder;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -53,32 +54,33 @@ class AuthServiceImplTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
-    private final UserLoginAuditRecorder loginAuditRecorder = new UserLoginAuditRecorder(userLoginAuditMapper);
+    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(userLoginAuditMapper);
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final IdentityCredentialAuthenticator credentialAuthenticator =
-        new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, loginAuditRecorder);
+        new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, auditRecorder);
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
-    private final UserAccountSessionInvalidator sessionInvalidator =
-        new UserAccountSessionInvalidator(userRefreshTokenMapper);
     private final RepoGuardMetrics metrics = Mockito.mock(RepoGuardMetrics.class);
     private final IdentitySessionLifecycle sessionLifecycle = new DefaultIdentitySessionLifecycle(
         userAccountMapper,
         userRefreshTokenMapper,
-        loginAuditRecorder,
+        auditRecorder,
         credentialAuthenticator,
         authProperties,
         authTokenService,
-        sessionInvalidator,
         metrics
     );
-    private final AuthServiceImpl authService = new AuthServiceImpl(
+    private final IdentityAccountLifecycle accountLifecycle = new DefaultIdentityAccountLifecycle(
         userAccountMapper,
-        loginAuditRecorder,
+        auditRecorder,
         passwordHashService,
-        credentialAuthenticator,
         sessionLifecycle,
         authProperties
+    );
+    private final AuthServiceImpl authService = new AuthServiceImpl(
+        accountLifecycle,
+        credentialAuthenticator,
+        sessionLifecycle
     );
 
     @AfterEach
@@ -462,21 +464,17 @@ class AuthServiceImplTest {
         IdentitySessionLifecycle transactionalSessionLifecycle = new DefaultIdentitySessionLifecycle(
             userAccountMapper,
             userRefreshTokenMapper,
-            loginAuditRecorder,
+            auditRecorder,
             credentialAuthenticator,
             authProperties,
             authTokenService,
-            sessionInvalidator,
             metrics,
             transactionManager
         );
         AuthServiceImpl transactionalAuthService = new AuthServiceImpl(
-            userAccountMapper,
-            loginAuditRecorder,
-            passwordHashService,
+            accountLifecycle,
             credentialAuthenticator,
-            transactionalSessionLifecycle,
-            authProperties
+            transactionalSessionLifecycle
         );
 
         assertThatThrownBy(() -> transactionalAuthService.refresh(new AuthRefreshRequest(refreshToken)))
@@ -495,11 +493,10 @@ class AuthServiceImplTest {
         IdentitySessionLifecycle transactionalSessionLifecycle = new DefaultIdentitySessionLifecycle(
             userAccountMapper,
             userRefreshTokenMapper,
-            loginAuditRecorder,
+            auditRecorder,
             credentialAuthenticator,
             authProperties,
             authTokenService,
-            sessionInvalidator,
             metrics,
             transactionManager
         );
@@ -608,40 +605,31 @@ class AuthServiceImplTest {
     @Test
     void constructorRequiresSessionLifecycle() {
         assertThatThrownBy(() -> new AuthServiceImpl(
-            userAccountMapper,
-            loginAuditRecorder,
-            passwordHashService,
+            accountLifecycle,
             credentialAuthenticator,
-            null,
-            authProperties
+            null
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("sessionLifecycle");
     }
 
     @Test
-    void constructorRequiresLoginAuditRecorder() {
+    void constructorRequiresAccountLifecycle() {
         assertThatThrownBy(() -> new AuthServiceImpl(
-            userAccountMapper,
             null,
-            passwordHashService,
             credentialAuthenticator,
-            sessionLifecycle,
-            authProperties
+            sessionLifecycle
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("loginAuditRecorder");
+            .hasMessageContaining("accountLifecycle");
     }
 
     @Test
     void constructorRequiresCredentialAuthenticator() {
         assertThatThrownBy(() -> new AuthServiceImpl(
-            userAccountMapper,
-            loginAuditRecorder,
-            passwordHashService,
+            accountLifecycle,
             null,
-            sessionLifecycle,
-            authProperties
+            sessionLifecycle
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("credentialAuthenticator");

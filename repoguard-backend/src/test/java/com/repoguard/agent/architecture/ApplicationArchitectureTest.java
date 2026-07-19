@@ -36,6 +36,7 @@ class ApplicationArchitectureTest {
     private static final String IDENTITY_PACKAGE = BASE_PACKAGE + ".identity";
     private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
+    private static final String USER_PACKAGE = BASE_PACKAGE + ".user";
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -140,6 +141,22 @@ class ApplicationArchitectureTest {
         assertThat(publicIdentitySources).as("public identity API source discovery").isNotEmpty();
         assertThat(violations)
             .as("Identity application ports must expose identity-owned values, never persistence types")
+            .isEmpty();
+    }
+
+    @Test
+    void identityBoundaryDoesNotDependOnUserImplementationPackage() {
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), IDENTITY_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, USER_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("Identity owns authentication and session behavior and must not depend on user implementations")
             .isEmpty();
     }
 

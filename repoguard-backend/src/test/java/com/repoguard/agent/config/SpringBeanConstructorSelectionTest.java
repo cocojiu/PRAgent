@@ -74,6 +74,7 @@ class SpringBeanConstructorSelectionTest {
             ReviewTaskExecutorImpl.class
         );
         List<Class<?>> packagePrivateSpringManagedTypes = List.of(
+            Class.forName("com.repoguard.agent.identity.internal.DefaultIdentityAccountLifecycle"),
             Class.forName("com.repoguard.agent.identity.internal.DefaultIdentityCredentialAuthenticator"),
             Class.forName("com.repoguard.agent.identity.internal.DefaultIdentitySessionLifecycle"),
             Class.forName("com.repoguard.agent.notification.DingTalkWebhookSigner"),

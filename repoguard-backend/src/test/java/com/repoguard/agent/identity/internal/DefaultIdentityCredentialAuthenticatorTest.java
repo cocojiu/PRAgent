@@ -19,7 +19,6 @@ import com.repoguard.agent.identity.IdentityCredentialAuthenticator.Authenticati
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.security.PasswordHashService;
-import com.repoguard.agent.user.UserLoginAuditRecorder;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,9 +32,9 @@ class DefaultIdentityCredentialAuthenticatorTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
     private final PasswordHashService passwordHashService = new PasswordHashService();
-    private final UserLoginAuditRecorder loginAuditRecorder = new UserLoginAuditRecorder(userLoginAuditMapper);
+    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(userLoginAuditMapper);
     private final DefaultIdentityCredentialAuthenticator authenticator =
-        new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, loginAuditRecorder);
+        new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, auditRecorder);
 
     @Test
     void wrongPasswordAdvancesLockStateAndRecordsFailureAudit() {
@@ -155,7 +154,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
             new DefaultIdentityCredentialAuthenticator(
                 userAccountMapper,
                 passwordHashService,
-                loginAuditRecorder,
+                auditRecorder,
                 transactionManager
             );
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
