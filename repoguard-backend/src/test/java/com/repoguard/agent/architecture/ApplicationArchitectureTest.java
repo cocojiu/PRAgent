@@ -122,6 +122,28 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void identityPublicApiDoesNotExposePersistenceTypes() {
+        List<String> publicIdentitySources = SOURCES.stream()
+            .filter(source -> source.packageName().equals(IDENTITY_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> source.packageName().equals(IDENTITY_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, ENTITY_PACKAGE)
+                    || isInPackage(dependency, MAPPER_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(publicIdentitySources).as("public identity API source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Identity application ports must expose identity-owned values, never persistence types")
+            .isEmpty();
+    }
+
+    @Test
     void implementationPackagesAreNotImportedAcrossBoundaries() {
         List<String> violations = SOURCES.stream()
             .flatMap(source -> source.dependencies().stream()

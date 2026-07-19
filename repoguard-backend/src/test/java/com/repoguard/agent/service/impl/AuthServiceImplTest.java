@@ -22,8 +22,11 @@ import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.entity.UserRefreshToken;
+import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
+import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.internal.DefaultIdentityCredentialAuthenticator;
+import com.repoguard.agent.identity.internal.DefaultIdentitySessionLifecycle;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
@@ -59,16 +62,23 @@ class AuthServiceImplTest {
     private final UserAccountSessionInvalidator sessionInvalidator =
         new UserAccountSessionInvalidator(userRefreshTokenMapper);
     private final RepoGuardMetrics metrics = Mockito.mock(RepoGuardMetrics.class);
-    private final AuthServiceImpl authService = new AuthServiceImpl(
+    private final IdentitySessionLifecycle sessionLifecycle = new DefaultIdentitySessionLifecycle(
         userAccountMapper,
         userRefreshTokenMapper,
         loginAuditRecorder,
-        passwordHashService,
         credentialAuthenticator,
         authProperties,
         authTokenService,
         sessionInvalidator,
         metrics
+    );
+    private final AuthServiceImpl authService = new AuthServiceImpl(
+        userAccountMapper,
+        loginAuditRecorder,
+        passwordHashService,
+        credentialAuthenticator,
+        sessionLifecycle,
+        authProperties
     );
 
     @AfterEach
@@ -228,8 +238,6 @@ class AuthServiceImplTest {
         assertThat(response.accessTokenExpiresInSeconds()).isEqualTo(10);
         assertThat(response.refreshTokenExpiresInSeconds()).isEqualTo(30);
         assertThat(response.tokenType()).isEqualTo("Bearer");
-        assertThat(user.getFailedLoginCount()).isZero();
-        assertThat(user.getLockedUntil()).isNull();
         verify(userAccountMapper).update(isNull(), any(Wrapper.class));
         ArgumentCaptor<UserRefreshToken> refreshCaptor = ArgumentCaptor.forClass(UserRefreshToken.class);
         verify(userRefreshTokenMapper).insert(refreshCaptor.capture());
@@ -451,17 +459,24 @@ class AuthServiceImplTest {
         when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
         RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-        AuthServiceImpl transactionalAuthService = new AuthServiceImpl(
+        IdentitySessionLifecycle transactionalSessionLifecycle = new DefaultIdentitySessionLifecycle(
             userAccountMapper,
             userRefreshTokenMapper,
             loginAuditRecorder,
-            passwordHashService,
             credentialAuthenticator,
             authProperties,
             authTokenService,
             sessionInvalidator,
             metrics,
             transactionManager
+        );
+        AuthServiceImpl transactionalAuthService = new AuthServiceImpl(
+            userAccountMapper,
+            loginAuditRecorder,
+            passwordHashService,
+            credentialAuthenticator,
+            transactionalSessionLifecycle,
+            authProperties
         );
 
         assertThatThrownBy(() -> transactionalAuthService.refresh(new AuthRefreshRequest(refreshToken)))
@@ -470,6 +485,36 @@ class AuthServiceImplTest {
 
         assertThat(transactionManager.commitCount).isEqualTo(1);
         assertThat(transactionManager.rollbackCount).isZero();
+        assertThat(transactionManager.lastPropagationBehavior)
+            .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    }
+
+    @Test
+    void sessionIssuanceUsesRequiredPropagationForRegistrationComposition() {
+        RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+        IdentitySessionLifecycle transactionalSessionLifecycle = new DefaultIdentitySessionLifecycle(
+            userAccountMapper,
+            userRefreshTokenMapper,
+            loginAuditRecorder,
+            credentialAuthenticator,
+            authProperties,
+            authTokenService,
+            sessionInvalidator,
+            metrics,
+            transactionManager
+        );
+
+        transactionalSessionLifecycle.issue(new IdentityAccount(
+            1001L,
+            "admin",
+            "admin@repoguard.dev",
+            "ADMIN",
+            0
+        ), false);
+
+        assertThat(transactionManager.commitCount).isEqualTo(1);
+        assertThat(transactionManager.lastPropagationBehavior)
+            .isEqualTo(TransactionDefinition.PROPAGATION_REQUIRED);
     }
 
     @Test
@@ -551,76 +596,52 @@ class AuthServiceImplTest {
         AuthResponse response = authService.resetRefreshToken(new AuthRefreshTokenResetRequest("admin", "Secure123", false));
 
         assertThat(response.refreshToken()).isNotBlank();
-        assertThat(user.getSessionVersion()).isEqualTo(4);
-        verify(userAccountMapper).updateById(user);
+        ArgumentCaptor<UserAccount> accountUpdate = ArgumentCaptor.forClass(UserAccount.class);
+        verify(userAccountMapper).updateById(accountUpdate.capture());
+        assertThat(accountUpdate.getValue().getId()).isEqualTo(1001L);
+        assertThat(accountUpdate.getValue().getSessionVersion()).isEqualTo(4);
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
     @Test
-    void constructorRequiresSessionInvalidator() {
+    void constructorRequiresSessionLifecycle() {
         assertThatThrownBy(() -> new AuthServiceImpl(
             userAccountMapper,
-            userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
             credentialAuthenticator,
-            authProperties,
-            authTokenService,
             null,
-            metrics
+            authProperties
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("sessionInvalidator");
+            .hasMessageContaining("sessionLifecycle");
     }
 
     @Test
     void constructorRequiresLoginAuditRecorder() {
         assertThatThrownBy(() -> new AuthServiceImpl(
             userAccountMapper,
-            userRefreshTokenMapper,
             null,
             passwordHashService,
             credentialAuthenticator,
-            authProperties,
-            authTokenService,
-            sessionInvalidator,
-            metrics
+            sessionLifecycle,
+            authProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("loginAuditRecorder");
     }
 
     @Test
-    void constructorRequiresMetrics() {
-        assertThatThrownBy(() -> new AuthServiceImpl(
-            userAccountMapper,
-            userRefreshTokenMapper,
-            loginAuditRecorder,
-            passwordHashService,
-            credentialAuthenticator,
-            authProperties,
-            authTokenService,
-            sessionInvalidator,
-            null
-        ))
-            .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("metrics");
-    }
-
-    @Test
     void constructorRequiresCredentialAuthenticator() {
         assertThatThrownBy(() -> new AuthServiceImpl(
             userAccountMapper,
-            userRefreshTokenMapper,
             loginAuditRecorder,
             passwordHashService,
             null,
-            authProperties,
-            authTokenService,
-            sessionInvalidator,
-            metrics
+            sessionLifecycle,
+            authProperties
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("credentialAuthenticator");
@@ -653,6 +674,7 @@ class AuthServiceImplTest {
 
         private int commitCount;
         private int rollbackCount;
+        private int lastPropagationBehavior = -1;
 
         @Override
         protected Object doGetTransaction() {
@@ -661,6 +683,7 @@ class AuthServiceImplTest {
 
         @Override
         protected void doBegin(Object transaction, TransactionDefinition definition) {
+            lastPropagationBehavior = definition.getPropagationBehavior();
         }
 
         @Override

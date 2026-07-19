@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
+import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.security.PasswordHashService;
@@ -70,7 +71,7 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
     }
 
     @Override
-    public UserAccount authenticate(
+    public IdentityAccount authenticate(
         String accountValue,
         String password,
         AuthenticationOperation operation
@@ -97,12 +98,12 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
             recordFailureInWriteTransaction(user.getId(), account, operation, "account disabled");
             throw invalidCredentials();
         }
-        return user;
+        return toIdentityAccount(user);
     }
 
     @Override
     public void recordSuccess(
-        UserAccount user,
+        IdentityAccount user,
         String account,
         AuthenticationOperation operation,
         LocalDateTime occurredAt
@@ -111,10 +112,10 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
         Objects.requireNonNull(operation, "operation must not be null");
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");
         if (operation.clearsLoginFailures()) {
-            clearLoginFailures(user, occurredAt);
+            clearLoginFailures(user.id(), occurredAt);
         }
         loginAuditRecorder.record(
-            user.getId(),
+            user.id(),
             account,
             operation.auditEventType(),
             AUDIT_SUCCESS,
@@ -156,18 +157,24 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
         user.setUpdatedAt(now);
     }
 
-    private void clearLoginFailures(UserAccount user, LocalDateTime now) {
-        user.setLastLoginAt(now);
-        user.setFailedLoginCount(0);
-        user.setLockedUntil(null);
-        user.setUpdatedAt(now);
+    private void clearLoginFailures(Long userId, LocalDateTime now) {
         UpdateWrapper<UserAccount> update = new UpdateWrapper<UserAccount>()
-            .eq("id", user.getId())
+            .eq("id", userId)
             .set("last_login_at", now)
             .set("failed_login_count", 0)
             .set("locked_until", null)
             .set("updated_at", now);
         userAccountMapper.update(null, update);
+    }
+
+    private IdentityAccount toIdentityAccount(UserAccount user) {
+        return new IdentityAccount(
+            user.getId(),
+            user.getUsername(),
+            user.getEmail(),
+            user.getRole(),
+            user.getSessionVersion() == null ? 0 : user.getSessionVersion()
+        );
     }
 
     private void recordFailureInWriteTransaction(
