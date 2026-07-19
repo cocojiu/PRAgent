@@ -2,7 +2,7 @@
   <section class="dashboard-grid">
     <article class="dashboard-card chart-card chart-card--wide">
       <h2>审查趋势</h2>
-      <EChartPanel
+      <DeferredEChartPanel
         v-if="reviewTrend.length"
         accessible-label="审查趋势图"
         :option="trendOption"
@@ -12,7 +12,7 @@
     </article>
     <article class="dashboard-card chart-card">
       <h2>风险分布</h2>
-      <EChartPanel
+      <DeferredEChartPanel
         v-if="riskDistribution.length"
         accessible-label="风险分布图"
         :option="riskOption"
@@ -23,7 +23,7 @@
     <article class="dashboard-card chart-card">
       <h2>规则命中</h2>
       <div v-if="ruleHits.length" class="donut-layout">
-        <EChartPanel accessible-label="规则命中分布图" :option="ruleOption" :summary="ruleSummary" />
+        <DeferredEChartPanel accessible-label="规则命中分布图" :option="ruleOption" :summary="ruleSummary" />
         <ul class="rule-legend">
           <li v-for="rule in ruleHits" :key="rule.name">
             <span :style="{ background: rule.color }"></span>
@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { EChartsOption } from "echarts";
-import EChartPanel from "@/components/EChartPanel.vue";
+import DeferredEChartPanel from "@/components/DeferredEChartPanel.vue";
 import type { ChartSlice, ReviewTrendPoint } from "@/types";
 
 const props = defineProps<{
