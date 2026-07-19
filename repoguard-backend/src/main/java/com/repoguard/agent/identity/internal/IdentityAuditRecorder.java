@@ -1,4 +1,4 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.identity.internal;
 
 import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
@@ -11,13 +11,13 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 @Component
-public class UserLoginAuditRecorder {
+public final class IdentityAuditRecorder {
 
     private static final int USER_AGENT_MAX_LENGTH = 512;
 
     private final UserLoginAuditMapper userLoginAuditMapper;
 
-    public UserLoginAuditRecorder(UserLoginAuditMapper userLoginAuditMapper) {
+    public IdentityAuditRecorder(UserLoginAuditMapper userLoginAuditMapper) {
         this.userLoginAuditMapper = Objects.requireNonNull(
             userLoginAuditMapper,
             "userLoginAuditMapper must not be null"

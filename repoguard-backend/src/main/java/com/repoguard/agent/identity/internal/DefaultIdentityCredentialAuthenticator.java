@@ -9,7 +9,6 @@ import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.security.PasswordHashService;
-import com.repoguard.agent.user.UserLoginAuditRecorder;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import java.util.Objects;
@@ -32,20 +31,20 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
 
     private final UserAccountMapper userAccountMapper;
     private final PasswordHashService passwordHashService;
-    private final UserLoginAuditRecorder loginAuditRecorder;
+    private final IdentityAuditRecorder auditRecorder;
     private final TransactionTemplate failureWriteTransaction;
 
     @Autowired
     public DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
         PasswordHashService passwordHashService,
-        UserLoginAuditRecorder loginAuditRecorder,
+        IdentityAuditRecorder auditRecorder,
         PlatformTransactionManager transactionManager
     ) {
         this(
             userAccountMapper,
             passwordHashService,
-            loginAuditRecorder,
+            auditRecorder,
             buildWriteTransaction(transactionManager)
         );
     }
@@ -53,20 +52,20 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
     public DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
         PasswordHashService passwordHashService,
-        UserLoginAuditRecorder loginAuditRecorder
+        IdentityAuditRecorder auditRecorder
     ) {
-        this(userAccountMapper, passwordHashService, loginAuditRecorder, (TransactionTemplate) null);
+        this(userAccountMapper, passwordHashService, auditRecorder, (TransactionTemplate) null);
     }
 
     private DefaultIdentityCredentialAuthenticator(
         UserAccountMapper userAccountMapper,
         PasswordHashService passwordHashService,
-        UserLoginAuditRecorder loginAuditRecorder,
+        IdentityAuditRecorder auditRecorder,
         TransactionTemplate failureWriteTransaction
     ) {
         this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
         this.passwordHashService = Objects.requireNonNull(passwordHashService, "passwordHashService must not be null");
-        this.loginAuditRecorder = Objects.requireNonNull(loginAuditRecorder, "loginAuditRecorder must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
         this.failureWriteTransaction = failureWriteTransaction;
     }
 
@@ -114,7 +113,7 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
         if (operation.clearsLoginFailures()) {
             clearLoginFailures(user.id(), occurredAt);
         }
-        loginAuditRecorder.record(
+        auditRecorder.record(
             user.id(),
             account,
             operation.auditEventType(),
@@ -143,7 +142,7 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
                 lockedUntil,
                 now
             );
-            loginAuditRecorder.record(
+            auditRecorder.record(
                 user.getId(),
                 account,
                 operation.auditEventType(),
@@ -184,7 +183,7 @@ public final class DefaultIdentityCredentialAuthenticator implements IdentityCre
         String failureReason
     ) {
         inFailureWriteTransaction(() -> {
-            loginAuditRecorder.record(
+            auditRecorder.record(
                 userId,
                 account,
                 operation.auditEventType(),

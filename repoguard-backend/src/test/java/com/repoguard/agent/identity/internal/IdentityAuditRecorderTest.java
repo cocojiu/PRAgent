@@ -1,4 +1,4 @@
-package com.repoguard.agent.user;
+package com.repoguard.agent.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -14,10 +14,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-class UserLoginAuditRecorderTest {
+class IdentityAuditRecorderTest {
 
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
-    private final UserLoginAuditRecorder recorder = new UserLoginAuditRecorder(userLoginAuditMapper);
+    private final IdentityAuditRecorder recorder = new IdentityAuditRecorder(userLoginAuditMapper);
 
     @AfterEach
     void clearRequestContext() {
@@ -62,7 +62,7 @@ class UserLoginAuditRecorderTest {
 
     @Test
     void constructorRequiresMapper() {
-        assertThatThrownBy(() -> new UserLoginAuditRecorder(null))
+        assertThatThrownBy(() -> new IdentityAuditRecorder(null))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("userLoginAuditMapper");
     }

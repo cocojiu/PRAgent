@@ -14,8 +14,6 @@ import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
-import com.repoguard.agent.user.UserAccountSessionInvalidator;
-import com.repoguard.agent.user.UserLoginAuditRecorder;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -38,11 +36,10 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
 
     private final UserAccountMapper userAccountMapper;
     private final UserRefreshTokenMapper userRefreshTokenMapper;
-    private final UserLoginAuditRecorder loginAuditRecorder;
+    private final IdentityAuditRecorder auditRecorder;
     private final IdentityCredentialAuthenticator credentialAuthenticator;
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
-    private final UserAccountSessionInvalidator sessionInvalidator;
     private final RepoGuardMetrics metrics;
     private final TransactionTemplate sessionWriteTransaction;
     private final TransactionTemplate isolatedSessionWriteTransaction;
@@ -51,22 +48,20 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     public DefaultIdentitySessionLifecycle(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
-        UserLoginAuditRecorder loginAuditRecorder,
+        IdentityAuditRecorder auditRecorder,
         IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        UserAccountSessionInvalidator sessionInvalidator,
         RepoGuardMetrics metrics,
         PlatformTransactionManager transactionManager
     ) {
         this(
             userAccountMapper,
             userRefreshTokenMapper,
-            loginAuditRecorder,
+            auditRecorder,
             credentialAuthenticator,
             authProperties,
             authTokenService,
-            sessionInvalidator,
             metrics,
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRED),
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRES_NEW)
@@ -76,21 +71,19 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     public DefaultIdentitySessionLifecycle(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
-        UserLoginAuditRecorder loginAuditRecorder,
+        IdentityAuditRecorder auditRecorder,
         IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        UserAccountSessionInvalidator sessionInvalidator,
         RepoGuardMetrics metrics
     ) {
         this(
             userAccountMapper,
             userRefreshTokenMapper,
-            loginAuditRecorder,
+            auditRecorder,
             credentialAuthenticator,
             authProperties,
             authTokenService,
-            sessionInvalidator,
             metrics,
             null,
             null
@@ -100,11 +93,10 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     private DefaultIdentitySessionLifecycle(
         UserAccountMapper userAccountMapper,
         UserRefreshTokenMapper userRefreshTokenMapper,
-        UserLoginAuditRecorder loginAuditRecorder,
+        IdentityAuditRecorder auditRecorder,
         IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        UserAccountSessionInvalidator sessionInvalidator,
         RepoGuardMetrics metrics,
         TransactionTemplate sessionWriteTransaction,
         TransactionTemplate isolatedSessionWriteTransaction
@@ -114,14 +106,13 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             userRefreshTokenMapper,
             "userRefreshTokenMapper must not be null"
         );
-        this.loginAuditRecorder = Objects.requireNonNull(loginAuditRecorder, "loginAuditRecorder must not be null");
+        this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder must not be null");
         this.credentialAuthenticator = Objects.requireNonNull(
             credentialAuthenticator,
             "credentialAuthenticator must not be null"
         );
         this.authProperties = Objects.requireNonNull(authProperties, "authProperties must not be null");
         this.authTokenService = Objects.requireNonNull(authTokenService, "authTokenService must not be null");
-        this.sessionInvalidator = Objects.requireNonNull(sessionInvalidator, "sessionInvalidator must not be null");
         this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
         this.sessionWriteTransaction = sessionWriteTransaction;
         this.isolatedSessionWriteTransaction = isolatedSessionWriteTransaction;
@@ -160,7 +151,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         Objects.requireNonNull(account, "account must not be null");
         return inIsolatedWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
-            sessionInvalidator.revokeActiveRefreshTokens(account.id(), now);
+            revokeActiveRefreshTokens(account.id(), now);
             IdentityAccount rotatedAccount = rotateSessionVersionAndPersist(account, now);
             credentialAuthenticator.recordSuccess(
                 rotatedAccount,
@@ -199,7 +190,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         Objects.requireNonNull(userId, "userId must not be null");
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");
         inWriteTransaction(() -> {
-            sessionInvalidator.revokeActiveRefreshTokens(userId, occurredAt);
+            revokeActiveRefreshTokens(userId, occurredAt);
             return null;
         });
     }
@@ -334,7 +325,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             return;
         }
         rotateSessionVersionAndPersist(user, now);
-        sessionInvalidator.revokeActiveRefreshTokens(user.getId(), now);
+        revokeActiveRefreshTokens(user.getId(), now);
         storedToken.setStatus(STATUS_REVOKED);
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
@@ -346,7 +337,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         if (user != null && safeSessionVersion(storedToken) == safeSessionVersion(user)) {
             rotateSessionVersionAndPersist(user, now);
         }
-        sessionInvalidator.revokeActiveRefreshTokens(storedToken.getUserId(), now);
+        revokeActiveRefreshTokens(storedToken.getUserId(), now);
         storedToken.setLastUsedAt(now);
         storedToken.setUpdatedAt(now);
         userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
@@ -414,8 +405,22 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     }
 
     private void rotateSessionVersionAndPersist(UserAccount user, LocalDateTime now) {
-        sessionInvalidator.rotateSessionVersion(user, now);
+        rotateSessionVersion(user, now);
         userAccountMapper.updateById(user);
+    }
+
+    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
+        user.setSessionVersion(safeSessionVersion(user) + 1);
+        user.setUpdatedAt(now);
+    }
+
+    private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {
+        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
+            .eq("user_id", userId)
+            .eq("status", STATUS_ACTIVE)
+            .set("status", STATUS_REVOKED)
+            .set("revoked_at", now)
+            .set("updated_at", now));
     }
 
     private IdentityAccount toIdentityAccount(UserAccount user) {
@@ -443,7 +448,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         String result,
         String failureReason
     ) {
-        loginAuditRecorder.record(userId, account, eventType, result, failureReason);
+        auditRecorder.record(userId, account, eventType, result, failureReason);
     }
 
     private <T> T inWriteTransaction(Supplier<T> operation) {
