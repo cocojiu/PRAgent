@@ -3,7 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
@@ -16,12 +16,11 @@ import com.repoguard.agent.dto.UserCreateRequest;
 import com.repoguard.agent.dto.UserOperationAuditContext;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserOperationAudit;
-import com.repoguard.agent.entity.UserRefreshToken;
+import com.repoguard.agent.identity.IdentitySessionInvalidator;
+import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidationMode;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserOperationAuditMapper;
-import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.security.PasswordHashService;
-import com.repoguard.agent.user.UserAccountSessionInvalidator;
 import com.repoguard.agent.user.UserManagementDisplayMapper;
 import com.repoguard.agent.user.UserOperationAuditRecorder;
 import com.repoguard.agent.user.UserRoleStatusPolicy;
@@ -36,16 +35,14 @@ import org.mockito.Mockito;
 class UserManagementServiceImplTest {
 
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
-    private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserOperationAuditMapper userOperationAuditMapper = Mockito.mock(UserOperationAuditMapper.class);
+    private final IdentitySessionInvalidator sessionInvalidator = Mockito.mock(IdentitySessionInvalidator.class);
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final UserManagementDisplayMapper displayMapper = new UserManagementDisplayMapper();
     private final UserOperationAuditRecorder auditRecorder = new UserOperationAuditRecorder(
         userAccountMapper,
         userOperationAuditMapper
     );
-    private final UserAccountSessionInvalidator sessionInvalidator =
-        new UserAccountSessionInvalidator(userRefreshTokenMapper);
     private final UserRoleStatusPolicy roleStatusPolicy = new UserRoleStatusPolicy();
     private final UserManagementServiceImpl userManagementService = new UserManagementServiceImpl(
         userAccountMapper,
@@ -59,7 +56,7 @@ class UserManagementServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        Mockito.reset(userAccountMapper, userRefreshTokenMapper, userOperationAuditMapper);
+        Mockito.reset(userAccountMapper, userOperationAuditMapper, sessionInvalidator);
         when(userAccountMapper.lockActiveAdminInvariant()).thenReturn("active_admin");
     }
 
@@ -170,9 +167,12 @@ class UserManagementServiceImplTest {
         var updated = userManagementService.updateRole(new UserOperationAuditContext(1002L, "10.0.0.1", "JUnit"), 1001L, "VIEWER");
 
         assertThat(updated.role()).isEqualTo("VIEWER");
-        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(sessionInvalidator).invalidateAccountSessions(
+            eq(1001L),
+            eq(SessionInvalidationMode.ALL_SESSIONS),
+            any(LocalDateTime.class)
+        );
         ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
         verify(userOperationAuditMapper).insert(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getAction()).isEqualTo("ROLE_UPDATE");
@@ -180,11 +180,16 @@ class UserManagementServiceImplTest {
         assertThat(auditCaptor.getValue().getAfterValue()).isEqualTo("VIEWER");
         assertThat(auditCaptor.getValue().getOperatorUsername()).isEqualTo("operator");
         assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("10.0.0.1");
-        InOrder order = inOrder(userAccountMapper);
+        InOrder order = inOrder(userAccountMapper, sessionInvalidator);
         order.verify(userAccountMapper).lockActiveAdminInvariant();
         order.verify(userAccountMapper).selectById(1001L);
         order.verify(userAccountMapper).selectCount(any(Wrapper.class));
         order.verify(userAccountMapper).updateById(user);
+        order.verify(sessionInvalidator).invalidateAccountSessions(
+            eq(1001L),
+            eq(SessionInvalidationMode.ALL_SESSIONS),
+            any(LocalDateTime.class)
+        );
     }
 
     @Test
@@ -215,9 +220,12 @@ class UserManagementServiceImplTest {
         var updated = userManagementService.updateStatus(auditContext(), 1003L, "DISABLED");
 
         assertThat(updated.status()).isEqualTo("DISABLED");
-        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(sessionInvalidator).invalidateAccountSessions(
+            eq(1003L),
+            eq(SessionInvalidationMode.ALL_SESSIONS),
+            any(LocalDateTime.class)
+        );
         ArgumentCaptor<UserOperationAudit> auditCaptor = ArgumentCaptor.forClass(UserOperationAudit.class);
         verify(userOperationAuditMapper).insert(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getAction()).isEqualTo("STATUS_UPDATE");
@@ -238,9 +246,12 @@ class UserManagementServiceImplTest {
         assertThat(updated.status()).isEqualTo("ACTIVE");
         assertThat(updated.failedLoginCount()).isZero();
         assertThat(updated.lockedUntil()).isNull();
-        assertThat(user.getSessionVersion()).isEqualTo(1);
         verify(userAccountMapper).updateById(user);
-        Mockito.verify(userRefreshTokenMapper, Mockito.never()).update(isNull(), any(Wrapper.class));
+        verify(sessionInvalidator).invalidateAccountSessions(
+            eq(1003L),
+            eq(SessionInvalidationMode.SESSION_VERSION_ONLY),
+            any(LocalDateTime.class)
+        );
         verify(userAccountMapper, never()).lockActiveAdminInvariant();
     }
 

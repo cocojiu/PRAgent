@@ -7,6 +7,7 @@ import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.identity.IdentityAccount;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator;
 import com.repoguard.agent.identity.IdentityCredentialAuthenticator.AuthenticationOperation;
+import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidationMode;
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
@@ -186,11 +187,23 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     }
 
     @Override
-    public void revokeActiveSessions(Long userId, LocalDateTime occurredAt) {
+    public void invalidateAccountSessions(
+        Long userId,
+        SessionInvalidationMode mode,
+        LocalDateTime occurredAt
+    ) {
         Objects.requireNonNull(userId, "userId must not be null");
+        Objects.requireNonNull(mode, "mode must not be null");
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");
         inWriteTransaction(() -> {
-            revokeActiveRefreshTokens(userId, occurredAt);
+            switch (mode) {
+                case REFRESH_TOKENS_ONLY -> revokeActiveRefreshTokens(userId, occurredAt);
+                case SESSION_VERSION_ONLY -> rotatePersistedSessionVersion(userId, occurredAt);
+                case ALL_SESSIONS -> {
+                    rotatePersistedSessionVersion(userId, occurredAt);
+                    revokeActiveRefreshTokens(userId, occurredAt);
+                }
+            }
             return null;
         });
     }
@@ -412,6 +425,13 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
         user.setSessionVersion(safeSessionVersion(user) + 1);
         user.setUpdatedAt(now);
+    }
+
+    private void rotatePersistedSessionVersion(Long userId, LocalDateTime now) {
+        int updated = userAccountMapper.rotateSessionVersion(userId, now);
+        if (updated != 1) {
+            throw new IllegalStateException("Account session version rotation affected " + updated + " rows");
+        }
     }
 
     private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {

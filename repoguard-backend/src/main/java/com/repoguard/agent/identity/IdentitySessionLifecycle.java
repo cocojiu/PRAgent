@@ -1,12 +1,11 @@
 package com.repoguard.agent.identity;
 
-import java.time.LocalDateTime;
 import java.util.Objects;
 
 /**
  * Application port for issuing, rotating, revoking, and invalidating identity sessions.
  */
-public interface IdentitySessionLifecycle {
+public interface IdentitySessionLifecycle extends IdentitySessionInvalidator {
 
     IdentitySessionTokens issue(IdentityAccount account, boolean remember);
 
@@ -17,8 +16,6 @@ public interface IdentitySessionLifecycle {
     RefreshResult refresh(String refreshToken);
 
     void logout(String refreshToken);
-
-    void revokeActiveSessions(Long userId, LocalDateTime occurredAt);
 
     record RefreshResult(IdentitySessionTokens tokens, String failureMessage) {
 
