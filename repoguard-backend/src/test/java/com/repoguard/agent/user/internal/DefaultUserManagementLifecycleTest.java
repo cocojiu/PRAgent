@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.springframework.aop.framework.ProxyFactory;
 
 class DefaultUserManagementLifecycleTest {
 
@@ -276,6 +277,14 @@ class DefaultUserManagementLifecycleTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("sessionInvalidator");
+    }
+
+    @Test
+    void supportsClassBasedSpringTransactionProxy() {
+        ProxyFactory proxyFactory = new ProxyFactory(lifecycle);
+        proxyFactory.setProxyTargetClass(true);
+
+        assertThat(proxyFactory.getProxy()).isInstanceOf(DefaultUserManagementLifecycle.class);
     }
 
     private AuditContext auditContext() {

@@ -30,7 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Component
-public final class DefaultUserManagementLifecycle implements UserManagementLifecycle {
+public class DefaultUserManagementLifecycle implements UserManagementLifecycle {
 
     private static final String ACTION_USER_CREATE = "USER_CREATE";
     private static final String ACTION_ROLE_UPDATE = "ROLE_UPDATE";
