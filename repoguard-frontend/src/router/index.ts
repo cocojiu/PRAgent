@@ -17,6 +17,8 @@ const UserManagementPage = () => import("@/pages/UserManagementPage.vue");
 const SystemSettingsPage = () => import("@/pages/SystemSettingsPage.vue");
 
 type RouteComponentLoader = () => Promise<unknown>;
+const ROUTE_PREFETCH_DELAY_MS = 3000;
+const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 3000;
 
 const commonRouteNeighbors = new Map<string, RouteComponentLoader>([
   [routeNames.overview, ReviewTasksPage],
@@ -34,33 +36,53 @@ const managementRouteNeighbors = new Map<string, RouteComponentLoader>([
 ]);
 
 let routeComponentPrefetchTimer: ReturnType<typeof setTimeout> | undefined;
+let routeComponentPrefetchIdleHandle: number | undefined;
 const prefetchedRoutes = new Set<string>();
+
+const cancelScheduledRouteComponentPrefetch = () => {
+  if (routeComponentPrefetchTimer !== undefined) {
+    clearTimeout(routeComponentPrefetchTimer);
+    routeComponentPrefetchTimer = undefined;
+  }
+  if (routeComponentPrefetchIdleHandle !== undefined) {
+    if ("cancelIdleCallback" in window) {
+      window.cancelIdleCallback(routeComponentPrefetchIdleHandle);
+    }
+    routeComponentPrefetchIdleHandle = undefined;
+  }
+};
 
 const scheduleRouteComponentPrefetch = (routeName: string, managementAllowed: boolean) => {
   const loadComponent = commonRouteNeighbors.get(routeName)
     ?? (managementAllowed ? managementRouteNeighbors.get(routeName) : undefined);
-  if (!loadComponent || prefetchedRoutes.has(routeName) || routeComponentPrefetchTimer || !prefetchAllowed()) {
+  if (!loadComponent || prefetchedRoutes.has(routeName)) {
     return;
   }
   routeComponentPrefetchTimer = setTimeout(() => {
     routeComponentPrefetchTimer = undefined;
-    if (!prefetchAllowed()) {
+    if (!prefetchAllowed() || String(router.currentRoute.value.name ?? "") !== routeName) {
       return;
     }
     const run = () => {
+      routeComponentPrefetchIdleHandle = undefined;
+      if (!prefetchAllowed() || String(router.currentRoute.value.name ?? "") !== routeName) {
+        return;
+      }
       prefetchedRoutes.add(routeName);
       void loadComponent().catch(() => prefetchedRoutes.delete(routeName));
     };
     if ("requestIdleCallback" in window) {
-      window.requestIdleCallback(run, { timeout: 1200 });
+      routeComponentPrefetchIdleHandle = window.requestIdleCallback(run, {
+        timeout: ROUTE_PREFETCH_IDLE_TIMEOUT_MS
+      });
     } else {
       run();
     }
-  }, 1200);
+  }, ROUTE_PREFETCH_DELAY_MS);
 };
 
 const prefetchAllowed = () => {
-  if (document.visibilityState === "hidden") {
+  if (document.visibilityState === "hidden" || document.readyState !== "complete") {
     return false;
   }
   const connection = (navigator as Navigator & {
@@ -178,6 +200,7 @@ router.beforeEach(async (to) => {
 });
 
 router.afterEach((to) => {
+  cancelScheduledRouteComponentPrefetch();
   if (to.meta.requiresAuth && hasAuthToken()) {
     scheduleRouteComponentPrefetch(String(to.name ?? ""), Boolean(to.meta.requiresManage && canManage.value));
   }

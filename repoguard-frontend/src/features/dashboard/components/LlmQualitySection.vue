@@ -11,7 +11,7 @@
           @update:model-value="onTrendDaysChange"
         />
       </div>
-      <EChartPanel
+      <DeferredEChartPanel
         v-if="qualityTrend.length"
         accessible-label="LLM 质量趋势图"
         :option="qualityTrendOption"
@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { EChartsOption } from "echarts";
-import EChartPanel from "@/components/EChartPanel.vue";
+import DeferredEChartPanel from "@/components/DeferredEChartPanel.vue";
 import type { LlmQualityByModel, LlmQualityByRepository, LlmQualityTrendPoint } from "@/types";
 
 interface TrendWindowOption {
