@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/user-management/userManagement.css";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { History, RefreshCw, Search, ShieldCheck, UserCheck, UserPlus, UserX, Users } from "@lucide/vue";

@@ -226,7 +226,11 @@ export default defineConfig({
             },
             {
               name: "vendor",
-              test: /node_modules[\\/](?!(?:element-plus|@element-plus)[\\/])/,
+              // Keep Element Plus transitive form/positioning dependencies on their
+              // lazy route boundaries instead of pulling them into the initial
+              // Lucide-backed vendor chunk.
+              test:
+                /node_modules[\\/](?!(?:element-plus|@element-plus|@popperjs|async-validator|lodash(?:-es|-unified)?)[\\/])/,
               priority: 10
             }
           ]

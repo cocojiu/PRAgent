@@ -48,6 +48,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/integrations/integrations.css";
 import { onMounted, reactive } from "vue";
 import { Hexagon, Save } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
