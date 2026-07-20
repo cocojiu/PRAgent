@@ -2,7 +2,11 @@
   <div v-loading="loading" class="overview-page">
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
 
-    <MetricGrid :metrics="overviewMetricItems" :resolve-icon="getMetricIcon" />
+    <MetricGrid
+      :metrics="overviewMetricItems"
+      :resolve-icon="getMetricIcon"
+      :loading="loading || (!errorMessage && overviewMetricItems.length === 0)"
+    />
 
     <DashboardChartSection
       :review-trend="reviewTrend"

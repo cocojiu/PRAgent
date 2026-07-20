@@ -508,6 +508,47 @@ a {
   border-radius: 18px;
 }
 
+.metric-card--skeleton {
+  pointer-events: none;
+}
+
+.metric-skeleton-icon {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  border-radius: 18px;
+  background: #e8edf5;
+}
+
+.metric-skeleton-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.metric-skeleton-line {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #e8edf5;
+}
+
+.metric-skeleton-title {
+  width: 78%;
+  height: 22px;
+  margin-bottom: 8px;
+}
+
+.metric-skeleton-value {
+  width: 52%;
+  height: 37px;
+  margin-bottom: 12px;
+}
+
+.metric-skeleton-note {
+  width: 92%;
+  height: 22px;
+}
+
 .metric-icon--blue {
   color: #1268ff;
   background: #eaf2ff;
@@ -921,6 +962,18 @@ a {
 }
 
 @media (max-width: 760px) {
+  .metric-skeleton-title {
+    height: 20px;
+  }
+
+  .metric-skeleton-value {
+    height: 34px;
+  }
+
+  .metric-skeleton-note {
+    height: 18px;
+  }
+
   .metric-grid,
   .dashboard-grid,
   .bottom-grid,
