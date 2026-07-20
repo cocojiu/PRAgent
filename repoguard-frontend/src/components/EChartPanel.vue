@@ -34,16 +34,31 @@ const props = defineProps<{
   option: EChartsOption;
   summary?: string;
 }>();
+const emit = defineEmits<{
+  rendered: [];
+}>();
 
 const chartRef = ref<HTMLDivElement | null>(null);
 const summaryId = `chart-summary-${useId()}`;
 let chart: echarts.EChartsType | null = null;
 let resizeObserver: ResizeObserver | null = null;
 let usingWindowResizeFallback = false;
+let rendered = false;
+
+const notifyRendered = () => {
+  if (rendered) {
+    return;
+  }
+  rendered = true;
+  emit("rendered");
+};
 
 const renderChart = () => {
   if (!chartRef.value) return;
-  chart ??= echarts.init(chartRef.value);
+  if (!chart) {
+    chart = echarts.init(chartRef.value);
+    chart.on("finished", notifyRendered);
+  }
   chart.setOption({
     ...props.option,
     aria: {
@@ -76,6 +91,7 @@ onBeforeUnmount(() => {
     window.removeEventListener("resize", resize);
     usingWindowResizeFallback = false;
   }
+  chart?.off("finished", notifyRendered);
   chart?.dispose();
   chart = null;
 });

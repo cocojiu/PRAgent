@@ -5,6 +5,7 @@
       :accessible-label="accessibleLabel"
       :option="option"
       :summary="summary"
+      @rendered="onChartRendered"
     />
     <div
       v-else
@@ -20,10 +21,16 @@
 <script setup lang="ts">
 import { defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
 import type { EChartsOption } from "echarts";
+import {
+  activateChartPerformanceTiming,
+  beginChartPerformanceTiming,
+  cancelChartPerformanceTiming,
+  completeChartPerformanceTiming
+} from "@/observability/frontendPerformanceDiagnosticsBridge";
 
 const AsyncEChartPanel = defineAsyncComponent(() => import("./EChartPanel.vue"));
 
-defineProps<{
+const props = defineProps<{
   accessibleLabel: string;
   option: EChartsOption;
   summary?: string;
@@ -34,11 +41,18 @@ const activated = ref(false);
 let intersectionObserver: IntersectionObserver | null = null;
 let idleCallbackHandle: number | undefined;
 let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+let chartRendered = false;
 
 const renderChart = () => {
   idleCallbackHandle = undefined;
   fallbackTimer = undefined;
+  activateChartPerformanceTiming(props.accessibleLabel);
   activated.value = true;
+};
+
+const onChartRendered = () => {
+  chartRendered = true;
+  completeChartPerformanceTiming(props.accessibleLabel);
 };
 
 const scheduleChartRender = () => {
@@ -55,6 +69,7 @@ const scheduleChartRender = () => {
 };
 
 onMounted(() => {
+  beginChartPerformanceTiming(props.accessibleLabel);
   if (typeof IntersectionObserver === "undefined" || !containerRef.value) {
     scheduleChartRender();
     return;
@@ -71,6 +86,9 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (!chartRendered) {
+    cancelChartPerformanceTiming(props.accessibleLabel);
+  }
   intersectionObserver?.disconnect();
   intersectionObserver = null;
   if (idleCallbackHandle !== undefined && "cancelIdleCallback" in window) {

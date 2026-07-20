@@ -4,6 +4,10 @@ import { hasAuthToken } from "@/api/client";
 import { routeNames } from "@/router/names";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
 import { canManage, currentUser, loadCurrentUser } from "@/stores/authState";
+import {
+  beginRoutePerformanceTiming,
+  completeRoutePerformanceTiming
+} from "@/observability/frontendPerformanceDiagnosticsBridge";
 
 const LoginPage = () => import("@/pages/LoginPage.vue");
 const OverviewPage = () => import("@/pages/OverviewPage.vue");
@@ -197,9 +201,12 @@ router.beforeEach(async (to) => {
   if (to.name === routeNames.login && hasAuthToken()) {
     return resolveSafePostAuthRedirect(to.query.redirect);
   }
+
+  beginRoutePerformanceTiming(String(to.name ?? "unknown"));
 });
 
 router.afterEach((to) => {
+  completeRoutePerformanceTiming(String(to.name ?? "unknown"));
   cancelScheduledRouteComponentPrefetch();
   if (to.meta.requiresAuth && hasAuthToken()) {
     scheduleRouteComponentPrefetch(String(to.name ?? ""), Boolean(to.meta.requiresManage && canManage.value));
