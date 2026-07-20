@@ -146,6 +146,8 @@ a {
 }
 
 .rg-topbar {
+  position: relative;
+  z-index: 20;
   height: 68px;
   display: flex;
   align-items: center;
@@ -182,6 +184,59 @@ a {
   align-items: center;
   gap: 22px;
   color: #0f172a;
+}
+
+.top-action-menu-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.top-action-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 50;
+  border: 1px solid #e5eaf3;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+}
+
+.notification-popover-panel {
+  width: min(380px, calc(100vw - 24px));
+  padding: 12px;
+}
+
+.user-action-menu {
+  width: 168px;
+  padding: 6px;
+}
+
+.user-action-menu button {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #334155;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.user-action-menu button:hover,
+.user-action-menu button:focus-visible {
+  background: #f1f5f9;
+  color: #1268ff;
+  outline: none;
+}
+
+.user-action-menu .user-action-menu-divider {
+  margin-top: 4px;
+  border-top: 1px solid #e5eaf3;
+  border-radius: 0 0 7px 7px;
 }
 
 .top-action-button {
@@ -1012,6 +1067,16 @@ a {
     grid-column: auto;
   }
 
+}
+
+@media (max-width: 560px) {
+  .notification-popover-panel {
+    position: fixed;
+    top: 76px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
 }
 
 @media (max-width: 900px) {
