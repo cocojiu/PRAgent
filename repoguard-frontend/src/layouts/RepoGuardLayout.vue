@@ -43,14 +43,26 @@
         </button>
         <div class="top-title">{{ currentTitle }}</div>
         <div class="top-actions">
-          <el-popover placement="bottom-end" trigger="click" width="380" popper-class="notification-popover" @show="loadNotifications()">
-            <template #reference>
-              <button class="top-action-button bell-wrap" type="button" aria-label="查看通知">
-                <Bell :size="20" />
-                <span v-if="unreadCount" class="notification-badge">{{ unreadBadgeText }}</span>
-              </button>
-            </template>
-            <div class="notification-panel">
+          <div class="top-action-menu-shell" @click.stop>
+            <button
+              class="top-action-button bell-wrap"
+              type="button"
+              aria-label="查看通知"
+              aria-haspopup="dialog"
+              aria-controls="notification-panel"
+              :aria-expanded="notificationPanelOpen"
+              @click="toggleNotificationPanel"
+            >
+              <Bell :size="20" />
+              <span v-if="unreadCount" class="notification-badge">{{ unreadBadgeText }}</span>
+            </button>
+            <div
+              v-if="notificationPanelOpen"
+              id="notification-panel"
+              class="top-action-popover notification-popover-panel notification-panel"
+              role="dialog"
+              aria-label="消息通知"
+            >
               <div class="notification-head">
                 <div>
                   <strong>消息通知</strong>
@@ -80,29 +92,49 @@
                   </span>
                 </button>
               </div>
-              <RouterLink class="notification-more" to="/repoguard/tasks">查看全部消息 →</RouterLink>
+              <RouterLink class="notification-more" to="/repoguard/tasks" @click="notificationPanelOpen = false">
+                查看全部消息 →
+              </RouterLink>
             </div>
-          </el-popover>
+          </div>
 
           <button class="top-action-button" type="button" aria-label="帮助文档" @click="openHelp">
             <CircleHelp :size="20" />
           </button>
 
-          <el-dropdown trigger="click" @command="handleUserCommand">
-            <button class="user" type="button">
+          <div class="top-action-menu-shell" @click.stop>
+            <button
+              class="user"
+              type="button"
+              aria-haspopup="menu"
+              aria-controls="user-action-menu"
+              :aria-expanded="userMenuOpen"
+              @click="toggleUserMenu"
+            >
               <span class="avatar">{{ currentUserInitial }}</span>
               <span>{{ currentUserName }}</span>
               <ChevronDown :size="16" />
             </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人资料</el-dropdown-item>
-                <el-dropdown-item command="change-password">修改密码</el-dropdown-item>
-                <el-dropdown-item command="settings">系统设置</el-dropdown-item>
-                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+            <div
+              v-if="userMenuOpen"
+              id="user-action-menu"
+              class="top-action-popover user-action-menu"
+              role="menu"
+              aria-label="用户操作"
+            >
+              <button type="button" role="menuitem" @click="handleUserMenuCommand('profile')">个人资料</button>
+              <button type="button" role="menuitem" @click="handleUserMenuCommand('change-password')">修改密码</button>
+              <button type="button" role="menuitem" @click="handleUserMenuCommand('settings')">系统设置</button>
+              <button
+                class="user-action-menu-divider"
+                type="button"
+                role="menuitem"
+                @click="handleUserMenuCommand('logout')"
+              >
+                退出登录
+              </button>
+            </div>
+          </div>
         </div>
       </header>
       <section class="rg-content">
@@ -148,6 +180,8 @@ const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
 const changePasswordDialogVisible = ref(false);
+const notificationPanelOpen = ref(false);
+const userMenuOpen = ref(false);
 const notificationCenter = ref<NotificationCenter>();
 const loadingNotifications = ref(false);
 const notificationError = ref("");
@@ -234,6 +268,7 @@ const markAllRead = () => {
 };
 
 const openNotification = (item: NotificationItem) => {
+  notificationPanelOpen.value = false;
   markNotificationRead(item.id);
   if (item.targetPath) {
     router.push(item.targetPath);
@@ -243,7 +278,34 @@ const openNotification = (item: NotificationItem) => {
 };
 
 const openHelp = () => {
+  closeTopActionMenus();
   ElMessage.info("帮助文档功能将在接入后端后开放，当前可查看 README 和需求文档。");
+};
+
+const closeTopActionMenus = () => {
+  notificationPanelOpen.value = false;
+  userMenuOpen.value = false;
+};
+
+const toggleNotificationPanel = () => {
+  const nextOpen = !notificationPanelOpen.value;
+  userMenuOpen.value = false;
+  notificationPanelOpen.value = nextOpen;
+  if (nextOpen) {
+    void loadNotifications();
+  }
+};
+
+const toggleUserMenu = () => {
+  const nextOpen = !userMenuOpen.value;
+  notificationPanelOpen.value = false;
+  userMenuOpen.value = nextOpen;
+};
+
+const handleDocumentKeydown = (event: KeyboardEvent) => {
+  if (event.key === "Escape") {
+    closeTopActionMenus();
+  }
 };
 
 const handleUserCommand = async (command: string) => {
@@ -269,6 +331,11 @@ const handleUserCommand = async (command: string) => {
   ElMessage.info("个人资料功能暂未开放");
 };
 
+const handleUserMenuCommand = (command: string) => {
+  userMenuOpen.value = false;
+  void handleUserCommand(command);
+};
+
 const handlePasswordChanged = () => {
   resetCurrentUser();
   ElMessage.success("密码修改成功，请使用新密码重新登录");
@@ -276,15 +343,19 @@ const handlePasswordChanged = () => {
 };
 
 onMounted(() => {
+  document.addEventListener("click", closeTopActionMenus);
+  document.addEventListener("keydown", handleDocumentKeydown);
   loadReadNotificationIds();
   void refreshCurrentUser();
   notificationWarmupTimer = setTimeout(() => {
     notificationWarmupTimer = undefined;
     void loadNotifications();
-  }, 1200);
+  }, 12000);
 });
 
 onBeforeUnmount(() => {
+  document.removeEventListener("click", closeTopActionMenus);
+  document.removeEventListener("keydown", handleDocumentKeydown);
   if (notificationWarmupTimer) {
     clearTimeout(notificationWarmupTimer);
   }
