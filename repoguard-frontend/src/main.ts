@@ -13,12 +13,32 @@ import "./features/system-settings/systemSettings.css";
 import "./features/user-management/userManagement.css";
 import App from "./App.vue";
 import { startFrontendPerformanceObservation } from "./observability/frontendPerformance";
+import {
+  disableFrontendPerformanceDiagnostics,
+  enableFrontendPerformanceDiagnostics,
+  isControlledPerformanceProfile
+} from "./observability/frontendPerformanceDiagnosticsBridge";
 import { router } from "./router";
 
-startFrontendPerformanceObservation(() => {
+const resolveCurrentRoute = () => {
   const name = router.currentRoute.value.name;
   return typeof name === "string" ? name : undefined;
-});
+};
+
+startFrontendPerformanceObservation(resolveCurrentRoute);
+
+const requestedPerformanceProfile = new URLSearchParams(window.location.search)
+  .get("performanceProfile")
+  ?.trim()
+  .toLowerCase();
+if (isControlledPerformanceProfile(requestedPerformanceProfile)) {
+  enableFrontendPerformanceDiagnostics();
+  void import("./observability/frontendPerformanceDiagnostics")
+    .then(({ startFrontendPerformanceDiagnostics }) => {
+      startFrontendPerformanceDiagnostics(resolveCurrentRoute);
+    })
+    .catch(disableFrontendPerformanceDiagnostics);
+}
 
 const app = createApp(App);
 

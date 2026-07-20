@@ -36,7 +36,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, nextTick, onMounted, watch } from "vue";
 import { Clock, FileText, ShieldAlert, Wallet } from "@lucide/vue";
 import MetricGrid from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
@@ -50,6 +50,8 @@ import {
   buildRuleHitOption,
   useDashboardOverview
 } from "@/features/dashboard";
+import { recordRoutePerformanceMilestone } from "@/observability/frontendPerformanceDiagnosticsBridge";
+import { routeNames } from "@/router/names";
 
 const metricIconMap = {
   blue: FileText,
@@ -85,6 +87,13 @@ const {
 } = useDashboardOverview();
 
 onMounted(loadOverview);
+
+watch(moduleLoading, async (isLoading, wasLoading) => {
+  if (wasLoading && !isLoading && !errorMessage.value) {
+    await nextTick();
+    recordRoutePerformanceMilestone(routeNames.overview, "data-ready");
+  }
+});
 
 const trendOption = computed(() => buildReviewTrendOption(reviewTrend.value));
 

@@ -1,9 +1,11 @@
 import { createApp, defineComponent, h, nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { dispose, init, resize, setOption, use } = vi.hoisted(() => ({
+const { dispose, init, off, on, resize, setOption, use } = vi.hoisted(() => ({
   dispose: vi.fn(),
   init: vi.fn(),
+  off: vi.fn(),
+  on: vi.fn(),
   resize: vi.fn(),
   setOption: vi.fn(),
   use: vi.fn()
@@ -32,7 +34,7 @@ describe("DeferredEChartPanel", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    init.mockReturnValue({ dispose, resize, setOption });
+    init.mockReturnValue({ dispose, off, on, resize, setOption });
     vi.stubGlobal("IntersectionObserver", class {
       constructor(callback: IntersectionObserverCallback) {
         intersectionCallback = callback;
