@@ -1,12 +1,21 @@
 <template>
-  <div ref="containerRef" class="deferred-chart-panel" :aria-busy="!activated">
-    <AsyncEChartPanel
-      v-if="activated"
+  <div ref="containerRef" class="deferred-chart-panel" :aria-busy="!chartRendered && !chartLoadFailed">
+    <component
+      :is="chartComponent"
+      v-if="chartComponent"
       :accessible-label="accessibleLabel"
       :option="option"
       :summary="summary"
       @rendered="onChartRendered"
     />
+    <div
+      v-else-if="chartLoadFailed"
+      class="chart-panel deferred-chart-error"
+      role="alert"
+    >
+      <span>图表加载失败</span>
+      <button type="button" @click="retryChartRender">重试</button>
+    </div>
     <div
       v-else
       class="chart-panel deferred-chart-placeholder"
@@ -19,7 +28,8 @@
 </template>
 
 <script setup lang="ts">
-import { defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
+import { onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
+import type { Component } from "vue";
 import type { EChartsOption } from "echarts";
 import {
   activateChartPerformanceTiming,
@@ -28,8 +38,6 @@ import {
   completeChartPerformanceTiming
 } from "@/observability/frontendPerformanceDiagnosticsBridge";
 
-const AsyncEChartPanel = defineAsyncComponent(() => import("./EChartPanel.vue"));
-
 const props = defineProps<{
   accessibleLabel: string;
   option: EChartsOption;
@@ -37,39 +45,76 @@ const props = defineProps<{
 }>();
 
 const containerRef = ref<HTMLDivElement | null>(null);
-const activated = ref(false);
+const chartComponent = shallowRef<Component>();
+const chartLoadFailed = ref(false);
 let intersectionObserver: IntersectionObserver | null = null;
 let idleCallbackHandle: number | undefined;
 let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
-let chartRendered = false;
+let chartLoading = false;
+const chartRendered = ref(false);
+let chartTimingActive = false;
+let unmounted = false;
 
-const renderChart = () => {
+const renderChart = async () => {
   idleCallbackHandle = undefined;
   fallbackTimer = undefined;
+  if (chartLoading || chartComponent.value || unmounted) {
+    return;
+  }
+  chartLoading = true;
   activateChartPerformanceTiming(props.accessibleLabel);
-  activated.value = true;
+  try {
+    const module = await import("./EChartPanel.vue");
+    if (!unmounted) {
+      chartComponent.value = module.default;
+    }
+  } catch {
+    if (!unmounted) {
+      chartLoadFailed.value = true;
+    }
+    if (chartTimingActive) {
+      cancelChartPerformanceTiming(props.accessibleLabel);
+      chartTimingActive = false;
+    }
+  } finally {
+    chartLoading = false;
+  }
 };
 
 const onChartRendered = () => {
-  chartRendered = true;
-  completeChartPerformanceTiming(props.accessibleLabel);
+  chartRendered.value = true;
+  if (chartTimingActive) {
+    completeChartPerformanceTiming(props.accessibleLabel);
+    chartTimingActive = false;
+  }
 };
 
 const scheduleChartRender = () => {
-  if (activated.value || idleCallbackHandle !== undefined || fallbackTimer !== undefined) {
+  if (chartComponent.value || chartLoading || idleCallbackHandle !== undefined || fallbackTimer !== undefined) {
     return;
   }
   intersectionObserver?.disconnect();
   intersectionObserver = null;
   if ("requestIdleCallback" in window) {
-    idleCallbackHandle = window.requestIdleCallback(renderChart, { timeout: 1500 });
+    idleCallbackHandle = window.requestIdleCallback(() => void renderChart(), { timeout: 1500 });
     return;
   }
-  fallbackTimer = setTimeout(renderChart, 0);
+  fallbackTimer = setTimeout(() => void renderChart(), 0);
+};
+
+const retryChartRender = () => {
+  if (chartLoading) {
+    return;
+  }
+  chartLoadFailed.value = false;
+  chartTimingActive = true;
+  beginChartPerformanceTiming(props.accessibleLabel);
+  void renderChart();
 };
 
 onMounted(() => {
   beginChartPerformanceTiming(props.accessibleLabel);
+  chartTimingActive = true;
   if (typeof IntersectionObserver === "undefined" || !containerRef.value) {
     scheduleChartRender();
     return;
@@ -86,8 +131,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  if (!chartRendered) {
+  unmounted = true;
+  if (chartTimingActive && !chartRendered.value) {
     cancelChartPerformanceTiming(props.accessibleLabel);
+    chartTimingActive = false;
   }
   intersectionObserver?.disconnect();
   intersectionObserver = null;
@@ -105,6 +152,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .deferred-chart-panel {
   width: 100%;
+  min-height: 300px;
   min-width: 0;
 }
 
@@ -127,6 +175,28 @@ onBeforeUnmount(() => {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.deferred-chart-error {
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  text-align: center;
+}
+
+.deferred-chart-error button {
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1268ff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
 }
 
 @keyframes deferred-chart-shimmer {

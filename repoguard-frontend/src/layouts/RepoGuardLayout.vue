@@ -97,6 +97,7 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="profile">个人资料</el-dropdown-item>
+                <el-dropdown-item command="change-password">修改密码</el-dropdown-item>
                 <el-dropdown-item command="settings">系统设置</el-dropdown-item>
                 <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
               </el-dropdown-menu>
@@ -108,11 +109,16 @@
         <RouterView />
       </section>
     </main>
+    <ChangePasswordDialog
+      v-if="changePasswordDialogVisible"
+      v-model="changePasswordDialogVisible"
+      @changed="handlePasswordChanged"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from "vue";
 import { RouterLink, RouterView, useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import {
@@ -135,9 +141,13 @@ import { fetchNotifications } from "@/api/notifications";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
+const ChangePasswordDialog = defineAsyncComponent(
+  () => import("@/features/auth/components/ChangePasswordDialog.vue")
+);
 const collapsed = ref(false);
 const route = useRoute();
 const router = useRouter();
+const changePasswordDialogVisible = ref(false);
 const notificationCenter = ref<NotificationCenter>();
 const loadingNotifications = ref(false);
 const notificationError = ref("");
@@ -237,6 +247,10 @@ const openHelp = () => {
 };
 
 const handleUserCommand = async (command: string) => {
+  if (command === "change-password") {
+    changePasswordDialogVisible.value = true;
+    return;
+  }
   if (command === "settings") {
     router.push("/repoguard/settings");
     return;
@@ -253,6 +267,12 @@ const handleUserCommand = async (command: string) => {
     return;
   }
   ElMessage.info("个人资料功能暂未开放");
+};
+
+const handlePasswordChanged = () => {
+  resetCurrentUser();
+  ElMessage.success("密码修改成功，请使用新密码重新登录");
+  void router.replace("/login");
 };
 
 onMounted(() => {

@@ -217,7 +217,6 @@ export default defineConfig({
             {
               name: "echarts",
               test: /node_modules[\\/]echarts[\\/]/,
-              maxSize: 350 * KIB,
               priority: 30
             },
             {
