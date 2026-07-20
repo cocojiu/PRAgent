@@ -35,11 +35,13 @@ export const llmTrendWindowOptions = [
 export const useDashboardOverview = () => {
   let overviewRequestSeq = 0;
   let moduleRequestSeq = 0;
+  let deferredRequestSeq = 0;
   let llmQualityRequestSeq = 0;
   let healthRequestSeq = 0;
 
   const loading = ref(false);
   const moduleLoading = ref(false);
+  const deferredLoading = ref(false);
   const llmQualityLoading = ref(false);
   const healthLoading = ref(false);
   const errorMessage = ref("");
@@ -70,7 +72,7 @@ export const useDashboardOverview = () => {
 
   const totalRuleHits = computed(() => ruleHits.value.reduce((total, item) => total + item.value, 0));
 
-  const loadOverview = async () => {
+  const loadOverview = async (options: { deferModules?: boolean } = {}) => {
     const requestSeq = ++overviewRequestSeq;
     loading.value = true;
     errorMessage.value = "";
@@ -83,8 +85,11 @@ export const useDashboardOverview = () => {
         ...overview.value,
         overviewMetrics
       };
-      void loadDashboardModules(requestSeq);
-      void loadSystemHealth(requestSeq);
+      if (!options.deferModules) {
+        void loadDashboardModules(requestSeq);
+        void loadDeferredModules(requestSeq);
+        void loadSystemHealth(requestSeq);
+      }
     } catch (error) {
       if (requestSeq !== overviewRequestSeq) {
         return;
@@ -101,35 +106,21 @@ export const useDashboardOverview = () => {
   const loadDashboardModules = async (overviewSeq = overviewRequestSeq) => {
     const requestSeq = ++moduleRequestSeq;
     moduleLoading.value = true;
-    const requestedLlmTrendDays = llmTrendDays.value;
     try {
-      const [reviewTrend, riskDistribution, rules, highRiskReviews, llmQuality] = await Promise.all([
+      const [reviewTrend, riskDistribution, rules] = await Promise.all([
         fetchDashboardReviewTrend(),
         fetchDashboardRiskDistribution(),
-        fetchDashboardRules(),
-        fetchDashboardHighRiskReviews(),
-        fetchDashboardLlmQuality(requestedLlmTrendDays)
+        fetchDashboardRules()
       ]);
-      const nextOverview = {
+      if (requestSeq !== moduleRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
+      overview.value = {
         ...overview.value,
         reviewTrend,
         riskDistribution,
         ruleHits: rules.ruleHits,
-        failedRules: rules.failedRules,
-        highRiskReviews
-      };
-      if (requestSeq !== moduleRequestSeq || overviewSeq !== overviewRequestSeq) {
-        return;
-      }
-      if (llmTrendDays.value !== requestedLlmTrendDays) {
-        overview.value = nextOverview;
-        return;
-      }
-      overview.value = {
-        ...nextOverview,
-        llmQualityByModel: llmQuality.byModel,
-        llmQualityByRepository: llmQuality.byRepository,
-        llmQualityTrend: llmQuality.trend
+        failedRules: rules.failedRules
       };
     } catch (error) {
       if (requestSeq !== moduleRequestSeq || overviewSeq !== overviewRequestSeq) {
@@ -140,6 +131,41 @@ export const useDashboardOverview = () => {
     } finally {
       if (requestSeq === moduleRequestSeq) {
         moduleLoading.value = false;
+      }
+    }
+  };
+
+  const loadDeferredModules = async (overviewSeq = overviewRequestSeq) => {
+    const requestSeq = ++deferredRequestSeq;
+    deferredLoading.value = true;
+    const requestedLlmTrendDays = llmTrendDays.value;
+    try {
+      const [highRiskReviews, llmQuality] = await Promise.all([
+        fetchDashboardHighRiskReviews(),
+        fetchDashboardLlmQuality(requestedLlmTrendDays)
+      ]);
+      if (
+        requestSeq !== deferredRequestSeq
+        || overviewSeq !== overviewRequestSeq
+        || llmTrendDays.value !== requestedLlmTrendDays
+      ) {
+        return;
+      }
+      overview.value = {
+        ...overview.value,
+        highRiskReviews,
+        llmQualityByModel: llmQuality.byModel,
+        llmQualityByRepository: llmQuality.byRepository,
+        llmQualityTrend: llmQuality.trend
+      };
+    } catch (error) {
+      if (requestSeq !== deferredRequestSeq || overviewSeq !== overviewRequestSeq) {
+        return;
+      }
+      ElMessage.error(getErrorMessage(error, "仪表盘扩展数据加载失败"));
+    } finally {
+      if (requestSeq === deferredRequestSeq) {
+        deferredLoading.value = false;
       }
     }
   };
@@ -204,6 +230,7 @@ export const useDashboardOverview = () => {
   return {
     loading,
     moduleLoading,
+    deferredLoading,
     llmQualityLoading,
     healthLoading,
     errorMessage,
@@ -224,6 +251,7 @@ export const useDashboardOverview = () => {
     llmQualityTrend,
     loadOverview,
     loadDashboardModules,
+    loadDeferredModules,
     loadLlmQuality,
     loadSystemHealth,
     updateLlmTrendDays
