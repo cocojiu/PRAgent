@@ -17,7 +17,7 @@
         :option="qualityTrendOption"
         :summary="qualityTrendSummary"
       />
-      <el-empty v-else description="暂无 LLM 质量趋势数据" />
+      <el-empty v-else class="chart-empty-state" description="暂无 LLM 质量趋势数据" />
     </article>
     <article class="dashboard-card">
       <h2>模型质量</h2>
