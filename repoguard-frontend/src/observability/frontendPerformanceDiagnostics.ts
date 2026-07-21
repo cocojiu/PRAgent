@@ -31,7 +31,7 @@ export type FrontendPerformanceDiagnosticSnapshot = {
   webVitals: {
     lcp: RatedLcpMetric;
     inp: RatedMetric;
-    cls: RatedMetric;
+    cls: RatedClsMetric;
   };
   navigation: NavigationTimingSummary | null;
   startupResources: StartupResourceSummary;
@@ -51,6 +51,10 @@ type RatedLcpMetric = RatedMetric & {
   attribution: LargestContentfulPaintAttribution | null;
 };
 
+type RatedClsMetric = RatedMetric & {
+  attribution: LayoutShiftAttribution | null;
+};
+
 type LargestContentfulPaintAttribution = {
   tagName: string;
   id: string | null;
@@ -59,6 +63,26 @@ type LargestContentfulPaintAttribution = {
   size: number;
   loadTimeMs: number;
   renderTimeMs: number;
+};
+
+type LayoutShiftAttribution = {
+  value: number;
+  sources: LayoutShiftSourceAttribution[];
+};
+
+type LayoutShiftSourceAttribution = {
+  tagName: string;
+  id: string | null;
+  classNames: string[];
+  previousRect: LayoutShiftRect | null;
+  currentRect: LayoutShiftRect | null;
+};
+
+type LayoutShiftRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 type NavigationTimingSummary = {
@@ -150,6 +174,13 @@ type ChartResourceSummary = {
 type LayoutShiftEntry = PerformanceEntry & {
   value: number;
   hadRecentInput: boolean;
+  sources?: LayoutShiftSource[];
+};
+
+type LayoutShiftSource = {
+  node?: Node | null;
+  previousRect?: DOMRectReadOnly;
+  currentRect?: DOMRectReadOnly;
 };
 
 type EventTimingEntry = PerformanceEntry & {
@@ -205,6 +236,8 @@ let cumulativeLayoutShift = 0;
 let layoutShiftSessionValue = 0;
 let layoutShiftSessionStartedAtMs: number | null = null;
 let lastLayoutShiftAtMs = 0;
+let largestLayoutShiftValue = 0;
+let largestLayoutShiftAttribution: LayoutShiftAttribution | null = null;
 let diagnosticOutput: HTMLOutputElement | null = null;
 
 export const startFrontendPerformanceDiagnostics = (resolveRoute: RouteResolver) => {
@@ -408,6 +441,10 @@ const recordLayoutShift = (entry: LayoutShiftEntry) => {
   }
   lastLayoutShiftAtMs = entry.startTime;
   cumulativeLayoutShift = Math.max(cumulativeLayoutShift, layoutShiftSessionValue);
+  if (entry.value >= largestLayoutShiftValue) {
+    largestLayoutShiftValue = entry.value;
+    largestLayoutShiftAttribution = describeLayoutShift(entry);
+  }
   publishSnapshot();
 };
 
@@ -467,7 +504,10 @@ const createSnapshot = (): FrontendPerformanceDiagnosticSnapshot => {
         attribution: largestContentfulPaintAttribution
       },
       inp: rated(inp, 200, 500),
-      cls: rated(cls, 0.1, 0.25)
+      cls: {
+        ...rated(cls, 0.1, 0.25),
+        attribution: largestLayoutShiftAttribution
+      }
     },
     navigation: navigationTimingSummary(navigation, firstRouteStartedAtMs),
     startupResources: startupResourceSummary(firstRoutePaintedAtMs),
@@ -566,6 +606,29 @@ const describeLargestContentfulPaint = (
   };
 };
 
+const describeLayoutShift = (entry: LayoutShiftEntry): LayoutShiftAttribution => ({
+  value: Number(entry.value.toFixed(4)),
+  sources: (entry.sources ?? []).slice(0, 6).map((source) => {
+    const element = source.node instanceof Element ? source.node : null;
+    return {
+      tagName: element?.tagName.toLowerCase() || "unknown",
+      id: element?.id ? stableText(element.id) : null,
+      classNames: element ? [...element.classList].slice(0, 6).map((name) => stableText(name)) : [],
+      previousRect: describeLayoutShiftRect(source.previousRect),
+      currentRect: describeLayoutShiftRect(source.currentRect)
+    };
+  })
+});
+
+const describeLayoutShiftRect = (rect: DOMRectReadOnly | undefined): LayoutShiftRect | null => rect
+  ? {
+      x: rounded(rect.x),
+      y: rounded(rect.y),
+      width: rounded(rect.width),
+      height: rounded(rect.height)
+    }
+  : null;
+
 const resourcePath = (value: string | undefined) => {
   if (!value) {
     return null;
@@ -659,6 +722,8 @@ const resetMeasurements = () => {
   layoutShiftSessionValue = 0;
   layoutShiftSessionStartedAtMs = null;
   lastLayoutShiftAtMs = 0;
+  largestLayoutShiftValue = 0;
+  largestLayoutShiftAttribution = null;
   publishSnapshot();
 };
 

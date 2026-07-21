@@ -8,7 +8,7 @@
         :option="trendOption"
         :summary="trendSummary"
       />
-      <el-empty v-else description="暂无审查趋势数据" />
+      <el-empty v-else class="chart-empty-state" description="暂无审查趋势数据" />
     </article>
     <article class="dashboard-card chart-card">
       <h2>风险分布</h2>
@@ -18,7 +18,7 @@
         :option="riskOption"
         :summary="riskSummary"
       />
-      <el-empty v-else description="暂无风险分布数据" />
+      <el-empty v-else class="chart-empty-state" description="暂无风险分布数据" />
     </article>
     <article class="dashboard-card chart-card">
       <h2>规则命中</h2>
@@ -32,7 +32,7 @@
           </li>
         </ul>
       </div>
-      <el-empty v-else description="暂无规则命中数据" />
+      <el-empty v-else class="chart-empty-state" description="暂无规则命中数据" />
     </article>
   </section>
 </template>

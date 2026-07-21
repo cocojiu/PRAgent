@@ -9,6 +9,10 @@
   box-sizing: border-box;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -534,7 +538,7 @@ a {
 }
 
 .metric-card {
-  min-height: 142px;
+  min-height: 154px;
   display: flex;
   align-items: center;
   gap: 26px;
@@ -558,6 +562,7 @@ a {
 .metric-icon {
   width: 58px;
   height: 58px;
+  flex: 0 0 58px;
   display: grid;
   place-items: center;
   border-radius: 18px;
@@ -655,6 +660,15 @@ a {
   margin: 0 0 18px;
   color: #0f172a;
   font-size: 22px;
+}
+
+.chart-card {
+  min-height: 390px;
+}
+
+.chart-empty-state {
+  height: 300px;
+  padding: 0;
 }
 
 .quality-card-head {
