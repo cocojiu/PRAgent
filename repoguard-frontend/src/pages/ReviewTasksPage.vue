@@ -57,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/review-tasks/reviewTasks.css";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { canManage } from "@/stores/authState";

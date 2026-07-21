@@ -201,6 +201,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/message-queue/messageQueue.css";
 import { computed } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 import {

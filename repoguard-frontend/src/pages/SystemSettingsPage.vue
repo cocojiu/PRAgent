@@ -145,6 +145,7 @@ security:
 </template>
 
 <script setup lang="ts">
+import "@/features/system-settings/systemSettings.css";
 import { onMounted, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";

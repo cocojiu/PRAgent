@@ -214,6 +214,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/notification-ops/notificationOps.css";
 import { computed, onMounted, ref } from "vue";
 import {
   Plus,

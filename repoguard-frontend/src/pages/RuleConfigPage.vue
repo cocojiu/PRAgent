@@ -135,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import "@/features/rule-config/ruleConfig.css";
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
