@@ -29,10 +29,12 @@ export type FrontendPerformanceDiagnosticSnapshot = {
     deviceMemoryGiB?: number;
   };
   webVitals: {
-    lcp: RatedMetric;
+    lcp: RatedLcpMetric;
     inp: RatedMetric;
     cls: RatedMetric;
   };
+  navigation: NavigationTimingSummary | null;
+  startupResources: StartupResourceSummary;
   routes: RouteTiming[];
   milestones: RouteMilestone[];
   charts: ChartTiming[];
@@ -43,6 +45,62 @@ export type FrontendPerformanceDiagnosticSnapshot = {
 type RatedMetric = {
   value: number | null;
   rating: MetricRating;
+};
+
+type RatedLcpMetric = RatedMetric & {
+  attribution: LargestContentfulPaintAttribution | null;
+};
+
+type LargestContentfulPaintAttribution = {
+  tagName: string;
+  id: string | null;
+  classNames: string[];
+  resourcePath: string | null;
+  size: number;
+  loadTimeMs: number;
+  renderTimeMs: number;
+};
+
+type NavigationTimingSummary = {
+  protocol: string;
+  redirectMs: number;
+  dnsMs: number;
+  connectMs: number;
+  tlsMs: number;
+  requestToFirstByteMs: number;
+  responseDownloadMs: number;
+  responseEndAtMs: number;
+  domInteractiveAtMs: number;
+  domContentLoadedAtMs: number;
+  loadEventAtMs: number;
+  appRouteStartAtMs: number | null;
+  responseEndToRouteStartMs: number | null;
+  transferBytes: number;
+  encodedBodyBytes: number;
+  decodedBodyBytes: number;
+};
+
+type StartupResourceTiming = {
+  path: string;
+  initiatorType: string;
+  protocol: string;
+  cacheState: Exclude<CacheState, "mixed" | "none">;
+  startAtMs: number;
+  responseEndAtMs: number;
+  durationMs: number;
+  transferBytes: number;
+  encodedBodyBytes: number;
+  decodedBodyBytes: number;
+};
+
+type StartupResourceSummary = {
+  cacheState: CacheState;
+  requestCount: number;
+  networkRequestCount: number;
+  cachedRequestCount: number;
+  transferBytes: number;
+  loadEndAtMs: number;
+  resources: StartupResourceTiming[];
 };
 
 type RouteTiming = {
@@ -99,6 +157,15 @@ type EventTimingEntry = PerformanceEntry & {
   interactionId: number;
 };
 
+type LargestContentfulPaintEntry = PerformanceEntry & {
+  element?: Element | null;
+  id?: string;
+  url?: string;
+  size?: number;
+  loadTime?: number;
+  renderTime?: number;
+};
+
 type NavigatorWithDiagnostics = Navigator & {
   connection?: {
     effectiveType?: string;
@@ -133,6 +200,7 @@ let activeProfile: ControlledPerformanceProfile | undefined;
 let routeResolver: RouteResolver = () => undefined;
 let currentRoute = "unknown";
 let largestContentfulPaintMs: number | null = null;
+let largestContentfulPaintAttribution: LargestContentfulPaintAttribution | null = null;
 let cumulativeLayoutShift = 0;
 let layoutShiftSessionValue = 0;
 let layoutShiftSessionStartedAtMs: number | null = null;
@@ -285,7 +353,11 @@ const recordChartRendered = (
 
 const observeWebVitals = () => {
   observeEntries("largest-contentful-paint", (entry) => {
-    largestContentfulPaintMs = Math.max(largestContentfulPaintMs ?? 0, entry.startTime);
+    const largestEntry = entry as LargestContentfulPaintEntry;
+    if (largestContentfulPaintMs === null || entry.startTime >= largestContentfulPaintMs) {
+      largestContentfulPaintMs = entry.startTime;
+      largestContentfulPaintAttribution = describeLargestContentfulPaint(largestEntry);
+    }
     publishSnapshot();
   });
   observeEntries("layout-shift", (entry) => recordLayoutShift(entry as LayoutShiftEntry));
@@ -362,6 +434,8 @@ const createSnapshot = (): FrontendPerformanceDiagnosticSnapshot => {
   const inp = interactionPercentile();
   const cls = Number(cumulativeLayoutShift.toFixed(4));
   const resources = chartResourceSummary();
+  const firstRouteStartedAtMs = routeTimings[0]?.startedAtMs ?? null;
+  const firstRoutePaintedAtMs = routeTimings[0]?.paintedAtMs ?? performance.now();
   const hasDataReady = routeMilestones.some(
     (milestone) => milestone.route === "overview" && milestone.name === "data-ready"
   );
@@ -388,16 +462,120 @@ const createSnapshot = (): FrontendPerformanceDiagnosticSnapshot => {
         : nonNegative(navigatorWithDiagnostics.deviceMemory)
     },
     webVitals: {
-      lcp: rated(lcp, 2500, 4000),
+      lcp: {
+        ...rated(lcp, 2500, 4000),
+        attribution: largestContentfulPaintAttribution
+      },
       inp: rated(inp, 200, 500),
       cls: rated(cls, 0.1, 0.25)
     },
+    navigation: navigationTimingSummary(navigation, firstRouteStartedAtMs),
+    startupResources: startupResourceSummary(firstRoutePaintedAtMs),
     routes: routeTimings.map((timing) => ({ ...timing })),
     milestones: routeMilestones.map((milestone) => ({ ...milestone })),
     charts: chartTimings.map((timing) => ({ ...timing })),
     pendingCharts: [...pendingCharts.keys()],
     chartResources: resources
   };
+};
+
+const navigationTimingSummary = (
+  navigation: PerformanceNavigationTiming | undefined,
+  appRouteStartAtMs: number | null
+): NavigationTimingSummary | null => {
+  if (!navigation) {
+    return null;
+  }
+  const secureConnectionStartedAtMs = nonNegative(navigation.secureConnectionStart);
+  const responseEndAtMs = rounded(navigation.responseEnd);
+  return {
+    protocol: navigation.nextHopProtocol || "unknown",
+    redirectMs: durationBetween(navigation.redirectStart, navigation.redirectEnd),
+    dnsMs: durationBetween(navigation.domainLookupStart, navigation.domainLookupEnd),
+    connectMs: durationBetween(navigation.connectStart, navigation.connectEnd),
+    tlsMs: secureConnectionStartedAtMs > 0
+      ? durationBetween(secureConnectionStartedAtMs, navigation.connectEnd)
+      : 0,
+    requestToFirstByteMs: durationBetween(navigation.requestStart, navigation.responseStart),
+    responseDownloadMs: durationBetween(navigation.responseStart, navigation.responseEnd),
+    responseEndAtMs,
+    domInteractiveAtMs: rounded(navigation.domInteractive),
+    domContentLoadedAtMs: rounded(navigation.domContentLoadedEventEnd),
+    loadEventAtMs: rounded(navigation.loadEventEnd),
+    appRouteStartAtMs,
+    responseEndToRouteStartMs: appRouteStartAtMs === null
+      ? null
+      : durationBetween(responseEndAtMs, appRouteStartAtMs),
+    transferBytes: rounded(navigation.transferSize),
+    encodedBodyBytes: rounded(navigation.encodedBodySize),
+    decodedBodyBytes: rounded(navigation.decodedBodySize)
+  };
+};
+
+const startupResourceSummary = (routePaintedAtMs: number): StartupResourceSummary => {
+  const resources = performance.getEntriesByType("resource")
+    .filter((entry): entry is PerformanceResourceTiming => isStartupResource(entry, routePaintedAtMs))
+    .sort((left, right) => left.startTime - right.startTime)
+    .slice(0, MAX_RECORDED_ITEMS);
+  const networkRequestCount = resources.filter((entry) => entry.transferSize > 0).length;
+  const cachedRequestCount = resources.filter(
+    (entry) => entry.transferSize === 0 && entry.decodedBodySize > 0
+  ).length;
+  return {
+    cacheState: resolveCacheState(resources.length, networkRequestCount, cachedRequestCount),
+    requestCount: resources.length,
+    networkRequestCount,
+    cachedRequestCount,
+    transferBytes: sumResourceField(resources, "transferSize"),
+    loadEndAtMs: rounded(Math.max(0, ...resources.map((entry) => entry.responseEnd))),
+    resources: resources.map((entry) => ({
+      path: resourcePath(entry.name) ?? "unknown",
+      initiatorType: entry.initiatorType || "unknown",
+      protocol: entry.nextHopProtocol || "unknown",
+      cacheState: entry.transferSize > 0 ? "network" : "cache",
+      startAtMs: rounded(entry.startTime),
+      responseEndAtMs: rounded(entry.responseEnd),
+      durationMs: rounded(entry.duration),
+      transferBytes: rounded(entry.transferSize),
+      encodedBodyBytes: rounded(entry.encodedBodySize),
+      decodedBodyBytes: rounded(entry.decodedBodySize)
+    }))
+  };
+};
+
+const isStartupResource = (entry: PerformanceEntry, routePaintedAtMs: number) => {
+  if (entry.entryType !== "resource" || entry.startTime > routePaintedAtMs) {
+    return false;
+  }
+  const path = resourcePath(entry.name);
+  return path?.startsWith("/assets/") === true && /\.(?:css|js)$/.test(path);
+};
+
+const describeLargestContentfulPaint = (
+  entry: LargestContentfulPaintEntry
+): LargestContentfulPaintAttribution => {
+  const element = entry.element;
+  return {
+    tagName: element?.tagName.toLowerCase() || "unknown",
+    id: element?.id ? stableText(element.id) : null,
+    classNames: element ? [...element.classList].slice(0, 6).map((name) => stableText(name)) : [],
+    resourcePath: resourcePath(entry.url),
+    size: rounded(entry.size ?? 0),
+    loadTimeMs: rounded(entry.loadTime ?? 0),
+    renderTimeMs: rounded(entry.renderTime ?? 0)
+  };
+};
+
+const resourcePath = (value: string | undefined) => {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value, window.location.href);
+    return url.origin === window.location.origin ? url.pathname : null;
+  } catch {
+    return null;
+  }
 };
 
 const chartResourceSummary = (): ChartResourceSummary => {
@@ -476,6 +654,7 @@ const resetMeasurements = () => {
   interactionDurations.clear();
   currentRoute = stableText(routeResolver());
   largestContentfulPaintMs = null;
+  largestContentfulPaintAttribution = null;
   cumulativeLayoutShift = 0;
   layoutShiftSessionValue = 0;
   layoutShiftSessionStartedAtMs = null;
@@ -514,6 +693,9 @@ const stableText = (value: string | undefined) => value?.trim().slice(0, 80) || 
 
 const elapsed = (startedAtMs: number, completedAtMs: number) =>
   rounded(Math.max(0, completedAtMs - startedAtMs));
+
+const durationBetween = (startedAtMs: number, completedAtMs: number) =>
+  rounded(Math.max(0, nonNegative(completedAtMs) - nonNegative(startedAtMs)));
 
 const rounded = (value: number) => Math.round(nonNegative(value));
 
