@@ -76,9 +76,10 @@ const bundleBudgetPlugin = (): Plugin => ({
       }
     }
 
-    const overviewRouteChunk = chunks.find((chunk) =>
-      chunk.facadeModuleId?.replaceAll("\\", "/").endsWith("/src/pages/OverviewPage.vue")
-    );
+    const isOverviewModule = (moduleId: string | null | undefined) =>
+      moduleId?.replaceAll("\\", "/").endsWith("/src/pages/OverviewPage.vue") === true;
+    const overviewRouteChunk = chunks.find((chunk) => isOverviewModule(chunk.facadeModuleId))
+      ?? chunks.find((chunk) => chunk.moduleIds.some(isOverviewModule));
     if (!overviewRouteChunk) {
       this.error("[bundle-budget] Overview route chunk was not found; route budgets cannot be evaluated.");
     }

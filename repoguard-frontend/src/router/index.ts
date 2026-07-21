@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
+import OverviewPage from "@/pages/OverviewPage.vue";
 import { hasAuthToken } from "@/api/client";
 import { routeNames } from "@/router/names";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
@@ -10,7 +11,6 @@ import {
 } from "@/observability/frontendPerformanceDiagnosticsBridge";
 
 const LoginPage = () => import("@/pages/LoginPage.vue");
-const OverviewPage = () => import("@/pages/OverviewPage.vue");
 const ReviewTasksPage = () => import("@/pages/ReviewTasksPage.vue");
 const ReviewDetailPage = () => import("@/pages/ReviewDetailPage.vue");
 const RuleConfigPage = () => import("@/pages/RuleConfigPage.vue");
@@ -26,7 +26,6 @@ const ROUTE_PREFETCH_IDLE_TIMEOUT_MS = 3000;
 
 const commonRouteNeighbors = new Map<string, RouteComponentLoader>([
   [routeNames.overview, ReviewTasksPage],
-  [routeNames.tasks, OverviewPage],
   [routeNames.taskDetail, ReviewTasksPage]
 ]);
 
