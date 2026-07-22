@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "17,47 * * * *"
   workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: Inject one synthetic failure to test alert creation and recovery
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -16,6 +22,7 @@ concurrency:
 env:
   PRODUCTION_BASE_URL: https://pragent.top
   ALERT_ISSUE_TITLE: "[生产告警] RepoGuard 可用性检查失败"
+  SIMULATE_FAILURE: ${{ inputs.simulate_failure }}
 
 jobs:
   observe:
@@ -110,6 +117,12 @@ jobs:
           probe_endpoint "overview" "/repoguard/overview" "200" "none" "page"
           probe_endpoint "anonymous-auth" "/api/v1/auth/me" "401" "none" "dynamic"
 
+          if [[ "${SIMULATE_FAILURE:-false}" == "true" ]]; then
+            failures=$((failures + 1))
+            echo "FAIL label=synthetic-drill path=- http=- health=- ip=- dns=- connect=- ttfb=- total=- x_cache=- age=- detail=manual_workflow_dispatch" \
+              >> "${report_path}"
+          fi
+
           if (( failures == 0 )); then
             healthy="true"
             result_label="PASS"
@@ -123,6 +136,7 @@ jobs:
             echo
             echo "- Checked at: ${checked_at}"
             echo "- Base URL: ${PRODUCTION_BASE_URL}"
+            echo "- Synthetic failure: ${SIMULATE_FAILURE:-false}"
             echo "- Result: ${result_label}"
             echo
             echo '```text'
@@ -150,6 +164,7 @@ jobs:
             const report = reportPath && fs.existsSync(reportPath)
               ? fs.readFileSync(reportPath, "utf8").trim()
               : "Probe did not produce a diagnostic report.";
+            const synthetic = report.includes("label=synthetic-drill");
             const { owner, repo } = context.repo;
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner,
@@ -180,8 +195,11 @@ jobs:
             }
 
             const body = [
-              "RepoGuard 定时生产可用性检查失败。持续故障只更新此 Issue，恢复后会自动关闭。",
+              synthetic
+                ? "这是一次手动告警演练，不代表生产服务故障。恢复检查会自动关闭此 Issue。"
+                : "RepoGuard 定时生产可用性检查失败。持续故障只更新此 Issue，恢复后会自动关闭。",
               "",
+              `- 类型：${synthetic ? "手动演练" : "真实探测失败"}`,
               `- 检测时间：${new Date().toISOString()}`,
               `- 运行日志：[GitHub Actions](${runUrl})`,
               "",
