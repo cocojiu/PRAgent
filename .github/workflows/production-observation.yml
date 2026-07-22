@@ -191,10 +191,22 @@ jobs:
             ].join("\n");
 
             if (alert) {
-              await github.rest.issues.update({ owner, repo, issue_number: alert.number, body });
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: alert.number,
+                body,
+                assignees: [owner],
+              });
               core.warning(`Updated existing alert issue #${alert.number}.`);
             } else {
-              const created = await github.rest.issues.create({ owner, repo, title, body });
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title,
+                body,
+                assignees: [owner],
+              });
               core.warning(`Created alert issue #${created.data.number}.`);
             }
 
