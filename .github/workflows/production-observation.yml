@@ -1,156 +1,206 @@
-name: Production Observation 24h
+name: Production Availability
 
 on:
   schedule:
-    - cron: "10 * * * *"
+    - cron: "17,47 * * * *"
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
+  issues: write
 
 concurrency:
-  group: production-observation-24h
-  cancel-in-progress: false
+  group: production-availability
+  cancel-in-progress: true
 
 env:
-  OBSERVATION_START_UTC: "2026-07-17T12:06:11Z"
-  OBSERVATION_END_UTC: "2026-07-18T12:06:11Z"
   PRODUCTION_BASE_URL: https://pragent.top
+  ALERT_ISSUE_TITLE: "[生产告警] RepoGuard 可用性检查失败"
 
 jobs:
   observe:
-    name: Observe production
+    name: Probe production endpoints
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
-      - name: Determine observation window
-        id: window
+      - name: Probe production endpoints
+        id: probe
         shell: bash
         run: |
-          set -euo pipefail
-          now_epoch="$(date -u +%s)"
-          start_epoch="$(date -u -d "${OBSERVATION_START_UTC}" +%s)"
-          end_epoch="$(date -u -d "${OBSERVATION_END_UTC}" +%s)"
+          set -uo pipefail
 
-          if (( now_epoch < start_epoch )); then
-            echo "active=false" >> "${GITHUB_OUTPUT}"
-            echo "final=false" >> "${GITHUB_OUTPUT}"
-            echo "Observation window has not started." >> "${GITHUB_STEP_SUMMARY}"
-          elif (( now_epoch >= end_epoch )); then
-            echo "active=false" >> "${GITHUB_OUTPUT}"
-            echo "final=true" >> "${GITHUB_OUTPUT}"
-            echo "Observation window completed at ${OBSERVATION_END_UTC}." >> "${GITHUB_STEP_SUMMARY}"
-          else
-            echo "active=true" >> "${GITHUB_OUTPUT}"
-            echo "final=false" >> "${GITHUB_OUTPUT}"
-            echo "Observation check at $(date -u +'%Y-%m-%dT%H:%M:%SZ')." >> "${GITHUB_STEP_SUMMARY}"
-          fi
+          report_path="${RUNNER_TEMP}/production-availability-report.txt"
+          : > "${report_path}"
+          failures=0
+          checked_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
-      - name: Check production endpoints
-        if: steps.window.outputs.active == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
+          probe_endpoint() {
+            local label="$1"
+            local path="$2"
+            local expected_code="$3"
+            local body_rule="$4"
+            local cache_rule="$5"
+            local body_file header_file metrics curl_exit
+            local status_code remote_ip dns_time connect_time ttfb total_time
+            local x_cache age health_status result detail
 
-          health_payload="$(curl --fail --silent --show-error \
-            --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 \
-            "${PRODUCTION_BASE_URL}/actuator/health")"
-          health_status="$(jq -r '.status // empty' <<<"${health_payload}")"
-          if [[ "${health_status}" != "UP" ]]; then
-            echo "Production health is not UP: ${health_status:-missing}" >&2
-            exit 1
-          fi
+            body_file="$(mktemp "${RUNNER_TEMP}/repoguard-body.XXXXXX")"
+            header_file="$(mktemp "${RUNNER_TEMP}/repoguard-headers.XXXXXX")"
+            health_status="-"
+            result="PASS"
+            detail="ok"
 
-          for path in / /login; do
-            status_code="$(curl --silent --show-error --output /dev/null \
-              --retry 2 --retry-delay 5 --connect-timeout 10 --max-time 30 \
-              --write-out '%{http_code}' "${PRODUCTION_BASE_URL}${path}")"
-            if [[ "${status_code}" != "200" ]]; then
-              echo "Unexpected HTTP ${status_code} for ${path}" >&2
-              exit 1
+            if metrics="$(curl --silent --show-error \
+              --retry 2 --retry-delay 3 --retry-all-errors \
+              --connect-timeout 8 --max-time 20 \
+              --output "${body_file}" --dump-header "${header_file}" \
+              --write-out '%{http_code}|%{remote_ip}|%{time_namelookup}|%{time_connect}|%{time_starttransfer}|%{time_total}' \
+              "${PRODUCTION_BASE_URL}${path}")"; then
+              IFS='|' read -r status_code remote_ip dns_time connect_time ttfb total_time <<<"${metrics}"
+            else
+              curl_exit=$?
+              status_code="000"
+              remote_ip="-"
+              dns_time="-"
+              connect_time="-"
+              ttfb="-"
+              total_time="-"
+              result="FAIL"
+              detail="curl_exit=${curl_exit}"
             fi
-          done
 
-          {
-            echo "- Health: UP"
-            echo "- Home: HTTP 200"
-            echo "- Login: HTTP 200"
-          } >> "${GITHUB_STEP_SUMMARY}"
+            x_cache="$(awk 'tolower($0) ~ /^x-cache:/ { sub(/^[^:]*:[[:space:]]*/, ""); gsub("\\r", ""); value=$0 } END { print value }' "${header_file}")"
+            age="$(awk 'tolower($0) ~ /^age:/ { sub(/^[^:]*:[[:space:]]*/, ""); gsub("\\r", ""); value=$0 } END { print value }' "${header_file}")"
+            x_cache="${x_cache:--}"
+            age="${age:--}"
 
-      - name: Check critical workflow failures
-        if: steps.window.outputs.active == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          runs_payload="$(curl --fail --silent --show-error \
-            --retry 2 --retry-delay 5 \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100")"
+            if [[ "${result}" == "PASS" && "${status_code}" != "${expected_code}" ]]; then
+              result="FAIL"
+              detail="expected_http=${expected_code}"
+            fi
 
-          failures="$(jq -r --arg start "${OBSERVATION_START_UTC}" '
-            [.workflow_runs[]
-              | select(.created_at >= $start)
-              | select(.name == "Release Images" or .name == "Real Chain Smoke")
-              | select(.status == "completed" and .conclusion != "success" and .conclusion != "skipped")
-              | "\(.name) \(.html_url) conclusion=\(.conclusion)"]
-            | unique
-            | .[]
-          ' <<<"${runs_payload}")"
+            if [[ "${result}" == "PASS" && "${body_rule}" == "health_up" ]]; then
+              health_status="$(jq -r '.status // empty' "${body_file}" 2>/dev/null || true)"
+              if [[ "${health_status}" != "UP" ]]; then
+                result="FAIL"
+                detail="health_status=${health_status:-missing}"
+              fi
+            fi
 
-          if [[ -n "${failures}" ]]; then
-            echo "Critical workflow failures detected since ${OBSERVATION_START_UTC}:" >&2
-            echo "${failures}" >&2
-            exit 1
+            if [[ "${result}" == "PASS" && "${cache_rule}" == "dynamic" && "${x_cache}" =~ (^|[[:space:],])(HIT|TCP_HIT|MEM_HIT)($|[[:space:],]) ]]; then
+              result="FAIL"
+              detail="protected_endpoint_cached=${x_cache}"
+            fi
+
+            if [[ "${result}" == "FAIL" ]]; then
+              failures=$((failures + 1))
+            fi
+
+            printf '%s label=%q path=%q http=%s health=%s ip=%s dns=%s connect=%s ttfb=%s total=%s x_cache=%q age=%q detail=%q\n' \
+              "${result}" "${label}" "${path}" "${status_code}" "${health_status:--}" "${remote_ip}" \
+              "${dns_time}" "${connect_time}" "${ttfb}" "${total_time}" "${x_cache}" "${age}" "${detail}" \
+              >> "${report_path}"
+
+            rm -f "${body_file}" "${header_file}"
+          }
+
+          probe_endpoint "health" "/actuator/health" "200" "health_up" "dynamic"
+          probe_endpoint "home" "/" "200" "none" "page"
+          probe_endpoint "login" "/login" "200" "none" "page"
+          probe_endpoint "overview" "/repoguard/overview" "200" "none" "page"
+          probe_endpoint "anonymous-auth" "/api/v1/auth/me" "401" "none" "dynamic"
+
+          if (( failures == 0 )); then
+            healthy="true"
+            result_label="PASS"
+          else
+            healthy="false"
+            result_label="FAIL (${failures} endpoint(s))"
           fi
 
-          echo "- Critical workflow failures since start: 0" >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Summarize completed observation
-        if: steps.window.outputs.final == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          runs_payload="$(curl --fail --silent --show-error \
-            --retry 2 --retry-delay 5 \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/production-observation.yml/runs?per_page=100")"
-
-          completed="$(jq --arg start "${OBSERVATION_START_UTC}" \
-            '[.workflow_runs[] | select(.created_at >= $start and .status == "completed")] | length' \
-            <<<"${runs_payload}")"
-          failed="$(jq --arg start "${OBSERVATION_START_UTC}" \
-            '[.workflow_runs[]
-              | select(.created_at >= $start and .status == "completed")
-              | select(.conclusion != "success" and .conclusion != "skipped")]
-             | length' <<<"${runs_payload}")"
-
           {
-            echo "- Completed checks: ${completed}"
-            echo "- Failed checks: ${failed}"
-            echo "- Window: ${OBSERVATION_START_UTC} to ${OBSERVATION_END_UTC}"
+            echo "## Production availability"
+            echo
+            echo "- Checked at: ${checked_at}"
+            echo "- Base URL: ${PRODUCTION_BASE_URL}"
+            echo "- Result: ${result_label}"
+            echo
+            echo '```text'
+            cat "${report_path}"
+            echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Disable completed observation workflow
-        if: always() && steps.window.outputs.final == 'true'
-        shell: bash
+          echo "healthy=${healthy}" >> "${GITHUB_OUTPUT}"
+          echo "report_path=${report_path}" >> "${GITHUB_OUTPUT}"
+
+      - name: Manage availability alert issue
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          GH_TOKEN: ${{ github.token }}
+          PROBE_HEALTHY: ${{ steps.probe.outputs.healthy }}
+          PROBE_REPORT_PATH: ${{ steps.probe.outputs.report_path }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const fs = require("fs");
+            const title = process.env.ALERT_ISSUE_TITLE;
+            const healthy = process.env.PROBE_HEALTHY === "true";
+            const runUrl = process.env.RUN_URL;
+            const reportPath = process.env.PROBE_REPORT_PATH;
+            const report = reportPath && fs.existsSync(reportPath)
+              ? fs.readFileSync(reportPath, "utf8").trim()
+              : "Probe did not produce a diagnostic report.";
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            const alert = issues.find((issue) => !issue.pull_request && issue.title === title);
+
+            if (healthy) {
+              if (alert) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  body: `✅ 生产端点已恢复。\n\n[查看恢复检查](${runUrl})`,
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: alert.number,
+                  state: "closed",
+                  state_reason: "completed",
+                });
+              }
+              core.info("Production endpoints are healthy.");
+              return;
+            }
+
+            const body = [
+              "RepoGuard 定时生产可用性检查失败。持续故障只更新此 Issue，恢复后会自动关闭。",
+              "",
+              `- 检测时间：${new Date().toISOString()}`,
+              `- 运行日志：[GitHub Actions](${runUrl})`,
+              "",
+              "```text",
+              report,
+              "```",
+            ].join("\n");
+
+            if (alert) {
+              await github.rest.issues.update({ owner, repo, issue_number: alert.number, body });
+              core.warning(`Updated existing alert issue #${alert.number}.`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.warning(`Created alert issue #${created.data.number}.`);
+            }
+
+      - name: Fail unhealthy observation
+        if: steps.probe.outputs.healthy != 'true'
+        shell: bash
         run: |
-          set -euo pipefail
-          curl --fail --silent --show-error \
-            --retry 2 --retry-delay 5 \
-            -X PUT \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/production-observation.yml/disable"
-          echo "- Workflow disabled after the observation window." >> "${GITHUB_STEP_SUMMARY}"
+          echo "Production availability probe failed. See the step summary and alert issue." >&2
+          exit 1
