@@ -209,6 +209,7 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 - 加密文件和独立 SHA-256 校验文件保存到服务器 `/opt/repoguard/backups/mysql/`，目录权限为 `0700`；工作流不上传业务数据到 GitHub Artifact。
 - 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，校验源库与恢复库的表数量及表名集合，逐表执行 `CHECK TABLE`，并记录加密文件与解密逻辑转储的 SHA-256 指纹和恢复库精确行数。
 - 临时容器、临时卷和中间文件在成功或失败时均按固定名称前缀清理；生产数据库只读，不创建演练 schema。
+- 历史明文备份通过 `Production MySQL Legacy Backup Migration` workflow 处理：先以 `inventory` 只读盘点顶层 `.sql` 的路径、大小、修改时间和 SHA-256，再以 `encrypt` 在 `/opt/repoguard/backups/mysql/legacy/` 创建加密副本，并校验密文 SHA-256 与解密后源文件 SHA-256 完全一致。该流程不删除明文；删除必须在核对精确清单后单独确认。
 - 不要直接轮换 `REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`。轮换前必须先重新加密仍需保留的历史备份，并在密码管理器中保存恢复密钥副本。
 
 ## API 入口
@@ -283,6 +284,7 @@ RepoGuard / RepoGuard Review Observability
 
 ## 优化进度
 
+- 2026-07-24 14:05:32（Asia/Shanghai）：启动 4 份生产 MySQL 历史明文备份的安全收敛。新增独立的 `inventory|encrypt` 手动工作流与受限脚本，源目录固定为 `/opt/repoguard/backups` 顶层、密文目录固定为 `/opt/repoguard/backups/mysql/legacy/`；先只读记录每份 `.sql` 的精确路径、字节数、UTC 修改时间和 SHA-256，再顺序创建 gzip + AES-256-CBC/PBKDF2-SHA-256 密文，校验密文 SHA-256 及解密后逐字节 SHA-256。脚本禁止符号链接和越界路径，预检磁盘余量，源文件在处理期间发生变化即失败，并在失败时回滚本轮新建密文；明文删除能力刻意不纳入本流程，待生产盘点、加密和复核全部通过后再按精确清单请求确认。
 - 2026-07-24 13:30:26（Asia/Shanghai）：完成生产 MySQL 加密备份与隔离恢复闭环。[最终生产演练](https://github.com/cocojiu/PRAgent/actions/runs/30069560053) 对 MySQL 8.0.46 的 `repoguard_demo` 成功生成 `/opt/repoguard/backups/mysql/repoguard-20260724T052944Z.sql.gz.enc`，30 张表的源库数据与索引估算为 21807104 字节，隔离恢复后精确统计 16088 行；加密文件 SHA-256 为 `58efbfb2dcb07f03b1004459d85051f4fa54416a5959afd335087af629fab964`，解密逻辑转储 SHA-256 为 `0731fef698575b25c970821055bb769e3c3b6dfbf8d8a1d5403e464cc3484783`。恢复导入、表数量与表名集合比对、逐表 `CHECK TABLE`、临时容器/卷清理及生产健康检查全部通过，结果为 `RESTORE_VERIFIED=true`、线上状态 `UP`；独立恢复密钥已写入 GitHub Secret，并在本机忽略目录保存当前用户 ACL 副本。只读盘点同时发现 4 份历史明文 `.sql`，为避免未经确认破坏恢复点，本次保留未删除。
 - 2026-07-24 11:56:12（Asia/Shanghai）：启动生产 MySQL 可恢复性闭环。现有仓库只有业务层 `backupReference` 审计字段，服务器历史脚本也仅生成明文 SQL，缺少事务一致性参数、加密、恢复校验和临时资源清理；新增手动 `Production MySQL Backup` 工作流与受限运维脚本，计划使用 GitHub Secret 中的独立随机密钥生成 gzip + AES-256/PBKDF2 加密备份，仅把加密文件留在服务器，并在无网络、限 CPU/内存的隔离 MySQL 容器中执行恢复，校验表数量与表名集合，逐表执行 `CHECK TABLE`，统计精确行数并记录加密文件和解密逻辑转储的双重 SHA-256 指纹。流程会先校验容器健康、InnoDB 引擎、磁盘和内存余量，生产库全程只读；OpenSSL 参数、临时 MySQL 认证就绪、镜像工具可用性与稳定语义校验问题均已在后续生产演练中收敛，完成结果见上条记录。
 - 2026-07-22 12:35:32（Asia/Shanghai）：启动生产可用性告警无停机演练。在长期监控的 `workflow_dispatch` 中增加默认关闭的布尔型 `simulate_failure` 开关，仅在有写权限的用户手动触发时向探测报告追加一条 `synthetic-drill` 合成失败，不修改生产 DNS、CDN、容器或业务流量；告警 Issue 会明确标注“手动演练”，沿用真实故障的去重、自动指派和失败通知路径，随后以正常手动检查验证恢复留言与自动关闭。定时触发没有该输入，始终执行真实端点检查，待工作流校验、合并及故障/恢复双向演练。
