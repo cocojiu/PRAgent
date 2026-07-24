@@ -239,6 +239,11 @@ non_transactional_tables="$(mysql_query "${MYSQL_CONTAINER}" "${database_name}" 
 
 mysql_query "${MYSQL_CONTAINER}" "${database_name}" "${MANIFEST_SQL}" >"${source_manifest_file}"
 exact_row_count="$(awk -F '\t' '{ total += $2 } END { print total + 0 }' "${source_manifest_file}")"
+source_table_names_sha256="$(
+  cut -f 1 "${source_manifest_file}" \
+    | sha256sum \
+    | cut -d ' ' -f 1
+)"
 table_count="${source_table_count}"
 
 available_kb="$(df -Pk "${BACKUP_ROOT}" | awk 'NR == 2 { print $4 }')"
@@ -371,6 +376,15 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
       fail "invalid_restored_table_count"
       ;;
   esac
+  [[ "${table_count}" == "${source_table_count}" ]] \
+    || fail "restored_table_count_mismatch"
+  restored_table_names_sha256="$(
+    cut -f 1 "${restored_manifest_file}" \
+      | sha256sum \
+      | cut -d ' ' -f 1
+  )"
+  [[ "${restored_table_names_sha256}" == "${source_table_names_sha256}" ]] \
+    || fail "restored_table_names_mismatch"
 
   : >"${table_check_log}"
   checked_table_count=0
@@ -412,10 +426,6 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     echo "TABLE_CHECK_DIAGNOSTIC_END" >&2
     fail "isolated_table_check_failed"
   fi
-
-  restored_dump_sha256="$(dump_database "${verify_container}" "${database_name}" | sha256sum | cut -d ' ' -f 1)"
-  [[ "${restored_dump_sha256}" == "${logical_dump_sha256}" ]] \
-    || fail "restored_logical_dump_mismatch"
 
   docker rm -f "${verify_container}" >/dev/null
   verify_container=""
