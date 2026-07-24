@@ -155,6 +155,18 @@ jobs:
             exit 1
           }
 
+          empty_count="$(awk -F= '$1 == "EMPTY_BACKUP_COUNT" { print $2 }' "${result_file}")"
+          migratable_count="$(awk -F= '$1 == "MIGRATABLE_BACKUP_COUNT" { print $2 }' "${result_file}")"
+          [[ "${empty_count}" =~ ^[0-9]+$ && "${migratable_count}" =~ ^[0-9]+$ ]] || {
+            echo "Legacy backup classification counts were not numeric." >&2
+            exit 1
+          }
+          classified_count=$((empty_count + migratable_count))
+          [[ "${classified_count}" == "${legacy_count}" ]] || {
+            echo "Legacy backup classification did not cover every file." >&2
+            exit 1
+          }
+
           plaintext_deleted="$(awk -F= '$1 == "PLAINTEXT_DELETED" { print $2 }' "${result_file}")"
           [[ "${plaintext_deleted}" == "false" ]] || {
             echo "The operation must not delete plaintext backups." >&2
@@ -164,9 +176,9 @@ jobs:
           if [[ "${OPERATION}" == "encrypt" ]]; then
             encrypted_count="$(awk -F= '$1 == "ENCRYPTED_BACKUP_COUNT" { print $2 }' "${result_file}")"
             verified_count="$(awk -F= '$1 == "ROUNDTRIP_VERIFIED_COUNT" { print $2 }' "${result_file}")"
-            [[ "${encrypted_count}" == "${legacy_count}" \
-              && "${verified_count}" == "${legacy_count}" ]] || {
-              echo "Not every legacy backup has a verified encrypted copy." >&2
+            [[ "${encrypted_count}" == "${migratable_count}" \
+              && "${verified_count}" == "${migratable_count}" ]] || {
+              echo "Not every nonempty legacy backup has a verified encrypted copy." >&2
               exit 1
             }
           fi
@@ -195,6 +207,12 @@ jobs:
                 LEGACY_BACKUP_COUNT)
                   echo "- Plaintext backups: \`${value}\`"
                   ;;
+                EMPTY_BACKUP_COUNT)
+                  echo "- Empty plaintext files: \`${value}\`"
+                  ;;
+                MIGRATABLE_BACKUP_COUNT)
+                  echo "- Nonempty backups eligible for encryption: \`${value}\`"
+                  ;;
                 TOTAL_SOURCE_BYTES)
                   echo "- Total plaintext bytes: \`${value}\`"
                   ;;
@@ -210,6 +228,9 @@ jobs:
                   ;;
                 LEGACY_*_SOURCE_SHA256)
                   echo "- Plaintext SHA-256: \`${value}\`"
+                  ;;
+                LEGACY_*_CLASSIFICATION)
+                  echo "- Classification: \`${value}\`"
                   ;;
                 LEGACY_*_ENCRYPTED_PATH)
                   echo "- Encrypted copy: \`${value}\`"
@@ -231,6 +252,9 @@ jobs:
                   ;;
                 ENCRYPTED_BACKUP_COUNT)
                   echo "- Verified encrypted copies: \`${value}\`"
+                  ;;
+                ROUNDTRIP_VERIFIED_COUNT)
+                  echo "- Exact round trips verified: \`${value}\`"
                   ;;
                 PLAINTEXT_DELETED)
                   echo "- Plaintext deleted: \`${value}\`"
