@@ -277,14 +277,14 @@ printf '%s  %s\n' "${backup_sha256}" "${backup_name}" >"${checksum_path}"
   sha256sum --check --status "${backup_name}.sha256"
 ) || fail "encrypted_backup_checksum_failed"
 
-openssl enc -decrypt -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
   -pass env:BACKUP_ENCRYPTION_PASSWORD \
   -in "${backup_path}" \
   | gzip --test \
   || fail "encrypted_backup_stream_validation_failed"
 
 logical_dump_sha256="$(
-  openssl enc -decrypt -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
     -pass env:BACKUP_ENCRYPTION_PASSWORD \
     -in "${backup_path}" \
     | gzip -dc \
@@ -346,7 +346,7 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
   done
   [[ "${restore_ready}" == "true" ]] || fail "isolated_mysql_readiness_timeout"
 
-  openssl enc -decrypt -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
+  openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -md sha256 \
     -pass env:BACKUP_ENCRYPTION_PASSWORD \
     -in "${backup_path}" \
     | gzip -dc \
