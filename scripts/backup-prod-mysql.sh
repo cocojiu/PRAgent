@@ -55,7 +55,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command_name in awk cut date df docker find gzip mktemp openssl seq sha256sum sleep wc; do
+for command_name in awk cut date df docker find gzip mktemp openssl seq sha256sum sleep tail wc; do
   command -v "${command_name}" >/dev/null 2>&1 \
     || fail "missing_required_command_${command_name}"
 done
@@ -358,11 +358,19 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     | docker exec --interactive "${verify_container}" sh -lc \
         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --user=root --binary-mode=1'
 
-  docker exec "${verify_container}" sh -lc \
+  if docker exec "${verify_container}" sh -lc \
     'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqlcheck --user=root --check --silent --databases "$1"' \
     sh "${database_name}" \
-    >"${mysqlcheck_log}" 2>&1 \
-    || fail "isolated_mysqlcheck_failed"
+    >"${mysqlcheck_log}" 2>&1; then
+    :
+  else
+    mysqlcheck_exit_code=$?
+    echo "MYSQLCHECK_EXIT_CODE=${mysqlcheck_exit_code}" >&2
+    echo "MYSQLCHECK_DIAGNOSTIC_BEGIN" >&2
+    tail -n 40 "${mysqlcheck_log}" >&2
+    echo "MYSQLCHECK_DIAGNOSTIC_END" >&2
+    fail "isolated_mysqlcheck_failed"
+  fi
 
   mysql_query "${verify_container}" "${database_name}" "${MANIFEST_SQL}" >"${restored_manifest_file}"
   exact_row_count="$(awk -F '\t' '{ total += $2 } END { print total + 0 }' "${restored_manifest_file}")"
