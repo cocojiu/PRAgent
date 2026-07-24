@@ -107,6 +107,8 @@ mapfile -d '' -t source_files < <(
 
 legacy_backup_count="${#source_files[@]}"
 total_source_bytes=0
+empty_backup_count=0
+migratable_backup_count=0
 for source_path in "${source_files[@]}"; do
   source_basename="${source_path##*/}"
   [[ "${source_path}" == "${SOURCE_ROOT}/${source_basename}" ]] \
@@ -118,9 +120,14 @@ for source_path in "${source_files[@]}"; do
   source_bytes="$(stat -c '%s' -- "${source_path}")"
   [[ "${source_bytes}" =~ ^[0-9]+$ ]] || fail "invalid_legacy_backup_size"
   total_source_bytes=$((total_source_bytes + source_bytes))
+  if (( source_bytes == 0 )); then
+    empty_backup_count=$((empty_backup_count + 1))
+  else
+    migratable_backup_count=$((migratable_backup_count + 1))
+  fi
 done
 
-if [[ "${MODE}" == "encrypt" && "${legacy_backup_count}" -gt 0 ]]; then
+if [[ "${MODE}" == "encrypt" && "${migratable_backup_count}" -gt 0 ]]; then
   available_kb="$(df -Pk "${DESTINATION_ROOT}" | awk 'NR == 2 { print $4 }')"
   [[ "${available_kb}" =~ ^[0-9]+$ ]] || fail "invalid_available_disk_space"
   required_kb=$(( (total_source_bytes / 1024) + 65536 ))
@@ -131,6 +138,8 @@ inventory_timestamp="$(date -u +'%Y%m%dT%H%M%SZ')"
 echo "OPERATION=${MODE}"
 echo "INVENTORY_TIMESTAMP_UTC=${inventory_timestamp}"
 echo "LEGACY_BACKUP_COUNT=${legacy_backup_count}"
+echo "EMPTY_BACKUP_COUNT=${empty_backup_count}"
+echo "MIGRATABLE_BACKUP_COUNT=${migratable_backup_count}"
 echo "TOTAL_SOURCE_BYTES=${total_source_bytes}"
 
 encrypted_backup_count=0
@@ -162,7 +171,17 @@ for source_path in "${source_files[@]}"; do
   echo "LEGACY_${file_index}_SOURCE_MTIME_UTC=${source_mtime_utc}"
   echo "LEGACY_${file_index}_SOURCE_SHA256=${source_sha256}"
 
+  if (( source_bytes == 0 )); then
+    echo "LEGACY_${file_index}_CLASSIFICATION=empty"
+    echo "LEGACY_${file_index}_MIGRATION_STATUS=skipped_empty"
+    echo "LEGACY_${file_index}_ROUNDTRIP_VERIFIED=skipped"
+    continue
+  fi
+
+  echo "LEGACY_${file_index}_CLASSIFICATION=nonempty"
   if [[ "${MODE}" != "encrypt" ]]; then
+    echo "LEGACY_${file_index}_MIGRATION_STATUS=not_requested"
+    echo "LEGACY_${file_index}_ROUNDTRIP_VERIFIED=not_requested"
     continue
   fi
 
