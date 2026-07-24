@@ -203,12 +203,13 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 
 ## 生产数据库备份
 
-生产 MySQL 逻辑备份通过 GitHub Actions 的 `Production MySQL Backup` workflow 手动执行。工作流复用 production environment 的 SSH 部署凭据，把 `scripts/backup-prod-mysql.sh` 上传到服务器后运行；数据库密码只在 MySQL 容器内部通过 `MYSQL_PWD` 使用，备份加密密码只通过 SSH 标准输入传递，两者均不会写入命令参数或日志。
+生产 MySQL 逻辑备份通过 GitHub Actions 的 `Production MySQL Backup` workflow 执行：每天北京时间 03:30（UTC 19:30）自动运行，也可手动触发。工作流复用 production environment 的 SSH 部署凭据，把受限备份与轮换脚本上传到服务器后运行；数据库密码只在 MySQL 容器内部通过 `MYSQL_PWD` 使用，备份加密密码只通过 SSH 标准输入传递，两者均不会写入命令参数或日志。定时运行强制执行隔离恢复验证；手动关闭恢复验证时不会执行保留策略。
 
 - 备份以 `--single-transaction --quick --routines --triggers --events` 创建一致性逻辑快照，经 gzip 压缩后使用 AES-256-CBC、PBKDF2-SHA-256 和 200000 次迭代加密。
 - 加密文件和独立 SHA-256 校验文件保存到服务器 `/opt/repoguard/backups/mysql/`，目录权限为 `0700`；工作流不上传业务数据到 GitHub Artifact。
 - 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，校验源库与恢复库的表数量及表名集合，逐表执行 `CHECK TABLE`，并记录加密文件与解密逻辑转储的 SHA-256 指纹和恢复库精确行数。
 - 临时容器、临时卷和中间文件在成功或失败时均按固定名称前缀清理；生产数据库只读，不创建演练 schema。
+- 日常备份仅在新备份加密校验、隔离恢复和生产外部健康检查均成功后执行保留策略；轮换前会校验根目录全部日常备份与 `.sha256` 文件一一对应且内容一致，按 UTC 文件名倒序保留最近 7 份。`/opt/repoguard/backups/mysql/legacy/` 被固定排除，不参与自动删除；轮换后再次检查备份数量、当前备份 SHA-256 和生产健康。
 - 历史明文备份通过 `Production MySQL Legacy Backup Migration` workflow 处理：先以 `inventory` 只读盘点顶层 `.sql` 的路径、大小、修改时间和 SHA-256，并区分空文件与可迁移备份；再以 `encrypt` 仅对非空文件在 `/opt/repoguard/backups/mysql/legacy/` 创建加密副本，并校验密文 SHA-256 与解密后源文件 SHA-256 完全一致。该流程不删除明文；删除必须在核对精确清单后单独确认。
 - 不要直接轮换 `REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`。轮换前必须先重新加密仍需保留的历史备份，并在密码管理器中保存恢复密钥副本。
 
@@ -284,6 +285,7 @@ RepoGuard / RepoGuard Review Observability
 
 ## 优化进度
 
+- 2026-07-24 17:53:06（Asia/Shanghai）：启动生产 MySQL 每日自动加密备份与 7 份轮换。计划在现有 `Production MySQL Backup` workflow 增加 UTC 19:30（北京时间次日 03:30）定时触发，定时运行强制执行隔离恢复；新增受限保留脚本，只识别 `/opt/repoguard/backups/mysql/` 直属且符合 UTC 时间戳命名的日常密文，要求全部密文与 `.sha256` 一一对应并重新验算，当前新备份必须是最新且 SHA-256 与本次运行输出一致。只有新备份、隔离恢复及生产健康检查全部成功才按时间倒序保留最近 7 份，并在删除前再次核对候选 stat 与哈希；`mysql/legacy/` 固定排除，轮换后再次校验备份数量、当前密文与生产健康。待本地门禁、完整 CI、主分支合并及首次手动等价生产演练。
 - 2026-07-24 16:29:34（Asia/Shanghai）：经用户按精确清单明确确认后，完成 4 份生产 MySQL 历史明文 SQL 的受限删除。[生产清理运行](https://github.com/cocojiu/PRAgent/actions/runs/30079070771) 在删除前重新核对 4 个路径、合计 457070422 字节及各自源 SHA-256，生成的清单 SHA-256 与确认值 `a14872adbd19c7d9e37ae58aa04c2704e693161d74ad14c7c9f30a0d1936e278` 完全一致；两份非空备份再次通过密文 SHA-256 与解密后源 SHA-256 回环验证，结果为 `ROUNDTRIP_VERIFIED_COUNT=2`、`PREDELETE_VERIFIED=true`。UTC 2026-07-24 08:29:26 删除 4 个确认文件后，顶层明文 `.sql` 数量为 0，结果为 `DELETED_BACKUP_COUNT=4`、`REMAINING_PLAINTEXT_BACKUP_COUNT=0`、`PLAINTEXT_DELETED=true`；两份已验证密文及校验文件继续保留在 `/opt/repoguard/backups/mysql/legacy/`，生产健康状态保持 `UP`。一次性远端删除脚本已在运行中移除，仓库中的一次性删除 workflow 与脚本也随结果提交撤除，避免保留不必要的破坏性入口。
 - 2026-07-24 15:04:56（Asia/Shanghai）：完成生产 MySQL 历史明文备份盘点及非空备份加密。[生产迁移运行](https://github.com/cocojiu/PRAgent/actions/runs/30074203455) 精确识别 4 个顶层 `.sql`、合计 457070422 字节：`/opt/repoguard/backups/pre-perf-fix-20260621-141013.sql` 与 `pre-perf-fix-20260621-141029.sql` 均为 0 字节，SHA-256 均为 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`，已分类为 `skipped_empty`；`pre-perf-fix-20260621-141045.sql` 为 231167663 字节，源 SHA-256 为 `a41540ca1195ca7ce56e1ac3ac69b4a8bd1cf992e5c1d8abc43fa57232fa7e91`，生成的 `mysql/legacy/pre-perf-fix-20260621-141045.sql.gz.enc` 为 16552112 字节、密文 SHA-256 为 `373aa473c9986507cb0b7ac207895ad180ac3cc7badad05b7014e6e4cca7326b`；`pre-v34-repair-20260622-204229.sql` 为 225902759 字节，源 SHA-256 为 `d562a304a58c9f47bead215039b7b2c46a415dfcdcd24230eeeb713c424c3e8e`，生成的 `mysql/legacy/pre-v34-repair-20260622-204229.sql.gz.enc` 为 13871648 字节、密文 SHA-256 为 `58cf4cfb86e042f3f2c9002b9929da9a4e3590bbd9315f2563ab1358c908a269`。两份非空备份均通过密文校验和解密后逐字节 SHA-256 回环验证，结果为 `ENCRYPTED_BACKUP_COUNT=2`、`ROUNDTRIP_VERIFIED_COUNT=2`、`PLAINTEXT_DELETED=false`，生产健康状态保持 `UP`；4 份明文原件继续保留，等待按上述精确清单单独确认删除。
 - 2026-07-24 14:05:32（Asia/Shanghai）：启动 4 份生产 MySQL 历史明文备份的安全收敛。新增独立的 `inventory|encrypt` 手动工作流与受限脚本，源目录固定为 `/opt/repoguard/backups` 顶层、密文目录固定为 `/opt/repoguard/backups/mysql/legacy/`；先只读记录每份 `.sql` 的精确路径、字节数、UTC 修改时间和 SHA-256，并把 0 字节文件明确分类为不可用，再仅对非空文件顺序创建 gzip + AES-256-CBC/PBKDF2-SHA-256 密文，校验密文 SHA-256 及解密后逐字节 SHA-256。脚本禁止符号链接和越界路径，预检磁盘余量，源文件在处理期间发生变化即失败，并在失败时回滚本轮新建密文；明文删除能力刻意不纳入本流程，待生产盘点、加密和复核全部通过后再按精确清单请求确认。
