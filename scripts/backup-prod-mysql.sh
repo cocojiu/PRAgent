@@ -205,7 +205,7 @@ SQL
 temporary_dir="$(mktemp -d /tmp/repoguard-mysql-backup.XXXXXX)"
 source_manifest_file="${temporary_dir}/source.manifest"
 restored_manifest_file="${temporary_dir}/restored.manifest"
-mysqlcheck_log="${temporary_dir}/mysqlcheck.log"
+table_check_log="${temporary_dir}/table-check.log"
 
 mysql_version="$(mysql_query "${MYSQL_CONTAINER}" "${database_name}" 'SELECT VERSION();')"
 source_stats="$(mysql_query "${MYSQL_CONTAINER}" "${database_name}" "
@@ -358,20 +358,6 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     | docker exec --interactive "${verify_container}" sh -lc \
         'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --user=root --binary-mode=1'
 
-  if docker exec "${verify_container}" sh -lc \
-    'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqlcheck --user=root --check --silent --databases "$1"' \
-    sh "${database_name}" \
-    >"${mysqlcheck_log}" 2>&1; then
-    :
-  else
-    mysqlcheck_exit_code=$?
-    echo "MYSQLCHECK_EXIT_CODE=${mysqlcheck_exit_code}" >&2
-    echo "MYSQLCHECK_DIAGNOSTIC_BEGIN" >&2
-    tail -n 40 "${mysqlcheck_log}" >&2
-    echo "MYSQLCHECK_DIAGNOSTIC_END" >&2
-    fail "isolated_mysqlcheck_failed"
-  fi
-
   mysql_query "${verify_container}" "${database_name}" "${MANIFEST_SQL}" >"${restored_manifest_file}"
   exact_row_count="$(awk -F '\t' '{ total += $2 } END { print total + 0 }' "${restored_manifest_file}")"
   table_count="$(mysql_query "${verify_container}" "${database_name}" "
@@ -380,6 +366,53 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     WHERE TABLE_SCHEMA = DATABASE()
       AND TABLE_TYPE = 'BASE TABLE';
   ")"
+  case "${table_count}" in
+    *[!0-9]* | "")
+      fail "invalid_restored_table_count"
+      ;;
+  esac
+
+  : >"${table_check_log}"
+  checked_table_count=0
+  if (( table_count > 0 )); then
+    while IFS=$'\t' read -r table_name _; do
+      case "${table_name}" in
+        *[!A-Za-z0-9_]* | "")
+          fail "unsupported_restored_table_name"
+          ;;
+      esac
+
+      if mysql_query \
+        "${verify_container}" \
+        "${database_name}" \
+        "CHECK TABLE \`${table_name}\`;" \
+        >>"${table_check_log}" 2>&1; then
+        checked_table_count=$((checked_table_count + 1))
+      else
+        echo "TABLE_CHECK_DIAGNOSTIC_BEGIN" >&2
+        tail -n 40 "${table_check_log}" >&2
+        echo "TABLE_CHECK_DIAGNOSTIC_END" >&2
+        fail "isolated_table_check_command_failed"
+      fi
+    done <"${restored_manifest_file}"
+  fi
+
+  (( checked_table_count == table_count )) \
+    || fail "isolated_table_check_count_mismatch"
+  if (( table_count > 0 )) && ! awk -F '\t' '
+    NF != 4 || $2 != "check" || $3 != "status" || $4 != "OK" {
+      invalid = 1
+    }
+    END {
+      exit invalid ? 1 : 0
+    }
+  ' "${table_check_log}"; then
+    echo "TABLE_CHECK_DIAGNOSTIC_BEGIN" >&2
+    tail -n 40 "${table_check_log}" >&2
+    echo "TABLE_CHECK_DIAGNOSTIC_END" >&2
+    fail "isolated_table_check_failed"
+  fi
+
   restored_dump_sha256="$(dump_database "${verify_container}" "${database_name}" | sha256sum | cut -d ' ' -f 1)"
   [[ "${restored_dump_sha256}" == "${logical_dump_sha256}" ]] \
     || fail "restored_logical_dump_mismatch"

@@ -207,7 +207,7 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 
 - 备份以 `--single-transaction --quick --routines --triggers --events` 创建一致性逻辑快照，经 gzip 压缩后使用 AES-256-CBC、PBKDF2-SHA-256 和 200000 次迭代加密。
 - 加密文件和独立 SHA-256 校验文件保存到服务器 `/opt/repoguard/backups/mysql/`，目录权限为 `0700`；工作流不上传业务数据到 GitHub Artifact。
-- 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，执行 `mysqlcheck`，并将解密后的原始逻辑备份与恢复后重新导出的规范化 SQL 做 SHA-256 对比。
+- 默认在无网络、限制 CPU/内存的临时 MySQL 容器和专用临时卷中恢复，逐表执行 `CHECK TABLE`，并将解密后的原始逻辑备份与恢复后重新导出的规范化 SQL 做 SHA-256 对比。
 - 临时容器、临时卷和中间文件在成功或失败时均按固定名称前缀清理；生产数据库只读，不创建演练 schema。
 - 不要直接轮换 `REPOGUARD_BACKUP_ENCRYPTION_PASSWORD`。轮换前必须先重新加密仍需保留的历史备份，并在密码管理器中保存恢复密钥副本。
 
@@ -283,7 +283,7 @@ RepoGuard / RepoGuard Review Observability
 
 ## 优化进度
 
-- 2026-07-24 11:56:12（Asia/Shanghai）：启动生产 MySQL 可恢复性闭环。现有仓库只有业务层 `backupReference` 审计字段，服务器历史脚本也仅生成明文 SQL，缺少事务一致性参数、加密、恢复校验和临时资源清理；新增手动 `Production MySQL Backup` 工作流与受限运维脚本，计划使用 GitHub Secret 中的独立随机密钥生成 gzip + AES-256/PBKDF2 加密备份，仅把加密文件留在服务器，并在无网络、限 CPU/内存的隔离 MySQL 容器中执行恢复、`mysqlcheck`、精确行数统计和规范化逻辑转储哈希比对。流程会先校验容器健康、InnoDB 引擎、磁盘和内存余量，生产库全程只读，待本地门禁、主分支合并和首次生产演练验证。
+- 2026-07-24 11:56:12（Asia/Shanghai）：启动生产 MySQL 可恢复性闭环。现有仓库只有业务层 `backupReference` 审计字段，服务器历史脚本也仅生成明文 SQL，缺少事务一致性参数、加密、恢复校验和临时资源清理；新增手动 `Production MySQL Backup` 工作流与受限运维脚本，计划使用 GitHub Secret 中的独立随机密钥生成 gzip + AES-256/PBKDF2 加密备份，仅把加密文件留在服务器，并在无网络、限 CPU/内存的隔离 MySQL 容器中执行恢复、逐表 `CHECK TABLE`、精确行数统计和规范化逻辑转储哈希比对。流程会先校验容器健康、InnoDB 引擎、磁盘和内存余量，生产库全程只读，待本地门禁、主分支合并和首次生产演练验证。
 - 2026-07-22 12:35:32（Asia/Shanghai）：启动生产可用性告警无停机演练。在长期监控的 `workflow_dispatch` 中增加默认关闭的布尔型 `simulate_failure` 开关，仅在有写权限的用户手动触发时向探测报告追加一条 `synthetic-drill` 合成失败，不修改生产 DNS、CDN、容器或业务流量；告警 Issue 会明确标注“手动演练”，沿用真实故障的去重、自动指派和失败通知路径，随后以正常手动检查验证恢复留言与自动关闭。定时触发没有该输入，始终执行真实端点检查，待工作流校验、合并及故障/恢复双向演练。
 - 2026-07-22 11:12:39（Asia/Shanghai）：启动生产可用性长期监控闭环。将已过期并自动停用的 24 小时生产观测改为每小时第 17、47 分钟持续执行，使用 GitHub 托管运行器对 `/actuator/health`、首页、登录页、Overview 和匿名鉴权端点实施带网络重试的外部探测，同时记录解析、连接、TTFB、总耗时、边缘 IP 与缓存状态；健康接口必须返回 `UP`，匿名鉴权必须保持 `401`，受保护端点若被边缘缓存命中则判定失败。故障时自动创建唯一 GitHub Issue，持续故障只更新同一 Issue，恢复后自动留言并关闭，以 Actions 失败通知和 Issue 通知形成无需额外密钥、无告警风暴的单人运维闭环；待工作流校验、主分支合并、重新启用和首次生产运行验证。
 - 2026-07-21 23:21:20（Asia/Shanghai）：启动 Overview CDN/LCP 与 CLS 第六轮闭环优化。阿里云 ESA 免费版已为 `pragent.top` 的 `/` 和 `/repoguard/*` 启用 120 秒边缘 HTML 缓存，浏览器继续遵循源站 `no-cache`；重复请求已验证 `MISS → HIT`，`/api/v1/auth/me` 保持 `401 DYNAMIC`，`/actuator/health` 保持 `200 DYNAMIC`，现有登录态正常。切换后的受控桌面热样本在链路瞬时抖动（TTFB 2617 ms）下出现 LCP 8668 ms、CLS 0.2001，代码侧进一步统一 154px 指标骨架/实卡最小高度、390px 图表卡和 300px 空状态/图表内容高度，并预留稳定滚动条槽，避免摘要与图表异步数据到达时改变首屏几何；性能诊断新增不采集业务文本的最大单次布局偏移元素与前后矩形归因，便于精确确认残余 CLS 来源。已通过前端类型检查、Lint、31 个测试文件共 110 项测试、生产构建和包体预算；首屏 JavaScript/CSS 为 90.3/150.0 KiB 与 11.8/24.0 KiB gzip，待 JDK 25 CI、精确镜像部署及生产 LCP/CLS 重复复测。
