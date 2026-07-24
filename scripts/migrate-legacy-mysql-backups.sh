@@ -14,6 +14,15 @@ fail() {
   exit 1
 }
 
+report_unexpected_error() {
+  local exit_code=$?
+  local line_number="$1"
+
+  echo "ERROR=unexpected_failure" >&2
+  echo "ERROR_LINE=${line_number}" >&2
+  exit "${exit_code}"
+}
+
 cleanup() {
   local exit_code=$?
   local file_path
@@ -40,6 +49,7 @@ cleanup() {
   unset BACKUP_ENCRYPTION_PASSWORD
   return "${exit_code}"
 }
+trap 'report_unexpected_error "${LINENO}"' ERR
 trap cleanup EXIT
 
 for command_name in awk chmod date df find gzip mkdir mv openssl rm sha256sum sort stat wc; do
@@ -107,7 +117,7 @@ for source_path in "${source_files[@]}"; do
 
   source_bytes="$(stat -c '%s' -- "${source_path}")"
   [[ "${source_bytes}" =~ ^[0-9]+$ ]] || fail "invalid_legacy_backup_size"
-  (( total_source_bytes += source_bytes ))
+  total_source_bytes=$((total_source_bytes + source_bytes))
 done
 
 if [[ "${MODE}" == "encrypt" && "${legacy_backup_count}" -gt 0 ]]; then
@@ -128,7 +138,7 @@ roundtrip_verified_count=0
 file_index=0
 
 for source_path in "${source_files[@]}"; do
-  (( file_index += 1 ))
+  file_index=$((file_index + 1))
   source_basename="${source_path##*/}"
   source_stat_before="$(stat -c '%s|%Y|%y|%i' -- "${source_path}")"
   IFS='|' read -r \
@@ -267,8 +277,8 @@ for source_path in "${source_files[@]}"; do
     || fail "legacy_backup_checksum_changed_before_completion"
 
   encrypted_bytes="$(stat -c '%s' -- "${encrypted_path}")"
-  (( encrypted_backup_count += 1 ))
-  (( roundtrip_verified_count += 1 ))
+  encrypted_backup_count=$((encrypted_backup_count + 1))
+  roundtrip_verified_count=$((roundtrip_verified_count + 1))
 
   echo "LEGACY_${file_index}_ENCRYPTED_PATH=${encrypted_path}"
   echo "LEGACY_${file_index}_ENCRYPTED_BYTES=${encrypted_bytes}"
