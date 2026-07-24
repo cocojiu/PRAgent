@@ -337,7 +337,12 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
       fail "isolated_mysql_exited_before_ready"
     fi
     if docker exec "${verify_container}" sh -lc \
-      'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysqladmin --user=root ping --silent' \
+      'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql \
+        --batch \
+        --skip-column-names \
+        --connect-timeout=2 \
+        --user=root \
+        --execute="SELECT 1"' \
       >/dev/null 2>&1; then
       restore_ready="true"
       break
