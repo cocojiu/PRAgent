@@ -126,6 +126,11 @@ jobs:
           echo "DOCKER_COMPOSE_VERSION=$(docker compose version --short)"
           echo "REMOTE_PRODUCTION_COMPOSE_SHA256=$(sha256sum docker-compose.prod.yml | awk '{ print $1 }')"
           echo "ENV_COMPOSE_PROJECT_NAME=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
+          if grep -q '^GRAFANA_ADMIN_PASSWORD=.' .env; then
+            echo "ENV_GRAFANA_ADMIN_PASSWORD_PRESENT=true"
+          else
+            echo "ENV_GRAFANA_ADMIN_PASSWORD_PRESENT=false"
+          fi
 
           if docker compose --env-file .env -f docker-compose.prod.yml config --services >"${production_config_stdout}" 2>"${production_config_stderr}"; then
             echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
