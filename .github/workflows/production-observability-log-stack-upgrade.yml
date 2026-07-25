@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Read-only preflight, disposable canary, or production log-stack upgrade
+        description: Read-only preflight, disposable canary, production upgrade, or legacy recovery
         required: true
         default: preflight
         type: choice
@@ -12,8 +12,9 @@ on:
           - preflight
           - canary
           - upgrade
+          - recover
       confirmation:
-        description: For canary or upgrade, enter the exact confirmation phrase shown in the workflow
+        description: For canary, upgrade, or recovery, enter the exact confirmation phrase shown in the workflow
         required: false
         type: string
 
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   upgrade:
-    name: ${{ inputs.action == 'upgrade' && 'Upgrade production log stack' || inputs.action == 'canary' && 'Canary upgraded log stack' || 'Log stack preflight' }}
+    name: ${{ inputs.action == 'recover' && 'Recover legacy log stack' || inputs.action == 'upgrade' && 'Upgrade production log stack' || inputs.action == 'canary' && 'Canary upgraded log stack' || 'Log stack preflight' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
@@ -35,6 +36,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Validate immutable upgrade assets
+        if: inputs.action != 'recover'
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
@@ -118,7 +120,120 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
+      - name: Recover legacy log stack after failed upgrade
+        if: inputs.action == 'recover'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test "${CONFIRMATION}" = "RECOVER_REPOGUARD_LOG_STACK" || {
+            echo "Confirmation does not match RECOVER_REPOGUARD_LOG_STACK." >&2
+            exit 1
+          }
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" <<'REMOTE_RECOVER'
+          set -eu
+          legacy_loki_image='grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08'
+          legacy_promtail_image='grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b'
+          old_loki_volume=app_repoguard_loki_data
+          project=repoguard-observability
+
+          wait_http() {
+            url="$1"
+            pattern="$2"
+            attempts="${3:-90}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null \
+                | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            docker inspect --format \
+              'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+              repoguard-loki >&2 || true
+            docker logs --tail 200 repoguard-loki >&2 || true
+            return 1
+          }
+
+          command -v docker >/dev/null 2>&1
+          command -v curl >/dev/null 2>&1
+          docker info >/dev/null 2>&1
+          cd "${DEPLOY_PATH}"
+          test -s .env
+          test -s docker-compose.observability.yml
+          test -s config/observability/docker-compose.production.yml
+          docker volume inspect "${old_loki_volume}" >/dev/null
+
+          compose_legacy() {
+            docker compose -p "${project}" --env-file .env \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml "$@"
+          }
+          services="$(compose_legacy config --services | sort | paste -sd, -)"
+          test "${services}" = "grafana,loki,promtail" || {
+            echo "Refusing recovery with unexpected Compose services: ${services}" >&2
+            exit 1
+          }
+          test "$(docker inspect --format '{{.State.Status}}' repoguard-promtail)" = "running"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-promtail)" = "${legacy_promtail_image}"
+          ! docker inspect repoguard-alloy >/dev/null 2>&1
+          ! docker inspect repoguard-docker-proxy >/dev/null 2>&1
+
+          if docker inspect repoguard-loki >/dev/null 2>&1; then
+            test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${legacy_loki_image}"
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' \
+              repoguard-loki | grep -qx "${old_loki_volume}"
+            docker start repoguard-loki >/dev/null
+          else
+            compose_legacy up -d --no-deps loki
+          fi
+
+          wait_http http://127.0.0.1:3100/ready '^ready' 90
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
+            | grep -q '"version":"3.4.2"'
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${legacy_loki_image}"
+          test "$(docker inspect --format '{{.State.Status}}' repoguard-loki)" = "running"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
+          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
+          docker inspect --format \
+            '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-loki | grep -qx "${old_loki_volume}"
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/api/health \
+            | grep -q '"database"[[:space:]]*:[[:space:]]*"ok"'
+
+          echo "LEGACY_LOG_STACK_RECOVERY_OK=true"
+          echo "LOKI_VERSION=3.4.2"
+          echo "LOKI_VOLUME=${old_loki_volume}"
+          echo "PROMTAIL_RUNNING=true"
+          echo "GRAFANA_HEALTHY=true"
+          REMOTE_RECOVER
+
       - name: Production preflight
+        if: inputs.action != 'recover'
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
@@ -283,7 +398,7 @@ jobs:
           REMOTE_PREFLIGHT
 
       - name: Validate confirmation and upload staged assets
-        if: inputs.action != 'preflight'
+        if: inputs.action == 'canary' || inputs.action == 'upgrade'
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
