@@ -535,13 +535,23 @@ jobs:
           (cd "$(dirname "${backup_archive}")" && sha256sum -c loki-data.tar.gz.sha256 >/dev/null)
           echo "CANARY_STAGE=backup-verified"
 
+          ensure_image() {
+            image="$1"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              echo "IMAGE_CACHE_HIT=${image}"
+              return 0
+            fi
+            docker pull "${image}"
+            docker image inspect "${image}" >/dev/null
+          }
+
           echo "CANARY_STAGE=pulling-images"
-          docker pull "${helper_image}"
-          docker pull "${loki_35_image}"
-          docker pull "${loki_36_image}"
-          docker pull "${loki_37_image}"
-          docker pull "${alloy_image}"
-          docker pull "${proxy_image}"
+          ensure_image "${helper_image}"
+          ensure_image "${loki_35_image}"
+          ensure_image "${loki_36_image}"
+          ensure_image "${loki_37_image}"
+          ensure_image "${alloy_image}"
+          ensure_image "${proxy_image}"
           echo "CANARY_STAGE=images-ready"
           docker network create \
             --label com.repoguard.purpose=observability-log-canary \
@@ -879,12 +889,22 @@ jobs:
           ! docker inspect "${old_loki_name}" >/dev/null 2>&1
           ! docker inspect "${old_promtail_name}" >/dev/null 2>&1
 
-          docker pull "${helper_image}"
-          docker pull "${loki_35_image}"
-          docker pull "${loki_36_image}"
-          docker pull "${loki_37_image}"
-          docker pull "${alloy_image}"
-          docker pull "${proxy_image}"
+          ensure_image() {
+            image="$1"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              echo "IMAGE_CACHE_HIT=${image}"
+              return 0
+            fi
+            docker pull "${image}"
+            docker image inspect "${image}" >/dev/null
+          }
+
+          ensure_image "${helper_image}"
+          ensure_image "${loki_35_image}"
+          ensure_image "${loki_36_image}"
+          ensure_image "${loki_37_image}"
+          ensure_image "${alloy_image}"
+          ensure_image "${proxy_image}"
           for image in "${loki_35_image}" "${loki_36_image}" "${loki_37_image}"; do
             docker run --rm --network none --read-only \
               --cap-drop ALL --security-opt no-new-privileges \
