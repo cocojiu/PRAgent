@@ -35,7 +35,7 @@ services:
     command:
       - -listenip=0.0.0.0
       - -allowfrom=alloy
-      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)
+      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks/[A-Za-z0-9_.-]+|events)
       - -allowHEAD=/_ping
       - -allowhealthcheck
       - -watchdoginterval=30

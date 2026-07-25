@@ -236,6 +236,7 @@ jobs:
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
             printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+            printf '%s\n' "${proxy_args}" | grep -Fq -- 'networks/[A-Za-z0-9_.-]+'
             ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
             test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
             curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready \
@@ -622,7 +623,7 @@ jobs:
             "${proxy_image}" \
             -listenip=0.0.0.0 \
             -allowfrom=alloy \
-            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)' \
+            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks/[A-Za-z0-9_.-]+|events)' \
             -allowHEAD=/_ping \
             -allowhealthcheck \
             -watchdoginterval=30 \
@@ -635,17 +636,22 @@ jobs:
             | grep -qx "${docker_socket_gid}"
           proxy_policy_statuses="$(docker run --rm \
             --network "${proxy_network_name}" --network-alias alloy \
+            --env PROXY_NETWORK_NAME="${proxy_network_name}" \
             --entrypoint /bin/sh "${helper_image}" -ec '
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" \
+                "http://docker-proxy:2375/networks/${PROXY_NETWORK_NAME}")"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
               denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
-              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+              printf "%s,%s,%s,%s" \
+                "${get_status}" "${network_get_status}" "${post_status}" "${denied_status}"
             ')"
-          test "${proxy_policy_statuses}" = "200,405,403"
+          test "${proxy_policy_statuses}" = "200,200,405,403"
           echo "CANARY_STAGE=docker-proxy-read-only"
 
           echo "CANARY_STAGE=alloy-starting"
@@ -721,6 +727,7 @@ jobs:
           echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_GET_ALLOWED=true"
+          echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"
           echo "DOCKER_PROXY_POST_DENIED=true"
           echo "SOURCE_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_archive}.sha256")"
           REMOTE_CANARY
@@ -1007,14 +1014,18 @@ jobs:
             --entrypoint /bin/sh "${helper_image}" -ec '
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" \
+                http://docker-proxy:2375/networks/repoguard_observability_docker_api)"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
               denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
-              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+              printf "%s,%s,%s,%s" \
+                "${get_status}" "${network_get_status}" "${post_status}" "${denied_status}"
             ')"
-          test "${proxy_policy_statuses}" = "200,405,403"
+          test "${proxy_policy_statuses}" = "200,200,405,403"
           curl -fsS --connect-timeout 5 --max-time 10 \
             http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
             | grep -q '"version":"3.7.4"'
@@ -1070,6 +1081,7 @@ jobs:
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
           printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+          printf '%s\n' "${proxy_args}" | grep -Fq -- 'networks/[A-Za-z0-9_.-]+'
           ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
           test "$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' repoguard-docker-proxy)" = "repoguard_observability_docker_api,"
           docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' repoguard-alloy \
@@ -1114,6 +1126,7 @@ jobs:
           echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_VERSION=1.12.3"
+          echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"
           echo "DOCKER_PROXY_POST_DENIED=true"
           REMOTE_UPGRADE
 
