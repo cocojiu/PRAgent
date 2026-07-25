@@ -116,13 +116,21 @@ jobs:
           production_config_stderr="$(mktemp)"
           observability_config_stdout="$(mktemp)"
           observability_config_stderr="$(mktemp)"
-          trap 'rm -f "${orphan_stderr}" "${production_config_stdout}" "${production_config_stderr}" "${observability_config_stdout}" "${observability_config_stderr}"' EXIT
+          loki_ready_body="$(mktemp)"
+          loki_build_body="$(mktemp)"
+          loki_labels_body="$(mktemp)"
+          trap 'rm -f "${orphan_stderr}" "${production_config_stdout}" "${production_config_stderr}" "${observability_config_stdout}" "${observability_config_stderr}" "${loki_ready_body}" "${loki_build_body}" "${loki_labels_body}"' EXIT
 
           echo "INVENTORY_TIMESTAMP_UTC=$(date -u +'%Y%m%dT%H%M%SZ')"
           echo "DOCKER_SERVER_VERSION=$(docker version --format '{{.Server.Version}}')"
           echo "DOCKER_COMPOSE_VERSION=$(docker compose version --short)"
           echo "REMOTE_PRODUCTION_COMPOSE_SHA256=$(sha256sum docker-compose.prod.yml | awk '{ print $1 }')"
           echo "ENV_COMPOSE_PROJECT_NAME=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
+          if grep -q '^GRAFANA_ADMIN_PASSWORD=.' .env; then
+            echo "ENV_GRAFANA_ADMIN_PASSWORD_PRESENT=true"
+          else
+            echo "ENV_GRAFANA_ADMIN_PASSWORD_PRESENT=false"
+          fi
 
           if docker compose --env-file .env -f docker-compose.prod.yml config --services >"${production_config_stdout}" 2>"${production_config_stderr}"; then
             echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
@@ -170,6 +178,8 @@ jobs:
             echo "CONTAINER_${container_index}_EXISTS=true"
             echo "CONTAINER_${container_index}_STATUS=$(docker inspect --format '{{.State.Status}}' "${container_name}")"
             echo "CONTAINER_${container_index}_HEALTH=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${container_name}")"
+            echo "CONTAINER_${container_index}_RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "${container_name}")"
+            echo "CONTAINER_${container_index}_STARTED_AT=$(docker inspect --format '{{.State.StartedAt}}' "${container_name}")"
             echo "CONTAINER_${container_index}_RESTART_POLICY=$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "${container_name}")"
             echo "CONTAINER_${container_index}_COMPOSE_PROJECT=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_name}")"
             echo "CONTAINER_${container_index}_COMPOSE_SERVICE=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_name}")"
@@ -180,6 +190,7 @@ jobs:
             echo "CONTAINER_${container_index}_IMAGE_ID=${image_id}"
             echo "CONTAINER_${container_index}_IMAGE_REPO_DIGESTS=$(docker image inspect --format '{{json .RepoDigests}}' "${image_id}")"
             echo "CONTAINER_${container_index}_NETWORKS=$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' "${container_name}")"
+            echo "CONTAINER_${container_index}_PORTS=$(docker inspect --format '{{json .NetworkSettings.Ports}}' "${container_name}")"
             echo "CONTAINER_${container_index}_MOUNTS=$(docker inspect --format '{{range .Mounts}}{{printf "%s|%s|%s," .Type .Name .Destination}}{{end}}' "${container_name}")"
             container_volumes="$(docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{printf "%s\n" .Name}}{{end}}{{end}}' "${container_name}")"
             if [ -n "${container_volumes}" ]; then
@@ -203,13 +214,36 @@ jobs:
             echo "GRAFANA_HEALTH_OK=false"
           fi
 
-          loki_ready="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/ready 2>/dev/null | tr -d '\r\n' || true)"
-          if [ -n "${loki_ready}" ]; then
+          loki_ready_http_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+            --output "${loki_ready_body}" --write-out '%{http_code}' http://127.0.0.1:3100/ready 2>/dev/null || true)"
+          echo "LOKI_READY_HTTP_STATUS=${loki_ready_http_status:-000}"
+          loki_ready="$(tr -d '\r\n' < "${loki_ready_body}" | cut -c 1-240)"
+          if [ "${loki_ready_http_status}" = "200" ]; then
             echo "LOKI_READY_OK=true"
-            echo "LOKI_READY_RESPONSE=${loki_ready}"
           else
             echo "LOKI_READY_OK=false"
           fi
+          echo "LOKI_READY_RESPONSE=${loki_ready:-empty}"
+
+          loki_build_http_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+            --output "${loki_build_body}" --write-out '%{http_code}' http://127.0.0.1:3100/loki/api/v1/status/buildinfo 2>/dev/null || true)"
+          echo "LOKI_BUILD_INFO_HTTP_STATUS=${loki_build_http_status:-000}"
+          if [ "${loki_build_http_status}" = "200" ]; then
+            echo "LOKI_BUILD_INFO_OK=true"
+            echo "LOKI_BUILD_INFO_RESPONSE=$(tr -d '\r\n' < "${loki_build_body}" | cut -c 1-480)"
+          else
+            echo "LOKI_BUILD_INFO_OK=false"
+          fi
+
+          loki_labels_http_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+            --output "${loki_labels_body}" --write-out '%{http_code}' http://127.0.0.1:3100/loki/api/v1/labels 2>/dev/null || true)"
+          echo "LOKI_LABELS_HTTP_STATUS=${loki_labels_http_status:-000}"
+          if [ "${loki_labels_http_status}" = "200" ] && grep -q '"status"[[:space:]]*:[[:space:]]*"success"' "${loki_labels_body}"; then
+            echo "LOKI_LABELS_QUERY_OK=true"
+          else
+            echo "LOKI_LABELS_QUERY_OK=false"
+          fi
+          echo "LOKI_ERROR_LOG_COUNT_10M=$(docker logs --since 10m repoguard-loki 2>&1 | grep -Eic 'level=(error|fatal)|(^|[[:space:]])(error|fatal)([[:space:]]|$)' || true)"
           REMOTE_INVENTORY
           ssh_status=$?
           set -e
