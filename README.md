@@ -230,9 +230,11 @@ API 响应通常使用统一 `ApiResponse` 包装。业务错误优先使用稳�
 
 ## 本地日志观测
 
-本地可以使用 Loki + Promtail + Grafana 查看 RepoGuard 日志：
+本地可以使用 Loki + Alloy + Grafana 查看 RepoGuard 日志。Linux 主机需先把 Docker Socket 的实际组 ID 和 Grafana 管理员密码放入当前 shell；Alloy 只通过内部只读 API 代理采集容器日志，不直接挂载 Docker Socket：
 
 ```bash
+export DOCKER_SOCKET_GID="$(stat -c '%g' /var/run/docker.sock)"
+export GRAFANA_ADMIN_PASSWORD='请设置一个独立强密码'
 docker compose -f docker-compose.observability.yml up -d
 ```
 
@@ -244,7 +246,7 @@ http://localhost:3000
 
 默认账号：`admin`
 
-默认密码见本地 `docker-compose.observability.yml` 配置；首次使用后建议立即修改。
+密码为启动前显式设置的 `GRAFANA_ADMIN_PASSWORD`；首次使用后建议立即修改。
 
 如果后端通过 Maven 或 IDE 本地启动，建议让日志写入仓库根目录的 `logs/backend`：
 

@@ -33,6 +33,7 @@ jobs:
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
         run: |
           set -euo pipefail
           compose_args=(
@@ -43,14 +44,14 @@ jobs:
           )
           docker compose "${compose_args[@]}" config --quiet
           services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
-          test "${services}" = "alloy,grafana,loki" || {
+          test "${services}" = "alloy,docker-proxy,grafana,loki" || {
             echo "Unexpected observability service set: ${services}" >&2
             exit 1
           }
           compose_images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
           image_count="$(printf '%s\n' "${compose_images}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
-          test "${image_count}" -eq 3 || {
-            echo "Expected exactly three observability images; found ${image_count}." >&2
+          test "${image_count}" -eq 4 || {
+            echo "Expected exactly four observability images; found ${image_count}." >&2
             exit 1
           }
           while IFS= read -r image; do
@@ -88,6 +89,7 @@ jobs:
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
         run: |
           set -euo pipefail
           compose_args=(

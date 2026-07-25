@@ -38,6 +38,7 @@ jobs:
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
         run: |
           set -euo pipefail
           compose_args=(
@@ -49,7 +50,7 @@ jobs:
           docker compose "${compose_args[@]}" config --quiet
 
           services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
-          test "${services}" = "alloy,grafana,loki" || {
+          test "${services}" = "alloy,docker-proxy,grafana,loki" || {
             echo "Unexpected observability service set: ${services}" >&2
             exit 1
           }
@@ -60,6 +61,7 @@ jobs:
               'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
               'grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7' \
               'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc' \
+              'ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600' \
               | sort
           )"
           test "${images}" = "${expected_images}" || {
@@ -157,12 +159,22 @@ jobs:
           legacy_promtail_image='grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b'
           final_loki_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           final_alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          final_proxy_image='ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600'
           grafana_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
 
           command -v docker >/dev/null 2>&1 || { echo "Docker is unavailable." >&2; exit 1; }
           command -v curl >/dev/null 2>&1 || { echo "curl is unavailable." >&2; exit 1; }
           command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is unavailable." >&2; exit 1; }
+          command -v stat >/dev/null 2>&1 || { echo "stat is unavailable." >&2; exit 1; }
           docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable." >&2; exit 1; }
+          test -S /var/run/docker.sock || { echo "Docker socket is unavailable." >&2; exit 1; }
+          docker_socket_gid="$(stat -c '%g' /var/run/docker.sock)"
+          case "${docker_socket_gid}" in
+            *[!0-9]* | "")
+              echo "Docker socket group id is invalid." >&2
+              exit 1
+              ;;
+          esac
           cd "${DEPLOY_PATH}"
           test -f .env || { echo "Production .env is missing." >&2; exit 1; }
           test -f docker-compose.observability.yml || { echo "Production observability Compose file is missing." >&2; exit 1; }
@@ -197,6 +209,10 @@ jobs:
           if docker inspect repoguard-promtail >/dev/null 2>&1 \
             && ! docker inspect repoguard-alloy >/dev/null 2>&1; then
             deployment_state=legacy
+            ! docker inspect repoguard-docker-proxy >/dev/null 2>&1 || {
+              echo "Unexpected Docker API proxy beside the legacy collector." >&2
+              exit 1
+            }
             check_running_image repoguard-loki "${legacy_loki_image}"
             check_running_image repoguard-promtail "${legacy_promtail_image}"
             docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
@@ -206,8 +222,27 @@ jobs:
             deployment_state=upgraded
             check_running_image repoguard-loki "${final_loki_image}"
             check_running_image repoguard-alloy "${final_alloy_image}"
+            check_running_image repoguard-docker-proxy "${final_proxy_image}"
             docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
               | grep -qx repoguard_observability_loki_data_v37
+            test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
+            test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
+            test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
+            test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-docker-proxy)" = "true"
+            docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' repoguard-docker-proxy \
+              | grep -qx "${docker_socket_gid}"
+            proxy_args="$(docker inspect --format '{{range .Config.Cmd}}{{println .}}{{end}}' repoguard-docker-proxy)"
+            printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
+            printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
+            printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+            ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
+            test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
+            curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready \
+              | grep -q 'Alloy is ready'
+            curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/healthy \
+              | grep -q 'All Alloy components are healthy'
+            test "$(docker inspect --format '{{.RestartCount}}' repoguard-alloy)" = "0"
+            test "$(docker inspect --format '{{.RestartCount}}' repoguard-docker-proxy)" = "0"
           else
             echo "Log collector state is ambiguous; expected exactly one of Promtail or Alloy." >&2
             exit 1
@@ -306,11 +341,14 @@ jobs:
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
           loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          proxy_image='ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600'
           network_name="repoguard-observability-canary-${CANARY_ID}"
+          proxy_network_name="repoguard-observability-canary-docker-api-${CANARY_ID}"
           loki_volume="repoguard-observability-canary-loki-${CANARY_ID}"
           alloy_volume="repoguard-observability-canary-alloy-${CANARY_ID}"
           loki_container="repoguard-loki-canary-${CANARY_ID}"
           alloy_container="repoguard-alloy-canary-${CANARY_ID}"
+          proxy_container="repoguard-docker-proxy-canary-${CANARY_ID}"
           active_loki=false
           active_alloy=false
 
@@ -320,7 +358,9 @@ jobs:
             trap - HUP INT TERM
             set +e
             docker rm -f "${alloy_container}" >/dev/null 2>&1
+            docker rm -f "${proxy_container}" >/dev/null 2>&1
             docker rm -f "${loki_container}" >/dev/null 2>&1
+            docker network rm "${proxy_network_name}" >/dev/null 2>&1
             docker network rm "${network_name}" >/dev/null 2>&1
             docker volume rm "${loki_volume}" "${alloy_volume}" >/dev/null 2>&1
             case "${STAGE_PATH}" in
@@ -342,17 +382,19 @@ jobs:
             stale_stage_count=0
 
             for stale_container in $(docker ps -a --format '{{.Names}}' \
-              | awk '/^repoguard-(loki|alloy)-canary-[0-9]+-[0-9]+$/ { print }'); do
+              | awk '/^repoguard-(loki|alloy|docker-proxy)-canary-[0-9]+-[0-9]+$/ { print }'); do
               if [ "${stale_container}" != "${loki_container}" ] \
-                && [ "${stale_container}" != "${alloy_container}" ]; then
+                && [ "${stale_container}" != "${alloy_container}" ] \
+                && [ "${stale_container}" != "${proxy_container}" ]; then
                 docker rm -f "${stale_container}" >/dev/null
                 stale_container_count=$((stale_container_count + 1))
               fi
             done
 
             for stale_network in $(docker network ls --format '{{.Name}}' \
-              | awk '/^repoguard-observability-canary-[0-9]+-[0-9]+$/ { print }'); do
-              if [ "${stale_network}" != "${network_name}" ]; then
+              | awk '/^repoguard-observability-canary(-docker-api)?-[0-9]+-[0-9]+$/ { print }'); do
+              if [ "${stale_network}" != "${network_name}" ] \
+                && [ "${stale_network}" != "${proxy_network_name}" ]; then
                 docker network rm "${stale_network}" >/dev/null
                 stale_network_count=$((stale_network_count + 1))
               fi
@@ -410,6 +452,25 @@ jobs:
             return 1
           }
 
+          wait_container_healthy() {
+            container_name="$1"
+            attempts="${2:-30}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              health_status="$(docker inspect --format '{{.State.Health.Status}}' "${container_name}")"
+              if [ "${health_status}" = "healthy" ]; then
+                return 0
+              fi
+              if [ "${health_status}" = "unhealthy" ]; then
+                docker logs "${container_name}" >&2
+                return 1
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
           case "${STAGE_PATH}" in
             "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
               ;;
@@ -420,6 +481,14 @@ jobs:
           esac
           test -s "${STAGE_PATH}/config/observability/loki.yml"
           test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
+          test -S /var/run/docker.sock
+          docker_socket_gid="$(stat -c '%g' /var/run/docker.sock)"
+          case "${docker_socket_gid}" in
+            *[!0-9]* | "")
+              echo "Docker socket group id is invalid." >&2
+              exit 1
+              ;;
+          esac
           cleanup_stale_canaries
           echo "CANARY_STAGE=assets-validated"
 
@@ -444,10 +513,14 @@ jobs:
           docker pull "${loki_36_image}"
           docker pull "${loki_37_image}"
           docker pull "${alloy_image}"
+          docker pull "${proxy_image}"
           echo "CANARY_STAGE=images-ready"
           docker network create \
             --label com.repoguard.purpose=observability-log-canary \
             "${network_name}" >/dev/null
+          docker network create --internal \
+            --label com.repoguard.purpose=observability-log-canary \
+            "${proxy_network_name}" >/dev/null
           docker volume create \
             --label com.repoguard.purpose=observability-log-canary \
             "${loki_volume}" >/dev/null
@@ -511,21 +584,63 @@ jobs:
             | grep -q '"version":"3.7.4"'
           echo "CANARY_STAGE=loki-3.7.4-ready"
 
+          echo "CANARY_STAGE=docker-proxy-starting"
+          docker run -d --name "${proxy_container}" \
+            --label com.repoguard.purpose=observability-log-canary \
+            --network "${proxy_network_name}" --network-alias docker-proxy \
+            --read-only --group-add "${docker_socket_gid}" \
+            --memory 64m --restart no \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --health-cmd /healthcheck --health-interval 10s \
+            --health-timeout 5s --health-retries 6 --health-start-period 5s \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            "${proxy_image}" \
+            -listenip=0.0.0.0 \
+            -allowfrom=alloy \
+            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)' \
+            -allowHEAD=/_ping \
+            -allowhealthcheck \
+            -watchdoginterval=30 \
+            -stoponwatchdog \
+            -shutdowngracetime=5 \
+            -loglevel=warn >/dev/null
+          wait_container_healthy "${proxy_container}" 30
+          test "$(docker inspect --format '{{.Config.User}}' "${proxy_container}")" = "65534:65534"
+          docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' "${proxy_container}" \
+            | grep -qx "${docker_socket_gid}"
+          proxy_policy_statuses="$(docker run --rm \
+            --network "${proxy_network_name}" --network-alias alloy \
+            --entrypoint /bin/sh "${helper_image}" -ec '
+              get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --request POST --header "Content-Type: application/json" --data "{}" \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
+              denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
+              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+            ')"
+          test "${proxy_policy_statuses}" = "200,405,403"
+          echo "CANARY_STAGE=docker-proxy-read-only"
+
           echo "CANARY_STAGE=alloy-starting"
-          docker run -d --name "${alloy_container}" \
+          docker create --name "${alloy_container}" \
             --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" \
             --memory 256m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
             -v "${STAGE_PATH}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
             -v "${alloy_volume}:/var/lib/alloy/data" \
-            -v /var/run/docker.sock:/var/run/docker.sock:ro \
             "${alloy_image}" \
             run --server.http.listen-addr=0.0.0.0:12345 \
             --storage.path=/var/lib/alloy/data --disable-reporting \
             /etc/alloy/config.alloy >/dev/null
+          docker network connect --alias alloy "${proxy_network_name}" "${alloy_container}"
+          docker start "${alloy_container}" >/dev/null
           active_alloy=true
-          alloy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${alloy_container}")"
+          alloy_ip="$(docker inspect \
+            --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+            "${alloy_container}")"
           wait_http "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
           wait_http "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
           echo "CANARY_STAGE=alloy-healthy"
@@ -559,6 +674,8 @@ jobs:
           echo "ALLOY_VERSION=1.18.0"
           echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
           echo "ALLOY_PARSING_ERRORS=0"
+          echo "DOCKER_PROXY_GET_ALLOWED=true"
+          echo "DOCKER_PROXY_POST_DENIED=true"
           echo "SOURCE_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_archive}.sha256")"
           REMOTE_CANARY
 
@@ -594,6 +711,7 @@ jobs:
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
           loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          proxy_image='ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600'
           old_loki_name="repoguard-loki-pre-v37-${migration_id}"
           old_promtail_name="repoguard-promtail-pre-alloy-${migration_id}"
           intermediate_name=""
@@ -642,7 +760,8 @@ jobs:
               docker rm -f "${intermediate_name}" >/dev/null 2>&1
             fi
             if [ "${final_start_attempted}" = "true" ]; then
-              docker rm -f repoguard-alloy repoguard-loki >/dev/null 2>&1
+              docker rm -f repoguard-alloy repoguard-docker-proxy repoguard-loki >/dev/null 2>&1
+              docker network rm repoguard_observability_docker_api >/dev/null 2>&1
             fi
             if [ "${assets_promoted}" = "true" ]; then
               if [ -d "${final_config}" ]; then
@@ -696,6 +815,14 @@ jobs:
           test -s "${final_base}"
           test -d "${final_config}"
           test -s "${env_file}"
+          test -S /var/run/docker.sock
+          docker_socket_gid="$(stat -c '%g' /var/run/docker.sock)"
+          case "${docker_socket_gid}" in
+            *[!0-9]* | "")
+              echo "Docker socket group id is invalid." >&2
+              exit 1
+              ;;
+          esac
           ! docker volume inspect "${new_loki_volume}" >/dev/null 2>&1
           ! docker volume inspect "${new_alloy_volume}" >/dev/null 2>&1
           ! docker inspect "${old_loki_name}" >/dev/null 2>&1
@@ -706,6 +833,7 @@ jobs:
           docker pull "${loki_36_image}"
           docker pull "${loki_37_image}"
           docker pull "${alloy_image}"
+          docker pull "${proxy_image}"
           for image in "${loki_35_image}" "${loki_36_image}" "${loki_37_image}"; do
             docker run --rm --network none --read-only \
               --cap-drop ALL --security-opt no-new-privileges \
@@ -788,6 +916,7 @@ jobs:
           env_updated=true
           set_env_key LOKI_DATA_VOLUME_NAME "${new_loki_volume}"
           set_env_key ALLOY_DATA_VOLUME_NAME "${new_alloy_volume}"
+          set_env_key DOCKER_SOCKET_GID "${docker_socket_gid}"
 
           run_production_loki_stage() {
             image="$1"
@@ -821,11 +950,25 @@ jobs:
           run_production_loki_stage "${loki_36_image}" 3.6.13 36
 
           final_start_attempted=true
-          compose_final up -d loki alloy grafana
+          compose_final up -d loki docker-proxy alloy grafana
           wait_http http://127.0.0.1:3100/ready '^ready' 60
           wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 60
           wait_http http://127.0.0.1:9080/-/ready 'Alloy is ready' 60
           wait_http http://127.0.0.1:9080/-/healthy 'All Alloy components are healthy' 60
+          test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
+          proxy_policy_statuses="$(docker run --rm \
+            --network repoguard_observability_docker_api --network-alias alloy \
+            --entrypoint /bin/sh "${helper_image}" -ec '
+              get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --request POST --header "Content-Type: application/json" --data "{}" \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
+              denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
+              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+            ')"
+          test "${proxy_policy_statuses}" = "200,405,403"
           curl -fsS --connect-timeout 5 --max-time 10 \
             http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
             | grep -q '"version":"3.7.4"'
@@ -855,14 +998,32 @@ jobs:
 
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-docker-proxy)" = "${proxy_image}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" = "${project}"
+          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-docker-proxy)" = "${project}"
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
+          test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-docker-proxy)" = "true"
+          docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' repoguard-docker-proxy \
+            | grep -qx "${docker_socket_gid}"
+          proxy_args="$(docker inspect --format '{{range .Config.Cmd}}{{println .}}{{end}}' repoguard-docker-proxy)"
+          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
+          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
+          printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+          ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
+          test "$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' repoguard-docker-proxy)" = "repoguard_observability_docker_api,"
+          docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' repoguard-alloy \
+            | sort | paste -sd, - | grep -qx 'repoguard_observability,repoguard_observability_docker_api'
           docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
             | grep -qx "${new_loki_volume}"
           docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/alloy/data"}}{{.Name}}{{end}}{{end}}' repoguard-alloy \
             | grep -qx "${new_alloy_volume}"
           test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
           test "$(docker inspect --format '{{.RestartCount}}' repoguard-alloy)" = "0"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-docker-proxy)" = "0"
+          test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
           test "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" = "0"
           critical_loki_count="$(docker logs --since 5m repoguard-loki 2>&1 \
             | grep -Eic 'level=fatal|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
@@ -870,6 +1031,9 @@ jobs:
           alloy_error_count="$(docker logs --since 5m repoguard-alloy 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
           test "${alloy_error_count}" -eq 0
+          proxy_error_count="$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
+            | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+          test "${proxy_error_count}" -eq 0
 
           upgrade_verified=true
           docker rm "${old_loki_name}" "${old_promtail_name}" >/dev/null
@@ -886,6 +1050,8 @@ jobs:
           echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
           echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
           echo "ALLOY_PARSING_ERRORS=0"
+          echo "DOCKER_PROXY_VERSION=1.12.3"
+          echo "DOCKER_PROXY_POST_DENIED=true"
           REMOTE_UPGRADE
 
       - name: Summarize preflight-only result

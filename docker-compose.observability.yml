@@ -25,6 +25,46 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  docker-proxy:
+    image: ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600
+    container_name: repoguard-docker-proxy
+    restart: unless-stopped
+    read_only: true
+    group_add:
+      - "${DOCKER_SOCKET_GID:?Set DOCKER_SOCKET_GID to the group id of /var/run/docker.sock}"
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=alloy
+      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)
+      - -allowHEAD=/_ping
+      - -allowhealthcheck
+      - -watchdoginterval=30
+      - -stoponwatchdog
+      - -shutdowngracetime=5
+      - -loglevel=warn
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      com.repoguard.stack: observability
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker_api
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   alloy:
     image: grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
     container_name: repoguard-alloy
@@ -43,11 +83,16 @@ services:
     labels:
       com.repoguard.stack: observability
     depends_on:
-      - loki
+      docker-proxy:
+        condition: service_healthy
+      loki:
+        condition: service_started
     volumes:
       - ./config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - repoguard_alloy_data:/var/lib/alloy/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+      - docker_api
     ports:
       - "${ALLOY_PORT_BIND:-127.0.0.1:9080}:12345"
     mem_limit: 256m
@@ -87,6 +132,9 @@ services:
 networks:
   default:
     name: repoguard_observability
+  docker_api:
+    name: repoguard_observability_docker_api
+    internal: true
 
 volumes:
   repoguard_loki_data:
