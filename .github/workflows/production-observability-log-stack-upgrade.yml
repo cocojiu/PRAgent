@@ -452,22 +452,19 @@ jobs:
             return 1
           }
 
-          wait_container_healthy() {
+          wait_proxy_healthcheck() {
             container_name="$1"
             attempts="${2:-30}"
             attempt=1
             while [ "${attempt}" -le "${attempts}" ]; do
-              health_status="$(docker inspect --format '{{.State.Health.Status}}' "${container_name}")"
-              if [ "${health_status}" = "healthy" ]; then
+              if docker exec "${container_name}" /healthcheck >/dev/null 2>&1; then
                 return 0
-              fi
-              if [ "${health_status}" = "unhealthy" ]; then
-                docker logs "${container_name}" >&2
-                return 1
               fi
               sleep 2
               attempt=$((attempt + 1))
             done
+            docker exec "${container_name}" /healthcheck >&2 || true
+            docker logs "${container_name}" >&2
             return 1
           }
 
@@ -591,8 +588,6 @@ jobs:
             --read-only --group-add "${docker_socket_gid}" \
             --memory 64m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
-            --health-cmd /healthcheck --health-interval 10s \
-            --health-timeout 5s --health-retries 6 --health-start-period 5s \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             "${proxy_image}" \
             -listenip=0.0.0.0 \
@@ -604,7 +599,7 @@ jobs:
             -stoponwatchdog \
             -shutdowngracetime=5 \
             -loglevel=warn >/dev/null
-          wait_container_healthy "${proxy_container}" 30
+          wait_proxy_healthcheck "${proxy_container}" 30
           test "$(docker inspect --format '{{.Config.User}}' "${proxy_container}")" = "65534:65534"
           docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' "${proxy_container}" \
             | grep -qx "${docker_socket_gid}"
