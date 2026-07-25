@@ -87,6 +87,7 @@ jobs:
           inventory_file="${RUNNER_TEMP}/production-observability-inventory.txt"
           remote_inventory_file="${RUNNER_TEMP}/production-observability-remote.txt"
 
+          set +e
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" > "${remote_inventory_file}" <<'REMOTE_INVENTORY'
           set -eu
@@ -115,7 +116,11 @@ jobs:
           }
 
           orphan_stderr="$(mktemp)"
-          trap 'rm -f "${orphan_stderr}"' EXIT
+          production_config_stdout="$(mktemp)"
+          production_config_stderr="$(mktemp)"
+          observability_config_stdout="$(mktemp)"
+          observability_config_stderr="$(mktemp)"
+          trap 'rm -f "${orphan_stderr}" "${production_config_stdout}" "${production_config_stderr}" "${observability_config_stdout}" "${observability_config_stderr}"' EXIT
 
           echo "INVENTORY_TIMESTAMP_UTC=$(date -u +'%Y%m%dT%H%M%SZ')"
           echo "DOCKER_SERVER_VERSION=$(docker version --format '{{.Server.Version}}')"
@@ -123,8 +128,20 @@ jobs:
           echo "REMOTE_PRODUCTION_COMPOSE_SHA256=$(sha256sum docker-compose.prod.yml | awk '{ print $1 }')"
           echo "REMOTE_OBSERVABILITY_COMPOSE_SHA256=$(sha256sum docker-compose.observability.yml | awk '{ print $1 }')"
           echo "ENV_COMPOSE_PROJECT_NAME=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
-          echo "PRODUCTION_COMPOSE_SERVICES=$(docker compose --env-file .env -f docker-compose.prod.yml config --services | paste -sd, -)"
-          echo "OBSERVABILITY_COMPOSE_SERVICES=$(docker compose --env-file .env -f docker-compose.observability.yml config --services | paste -sd, -)"
+
+          if docker compose --env-file .env -f docker-compose.prod.yml config --services >"${production_config_stdout}" 2>"${production_config_stderr}"; then
+            echo "PRODUCTION_COMPOSE_CONFIG_OK=true"
+            echo "PRODUCTION_COMPOSE_SERVICES=$(paste -sd, - < "${production_config_stdout}")"
+          else
+            echo "PRODUCTION_COMPOSE_CONFIG_OK=false"
+          fi
+
+          if docker compose --env-file .env -f docker-compose.observability.yml config --services >"${observability_config_stdout}" 2>"${observability_config_stderr}"; then
+            echo "OBSERVABILITY_COMPOSE_CONFIG_OK=true"
+            echo "OBSERVABILITY_COMPOSE_SERVICES=$(paste -sd, - < "${observability_config_stdout}")"
+          else
+            echo "OBSERVABILITY_COMPOSE_CONFIG_OK=false"
+          fi
 
           if docker compose --env-file .env -f docker-compose.prod.yml ps >/dev/null 2>"${orphan_stderr}"; then
             if grep -qi 'orphan containers' "${orphan_stderr}"; then
@@ -191,6 +208,14 @@ jobs:
             echo "LOKI_READY_OK=false"
           fi
           REMOTE_INVENTORY
+          ssh_status=$?
+          set -e
+
+          if [ "${ssh_status}" -ne 0 ]; then
+            echo "Remote inventory failed with exit code ${ssh_status}; partial sanitized inventory follows." >&2
+            cat "${remote_inventory_file}" >&2
+            exit "${ssh_status}"
+          fi
 
           {
             echo "REPOSITORY_PRODUCTION_COMPOSE_SHA256=$(sha256sum docker-compose.prod.yml | awk '{ print $1 }')"
