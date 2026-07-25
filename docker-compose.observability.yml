@@ -38,6 +38,8 @@ services:
       - /etc/alloy/config.alloy
     cap_drop:
       - ALL
+    group_add:
+      - "${DOCKER_SOCKET_GID:-0}"
     security_opt:
       - no-new-privileges:true
     labels:

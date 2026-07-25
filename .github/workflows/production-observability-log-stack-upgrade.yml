@@ -420,6 +420,14 @@ jobs:
           esac
           test -s "${STAGE_PATH}/config/observability/loki.yml"
           test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
+          test -S /var/run/docker.sock
+          docker_socket_gid="$(stat -c %g /var/run/docker.sock)"
+          case "${docker_socket_gid}" in
+            *[!0-9]* | "")
+              echo "Docker socket GID is not numeric." >&2
+              exit 1
+              ;;
+          esac
           cleanup_stale_canaries
           echo "CANARY_STAGE=assets-validated"
 
@@ -515,6 +523,7 @@ jobs:
           docker run -d --name "${alloy_container}" \
             --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" \
+            --group-add "${docker_socket_gid}" \
             --memory 256m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
             -v "${STAGE_PATH}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
@@ -696,6 +705,14 @@ jobs:
           test -s "${final_base}"
           test -d "${final_config}"
           test -s "${env_file}"
+          test -S /var/run/docker.sock
+          docker_socket_gid="$(stat -c %g /var/run/docker.sock)"
+          case "${docker_socket_gid}" in
+            *[!0-9]* | "")
+              echo "Docker socket GID is not numeric." >&2
+              exit 1
+              ;;
+          esac
           ! docker volume inspect "${new_loki_volume}" >/dev/null 2>&1
           ! docker volume inspect "${new_alloy_volume}" >/dev/null 2>&1
           ! docker inspect "${old_loki_name}" >/dev/null 2>&1
@@ -788,6 +805,7 @@ jobs:
           env_updated=true
           set_env_key LOKI_DATA_VOLUME_NAME "${new_loki_volume}"
           set_env_key ALLOY_DATA_VOLUME_NAME "${new_alloy_volume}"
+          set_env_key DOCKER_SOCKET_GID "${docker_socket_gid}"
 
           run_production_loki_stage() {
             image="$1"

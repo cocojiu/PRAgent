@@ -286,6 +286,7 @@ jobs:
             echo "CONTAINER_${container_index}_RESTART_COUNT=$(docker inspect --format '{{.RestartCount}}' "${container_name}")"
             echo "CONTAINER_${container_index}_STARTED_AT=$(docker inspect --format '{{.State.StartedAt}}' "${container_name}")"
             echo "CONTAINER_${container_index}_RESTART_POLICY=$(docker inspect --format '{{.HostConfig.RestartPolicy.Name}}' "${container_name}")"
+            echo "CONTAINER_${container_index}_GROUP_ADD=$(docker inspect --format '{{json .HostConfig.GroupAdd}}' "${container_name}")"
             echo "CONTAINER_${container_index}_COMPOSE_PROJECT=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_name}")"
             echo "CONTAINER_${container_index}_COMPOSE_SERVICE=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_name}")"
             echo "CONTAINER_${container_index}_COMPOSE_WORKING_DIR=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "${container_name}")"
