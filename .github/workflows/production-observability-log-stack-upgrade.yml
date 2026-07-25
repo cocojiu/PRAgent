@@ -784,6 +784,9 @@ jobs:
 
           target_series=0
           entries=0
+          dropped_old_entries=0
+          previous_dropped_old_entries=-1
+          stable_drop_samples=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
             alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics")"
@@ -791,15 +794,32 @@ jobs:
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
             entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${target_series}" -gt 0 ]; then
-              break
+            dropped_old_entries="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_process_dropped_lines_total[{ ].*outside_loki_ingestion_window/ {
+                  total += $NF
+                } END { printf "%.0f", total + 0 }')"
+            if [ "${target_series}" -gt 0 ] \
+              && [ "${entries}" -gt 0 ] \
+              && [ "${dropped_old_entries}" -gt 0 ]; then
+              if [ "${dropped_old_entries}" -eq "${previous_dropped_old_entries}" ]; then
+                stable_drop_samples=$((stable_drop_samples + 1))
+              else
+                stable_drop_samples=0
+              fi
+              if [ "${stable_drop_samples}" -ge 2 ]; then
+                break
+              fi
             fi
+            previous_dropped_old_entries="${dropped_old_entries}"
             sleep 2
             attempt=$((attempt + 1))
           done
-          if [ "${target_series}" -le 0 ]; then
+          if [ "${target_series}" -le 0 ] \
+            || [ "${entries}" -le 0 ] \
+            || [ "${dropped_old_entries}" -le 0 ] \
+            || [ "${stable_drop_samples}" -lt 2 ]; then
             curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
-              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+              | grep -E '^(loki_source_docker|loki_process_dropped|discovery_docker)' >&2 || true
             docker logs --tail 200 "${alloy_container}" >&2
             docker logs --tail 200 "${proxy_container}" >&2
             exit 1
@@ -808,6 +828,7 @@ jobs:
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
           echo "CANARY_ALLOY_TARGET_SERIES=${target_series}"
           echo "CANARY_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          echo "CANARY_ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=${dropped_old_entries}"
           echo "CANARY_ALLOY_PARSING_ERRORS=${parsing_errors}"
           if [ "${parsing_errors}" -ne 0 ]; then
             docker logs --tail 200 "${alloy_container}" >&2
@@ -827,6 +848,7 @@ jobs:
           echo "ALLOY_VERSION=1.18.0"
           echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
           echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          echo "ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=${dropped_old_entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_GET_ALLOWED=true"
           echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"
@@ -1128,6 +1150,9 @@ jobs:
 
           target_series=0
           entries=0
+          dropped_old_entries=0
+          previous_dropped_old_entries=-1
+          stable_drop_samples=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
             alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics)"
@@ -1135,17 +1160,35 @@ jobs:
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
             entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${target_series}" -gt 0 ]; then
-              break
+            dropped_old_entries="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_process_dropped_lines_total[{ ].*outside_loki_ingestion_window/ {
+                  total += $NF
+                } END { printf "%.0f", total + 0 }')"
+            if [ "${target_series}" -gt 0 ] \
+              && [ "${entries}" -gt 0 ] \
+              && [ "${dropped_old_entries}" -gt 0 ]; then
+              if [ "${dropped_old_entries}" -eq "${previous_dropped_old_entries}" ]; then
+                stable_drop_samples=$((stable_drop_samples + 1))
+              else
+                stable_drop_samples=0
+              fi
+              if [ "${stable_drop_samples}" -ge 2 ]; then
+                break
+              fi
             fi
+            previous_dropped_old_entries="${dropped_old_entries}"
             sleep 2
             attempt=$((attempt + 1))
           done
           echo "POST_UPGRADE_ALLOY_TARGET_SERIES=${target_series}"
           echo "POST_UPGRADE_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
-          if [ "${target_series}" -le 0 ]; then
+          echo "POST_UPGRADE_ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=${dropped_old_entries}"
+          if [ "${target_series}" -le 0 ] \
+            || [ "${entries}" -le 0 ] \
+            || [ "${dropped_old_entries}" -le 0 ] \
+            || [ "${stable_drop_samples}" -lt 2 ]; then
             curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
-              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+              | grep -E '^(loki_source_docker|loki_process_dropped|discovery_docker)' >&2 || true
             docker logs --tail 200 repoguard-alloy >&2
             exit 1
           fi
@@ -1266,6 +1309,7 @@ jobs:
           echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
           echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
           echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          echo "ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=${dropped_old_entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_VERSION=1.12.3"
           echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"

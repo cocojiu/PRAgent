@@ -50,7 +50,18 @@ loki.source.docker "repoguard" {
   labels           = { job = "repoguard-docker" }
   relabel_rules    = discovery.relabel.docker_stream.rules
   refresh_interval = "5s"
-  forward_to       = [loki.write.local.receiver]
+  forward_to       = [loki.process.repoguard.receiver]
+}
+
+loki.process "repoguard" {
+  forward_to = [loki.write.local.receiver]
+
+  // Loki rejects samples older than 168h. Keep a small processing margin
+  // when a fresh Alloy data volume first replays existing Docker logs.
+  stage.drop {
+    older_than          = "167h55m"
+    drop_counter_reason = "outside_loki_ingestion_window"
+  }
 }
 
 loki.write "local" {

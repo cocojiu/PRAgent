@@ -427,6 +427,10 @@ jobs:
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
             echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+            echo "ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_process_dropped_lines_total[{ ].*outside_loki_ingestion_window/ {
+                  total += $NF
+                } END { printf "%.0f", total + 0 }')"
             alloy_socket_mount="$(docker inspect \
               --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' \
               repoguard-alloy)"
@@ -439,6 +443,7 @@ jobs:
             echo "ALLOY_HEALTHY_OK=not_present"
             echo "ALLOY_DOCKER_TARGET_ENTRIES_TOTAL=not_present"
             echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=not_present"
+            echo "ALLOY_DROPPED_OUTSIDE_WINDOW_TOTAL=not_present"
             echo "ALLOY_DIRECT_DOCKER_SOCKET_MOUNT=not_present"
           fi
 
