@@ -1,0 +1,103 @@
+name: Production Observability Image Security
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/production-observability*.yml"
+      - "config/observability/**"
+      - "docker-compose.observability.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/production-observability*.yml"
+      - "config/observability/**"
+      - "docker-compose.observability.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Validate immutable observability images
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.images.outputs.images }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Resolve pinned images
+        id: images
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+        run: |
+          set -euo pipefail
+          compose_args=(
+            -p repoguard-observability
+            --env-file /dev/null
+            -f docker-compose.observability.yml
+            -f config/observability/docker-compose.production.yml
+          )
+          docker compose "${compose_args[@]}" config --quiet
+          images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
+          image_count="$(printf '%s\n' "${images}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+          test "${image_count}" -eq 3 || {
+            echo "Expected exactly three observability images; found ${image_count}." >&2
+            exit 1
+          }
+          while IFS= read -r image; do
+            case "${image}" in
+              *@sha256:*)
+                digest="${image##*@sha256:}"
+                test "${#digest}" -eq 64
+                case "${digest}" in
+                  *[!0-9a-f]*)
+                    echo "Invalid image digest: ${image}" >&2
+                    exit 1
+                    ;;
+                esac
+                ;;
+              *)
+                echo "Observability image is not pinned by digest: ${image}" >&2
+                exit 1
+                ;;
+            esac
+          done <<EOF
+          ${images}
+          EOF
+          images_json="$(printf '%s\n' "${images}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
+          echo "images=${images_json}" >> "${GITHUB_OUTPUT}"
+
+  scan:
+    name: Report HIGH/CRITICAL CVEs · ${{ matrix.image }}
+    needs: resolve
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJSON(needs.resolve.outputs.images) }}
+    steps:
+      - name: Scan immutable image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ matrix.image }}
+          format: table
+          exit-code: "0"
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+
+      - name: Explain baseline mode
+        shell: bash
+        run: |
+          {
+            echo "## Observability image baseline"
+            echo
+            echo "- Image: \`${{ matrix.image }}\`"
+            echo "- HIGH/CRITICAL findings are reported without blocking the ownership-only migration."
+            echo "- Enforcement will be enabled when the supported Loki, Alloy, and Grafana upgrade is merged."
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,33 +1,56 @@
+name: repoguard-observability
+
 services:
   loki:
-    image: grafana/loki:3.4.2
+    image: grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08
     container_name: repoguard-loki
     restart: unless-stopped
+    stop_grace_period: 30s
     command: ["-config.file=/etc/loki/loki.yml"]
+    labels:
+      com.repoguard.stack: observability
     volumes:
       - ./config/observability/loki.yml:/etc/loki/loki.yml:ro
       - repoguard_loki_data:/loki
     ports:
-      - "${LOKI_PORT_BIND:-3100}:3100"
+      - "${LOKI_PORT_BIND:-127.0.0.1:3100}:3100"
     mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   promtail:
-    image: grafana/promtail:3.4.2
+    image: grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b
     container_name: repoguard-promtail
     restart: unless-stopped
+    stop_grace_period: 30s
     command: ["-config.file=/etc/promtail/promtail.yml"]
+    labels:
+      com.repoguard.stack: observability
     depends_on:
       - loki
     volumes:
       - ./config/observability/promtail.yml:/etc/promtail/promtail.yml:ro
       - ./config/observability/promtail-positions:/positions
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "${PROMTAIL_PORT_BIND:-127.0.0.1:9080}:9080"
     mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   grafana:
-    image: grafana/grafana:11.5.2
+    image: grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7
     container_name: repoguard-grafana
     restart: unless-stopped
+    stop_grace_period: 30s
+    labels:
+      com.repoguard.stack: observability
     depends_on:
       - loki
     environment:
@@ -40,8 +63,17 @@ services:
       - repoguard_grafana_data:/var/lib/grafana
       - ./config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "${GRAFANA_PORT_BIND:-3000}:3000"
+      - "${GRAFANA_PORT_BIND:-127.0.0.1:3000}:3000"
     mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: repoguard_observability
 
 volumes:
   repoguard_loki_data:

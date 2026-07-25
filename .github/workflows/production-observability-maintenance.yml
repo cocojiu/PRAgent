@@ -1,0 +1,536 @@
+name: Production Observability Maintenance
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Read-only preflight or one-time Compose ownership migration
+        required: true
+        default: preflight
+        type: choice
+        options:
+          - preflight
+          - migrate-ownership
+      confirmation:
+        description: For migration, enter MIGRATE_REPOGUARD_OBSERVABILITY
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-observability-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    name: ${{ inputs.action == 'migrate-ownership' && 'Migrate observability ownership' || 'Observability preflight' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Validate immutable Compose assets
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+        run: |
+          set -euo pipefail
+          compose_args=(
+            -p repoguard-observability
+            --env-file /dev/null
+            -f docker-compose.observability.yml
+            -f config/observability/docker-compose.production.yml
+          )
+          docker compose "${compose_args[@]}" config --quiet
+
+          services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
+          test "${services}" = "grafana,loki,promtail" || {
+            echo "Unexpected observability service set: ${services}" >&2
+            exit 1
+          }
+
+          images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
+          expected_images="$(
+            printf '%s\n' \
+              'grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7' \
+              'grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08' \
+              'grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b' \
+              | sort
+          )"
+          test "${images}" = "${expected_images}" || {
+            echo "Observability images are not the reviewed immutable set." >&2
+            printf '%s\n' "${images}" >&2
+            exit 1
+          }
+
+      - name: Prepare SSH key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY secret"; exit 1; }
+          deploy_port="${DEPLOY_PORT:-22}"
+          case "${deploy_port}" in
+            *[!0-9]* | "")
+              echo "DEPLOY_PORT must be a numeric TCP port." >&2
+              exit 1
+              ;;
+          esac
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 30 -p "${deploy_port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>ssh-keyscan.err; then
+              break
+            fi
+            echo "ssh-keyscan attempt ${attempt}/5 failed; retrying." >&2
+            sleep $((attempt * 10))
+          done
+          test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
+
+      - name: Production preflight
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
+          case "${DEPLOY_USER}" in
+            *[!A-Za-z0-9_.-]*)
+              echo "DEPLOY_USER contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            *[!A-Za-z0-9_./-]*)
+              echo "DEPLOY_PATH contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' ACTION='${ACTION}' sh -s" <<'REMOTE_PREFLIGHT'
+          set -eu
+          expected_loki_digest="58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08"
+          expected_promtail_digest="c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b"
+          expected_grafana_digest="8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7"
+
+          command -v docker >/dev/null 2>&1 || { echo "Docker is unavailable." >&2; exit 1; }
+          docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable." >&2; exit 1; }
+          cd "${DEPLOY_PATH}"
+          test -f .env || { echo "Production .env is missing." >&2; exit 1; }
+
+          check_container() {
+            container_name="$1"
+            expected_service="$2"
+            expected_digest="$3"
+            docker inspect "${container_name}" >/dev/null 2>&1 || {
+              echo "Missing container: ${container_name}" >&2
+              return 1
+            }
+            test "$(docker inspect --format '{{.State.Status}}' "${container_name}")" = "running" || {
+              echo "Container is not running: ${container_name}" >&2
+              return 1
+            }
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_name}")" = "${expected_service}" || {
+              echo "Unexpected Compose service label: ${container_name}" >&2
+              return 1
+            }
+            image_id="$(docker inspect --format '{{.Image}}' "${container_name}")"
+            docker image inspect --format '{{json .RepoDigests}}' "${image_id}" | grep -q "${expected_digest}" || {
+              echo "Unexpected image digest: ${container_name}" >&2
+              return 1
+            }
+          }
+
+          check_container repoguard-loki loki "${expected_loki_digest}"
+          check_container repoguard-promtail promtail "${expected_promtail_digest}"
+          check_container repoguard-grafana grafana "${expected_grafana_digest}"
+          docker volume inspect app_repoguard_loki_data >/dev/null
+          docker volume inspect app_repoguard_grafana_data >/dev/null
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/ready | grep -q '^ready'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/api/health \
+            | grep -q '"database"[[:space:]]*:[[:space:]]*"ok"'
+
+          current_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)"
+          if [ "${ACTION}" = "migrate-ownership" ] && [ "${current_project}" != "app" ]; then
+            echo "Ownership migration requires the current project to be app; found ${current_project}." >&2
+            exit 1
+          fi
+
+          echo "PREFLIGHT_OK=true"
+          echo "CURRENT_OBSERVABILITY_PROJECT=${current_project}"
+          echo "LOKI_VOLUME=app_repoguard_loki_data"
+          echo "GRAFANA_VOLUME=app_repoguard_grafana_data"
+          if grep -q '^GRAFANA_ADMIN_PASSWORD=.' .env; then
+            echo "GRAFANA_BOOTSTRAP_PASSWORD_PRESENT=true"
+          else
+            echo "GRAFANA_BOOTSTRAP_PASSWORD_PRESENT=false"
+          fi
+          echo "AVAILABLE_KB=$(df -Pk "${DEPLOY_PATH}" | awk 'NR == 2 { print $4 }')"
+          REMOTE_PREFLIGHT
+
+      - name: Upload staged observability assets
+        if: inputs.action == 'migrate-ownership'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test "${CONFIRMATION}" = "MIGRATE_REPOGUARD_OBSERVABILITY" || {
+            echo "Migration confirmation does not match." >&2
+            exit 1
+          }
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+
+          stage_path="${DEPLOY_PATH}/.observability-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${stage_path}/config'"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            docker-compose.observability.yml \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/docker-compose.observability.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" -r \
+            config/observability \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/config/"
+
+      - name: Migrate Compose ownership with backup and automatic rollback
+        if: inputs.action == 'migrate-ownership'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          STAGE_PATH="${DEPLOY_PATH}/.observability-stage-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.observability-stage-[0-9]*)
+              ;;
+            *)
+              echo "Unexpected observability staging path." >&2
+              exit 1
+              ;;
+          esac
+
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${STAGE_PATH}' sh -s" <<'REMOTE_MIGRATION'
+          set -eu
+          project="repoguard-observability"
+          legacy_project="app"
+          migration_started="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          migration_id="$(date -u +'%Y%m%dT%H%M%SZ')"
+          backup_dir="${DEPLOY_PATH}/backups/observability/${migration_id}"
+          stage_base="${STAGE_PATH}/docker-compose.observability.yml"
+          stage_override="${STAGE_PATH}/config/observability/docker-compose.production.yml"
+          final_base="${DEPLOY_PATH}/docker-compose.observability.yml"
+          final_override="${DEPLOY_PATH}/config/observability/docker-compose.production.yml"
+          env_file="${DEPLOY_PATH}/.env"
+          LOKI_DATA_VOLUME_NAME="app_repoguard_loki_data"
+          GRAFANA_DATA_VOLUME_NAME="app_repoguard_grafana_data"
+          export LOKI_DATA_VOLUME_NAME
+          export GRAFANA_DATA_VOLUME_NAME
+          grafana_image="grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7"
+          legacy_loki="repoguard-loki-legacy-${migration_id}"
+          legacy_promtail="repoguard-promtail-legacy-${migration_id}"
+          legacy_grafana="repoguard-grafana-legacy-${migration_id}"
+          old_stopped=false
+          old_renamed=false
+          assets_promoted=false
+          env_updated=false
+          migration_verified=false
+          original_compose_present=false
+
+          GRAFANA_ADMIN_PASSWORD="$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' "${env_file}" | tail -n 1)"
+          if [ -z "${GRAFANA_ADMIN_PASSWORD}" ]; then
+            GRAFANA_ADMIN_PASSWORD="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+            test "${#GRAFANA_ADMIN_PASSWORD}" -eq 64
+            grafana_password_generated=true
+          else
+            grafana_password_generated=false
+          fi
+          export GRAFANA_ADMIN_PASSWORD
+
+          compose_stage() {
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${stage_base}" -f "${stage_override}" "$@"
+          }
+
+          compose_final() {
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${final_base}" -f "${final_override}" "$@"
+          }
+
+          wait_http() {
+            url="$1"
+            pattern="$2"
+            attempts="${3:-45}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            echo "HTTP readiness failed: ${url}" >&2
+            return 1
+          }
+
+          restore_legacy() {
+            status="$1"
+            trap - EXIT
+            if [ "${status}" -eq 0 ] || [ "${migration_verified}" = "true" ]; then
+              exit "${status}"
+            fi
+
+            set +e
+            echo "Migration failed; restoring the original observability containers." >&2
+            if [ -f "${final_base}" ] && [ -f "${final_override}" ]; then
+              compose_final down >/dev/null 2>&1
+            fi
+
+            if [ "${assets_promoted}" = "true" ]; then
+              if [ -d "${DEPLOY_PATH}/config/observability" ]; then
+                mv "${DEPLOY_PATH}/config/observability" \
+                  "${DEPLOY_PATH}/config/observability.failed-${migration_id}"
+              fi
+              cp -a "${backup_dir}/config-observability" "${DEPLOY_PATH}/config/observability"
+              if [ "${original_compose_present}" = "true" ]; then
+                cp -a "${backup_dir}/docker-compose.observability.yml" "${final_base}"
+              else
+                mv "${final_base}" "${backup_dir}/docker-compose.observability.failed.yml"
+              fi
+            fi
+            if [ "${env_updated}" = "true" ]; then
+              cp -a "${backup_dir}/production.env" "${env_file}"
+            fi
+
+            if [ "${old_renamed}" = "true" ]; then
+              docker rename "${legacy_loki}" repoguard-loki >/dev/null 2>&1
+              docker rename "${legacy_promtail}" repoguard-promtail >/dev/null 2>&1
+              docker rename "${legacy_grafana}" repoguard-grafana >/dev/null 2>&1
+            fi
+            if [ "${old_stopped}" = "true" ]; then
+              docker start repoguard-loki repoguard-promtail repoguard-grafana >/dev/null 2>&1
+              wait_http http://127.0.0.1:3100/ready '^ready' 45
+              wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 45
+            fi
+            echo "Automatic rollback attempt completed." >&2
+            exit "${status}"
+          }
+          trap 'restore_legacy $?' EXIT
+
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.observability-stage-[0-9]*)
+              ;;
+            *)
+              echo "Staging path escaped the deployment root." >&2
+              exit 1
+              ;;
+          esac
+          test -f "${stage_base}"
+          test -f "${stage_override}"
+          test -f "${env_file}"
+
+          services="$(compose_stage config --services | sort | paste -sd, -)"
+          test "${services}" = "grafana,loki,promtail"
+          compose_stage config --images | while IFS= read -r image; do
+            case "${image}" in
+              *@sha256:*)
+                digest="${image##*@sha256:}"
+                test "${#digest}" -eq 64
+                case "${digest}" in
+                  *[!0-9a-f]*)
+                    echo "Invalid observability image digest: ${image}" >&2
+                    exit 1
+                    ;;
+                esac
+                ;;
+              *)
+                echo "Unpinned observability image: ${image}" >&2
+                exit 1
+                ;;
+            esac
+          done
+
+          for mapping in \
+            "repoguard-loki:loki" \
+            "repoguard-promtail:promtail" \
+            "repoguard-grafana:grafana"; do
+            container_name="${mapping%%:*}"
+            service_name="${mapping#*:}"
+            test "$(docker inspect --format '{{.State.Status}}' "${container_name}")" = "running"
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_name}")" = "${legacy_project}"
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_name}")" = "${service_name}"
+          done
+          docker volume inspect app_repoguard_loki_data >/dev/null
+          docker volume inspect app_repoguard_grafana_data >/dev/null
+
+          compose_stage pull
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL --cap-add DAC_READ_SEARCH \
+            --security-opt no-new-privileges --entrypoint /bin/tar \
+            "${grafana_image}" --help >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL --cap-add DAC_READ_SEARCH \
+            --security-opt no-new-privileges \
+            -v "app_repoguard_grafana_data:/source:ro" \
+            --entrypoint /bin/sh "${grafana_image}" \
+            -c 'test -s /source/grafana.db'
+
+          volume_kb() {
+            volume_name="$1"
+            docker run --rm --network none --read-only --user 0:0 \
+              --cap-drop ALL --cap-add DAC_READ_SEARCH \
+              --security-opt no-new-privileges \
+              -v "${volume_name}:/source:ro" \
+              --entrypoint /bin/du "${grafana_image}" -sk /source \
+              | awk 'NR == 1 { print $1 }'
+          }
+          loki_kb="$(volume_kb app_repoguard_loki_data)"
+          grafana_kb="$(volume_kb app_repoguard_grafana_data)"
+          available_kb="$(df -Pk "${DEPLOY_PATH}" | awk 'NR == 2 { print $4 }')"
+          required_kb=$(((loki_kb + grafana_kb) * 2 + 102400))
+          test "${available_kb}" -ge "${required_kb}" || {
+            echo "Insufficient disk for consistent volume backups." >&2
+            exit 1
+          }
+
+          install -m 700 -d "${backup_dir}"
+          cp -a "${DEPLOY_PATH}/config/observability" "${backup_dir}/config-observability"
+          cp -a "${env_file}" "${backup_dir}/production.env"
+          if [ "${grafana_password_generated}" = "true" ]; then
+            printf '\nGRAFANA_ADMIN_PASSWORD=%s\n' "${GRAFANA_ADMIN_PASSWORD}" >> "${env_file}"
+            chmod 600 "${env_file}"
+            env_updated=true
+          fi
+          if [ -f "${final_base}" ]; then
+            original_compose_present=true
+            cp -a "${final_base}" "${backup_dir}/docker-compose.observability.yml"
+          fi
+
+          old_stopped=true
+          docker stop -t 30 repoguard-promtail repoguard-grafana repoguard-loki >/dev/null
+
+          backup_volume() {
+            volume_name="$1"
+            archive_path="$2"
+            docker run --rm --network none --read-only --user 0:0 \
+              --cap-drop ALL --cap-add DAC_READ_SEARCH \
+              --security-opt no-new-privileges \
+              -v "${volume_name}:/source:ro" \
+              --entrypoint /bin/tar "${grafana_image}" \
+              -C /source -czf - . > "${archive_path}"
+            test -s "${archive_path}"
+            sha256sum "${archive_path}" > "${archive_path}.sha256"
+            sha256sum -c "${archive_path}.sha256" >/dev/null
+          }
+          backup_volume app_repoguard_loki_data "${backup_dir}/loki-data.tar.gz"
+          backup_volume app_repoguard_grafana_data "${backup_dir}/grafana-data.tar.gz"
+
+          docker rename repoguard-loki "${legacy_loki}"
+          docker rename repoguard-promtail "${legacy_promtail}"
+          docker rename repoguard-grafana "${legacy_grafana}"
+          old_renamed=true
+
+          install -d "${DEPLOY_PATH}/config/observability"
+          cp -a "${STAGE_PATH}/config/observability/." "${DEPLOY_PATH}/config/observability/"
+          cp -a "${stage_base}" "${final_base}"
+          assets_promoted=true
+
+          compose_final up -d
+          wait_http http://127.0.0.1:3100/ready '^ready' 60
+          wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 60
+          if ! wait_http http://127.0.0.1:9080/ready 'ready|Ready' 30; then
+            wait_http http://127.0.0.1:9080/-/ready 'ready|Ready' 30
+          fi
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+
+          test -s "${DEPLOY_PATH}/config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json"
+          test -s "${DEPLOY_PATH}/config/observability/grafana/provisioning/datasources/loki.yml"
+          if docker logs --since "${migration_started}" repoguard-grafana 2>&1 \
+            | grep -Eqi 'failed to provision|provisioning.*error'; then
+            echo "Grafana reported a provisioning error after migration." >&2
+            exit 1
+          fi
+
+          for mapping in \
+            "repoguard-loki:loki" \
+            "repoguard-promtail:promtail" \
+            "repoguard-grafana:grafana"; do
+            container_name="${mapping%%:*}"
+            service_name="${mapping#*:}"
+            test "$(docker inspect --format '{{.State.Status}}' "${container_name}")" = "running"
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_name}")" = "${project}"
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "${container_name}")" = "${service_name}"
+            test "$(docker inspect --format '{{index .Config.Labels "com.repoguard.stack"}}' "${container_name}")" = "observability"
+          done
+          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
+            | grep -qx app_repoguard_loki_data
+          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' repoguard-grafana \
+            | grep -qx app_repoguard_grafana_data
+
+          migration_verified=true
+          docker rm "${legacy_loki}" "${legacy_promtail}" "${legacy_grafana}" >/dev/null
+          for service_name in loki promtail grafana; do
+            test -z "$(docker ps -aq \
+              --filter "label=com.docker.compose.project=${legacy_project}" \
+              --filter "label=com.docker.compose.service=${service_name}")"
+          done
+          rm -rf "${STAGE_PATH}"
+
+          echo "MIGRATION_OK=true"
+          echo "OBSERVABILITY_PROJECT=${project}"
+          echo "LOKI_VOLUME=app_repoguard_loki_data"
+          echo "GRAFANA_VOLUME=app_repoguard_grafana_data"
+          echo "LOKI_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_dir}/loki-data.tar.gz.sha256")"
+          echo "GRAFANA_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_dir}/grafana-data.tar.gz.sha256")"
+          echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
+          REMOTE_MIGRATION
+
+      - name: Summarize preflight-only result
+        if: inputs.action == 'preflight'
+        shell: bash
+        run: |
+          {
+            echo "## Production observability preflight"
+            echo
+            echo "Read-only preflight completed. No files, containers, images, networks, or volumes were changed."
+          } >> "${GITHUB_STEP_SUMMARY}"

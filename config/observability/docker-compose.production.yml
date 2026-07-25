@@ -1,0 +1,7 @@
+volumes:
+  repoguard_loki_data:
+    external: true
+    name: ${LOKI_DATA_VOLUME_NAME:-app_repoguard_loki_data}
+  repoguard_grafana_data:
+    external: true
+    name: ${GRAFANA_DATA_VOLUME_NAME:-app_repoguard_grafana_data}
