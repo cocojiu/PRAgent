@@ -25,6 +25,45 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  docker-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    container_name: repoguard-docker-proxy
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CONTAINERS: "1"
+      EVENTS: "1"
+      PING: "1"
+      VERSION: "1"
+      POST: "0"
+      DISABLE_IPV6: "1"
+      LOG_LEVEL: warning
+    labels:
+      com.repoguard.stack: observability
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=4m
+      - /tmp:rw,noexec,nosuid,size=4m
+    networks:
+      - docker_api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q '^OK$'"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   alloy:
     image: grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
     container_name: repoguard-alloy
@@ -43,11 +82,16 @@ services:
     labels:
       com.repoguard.stack: observability
     depends_on:
-      - loki
+      docker-proxy:
+        condition: service_healthy
+      loki:
+        condition: service_started
     volumes:
       - ./config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - repoguard_alloy_data:/var/lib/alloy/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - default
+      - docker_api
     ports:
       - "${ALLOY_PORT_BIND:-127.0.0.1:9080}:12345"
     mem_limit: 256m
@@ -87,6 +131,9 @@ services:
 networks:
   default:
     name: repoguard_observability
+  docker_api:
+    name: repoguard_observability_docker_api
+    internal: true
 
 volumes:
   repoguard_loki_data:

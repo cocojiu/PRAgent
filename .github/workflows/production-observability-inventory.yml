@@ -167,7 +167,7 @@ jobs:
           fi
 
           legacy_observability_container_count=0
-          for service_name in loki promtail alloy grafana; do
+          for service_name in loki promtail alloy docker-proxy grafana; do
             service_count="$(docker ps -aq \
               --filter 'label=com.docker.compose.project=app' \
               --filter "label=com.docker.compose.service=${service_name}" \
@@ -176,9 +176,9 @@ jobs:
           done
           echo "LEGACY_OBSERVABILITY_CONTAINER_COUNT=${legacy_observability_container_count}"
           echo "LOG_STACK_CANARY_CONTAINER_COUNT=$(docker ps -a --format '{{.Names}}' \
-            | awk '/^repoguard-(loki|alloy)-canary-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
+            | awk '/^repoguard-(loki|alloy|docker-proxy)-canary-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
           echo "LOG_STACK_CANARY_NETWORK_COUNT=$(docker network ls --format '{{.Name}}' \
-            | awk '/^repoguard-observability-canary-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
+            | awk '/^repoguard-observability-canary(-docker-api)?-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
           echo "LOG_STACK_CANARY_VOLUME_COUNT=$(docker volume ls --format '{{.Name}}' \
             | awk '/^repoguard-observability-canary-(loki|alloy)-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
           echo "LOG_STACK_UPGRADE_STAGE_COUNT=$(find "${DEPLOY_PATH}" -mindepth 1 -maxdepth 1 -type d \
@@ -225,7 +225,13 @@ jobs:
             | awk '/^repoguard-alloy-canary-[0-9]+-[0-9]+$/ { print }'); do
             if [ "$(docker inspect --format '{{.State.Status}}' "${canary_alloy}")" = "running" ]; then
               canary_alloy_running_count=$((canary_alloy_running_count + 1))
-              canary_alloy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${canary_alloy}")"
+              canary_alloy_network="$(docker inspect \
+                --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+                "${canary_alloy}" \
+                | grep -E '^repoguard-observability-canary-[0-9]+-[0-9]+$' | head -n 1)"
+              canary_alloy_ip="$(docker inspect \
+                --format "{{(index .NetworkSettings.Networks \"${canary_alloy_network}\").IPAddress}}" \
+                "${canary_alloy}")"
               if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_alloy_ip}:12345/-/ready" 2>/dev/null \
                 | grep -q 'Alloy is ready'; then
                 canary_alloy_ready_count=$((canary_alloy_ready_count + 1))
@@ -258,6 +264,27 @@ jobs:
           echo "LOG_STACK_CANARY_ALLOY_ERROR_COUNT_10M=${canary_alloy_error_count}"
           echo "LOG_STACK_CANARY_ALLOY_DOCKER_ERROR_COUNT_10M=${canary_alloy_docker_error_count}"
 
+          canary_proxy_running_count=0
+          canary_proxy_ready_count=0
+          canary_proxy_error_count=0
+          for canary_proxy in $(docker ps -a --format '{{.Names}}' \
+            | awk '/^repoguard-docker-proxy-canary-[0-9]+-[0-9]+$/ { print }'); do
+            if [ "$(docker inspect --format '{{.State.Status}}' "${canary_proxy}")" = "running" ]; then
+              canary_proxy_running_count=$((canary_proxy_running_count + 1))
+              canary_proxy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${canary_proxy}")"
+              if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_proxy_ip}:2375/_ping" 2>/dev/null \
+                | grep -q '^OK'; then
+                canary_proxy_ready_count=$((canary_proxy_ready_count + 1))
+              fi
+            fi
+            service_errors="$(docker logs --since 10m "${canary_proxy}" 2>&1 \
+              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+            canary_proxy_error_count=$((canary_proxy_error_count + service_errors))
+          done
+          echo "LOG_STACK_CANARY_DOCKER_PROXY_RUNNING_COUNT=${canary_proxy_running_count}"
+          echo "LOG_STACK_CANARY_DOCKER_PROXY_READY_COUNT=${canary_proxy_ready_count}"
+          echo "LOG_STACK_CANARY_DOCKER_PROXY_ERROR_COUNT_10M=${canary_proxy_error_count}"
+
           if [ "$(docker inspect --format '{{.State.Status}}' repoguard-alloy 2>/dev/null || true)" = "running" ]; then
             collector_name="repoguard-alloy"
           else
@@ -270,9 +297,15 @@ jobs:
             echo "PROMTAIL_CONTAINER_EXISTS=false"
           fi
 
+          container_names="repoguard-loki ${collector_name}"
+          if docker inspect repoguard-docker-proxy >/dev/null 2>&1; then
+            container_names="${container_names} repoguard-docker-proxy"
+          fi
+          container_names="${container_names} repoguard-grafana"
+
           container_index=0
           volume_names=""
-          for container_name in repoguard-loki "${collector_name}" repoguard-grafana; do
+          for container_name in ${container_names}; do
             container_index=$((container_index + 1))
             echo "CONTAINER_${container_index}_NAME=${container_name}"
             if ! docker inspect "${container_name}" >/dev/null 2>&1; then
@@ -396,6 +429,10 @@ jobs:
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
             echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+            alloy_socket_mount="$(docker inspect \
+              --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' \
+              repoguard-alloy)"
+            echo "ALLOY_DIRECT_DOCKER_SOCKET_MOUNT=${alloy_socket_mount:-none}"
           else
             echo "ALLOY_ERROR_LOG_COUNT_1M=not_present"
             echo "ALLOY_ERROR_LOG_COUNT_5M=not_present"
@@ -404,6 +441,57 @@ jobs:
             echo "ALLOY_HEALTHY_OK=not_present"
             echo "ALLOY_DOCKER_TARGET_ENTRIES_TOTAL=not_present"
             echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=not_present"
+            echo "ALLOY_DIRECT_DOCKER_SOCKET_MOUNT=not_present"
+          fi
+
+          if docker inspect repoguard-docker-proxy >/dev/null 2>&1; then
+            echo "DOCKER_PROXY_CONTAINER_EXISTS=true"
+            proxy_socket_mount="$(docker inspect \
+              --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' \
+              repoguard-docker-proxy)"
+            echo "DOCKER_PROXY_SOCKET_MOUNT=${proxy_socket_mount:-none}"
+            if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-docker-proxy \
+              | grep -qx 'CONTAINERS=1'; then
+              echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=true"
+            else
+              echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=false"
+            fi
+            if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-docker-proxy \
+              | grep -qx 'POST=0'; then
+              echo "DOCKER_PROXY_POST_DISABLED=true"
+            else
+              echo "DOCKER_PROXY_POST_DISABLED=false"
+            fi
+            proxy_ip="$(docker inspect \
+              --format '{{(index .NetworkSettings.Networks "repoguard_observability_docker_api").IPAddress}}' \
+              repoguard-docker-proxy 2>/dev/null || true)"
+            if [ -n "${proxy_ip}" ] \
+              && curl -fsS --connect-timeout 5 --max-time 10 "http://${proxy_ip}:2375/_ping" 2>/dev/null \
+                | grep -q '^OK'; then
+              echo "DOCKER_PROXY_PING_OK=true"
+            else
+              echo "DOCKER_PROXY_PING_OK=false"
+            fi
+            proxy_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              "http://${proxy_ip}:2375/containers/json" 2>/dev/null || true)"
+            echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=${proxy_get_status:-000}"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_1M=$(docker logs --since 1m repoguard-docker-proxy 2>&1 \
+              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_5M=$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
+              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_10M=$(docker logs --since 10m repoguard-docker-proxy 2>&1 \
+              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+          else
+            echo "DOCKER_PROXY_CONTAINER_EXISTS=false"
+            echo "DOCKER_PROXY_SOCKET_MOUNT=not_present"
+            echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=not_present"
+            echo "DOCKER_PROXY_POST_DISABLED=not_present"
+            echo "DOCKER_PROXY_PING_OK=not_present"
+            echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=not_present"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_1M=not_present"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_5M=not_present"
+            echo "DOCKER_PROXY_ERROR_LOG_COUNT_10M=not_present"
           fi
           echo "GRAFANA_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-grafana)"
           echo "GRAFANA_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-grafana)"

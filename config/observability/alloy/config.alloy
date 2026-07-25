@@ -4,7 +4,7 @@ logging {
 }
 
 discovery.docker "repoguard" {
-  host             = "unix:///var/run/docker.sock"
+  host             = "tcp://docker-proxy:2375"
   refresh_interval = "5s"
 }
 
@@ -45,7 +45,7 @@ discovery.relabel "docker_stream" {
 }
 
 loki.source.docker "repoguard" {
-  host             = "unix:///var/run/docker.sock"
+  host             = "tcp://docker-proxy:2375"
   targets          = discovery.relabel.repoguard.output
   labels           = { job = "repoguard-docker" }
   relabel_rules    = discovery.relabel.docker_stream.rules
