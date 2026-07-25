@@ -1215,10 +1215,10 @@ jobs:
           assert_equal PROXY_POST_DISABLED "${proxy_post_disabled}" "true"
           proxy_networks="$(docker inspect \
             --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
-            repoguard-docker-proxy | sort | paste -sd, -)"
+            repoguard-docker-proxy | sed '/^$/d' | sort | paste -sd, -)"
           alloy_networks="$(docker inspect \
             --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
-            repoguard-alloy | sort | paste -sd, -)"
+            repoguard-alloy | sed '/^$/d' | sort | paste -sd, -)"
           assert_equal PROXY_NETWORKS "${proxy_networks}" "repoguard_observability_docker_api"
           assert_equal ALLOY_NETWORKS "${alloy_networks}" \
             "repoguard_observability,repoguard_observability_docker_api"
