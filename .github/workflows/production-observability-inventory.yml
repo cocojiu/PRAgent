@@ -88,7 +88,8 @@ jobs:
           remote_inventory_file="${RUNNER_TEMP}/production-observability-remote.txt"
 
           set +e
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" > "${remote_inventory_file}" <<'REMOTE_INVENTORY'
           set -eu
 
@@ -174,6 +175,16 @@ jobs:
             legacy_observability_container_count=$((legacy_observability_container_count + service_count))
           done
           echo "LEGACY_OBSERVABILITY_CONTAINER_COUNT=${legacy_observability_container_count}"
+          echo "LOG_STACK_CANARY_CONTAINER_COUNT=$(docker ps -a --format '{{.Names}}' \
+            | awk '/^repoguard-(loki|alloy)-canary-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
+          echo "LOG_STACK_CANARY_NETWORK_COUNT=$(docker network ls --format '{{.Name}}' \
+            | awk '/^repoguard-observability-canary-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
+          echo "LOG_STACK_CANARY_VOLUME_COUNT=$(docker volume ls --format '{{.Name}}' \
+            | awk '/^repoguard-observability-canary-(loki|alloy)-[0-9]+-[0-9]+$/ { count++ } END { print count + 0 }')"
+          echo "LOG_STACK_UPGRADE_STAGE_COUNT=$(find "${DEPLOY_PATH}" -mindepth 1 -maxdepth 1 -type d \
+            -name '.observability-log-upgrade-*' | wc -l | tr -d ' ')"
+          echo "LOG_STACK_UPGRADE_TRANSIENT_CONTAINER_COUNT=$(docker ps -a --format '{{.Names}}' \
+            | awk '/^repoguard-(loki-pre-v37|promtail-pre-alloy|loki-upgrade-[0-9]+)-/ { count++ } END { print count + 0 }')"
 
           if [ "$(docker inspect --format '{{.State.Status}}' repoguard-alloy 2>/dev/null || true)" = "running" ]; then
             collector_name="repoguard-alloy"

@@ -149,7 +149,8 @@ jobs:
               ;;
           esac
 
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' ACTION='${ACTION}' sh -s" <<'REMOTE_PREFLIGHT'
           set -eu
           legacy_loki_image='grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08'
@@ -275,7 +276,8 @@ jobs:
           esac
 
           stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "install -m 700 -d '${stage_path}/config'"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
             docker-compose.observability.yml \
@@ -295,7 +297,8 @@ jobs:
         run: |
           set -euo pipefail
           stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' CANARY_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_CANARY'
           set -eu
           helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
@@ -357,6 +360,7 @@ jobs:
           esac
           test -s "${STAGE_PATH}/config/observability/loki.yml"
           test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
+          echo "CANARY_STAGE=assets-validated"
 
           backup_archive="$(find "${DEPLOY_PATH}/backups/observability" \
             -mindepth 2 -maxdepth 2 -type f -name 'loki-data.tar.gz' | sort | tail -n 1)"
@@ -371,12 +375,15 @@ jobs:
           esac
           test -s "${backup_archive}.sha256"
           (cd "$(dirname "${backup_archive}")" && sha256sum -c loki-data.tar.gz.sha256 >/dev/null)
+          echo "CANARY_STAGE=backup-verified"
 
+          echo "CANARY_STAGE=pulling-images"
           docker pull "${helper_image}"
           docker pull "${loki_35_image}"
           docker pull "${loki_36_image}"
           docker pull "${loki_37_image}"
           docker pull "${alloy_image}"
+          echo "CANARY_STAGE=images-ready"
           docker network create "${network_name}" >/dev/null
           docker volume create "${loki_volume}" >/dev/null
           docker volume create "${alloy_volume}" >/dev/null
@@ -388,10 +395,12 @@ jobs:
             -v "$(dirname "${backup_archive}"):/backup:ro" \
             --entrypoint /bin/tar "${helper_image}" \
             -C /restore -xzf /backup/loki-data.tar.gz
+          echo "CANARY_STAGE=backup-restored"
 
           run_loki_stage() {
             image="$1"
             expected_version="$2"
+            echo "CANARY_STAGE=loki-${expected_version}-starting"
             docker run -d --name "${loki_container}" \
               --network "${network_name}" --network-alias loki \
               --memory 384m --restart no \
@@ -412,11 +421,13 @@ jobs:
             docker stop -t 30 "${loki_container}" >/dev/null
             docker rm "${loki_container}" >/dev/null
             active_loki=false
+            echo "CANARY_STAGE=loki-${expected_version}-verified"
           }
 
           run_loki_stage "${loki_35_image}" 3.5.12
           run_loki_stage "${loki_36_image}" 3.6.13
 
+          echo "CANARY_STAGE=loki-3.7.4-starting"
           docker run -d --name "${loki_container}" \
             --network "${network_name}" --network-alias loki \
             --memory 384m --restart no \
@@ -429,7 +440,9 @@ jobs:
           wait_http "http://${loki_ip}:3100/ready" '^ready' 60
           curl -fsS --connect-timeout 5 --max-time 10 "http://${loki_ip}:3100/loki/api/v1/status/buildinfo" \
             | grep -q '"version":"3.7.4"'
+          echo "CANARY_STAGE=loki-3.7.4-ready"
 
+          echo "CANARY_STAGE=alloy-starting"
           docker run -d --name "${alloy_container}" \
             --network "${network_name}" \
             --memory 256m --restart no \
@@ -445,6 +458,7 @@ jobs:
           alloy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${alloy_container}")"
           wait_http "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
           wait_http "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
+          echo "CANARY_STAGE=alloy-healthy"
 
           entries=0
           attempt=1
@@ -468,6 +482,7 @@ jobs:
           alloy_error_count="$(docker logs "${alloy_container}" 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
           test "${alloy_error_count}" -eq 0
+          echo "CANARY_STAGE=collector-verified"
 
           echo "CANARY_OK=true"
           echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.4"
@@ -488,7 +503,8 @@ jobs:
         run: |
           set -euo pipefail
           stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' sh -s" <<'REMOTE_UPGRADE'
           set -eu
           project=repoguard-observability
