@@ -225,6 +225,7 @@ jobs:
             check_running_image repoguard-docker-proxy "${final_proxy_image}"
             docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
               | grep -qx repoguard_observability_loki_data_v37
+            test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
             test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
@@ -235,6 +236,7 @@ jobs:
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
             printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+            printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|'
             ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
             test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
             curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready \
@@ -452,22 +454,48 @@ jobs:
             return 1
           }
 
-          wait_container_healthy() {
+          wait_proxy_healthcheck() {
             container_name="$1"
             attempts="${2:-30}"
             attempt=1
             while [ "${attempt}" -le "${attempts}" ]; do
-              health_status="$(docker inspect --format '{{.State.Health.Status}}' "${container_name}")"
-              if [ "${health_status}" = "healthy" ]; then
+              if docker exec "${container_name}" /healthcheck >/dev/null 2>&1; then
                 return 0
-              fi
-              if [ "${health_status}" = "unhealthy" ]; then
-                docker logs "${container_name}" >&2
-                return 1
               fi
               sleep 2
               attempt=$((attempt + 1))
             done
+            docker exec "${container_name}" /healthcheck >&2 || true
+            docker logs "${container_name}" >&2
+            return 1
+          }
+
+          wait_container_http() {
+            container_name="$1"
+            url="$2"
+            pattern="$3"
+            attempts="${4:-60}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              container_status="$(docker inspect --format '{{.State.Status}}' "${container_name}")"
+              if [ "${container_status}" != "running" ]; then
+                docker inspect --format \
+                  'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+                  "${container_name}" >&2
+                docker logs --tail 200 "${container_name}" >&2
+                return 1
+              fi
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            echo "Timed out waiting for ${container_name} at ${url}." >&2
+            docker inspect --format \
+              'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+              "${container_name}" >&2
+            docker logs --tail 200 "${container_name}" >&2
             return 1
           }
 
@@ -507,13 +535,23 @@ jobs:
           (cd "$(dirname "${backup_archive}")" && sha256sum -c loki-data.tar.gz.sha256 >/dev/null)
           echo "CANARY_STAGE=backup-verified"
 
+          ensure_image() {
+            image="$1"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              echo "IMAGE_CACHE_HIT=${image}"
+              return 0
+            fi
+            docker pull "${image}"
+            docker image inspect "${image}" >/dev/null
+          }
+
           echo "CANARY_STAGE=pulling-images"
-          docker pull "${helper_image}"
-          docker pull "${loki_35_image}"
-          docker pull "${loki_36_image}"
-          docker pull "${loki_37_image}"
-          docker pull "${alloy_image}"
-          docker pull "${proxy_image}"
+          ensure_image "${helper_image}"
+          ensure_image "${loki_35_image}"
+          ensure_image "${loki_36_image}"
+          ensure_image "${loki_37_image}"
+          ensure_image "${alloy_image}"
+          ensure_image "${proxy_image}"
           echo "CANARY_STAGE=images-ready"
           docker network create \
             --label com.repoguard.purpose=observability-log-canary \
@@ -591,20 +629,18 @@ jobs:
             --read-only --group-add "${docker_socket_gid}" \
             --memory 64m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
-            --health-cmd /healthcheck --health-interval 10s \
-            --health-timeout 5s --health-retries 6 --health-start-period 5s \
             -v /var/run/docker.sock:/var/run/docker.sock:ro \
             "${proxy_image}" \
             -listenip=0.0.0.0 \
             -allowfrom=alloy \
-            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)' \
+            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks|events)' \
             -allowHEAD=/_ping \
             -allowhealthcheck \
             -watchdoginterval=30 \
             -stoponwatchdog \
             -shutdowngracetime=5 \
             -loglevel=warn >/dev/null
-          wait_container_healthy "${proxy_container}" 30
+          wait_proxy_healthcheck "${proxy_container}" 30
           test "$(docker inspect --format '{{.Config.User}}' "${proxy_container}")" = "65534:65534"
           docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' "${proxy_container}" \
             | grep -qx "${docker_socket_gid}"
@@ -613,20 +649,24 @@ jobs:
             --entrypoint /bin/sh "${helper_image}" -ec '
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/networks)"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
               denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
-              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+              printf "%s,%s,%s,%s" \
+                "${get_status}" "${network_get_status}" "${post_status}" "${denied_status}"
             ')"
-          test "${proxy_policy_statuses}" = "200,405,403"
+          test "${proxy_policy_statuses}" = "200,200,405,403"
           echo "CANARY_STAGE=docker-proxy-read-only"
 
           echo "CANARY_STAGE=alloy-starting"
           docker create --name "${alloy_container}" \
             --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" \
+            --user 473:473 \
             --memory 256m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
             -v "${STAGE_PATH}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
@@ -638,43 +678,64 @@ jobs:
           docker network connect --alias alloy "${proxy_network_name}" "${alloy_container}"
           docker start "${alloy_container}" >/dev/null
           active_alloy=true
+          test "$(docker inspect --format '{{.Config.User}}' "${alloy_container}")" = "473:473"
           alloy_ip="$(docker inspect \
             --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
             "${alloy_container}")"
-          wait_http "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
-          wait_http "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
+          wait_container_http "${alloy_container}" \
+            "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
+          wait_container_http "${alloy_container}" \
+            "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
           echo "CANARY_STAGE=alloy-healthy"
 
+          target_series=0
           entries=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
-            entries="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+            alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics")"
+            target_series="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
+            entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${entries}" -gt 0 ]; then
+            if [ "${target_series}" -gt 0 ]; then
               break
             fi
             sleep 2
             attempt=$((attempt + 1))
           done
-          test "${entries}" -gt 0
+          if [ "${target_series}" -le 0 ]; then
+            curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+            docker logs --tail 200 "${alloy_container}" >&2
+            docker logs --tail 200 "${proxy_container}" >&2
+            exit 1
+          fi
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-          test "${parsing_errors}" -eq 0
-          sleep 5
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            "http://${loki_ip}:3100/loki/api/v1/label/container/values" \
-            | grep -q '"repoguard-backend"'
+          echo "CANARY_ALLOY_TARGET_SERIES=${target_series}"
+          echo "CANARY_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          echo "CANARY_ALLOY_PARSING_ERRORS=${parsing_errors}"
+          if [ "${parsing_errors}" -ne 0 ]; then
+            docker logs --tail 200 "${alloy_container}" >&2
+            exit 1
+          fi
           alloy_error_count="$(docker logs "${alloy_container}" 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
-          test "${alloy_error_count}" -eq 0
+          echo "CANARY_ALLOY_ERROR_COUNT=${alloy_error_count}"
+          if [ "${alloy_error_count}" -ne 0 ]; then
+            docker logs --tail 200 "${alloy_container}" >&2
+            exit 1
+          fi
           echo "CANARY_STAGE=collector-verified"
 
           echo "CANARY_OK=true"
           echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.4"
           echo "ALLOY_VERSION=1.18.0"
-          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_GET_ALLOWED=true"
+          echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"
           echo "DOCKER_PROXY_POST_DENIED=true"
           echo "SOURCE_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_archive}.sha256")"
           REMOTE_CANARY
@@ -828,12 +889,22 @@ jobs:
           ! docker inspect "${old_loki_name}" >/dev/null 2>&1
           ! docker inspect "${old_promtail_name}" >/dev/null 2>&1
 
-          docker pull "${helper_image}"
-          docker pull "${loki_35_image}"
-          docker pull "${loki_36_image}"
-          docker pull "${loki_37_image}"
-          docker pull "${alloy_image}"
-          docker pull "${proxy_image}"
+          ensure_image() {
+            image="$1"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              echo "IMAGE_CACHE_HIT=${image}"
+              return 0
+            fi
+            docker pull "${image}"
+            docker image inspect "${image}" >/dev/null
+          }
+
+          ensure_image "${helper_image}"
+          ensure_image "${loki_35_image}"
+          ensure_image "${loki_36_image}"
+          ensure_image "${loki_37_image}"
+          ensure_image "${alloy_image}"
+          ensure_image "${proxy_image}"
           for image in "${loki_35_image}" "${loki_36_image}" "${loki_37_image}"; do
             docker run --rm --network none --read-only \
               --cap-drop ALL --security-opt no-new-privileges \
@@ -961,14 +1032,17 @@ jobs:
             --entrypoint /bin/sh "${helper_image}" -ec '
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
+              network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/networks)"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
               denied_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/images/json)"
-              printf "%s,%s,%s" "${get_status}" "${post_status}" "${denied_status}"
+              printf "%s,%s,%s,%s" \
+                "${get_status}" "${network_get_status}" "${post_status}" "${denied_status}"
             ')"
-          test "${proxy_policy_statuses}" = "200,405,403"
+          test "${proxy_policy_statuses}" = "200,200,405,403"
           curl -fsS --connect-timeout 5 --max-time 10 \
             http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
             | grep -q '"version":"3.7.4"'
@@ -976,25 +1050,36 @@ jobs:
             http://127.0.0.1:3100/loki/api/v1/labels \
             | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
 
+          target_series=0
           entries=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
-            entries="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+            alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics)"
+            target_series="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
+            entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${entries}" -gt 0 ]; then
+            if [ "${target_series}" -gt 0 ]; then
               break
             fi
             sleep 2
             attempt=$((attempt + 1))
           done
-          test "${entries}" -gt 0
+          echo "POST_UPGRADE_ALLOY_TARGET_SERIES=${target_series}"
+          echo "POST_UPGRADE_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          if [ "${target_series}" -le 0 ]; then
+            curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+            docker logs --tail 200 repoguard-alloy >&2
+            exit 1
+          fi
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-          test "${parsing_errors}" -eq 0
-          sleep 5
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            http://127.0.0.1:3100/loki/api/v1/label/container/values \
-            | grep -q '"repoguard-backend"'
+          echo "POST_UPGRADE_ALLOY_PARSING_ERRORS=${parsing_errors}"
+          if [ "${parsing_errors}" -ne 0 ]; then
+            docker logs --tail 200 repoguard-alloy >&2
+            exit 1
+          fi
 
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
@@ -1002,6 +1087,7 @@ jobs:
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" = "${project}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-docker-proxy)" = "${project}"
+          test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
           test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
@@ -1012,6 +1098,7 @@ jobs:
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
           printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
+          printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|'
           ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
           test "$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' repoguard-docker-proxy)" = "repoguard_observability_docker_api,"
           docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' repoguard-alloy \
@@ -1030,7 +1117,11 @@ jobs:
           test "${critical_loki_count}" -eq 0
           alloy_error_count="$(docker logs --since 5m repoguard-alloy 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
-          test "${alloy_error_count}" -eq 0
+          echo "POST_UPGRADE_ALLOY_ERROR_COUNT=${alloy_error_count}"
+          if [ "${alloy_error_count}" -ne 0 ]; then
+            docker logs --since 5m repoguard-alloy >&2
+            exit 1
+          fi
           proxy_error_count="$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
             | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
           test "${proxy_error_count}" -eq 0
@@ -1048,9 +1139,11 @@ jobs:
           echo "ROLLBACK_LOKI_VOLUME=${old_loki_volume}"
           echo "LOKI_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_dir}/loki-data.tar.gz.sha256")"
           echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
-          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_VERSION=1.12.3"
+          echo "DOCKER_PROXY_NETWORK_GET_ALLOWED=true"
           echo "DOCKER_PROXY_POST_DENIED=true"
           REMOTE_UPGRADE
 

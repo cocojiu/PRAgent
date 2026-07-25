@@ -463,6 +463,12 @@ jobs:
             else
               echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=false"
             fi
+            if printf '%s\n' "${proxy_args}" \
+              | grep -Fq -- '|networks|'; then
+              echo "DOCKER_PROXY_NETWORK_GET_ENABLED=true"
+            else
+              echo "DOCKER_PROXY_NETWORK_GET_ENABLED=false"
+            fi
             if ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='; then
               echo "DOCKER_PROXY_POST_DISABLED=true"
             else
@@ -484,6 +490,7 @@ jobs:
             echo "DOCKER_PROXY_READ_ONLY_ROOT=not_present"
             echo "DOCKER_PROXY_ALLOY_ONLY=not_present"
             echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=not_present"
+            echo "DOCKER_PROXY_NETWORK_GET_ENABLED=not_present"
             echo "DOCKER_PROXY_POST_DISABLED=not_present"
             echo "DOCKER_PROXY_HEALTH=not_present"
             echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=not_present"

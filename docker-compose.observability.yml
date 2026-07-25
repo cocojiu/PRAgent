@@ -35,7 +35,7 @@ services:
     command:
       - -listenip=0.0.0.0
       - -allowfrom=alloy
-      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)
+      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks|events)
       - -allowHEAD=/_ping
       - -allowhealthcheck
       - -watchdoginterval=30
@@ -69,6 +69,7 @@ services:
     image: grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308
     container_name: repoguard-alloy
     restart: unless-stopped
+    user: "473:473"
     stop_grace_period: 30s
     command:
       - run
