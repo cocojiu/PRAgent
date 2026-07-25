@@ -674,22 +674,31 @@ jobs:
             "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
           echo "CANARY_STAGE=alloy-healthy"
 
+          target_series=0
           entries=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
-            entries="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+            alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics")"
+            target_series="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
+            entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${entries}" -gt 0 ]; then
+            if [ "${target_series}" -gt 0 ]; then
               break
             fi
             sleep 2
             attempt=$((attempt + 1))
           done
-          test "${entries}" -gt 0
+          if [ "${target_series}" -le 0 ]; then
+            curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+            docker logs --tail 200 "${alloy_container}" >&2
+            docker logs --tail 200 "${proxy_container}" >&2
+            exit 1
+          fi
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
           test "${parsing_errors}" -eq 0
-          sleep 5
           curl -fsS --connect-timeout 5 --max-time 10 \
             "http://${loki_ip}:3100/loki/api/v1/label/container/values" \
             | grep -q '"repoguard-backend"'
@@ -701,7 +710,8 @@ jobs:
           echo "CANARY_OK=true"
           echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.4"
           echo "ALLOY_VERSION=1.18.0"
-          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_GET_ALLOWED=true"
           echo "DOCKER_PROXY_POST_DENIED=true"
@@ -1005,18 +1015,22 @@ jobs:
             http://127.0.0.1:3100/loki/api/v1/labels \
             | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
 
+          target_series=0
           entries=0
           attempt=1
           while [ "${attempt}" -le 30 ]; do
-            entries="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+            alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics)"
+            target_series="$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { count++ } END { print count + 0 }')"
+            entries="$(printf '%s\n' "${alloy_metrics}" \
               | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-            if [ "${entries}" -gt 0 ]; then
+            if [ "${target_series}" -gt 0 ]; then
               break
             fi
             sleep 2
             attempt=$((attempt + 1))
           done
-          test "${entries}" -gt 0
+          test "${target_series}" -gt 0
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
           test "${parsing_errors}" -eq 0
@@ -1078,7 +1092,8 @@ jobs:
           echo "ROLLBACK_LOKI_VOLUME=${old_loki_volume}"
           echo "LOKI_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_dir}/loki-data.tar.gz.sha256")"
           echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
-          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_SERIES_GT_ZERO=true"
+          echo "ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
           echo "ALLOY_PARSING_ERRORS=0"
           echo "DOCKER_PROXY_VERSION=1.12.3"
           echo "DOCKER_PROXY_POST_DENIED=true"
