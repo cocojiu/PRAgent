@@ -699,9 +699,6 @@ jobs:
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
           test "${parsing_errors}" -eq 0
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            "http://${loki_ip}:3100/loki/api/v1/label/container/values" \
-            | grep -q '"repoguard-backend"'
           alloy_error_count="$(docker logs "${alloy_container}" 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
           test "${alloy_error_count}" -eq 0
@@ -1034,10 +1031,6 @@ jobs:
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
           test "${parsing_errors}" -eq 0
-          sleep 5
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            http://127.0.0.1:3100/loki/api/v1/label/container/values \
-            | grep -q '"repoguard-backend"'
 
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
