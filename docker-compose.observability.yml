@@ -108,6 +108,12 @@ services:
     container_name: repoguard-grafana
     restart: unless-stopped
     stop_grace_period: 30s
+    read_only: true
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     labels:
       com.repoguard.stack: observability
     depends_on:
@@ -116,6 +122,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD before starting observability services}
       GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_LOG_MODE: console
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
@@ -128,6 +135,8 @@ services:
       - ./config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "${GRAFANA_PORT_BIND:-127.0.0.1:3000}:3000"
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     mem_limit: 384m
     logging:
       driver: json-file

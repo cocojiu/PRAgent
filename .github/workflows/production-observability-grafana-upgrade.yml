@@ -338,9 +338,10 @@ jobs:
           migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
           target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           old_volume=app_repoguard_grafana_data
-          network_name=repoguard_observability
+          production_network=repoguard_observability
           canary_volume="repoguard_grafana_canary_data_${CANARY_ID}"
           canary_container="repoguard-grafana-canary-${CANARY_ID}"
+          canary_network="repoguard_grafana_canary_${CANARY_ID}"
           backup_dir="${DEPLOY_PATH}/backups/grafana-canary/${CANARY_ID}"
           production_stopped=false
 
@@ -349,6 +350,7 @@ jobs:
             trap - EXIT HUP INT TERM
             set +e
             docker rm -f "${canary_container}" >/dev/null 2>&1
+            docker network rm "${canary_network}" >/dev/null 2>&1
             docker volume rm "${canary_volume}" >/dev/null 2>&1
             if [ "${production_stopped}" = "true" ]; then
               docker start repoguard-grafana >/dev/null 2>&1
@@ -374,7 +376,7 @@ jobs:
                 return 1
               fi
               container_ip="$(docker inspect \
-                --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+                --format "{{(index .NetworkSettings.Networks \"${canary_network}\").IPAddress}}" \
                 "${container_name}")"
               health="$(curl -fsS --connect-timeout 3 --max-time 5 \
                 "http://${container_ip}:3000/api/health" 2>/dev/null || true)"
@@ -428,7 +430,8 @@ jobs:
             repoguard-grafana)" = "${old_volume}"
           ! docker volume inspect "${canary_volume}" >/dev/null 2>&1
           ! docker inspect "${canary_container}" >/dev/null 2>&1
-          docker network inspect "${network_name}" >/dev/null
+          ! docker network inspect "${canary_network}" >/dev/null 2>&1
+          docker network inspect "${production_network}" >/dev/null
           ensure_image "${old_image}"
           ensure_image "${bridge_image}"
           ensure_image "${migration_image}"
@@ -459,6 +462,10 @@ jobs:
             --label com.repoguard.stack=observability \
             --label com.repoguard.purpose=grafana-upgrade-canary \
             "${canary_volume}" >/dev/null
+          docker network create --internal \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.purpose=grafana-upgrade-canary \
+            "${canary_network}" >/dev/null
           docker run --rm --network none --read-only --user 0:0 \
             --cap-drop ALL \
             --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
@@ -479,11 +486,13 @@ jobs:
               set --
             fi
             docker run -d --name "${canary_container}" \
-              --network "${network_name}" \
-              --memory 512m --restart no \
+              --network "${canary_network}" \
+              --memory 512m --pids-limit 256 --restart no \
+              --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
               --cap-drop ALL --security-opt no-new-privileges \
               -e GF_SECURITY_ADMIN_PASSWORD=canary-validation-only \
               -e GF_USERS_ALLOW_SIGN_UP=false \
+              -e GF_LOG_MODE=console \
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
@@ -494,7 +503,7 @@ jobs:
             wait_grafana "${canary_container}" "${expected_version}"
             sleep 5
             container_ip="$(docker inspect \
-              --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+              --format "{{(index .NetworkSettings.Networks \"${canary_network}\").IPAddress}}" \
               "${canary_container}")"
             curl -fsS --connect-timeout 5 --max-time 10 \
               "http://${container_ip}:3000/login" | grep -qi grafana
@@ -548,7 +557,7 @@ jobs:
           migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
           target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           old_volume=app_repoguard_grafana_data
-          network_name=repoguard_observability
+          production_network=repoguard_observability
           project=repoguard-observability
           final_base="${DEPLOY_PATH}/docker-compose.observability.yml"
           final_override="${DEPLOY_PATH}/config/observability/docker-compose.production.yml"
@@ -556,6 +565,7 @@ jobs:
           env_file="${DEPLOY_PATH}/.env"
           new_volume="repoguard_observability_grafana_data_v13_${UPGRADE_ID}"
           migration_container="repoguard-grafana-migrate-${UPGRADE_ID}"
+          migration_network="repoguard_grafana_migration_${UPGRADE_ID}"
           migration_id="$(date -u +%Y%m%dT%H%M%SZ)"
           backup_dir="${DEPLOY_PATH}/backups/grafana-upgrade/${migration_id}"
           success=false
@@ -597,7 +607,7 @@ jobs:
                 return 1
               fi
               container_ip="$(docker inspect \
-                --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+                --format "{{(index .NetworkSettings.Networks \"${migration_network}\").IPAddress}}" \
                 "${migration_container}")"
               health="$(curl -fsS --connect-timeout 3 --max-time 5 \
                 "http://${container_ip}:3000/api/health" 2>/dev/null || true)"
@@ -618,13 +628,14 @@ jobs:
             if [ "${success}" = "true" ]; then
               exit "${status}"
             fi
+            set +e
+            docker rm -f "${migration_container}" >/dev/null 2>&1
+            docker network rm "${migration_network}" >/dev/null 2>&1
             if [ "${production_changed}" != "true" ]; then
               echo "Grafana upgrade failed before production state changed; rollback was not needed." >&2
               exit "${status}"
             fi
-            set +e
             echo "Grafana upgrade failed; restoring the original image, assets, and untouched volume." >&2
-            docker rm -f "${migration_container}" >/dev/null 2>&1
             docker rm -f repoguard-grafana >/dev/null 2>&1
             recovery_status=0
             if [ "${rollback_assets_ready}" = "true" ]; then
@@ -701,11 +712,13 @@ jobs:
               set --
             fi
             docker run -d --name "${migration_container}" \
-              --network "${network_name}" \
-              --memory 512m --restart no \
+              --network "${migration_network}" \
+              --memory 512m --pids-limit 256 --restart no \
+              --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
               --cap-drop ALL --security-opt no-new-privileges \
               -e GF_SECURITY_ADMIN_PASSWORD=migration-validation-only \
               -e GF_USERS_ALLOW_SIGN_UP=false \
+              -e GF_LOG_MODE=console \
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
@@ -744,8 +757,9 @@ jobs:
             repoguard-grafana)" = "${old_volume}"
           ! docker volume inspect "${new_volume}" >/dev/null 2>&1
           ! docker inspect "${migration_container}" >/dev/null 2>&1
+          ! docker network inspect "${migration_network}" >/dev/null 2>&1
           docker volume inspect "${old_volume}" >/dev/null
-          docker network inspect "${network_name}" >/dev/null
+          docker network inspect "${production_network}" >/dev/null
           ensure_image "${old_image}"
           ensure_image "${bridge_image}"
           ensure_image "${migration_image}"
@@ -757,6 +771,10 @@ jobs:
           cp -a "${env_file}" "${backup_dir}/production.env"
           chmod 600 "${backup_dir}/production.env"
           rollback_assets_ready=true
+          docker network create --internal \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.purpose=grafana-upgrade-migration \
+            "${migration_network}" >/dev/null
 
           cutover_started_at="$(date +%s)"
           production_changed=true
@@ -792,6 +810,7 @@ jobs:
           run_migration_stage "${bridge_image}" 11.6.16
           run_migration_stage "${migration_image}" 12.4.6
           run_migration_stage "${target_image}" 13.1.1
+          docker network rm "${migration_network}" >/dev/null
 
           cp -a "${STAGE_PATH}/docker-compose.observability.yml" "${final_base}"
           cp -a "${STAGE_PATH}/config/observability/." "${final_config}/"
@@ -837,9 +856,19 @@ jobs:
             "$(docker inspect \
               --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
               repoguard-grafana | sed '/^$/d' | sort | paste -sd, -)" \
-            "${network_name}"
+            "${production_network}"
           assert_equal RESTARTS \
             "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" "0"
+          assert_equal READ_ONLY \
+            "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-grafana)" "true"
+          assert_equal PIDS_LIMIT \
+            "$(docker inspect --format '{{.HostConfig.PidsLimit}}' repoguard-grafana)" "256"
+          assert_equal CAP_DROP \
+            "$(docker inspect --format '{{join .HostConfig.CapDrop ","}}' repoguard-grafana)" "ALL"
+          security_options="$(docker inspect \
+            --format '{{json .HostConfig.SecurityOpt}}' repoguard-grafana)"
+          echo "GRAFANA_POST_UPGRADE_VERIFY_SECURITY_OPTIONS=${security_options}"
+          printf '%s\n' "${security_options}" | grep -q 'no-new-privileges'
           image_user="$(docker image inspect --format '{{.Config.User}}' "${target_image}")"
           assert_equal USER \
             "$(docker inspect --format '{{.Config.User}}' repoguard-grafana)" "${image_user}"
