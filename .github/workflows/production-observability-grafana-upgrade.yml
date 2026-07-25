@@ -437,10 +437,23 @@ jobs:
 
           ensure_image() {
             image="$1"
-            if ! docker image inspect "${image}" >/dev/null 2>&1; then
-              docker pull "${image}"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              return 0
             fi
-            docker image inspect "${image}" >/dev/null
+            attempt=1
+            while [ "${attempt}" -le 5 ]; do
+              echo "Pulling ${image}; attempt ${attempt}/5."
+              if docker pull "${image}" \
+                && docker image inspect "${image}" >/dev/null 2>&1; then
+                return 0
+              fi
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 10))
+              fi
+              attempt=$((attempt + 1))
+            done
+            echo "Unable to pull and verify ${image} after 5 attempts." >&2
+            return 1
           }
 
           case "${STAGE_PATH}" in
@@ -726,10 +739,23 @@ jobs:
 
           ensure_image() {
             image="$1"
-            if ! docker image inspect "${image}" >/dev/null 2>&1; then
-              docker pull "${image}"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              return 0
             fi
-            docker image inspect "${image}" >/dev/null
+            attempt=1
+            while [ "${attempt}" -le 5 ]; do
+              echo "Pulling ${image}; attempt ${attempt}/5."
+              if docker pull "${image}" \
+                && docker image inspect "${image}" >/dev/null 2>&1; then
+                return 0
+              fi
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 10))
+              fi
+              attempt=$((attempt + 1))
+            done
+            echo "Unable to pull and verify ${image} after 5 attempts." >&2
+            return 1
           }
 
           run_migration_stage() {
