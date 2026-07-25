@@ -20,6 +20,7 @@
     <properties>
         <java.version>25</java.version>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
+        <netty.version>4.2.16.Final</netty.version>
         <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
