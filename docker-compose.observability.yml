@@ -26,7 +26,7 @@ services:
         max-file: "3"
 
   docker-proxy:
-    image: ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600
+    image: wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b
     container_name: repoguard-docker-proxy
     restart: unless-stopped
     read_only: true
