@@ -464,7 +464,7 @@ jobs:
               echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=false"
             fi
             if printf '%s\n' "${proxy_args}" \
-              | grep -Fq -- 'networks/[A-Za-z0-9_.-]+'; then
+              | grep -Fq -- '|networks|'; then
               echo "DOCKER_PROXY_NETWORK_GET_ENABLED=true"
             else
               echo "DOCKER_PROXY_NETWORK_GET_ENABLED=false"

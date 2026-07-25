@@ -236,7 +236,7 @@ jobs:
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
             printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
             printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
-            printf '%s\n' "${proxy_args}" | grep -Fq -- 'networks/[A-Za-z0-9_.-]+'
+            printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|'
             ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
             test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
             curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready \
@@ -623,7 +623,7 @@ jobs:
             "${proxy_image}" \
             -listenip=0.0.0.0 \
             -allowfrom=alloy \
-            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks/[A-Za-z0-9_.-]+|events)' \
+            '-allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|networks|events)' \
             -allowHEAD=/_ping \
             -allowhealthcheck \
             -watchdoginterval=30 \
@@ -636,13 +636,11 @@ jobs:
             | grep -qx "${docker_socket_gid}"
           proxy_policy_statuses="$(docker run --rm \
             --network "${proxy_network_name}" --network-alias alloy \
-            --env PROXY_NETWORK_NAME="${proxy_network_name}" \
             --entrypoint /bin/sh "${helper_image}" -ec '
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
               network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
-                --output /dev/null --write-out "%{http_code}" \
-                "http://docker-proxy:2375/networks/${PROXY_NETWORK_NAME}")"
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/networks)"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
@@ -1015,8 +1013,7 @@ jobs:
               get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/json)"
               network_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
-                --output /dev/null --write-out "%{http_code}" \
-                http://docker-proxy:2375/networks/repoguard_observability_docker_api)"
+                --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/networks)"
               post_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
                 --request POST --header "Content-Type: application/json" --data "{}" \
                 --output /dev/null --write-out "%{http_code}" http://docker-proxy:2375/containers/create)"
@@ -1081,7 +1078,7 @@ jobs:
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
           printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
           printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
-          printf '%s\n' "${proxy_args}" | grep -Fq -- 'networks/[A-Za-z0-9_.-]+'
+          printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|'
           ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
           test "$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' repoguard-docker-proxy)" = "repoguard_observability_docker_api,"
           docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' repoguard-alloy \
