@@ -317,10 +317,13 @@ jobs:
           cleanup() {
             status="$?"
             trap - EXIT
-            trap - HUP INT TERM
             set +e
-            docker rm -f "${alloy_container}" >/dev/null 2>&1
-            docker rm -f "${loki_container}" >/dev/null 2>&1
+            if [ "${active_alloy}" = "true" ]; then
+              docker rm -f "${alloy_container}" >/dev/null 2>&1
+            fi
+            if [ "${active_loki}" = "true" ]; then
+              docker rm -f "${loki_container}" >/dev/null 2>&1
+            fi
             docker network rm "${network_name}" >/dev/null 2>&1
             docker volume rm "${loki_volume}" "${alloy_volume}" >/dev/null 2>&1
             case "${STAGE_PATH}" in
@@ -331,69 +334,6 @@ jobs:
             exit "${status}"
           }
           trap cleanup EXIT
-          trap 'exit 129' HUP
-          trap 'exit 130' INT
-          trap 'exit 143' TERM
-
-          cleanup_stale_canaries() {
-            stale_container_count=0
-            stale_network_count=0
-            stale_volume_count=0
-            stale_stage_count=0
-
-            for stale_container in $(docker ps -a --format '{{.Names}}' \
-              | awk '/^repoguard-(loki|alloy)-canary-[0-9]+-[0-9]+$/ { print }'); do
-              if [ "${stale_container}" != "${loki_container}" ] \
-                && [ "${stale_container}" != "${alloy_container}" ]; then
-                docker rm -f "${stale_container}" >/dev/null
-                stale_container_count=$((stale_container_count + 1))
-              fi
-            done
-
-            for stale_network in $(docker network ls --format '{{.Name}}' \
-              | awk '/^repoguard-observability-canary-[0-9]+-[0-9]+$/ { print }'); do
-              if [ "${stale_network}" != "${network_name}" ]; then
-                docker network rm "${stale_network}" >/dev/null
-                stale_network_count=$((stale_network_count + 1))
-              fi
-            done
-
-            for stale_volume in $(docker volume ls --format '{{.Name}}' \
-              | awk '/^repoguard-observability-canary-(loki|alloy)-[0-9]+-[0-9]+$/ { print }'); do
-              if [ "${stale_volume}" != "${loki_volume}" ] \
-                && [ "${stale_volume}" != "${alloy_volume}" ]; then
-                docker volume rm "${stale_volume}" >/dev/null
-                stale_volume_count=$((stale_volume_count + 1))
-              fi
-            done
-
-            for stale_stage in $(find "${DEPLOY_PATH}" -mindepth 1 -maxdepth 1 -type d \
-              -name '.observability-log-upgrade-*'); do
-              stale_stage_name="${stale_stage##*/}"
-              case "${stale_stage}" in
-                "${DEPLOY_PATH}"/.observability-log-upgrade-*)
-                  ;;
-                *)
-                  echo "Refusing unexpected stale staging path." >&2
-                  return 1
-                  ;;
-              esac
-              printf '%s\n' "${stale_stage_name}" \
-                | grep -Eq '^\.observability-log-upgrade-[0-9]+-[0-9]+$' || {
-                  echo "Refusing malformed stale staging directory." >&2
-                  return 1
-                }
-              if [ "${stale_stage}" != "${STAGE_PATH}" ]; then
-                rm -rf -- "${stale_stage}"
-                stale_stage_count=$((stale_stage_count + 1))
-              fi
-            done
-
-            echo "CANARY_STALE_CONTAINERS_REMOVED=${stale_container_count}"
-            echo "CANARY_STALE_NETWORKS_REMOVED=${stale_network_count}"
-            echo "CANARY_STALE_VOLUMES_REMOVED=${stale_volume_count}"
-            echo "CANARY_STALE_STAGES_REMOVED=${stale_stage_count}"
-          }
 
           wait_http() {
             url="$1"
@@ -420,7 +360,6 @@ jobs:
           esac
           test -s "${STAGE_PATH}/config/observability/loki.yml"
           test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
-          cleanup_stale_canaries
           echo "CANARY_STAGE=assets-validated"
 
           backup_archive="$(find "${DEPLOY_PATH}/backups/observability" \
@@ -445,15 +384,9 @@ jobs:
           docker pull "${loki_37_image}"
           docker pull "${alloy_image}"
           echo "CANARY_STAGE=images-ready"
-          docker network create \
-            --label com.repoguard.purpose=observability-log-canary \
-            "${network_name}" >/dev/null
-          docker volume create \
-            --label com.repoguard.purpose=observability-log-canary \
-            "${loki_volume}" >/dev/null
-          docker volume create \
-            --label com.repoguard.purpose=observability-log-canary \
-            "${alloy_volume}" >/dev/null
+          docker network create "${network_name}" >/dev/null
+          docker volume create "${loki_volume}" >/dev/null
+          docker volume create "${alloy_volume}" >/dev/null
           docker run --rm --network none --read-only --user 0:0 \
             --cap-drop ALL \
             --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
@@ -469,7 +402,6 @@ jobs:
             expected_version="$2"
             echo "CANARY_STAGE=loki-${expected_version}-starting"
             docker run -d --name "${loki_container}" \
-              --label com.repoguard.purpose=observability-log-canary \
               --network "${network_name}" --network-alias loki \
               --memory 384m --restart no \
               --cap-drop ALL --security-opt no-new-privileges \
@@ -497,7 +429,6 @@ jobs:
 
           echo "CANARY_STAGE=loki-3.7.4-starting"
           docker run -d --name "${loki_container}" \
-            --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" --network-alias loki \
             --memory 384m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
@@ -513,7 +444,6 @@ jobs:
 
           echo "CANARY_STAGE=alloy-starting"
           docker run -d --name "${alloy_container}" \
-            --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" \
             --memory 256m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
@@ -631,7 +561,6 @@ jobs:
           rollback() {
             status="$1"
             trap - EXIT
-            trap - HUP INT TERM
             if [ "${status}" -eq 0 ] || [ "${upgrade_verified}" = "true" ]; then
               exit "${status}"
             fi
@@ -677,9 +606,6 @@ jobs:
             exit "${status}"
           }
           trap 'rollback $?' EXIT
-          trap 'exit 129' HUP
-          trap 'exit 130' INT
-          trap 'exit 143' TERM
 
           case "${STAGE_PATH}" in
             "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
