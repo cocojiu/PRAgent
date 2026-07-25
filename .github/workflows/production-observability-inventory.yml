@@ -165,6 +165,16 @@ jobs:
             exit 1
           fi
 
+          legacy_observability_container_count=0
+          for service_name in loki promtail grafana; do
+            service_count="$(docker ps -aq \
+              --filter 'label=com.docker.compose.project=app' \
+              --filter "label=com.docker.compose.service=${service_name}" \
+              | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+            legacy_observability_container_count=$((legacy_observability_container_count + service_count))
+          done
+          echo "LEGACY_OBSERVABILITY_CONTAINER_COUNT=${legacy_observability_container_count}"
+
           container_index=0
           volume_names=""
           for container_name in repoguard-loki repoguard-promtail repoguard-grafana; do
@@ -243,7 +253,38 @@ jobs:
           else
             echo "LOKI_LABELS_QUERY_OK=false"
           fi
-          echo "LOKI_ERROR_LOG_COUNT_10M=$(docker logs --since 10m repoguard-loki 2>&1 | grep -Eic 'level=(error|fatal)|(^|[[:space:]])(error|fatal)([[:space:]]|$)' || true)"
+
+          count_service_errors() {
+            since="$1"
+            container_name="$2"
+            docker logs --since "${since}" "${container_name}" 2>&1 \
+              | grep -Eic 'level=(error|fatal)|(^|[[:space:]])(error|fatal)([[:space:]]|$)' || true
+          }
+          echo "LOKI_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-loki)"
+          echo "LOKI_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-loki)"
+          echo "LOKI_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-loki)"
+          echo "PROMTAIL_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-promtail)"
+          echo "PROMTAIL_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-promtail)"
+          echo "PROMTAIL_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-promtail)"
+          echo "GRAFANA_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-grafana)"
+          echo "GRAFANA_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-grafana)"
+          echo "GRAFANA_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-grafana)"
+
+          count_loki_error_category() {
+            category_pattern="$1"
+            docker logs --since 10m repoguard-loki 2>&1 \
+              | grep -Ei 'level=(error|fatal)|(^|[[:space:]])(error|fatal)([[:space:]]|$)' \
+              | grep -Eic "${category_pattern}" || true
+          }
+          echo "LOKI_FATAL_LOG_COUNT_10M=$(count_loki_error_category 'level=fatal|(^|[[:space:]])fatal([[:space:]]|$)')"
+          echo "LOKI_PERMISSION_ERROR_COUNT_10M=$(count_loki_error_category 'permission denied|operation not permitted')"
+          echo "LOKI_MISSING_PATH_ERROR_COUNT_10M=$(count_loki_error_category 'no such file|not found')"
+          echo "LOKI_STORAGE_ERROR_COUNT_10M=$(count_loki_error_category 'input/output error|read-only file system|no space left|disk')"
+          echo "LOKI_CORRUPTION_ERROR_COUNT_10M=$(count_loki_error_category 'corrupt|checksum')"
+          echo "LOKI_TIMEOUT_ERROR_COUNT_10M=$(count_loki_error_category 'timeout|deadline exceeded')"
+          echo "LOKI_CONNECTION_ERROR_COUNT_10M=$(count_loki_error_category 'connection refused|connection reset|network is unreachable')"
+          echo "LOKI_COMPACTOR_ERROR_COUNT_10M=$(count_loki_error_category 'compactor|retention')"
+          echo "LOKI_INGESTER_ERROR_COUNT_10M=$(count_loki_error_category 'ingester|wal')"
           REMOTE_INVENTORY
           ssh_status=$?
           set -e
