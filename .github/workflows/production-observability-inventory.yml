@@ -186,6 +186,78 @@ jobs:
           echo "LOG_STACK_UPGRADE_TRANSIENT_CONTAINER_COUNT=$(docker ps -a --format '{{.Names}}' \
             | awk '/^repoguard-(loki-pre-v37|promtail-pre-alloy|loki-upgrade-[0-9]+)-/ { count++ } END { print count + 0 }')"
 
+          canary_loki_running_count=0
+          canary_loki_ready_count=0
+          canary_loki_v37_count=0
+          canary_loki_error_count=0
+          for canary_loki in $(docker ps -a --format '{{.Names}}' \
+            | awk '/^repoguard-loki-canary-[0-9]+-[0-9]+$/ { print }'); do
+            if [ "$(docker inspect --format '{{.State.Status}}' "${canary_loki}")" = "running" ]; then
+              canary_loki_running_count=$((canary_loki_running_count + 1))
+              canary_loki_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${canary_loki}")"
+              if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_loki_ip}:3100/ready" 2>/dev/null \
+                | grep -q '^ready'; then
+                canary_loki_ready_count=$((canary_loki_ready_count + 1))
+              fi
+              if curl -fsS --connect-timeout 3 --max-time 5 \
+                "http://${canary_loki_ip}:3100/loki/api/v1/status/buildinfo" 2>/dev/null \
+                | grep -q '"version":"3.7.4"'; then
+                canary_loki_v37_count=$((canary_loki_v37_count + 1))
+              fi
+            fi
+            service_errors="$(docker logs --since 10m "${canary_loki}" 2>&1 \
+              | grep -Eic 'level=(error|fatal)|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
+            canary_loki_error_count=$((canary_loki_error_count + service_errors))
+          done
+          echo "LOG_STACK_CANARY_LOKI_RUNNING_COUNT=${canary_loki_running_count}"
+          echo "LOG_STACK_CANARY_LOKI_READY_COUNT=${canary_loki_ready_count}"
+          echo "LOG_STACK_CANARY_LOKI_V37_COUNT=${canary_loki_v37_count}"
+          echo "LOG_STACK_CANARY_LOKI_ERROR_COUNT_10M=${canary_loki_error_count}"
+
+          canary_alloy_running_count=0
+          canary_alloy_ready_count=0
+          canary_alloy_healthy_count=0
+          canary_alloy_entries=0
+          canary_alloy_parsing_errors=0
+          canary_alloy_error_count=0
+          canary_alloy_docker_error_count=0
+          for canary_alloy in $(docker ps -a --format '{{.Names}}' \
+            | awk '/^repoguard-alloy-canary-[0-9]+-[0-9]+$/ { print }'); do
+            if [ "$(docker inspect --format '{{.State.Status}}' "${canary_alloy}")" = "running" ]; then
+              canary_alloy_running_count=$((canary_alloy_running_count + 1))
+              canary_alloy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${canary_alloy}")"
+              if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_alloy_ip}:12345/-/ready" 2>/dev/null \
+                | grep -q 'Alloy is ready'; then
+                canary_alloy_ready_count=$((canary_alloy_ready_count + 1))
+              fi
+              if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_alloy_ip}:12345/-/healthy" 2>/dev/null \
+                | grep -q 'All Alloy components are healthy'; then
+                canary_alloy_healthy_count=$((canary_alloy_healthy_count + 1))
+              fi
+              alloy_metrics="$(curl -fsS --connect-timeout 3 --max-time 5 \
+                "http://${canary_alloy_ip}:12345/metrics" 2>/dev/null || true)"
+              service_entries="$(printf '%s\n' "${alloy_metrics}" \
+                | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+              service_parsing_errors="$(printf '%s\n' "${alloy_metrics}" \
+                | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+              canary_alloy_entries=$((canary_alloy_entries + service_entries))
+              canary_alloy_parsing_errors=$((canary_alloy_parsing_errors + service_parsing_errors))
+            fi
+            service_errors="$(docker logs --since 10m "${canary_alloy}" 2>&1 \
+              | grep -Eic 'level=(error|fatal)' || true)"
+            docker_errors="$(docker logs --since 10m "${canary_alloy}" 2>&1 \
+              | grep -Eic 'docker.sock|permission denied|operation not permitted|dial unix|connection refused' || true)"
+            canary_alloy_error_count=$((canary_alloy_error_count + service_errors))
+            canary_alloy_docker_error_count=$((canary_alloy_docker_error_count + docker_errors))
+          done
+          echo "LOG_STACK_CANARY_ALLOY_RUNNING_COUNT=${canary_alloy_running_count}"
+          echo "LOG_STACK_CANARY_ALLOY_READY_COUNT=${canary_alloy_ready_count}"
+          echo "LOG_STACK_CANARY_ALLOY_HEALTHY_COUNT=${canary_alloy_healthy_count}"
+          echo "LOG_STACK_CANARY_ALLOY_TARGET_ENTRIES_TOTAL=${canary_alloy_entries}"
+          echo "LOG_STACK_CANARY_ALLOY_PARSING_ERRORS_TOTAL=${canary_alloy_parsing_errors}"
+          echo "LOG_STACK_CANARY_ALLOY_ERROR_COUNT_10M=${canary_alloy_error_count}"
+          echo "LOG_STACK_CANARY_ALLOY_DOCKER_ERROR_COUNT_10M=${canary_alloy_docker_error_count}"
+
           if [ "$(docker inspect --format '{{.State.Status}}' repoguard-alloy 2>/dev/null || true)" = "running" ]; then
             collector_name="repoguard-alloy"
           else
