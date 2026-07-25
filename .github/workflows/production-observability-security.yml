@@ -33,6 +33,7 @@ jobs:
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
         run: |
           set -euo pipefail
           compose_args=(
@@ -88,6 +89,7 @@ jobs:
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
         run: |
           set -euo pipefail
           compose_args=(

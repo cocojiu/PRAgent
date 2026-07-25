@@ -26,33 +26,34 @@ services:
         max-file: "3"
 
   docker-proxy:
-    image: ghcr.io/tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    image: ghcr.io/wollomatic/socket-proxy:1.12.3@sha256:9e781fbe79315355d08901832f639119aa332ac27ee6157fc7f2fab5193c8600
     container_name: repoguard-docker-proxy
     restart: unless-stopped
     read_only: true
+    group_add:
+      - "${DOCKER_SOCKET_GID:?Set DOCKER_SOCKET_GID to the group id of /var/run/docker.sock}"
+    command:
+      - -listenip=0.0.0.0
+      - -allowfrom=alloy
+      - -allowGET=/(v[0-9]+\.[0-9]+/)?(version|info|_ping|containers/json|containers/[A-Za-z0-9_.-]+/(json|logs)|events)
+      - -allowHEAD=/_ping
+      - -allowhealthcheck
+      - -watchdoginterval=30
+      - -stoponwatchdog
+      - -shutdowngracetime=5
+      - -loglevel=warn
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    environment:
-      CONTAINERS: "1"
-      EVENTS: "1"
-      PING: "1"
-      VERSION: "1"
-      POST: "0"
-      DISABLE_IPV6: "1"
-      LOG_LEVEL: warning
     labels:
       com.repoguard.stack: observability
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    tmpfs:
-      - /run:rw,noexec,nosuid,size=4m
-      - /tmp:rw,noexec,nosuid,size=4m
     networks:
       - docker_api
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q '^OK$'"]
+      test: ["CMD", "/healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 6

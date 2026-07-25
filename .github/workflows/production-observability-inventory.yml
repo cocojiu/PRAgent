@@ -271,14 +271,12 @@ jobs:
             | awk '/^repoguard-docker-proxy-canary-[0-9]+-[0-9]+$/ { print }'); do
             if [ "$(docker inspect --format '{{.State.Status}}' "${canary_proxy}")" = "running" ]; then
               canary_proxy_running_count=$((canary_proxy_running_count + 1))
-              canary_proxy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${canary_proxy}")"
-              if curl -fsS --connect-timeout 3 --max-time 5 "http://${canary_proxy_ip}:2375/_ping" 2>/dev/null \
-                | grep -q '^OK'; then
+              if [ "$(docker inspect --format '{{.State.Health.Status}}' "${canary_proxy}")" = "healthy" ]; then
                 canary_proxy_ready_count=$((canary_proxy_ready_count + 1))
               fi
             fi
             service_errors="$(docker logs --since 10m "${canary_proxy}" 2>&1 \
-              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+              | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
             canary_proxy_error_count=$((canary_proxy_error_count + service_errors))
           done
           echo "LOG_STACK_CANARY_DOCKER_PROXY_RUNNING_COUNT=${canary_proxy_running_count}"
@@ -450,44 +448,44 @@ jobs:
               --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' \
               repoguard-docker-proxy)"
             echo "DOCKER_PROXY_SOCKET_MOUNT=${proxy_socket_mount:-none}"
-            if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-docker-proxy \
-              | grep -qx 'CONTAINERS=1'; then
+            echo "DOCKER_PROXY_USER=$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)"
+            echo "DOCKER_PROXY_GROUP_ADD=$(docker inspect --format '{{json .HostConfig.GroupAdd}}' repoguard-docker-proxy)"
+            echo "DOCKER_PROXY_READ_ONLY_ROOT=$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-docker-proxy)"
+            proxy_args="$(docker inspect --format '{{range .Config.Cmd}}{{println .}}{{end}}' repoguard-docker-proxy)"
+            if printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'; then
+              echo "DOCKER_PROXY_ALLOY_ONLY=true"
+            else
+              echo "DOCKER_PROXY_ALLOY_ONLY=false"
+            fi
+            if printf '%s\n' "${proxy_args}" \
+              | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'; then
               echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=true"
             else
               echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=false"
             fi
-            if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' repoguard-docker-proxy \
-              | grep -qx 'POST=0'; then
+            if ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='; then
               echo "DOCKER_PROXY_POST_DISABLED=true"
             else
               echo "DOCKER_PROXY_POST_DISABLED=false"
             fi
-            proxy_ip="$(docker inspect \
-              --format '{{(index .NetworkSettings.Networks "repoguard_observability_docker_api").IPAddress}}' \
-              repoguard-docker-proxy 2>/dev/null || true)"
-            if [ -n "${proxy_ip}" ] \
-              && curl -fsS --connect-timeout 5 --max-time 10 "http://${proxy_ip}:2375/_ping" 2>/dev/null \
-                | grep -q '^OK'; then
-              echo "DOCKER_PROXY_PING_OK=true"
-            else
-              echo "DOCKER_PROXY_PING_OK=false"
-            fi
-            proxy_get_status="$(curl --silent --show-error --connect-timeout 5 --max-time 10 \
-              --output /dev/null --write-out '%{http_code}' \
-              "http://${proxy_ip}:2375/containers/json" 2>/dev/null || true)"
-            echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=${proxy_get_status:-000}"
+            echo "DOCKER_PROXY_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)"
+            echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=restricted_to_alloy"
             echo "DOCKER_PROXY_ERROR_LOG_COUNT_1M=$(docker logs --since 1m repoguard-docker-proxy 2>&1 \
-              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+              | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
             echo "DOCKER_PROXY_ERROR_LOG_COUNT_5M=$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
-              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+              | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
             echo "DOCKER_PROXY_ERROR_LOG_COUNT_10M=$(docker logs --since 10m repoguard-docker-proxy 2>&1 \
-              | grep -Eic '(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
+              | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
           else
             echo "DOCKER_PROXY_CONTAINER_EXISTS=false"
             echo "DOCKER_PROXY_SOCKET_MOUNT=not_present"
+            echo "DOCKER_PROXY_USER=not_present"
+            echo "DOCKER_PROXY_GROUP_ADD=not_present"
+            echo "DOCKER_PROXY_READ_ONLY_ROOT=not_present"
+            echo "DOCKER_PROXY_ALLOY_ONLY=not_present"
             echo "DOCKER_PROXY_CONTAINERS_GET_ENABLED=not_present"
             echo "DOCKER_PROXY_POST_DISABLED=not_present"
-            echo "DOCKER_PROXY_PING_OK=not_present"
+            echo "DOCKER_PROXY_HEALTH=not_present"
             echo "DOCKER_PROXY_CONTAINERS_GET_HTTP_STATUS=not_present"
             echo "DOCKER_PROXY_ERROR_LOG_COUNT_1M=not_present"
             echo "DOCKER_PROXY_ERROR_LOG_COUNT_5M=not_present"
