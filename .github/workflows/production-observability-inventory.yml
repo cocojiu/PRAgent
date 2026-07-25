@@ -110,10 +110,6 @@ jobs:
             echo "ERROR=production_compose_not_found"
             exit 1
           }
-          test -f docker-compose.observability.yml || {
-            echo "ERROR=observability_compose_not_found"
-            exit 1
-          }
 
           orphan_stderr="$(mktemp)"
           production_config_stdout="$(mktemp)"
@@ -126,7 +122,6 @@ jobs:
           echo "DOCKER_SERVER_VERSION=$(docker version --format '{{.Server.Version}}')"
           echo "DOCKER_COMPOSE_VERSION=$(docker compose version --short)"
           echo "REMOTE_PRODUCTION_COMPOSE_SHA256=$(sha256sum docker-compose.prod.yml | awk '{ print $1 }')"
-          echo "REMOTE_OBSERVABILITY_COMPOSE_SHA256=$(sha256sum docker-compose.observability.yml | awk '{ print $1 }')"
           echo "ENV_COMPOSE_PROJECT_NAME=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env | tail -n 1)"
 
           if docker compose --env-file .env -f docker-compose.prod.yml config --services >"${production_config_stdout}" 2>"${production_config_stderr}"; then
@@ -136,11 +131,19 @@ jobs:
             echo "PRODUCTION_COMPOSE_CONFIG_OK=false"
           fi
 
-          if docker compose --env-file .env -f docker-compose.observability.yml config --services >"${observability_config_stdout}" 2>"${observability_config_stderr}"; then
-            echo "OBSERVABILITY_COMPOSE_CONFIG_OK=true"
-            echo "OBSERVABILITY_COMPOSE_SERVICES=$(paste -sd, - < "${observability_config_stdout}")"
+          if [ -f docker-compose.observability.yml ]; then
+            echo "OBSERVABILITY_COMPOSE_PRESENT=true"
+            echo "REMOTE_OBSERVABILITY_COMPOSE_SHA256=$(sha256sum docker-compose.observability.yml | awk '{ print $1 }')"
+            if docker compose --env-file .env -f docker-compose.observability.yml config --services >"${observability_config_stdout}" 2>"${observability_config_stderr}"; then
+              echo "OBSERVABILITY_COMPOSE_CONFIG_OK=true"
+              echo "OBSERVABILITY_COMPOSE_SERVICES=$(paste -sd, - < "${observability_config_stdout}")"
+            else
+              echo "OBSERVABILITY_COMPOSE_CONFIG_OK=false"
+            fi
           else
-            echo "OBSERVABILITY_COMPOSE_CONFIG_OK=false"
+            echo "OBSERVABILITY_COMPOSE_PRESENT=false"
+            echo "REMOTE_OBSERVABILITY_COMPOSE_SHA256=missing"
+            echo "OBSERVABILITY_COMPOSE_CONFIG_OK=not_run"
           fi
 
           if docker compose --env-file .env -f docker-compose.prod.yml ps >/dev/null 2>"${orphan_stderr}"; then
