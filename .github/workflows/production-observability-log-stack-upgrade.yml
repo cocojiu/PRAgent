@@ -468,6 +468,35 @@ jobs:
             return 1
           }
 
+          wait_container_http() {
+            container_name="$1"
+            url="$2"
+            pattern="$3"
+            attempts="${4:-60}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              container_status="$(docker inspect --format '{{.State.Status}}' "${container_name}")"
+              if [ "${container_status}" != "running" ]; then
+                docker inspect --format \
+                  'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+                  "${container_name}" >&2
+                docker logs --tail 200 "${container_name}" >&2
+                return 1
+              fi
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            echo "Timed out waiting for ${container_name} at ${url}." >&2
+            docker inspect --format \
+              'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+              "${container_name}" >&2
+            docker logs --tail 200 "${container_name}" >&2
+            return 1
+          }
+
           case "${STAGE_PATH}" in
             "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
               ;;
@@ -636,8 +665,10 @@ jobs:
           alloy_ip="$(docker inspect \
             --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
             "${alloy_container}")"
-          wait_http "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
-          wait_http "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
+          wait_container_http "${alloy_container}" \
+            "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
+          wait_container_http "${alloy_container}" \
+            "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
           echo "CANARY_STAGE=alloy-healthy"
 
           entries=0
