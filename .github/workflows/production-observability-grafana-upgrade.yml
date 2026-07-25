@@ -243,9 +243,38 @@ jobs:
               done
             fi
           ' | sort | paste -sd, -)"
+          plugin_count=0
           if [ -n "${plugin_names}" ]; then
-            echo "Unreviewed installed Grafana plugins: ${plugin_names}" >&2
-            exit 1
+            saved_ifs="${IFS}"
+            IFS=,
+            for plugin_name in ${plugin_names}; do
+              case "${plugin_name}" in
+                grafana-lokiexplore-app | grafana-pyroscope-app)
+                  ;;
+                *)
+                  echo "Unreviewed installed Grafana plugin: ${plugin_name}" >&2
+                  exit 1
+                  ;;
+              esac
+              plugin_metadata="$(docker exec repoguard-grafana /bin/sh -ec '
+                plugin_path="/var/lib/grafana/plugins/$1"
+                test -s "${plugin_path}/plugin.json"
+                test -s "${plugin_path}/MANIFEST.txt"
+                version="$(sed -n \
+                  "s/.*\"version\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" \
+                  "${plugin_path}/plugin.json" | head -n 1)"
+                dependency="$(sed -n \
+                  "s/.*\"grafanaDependency\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" \
+                  "${plugin_path}/plugin.json" | head -n 1)"
+                test -n "${version}"
+                test -n "${dependency}"
+                printf "%s|version=%s|grafana=%s|manifest=present" \
+                  "$1" "${version}" "${dependency}"
+              ' plugin-metadata "${plugin_name}")"
+              echo "GRAFANA_PLUGIN=${plugin_metadata}"
+              plugin_count=$((plugin_count + 1))
+            done
+            IFS="${saved_ifs}"
           fi
 
           docker_root="$(docker info --format '{{.DockerRootDir}}')"
@@ -269,7 +298,8 @@ jobs:
           echo "GRAFANA_CURRENT_VOLUME=${current_volume}"
           echo "GRAFANA_DB_BYTES=${grafana_db_bytes}"
           echo "GRAFANA_VOLUME_KB=${grafana_volume_kb}"
-          echo "GRAFANA_PLUGIN_COUNT=0"
+          echo "GRAFANA_PLUGIN_COUNT=${plugin_count}"
+          echo "GRAFANA_PLUGIN_IDS=${plugin_names:-none}"
           echo "GRAFANA_LOKI_PROVISIONING_FILE_OK=true"
           echo "GRAFANA_DISK_AVAILABLE_KB=${available_kb}"
           echo "GRAFANA_DISK_REQUIRED_KB=${required_kb}"
