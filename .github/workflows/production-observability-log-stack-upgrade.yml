@@ -225,6 +225,7 @@ jobs:
             check_running_image repoguard-docker-proxy "${final_proxy_image}"
             docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
               | grep -qx repoguard_observability_loki_data_v37
+            test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
             test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
@@ -651,6 +652,7 @@ jobs:
           docker create --name "${alloy_container}" \
             --label com.repoguard.purpose=observability-log-canary \
             --network "${network_name}" \
+            --user 473:473 \
             --memory 256m --restart no \
             --cap-drop ALL --security-opt no-new-privileges \
             -v "${STAGE_PATH}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
@@ -662,6 +664,7 @@ jobs:
           docker network connect --alias alloy "${proxy_network_name}" "${alloy_container}"
           docker start "${alloy_container}" >/dev/null
           active_alloy=true
+          test "$(docker inspect --format '{{.Config.User}}' "${alloy_container}")" = "473:473"
           alloy_ip="$(docker inspect \
             --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
             "${alloy_container}")"
@@ -1028,6 +1031,7 @@ jobs:
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" = "${project}"
           test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-docker-proxy)" = "${project}"
+          test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
           test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
