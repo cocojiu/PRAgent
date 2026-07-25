@@ -275,6 +275,7 @@ jobs:
           env_updated=false
           migration_verified=false
           original_compose_present=false
+          original_config_present=false
 
           GRAFANA_ADMIN_PASSWORD="$(sed -n 's/^GRAFANA_ADMIN_PASSWORD=//p' "${env_file}" | tail -n 1)"
           if [ -z "${GRAFANA_ADMIN_PASSWORD}" ]; then
@@ -330,10 +331,12 @@ jobs:
                 mv "${DEPLOY_PATH}/config/observability" \
                   "${DEPLOY_PATH}/config/observability.failed-${migration_id}"
               fi
-              cp -a "${backup_dir}/config-observability" "${DEPLOY_PATH}/config/observability"
+              if [ "${original_config_present}" = "true" ]; then
+                cp -a "${backup_dir}/config-observability" "${DEPLOY_PATH}/config/observability"
+              fi
               if [ "${original_compose_present}" = "true" ]; then
                 cp -a "${backup_dir}/docker-compose.observability.yml" "${final_base}"
-              else
+              elif [ -f "${final_base}" ]; then
                 mv "${final_base}" "${backup_dir}/docker-compose.observability.failed.yml"
               fi
             fi
@@ -414,26 +417,47 @@ jobs:
             --entrypoint /bin/sh "${grafana_image}" \
             -c 'test -s /source/grafana.db'
 
-          volume_kb() {
+          install -m 700 -d "${backup_dir}"
+
+          estimate_volume_kb() {
             volume_name="$1"
+            estimate_path="${backup_dir}/${volume_name}.estimate.tar.gz"
             docker run --rm --network none --read-only --user 0:0 \
               --cap-drop ALL --cap-add DAC_READ_SEARCH \
               --security-opt no-new-privileges \
               -v "${volume_name}:/source:ro" \
-              --entrypoint /bin/du "${grafana_image}" -sk /source \
-              | awk 'NR == 1 { print $1 }'
+              --entrypoint /bin/tar "${grafana_image}" \
+              -C /source -czf - . > "${estimate_path}"
+            test -s "${estimate_path}"
+            estimate_bytes="$(stat -c %s "${estimate_path}")"
+            case "${estimate_bytes}" in
+              *[!0-9]* | "")
+                echo "Invalid volume estimate for ${volume_name}." >&2
+                return 1
+                ;;
+            esac
+            rm -f "${estimate_path}"
+            echo $(((estimate_bytes + 1023) / 1024))
           }
-          loki_kb="$(volume_kb app_repoguard_loki_data)"
-          grafana_kb="$(volume_kb app_repoguard_grafana_data)"
+          loki_kb="$(estimate_volume_kb app_repoguard_loki_data)"
+          grafana_kb="$(estimate_volume_kb app_repoguard_grafana_data)"
           available_kb="$(df -Pk "${DEPLOY_PATH}" | awk 'NR == 2 { print $4 }')"
+          case "${available_kb}" in
+            *[!0-9]* | "")
+              echo "Unable to determine available backup storage." >&2
+              exit 1
+              ;;
+          esac
           required_kb=$(((loki_kb + grafana_kb) * 2 + 102400))
           test "${available_kb}" -ge "${required_kb}" || {
             echo "Insufficient disk for consistent volume backups." >&2
             exit 1
           }
 
-          install -m 700 -d "${backup_dir}"
-          cp -a "${DEPLOY_PATH}/config/observability" "${backup_dir}/config-observability"
+          if [ -d "${DEPLOY_PATH}/config/observability" ]; then
+            original_config_present=true
+            cp -a "${DEPLOY_PATH}/config/observability" "${backup_dir}/config-observability"
+          fi
           cp -a "${env_file}" "${backup_dir}/production.env"
           if [ "${grafana_password_generated}" = "true" ]; then
             printf '\nGRAFANA_ADMIN_PASSWORD=%s\n' "${GRAFANA_ADMIN_PASSWORD}" >> "${env_file}"
@@ -469,10 +493,10 @@ jobs:
           docker rename repoguard-grafana "${legacy_grafana}"
           old_renamed=true
 
+          assets_promoted=true
           install -d "${DEPLOY_PATH}/config/observability"
           cp -a "${STAGE_PATH}/config/observability/." "${DEPLOY_PATH}/config/observability/"
           cp -a "${stage_base}" "${final_base}"
-          assets_promoted=true
 
           compose_final up -d
           wait_http http://127.0.0.1:3100/ready '^ready' 60
