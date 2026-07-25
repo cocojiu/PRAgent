@@ -166,7 +166,7 @@ jobs:
           fi
 
           legacy_observability_container_count=0
-          for service_name in loki promtail grafana; do
+          for service_name in loki promtail alloy grafana; do
             service_count="$(docker ps -aq \
               --filter 'label=com.docker.compose.project=app' \
               --filter "label=com.docker.compose.service=${service_name}" \
@@ -175,9 +175,21 @@ jobs:
           done
           echo "LEGACY_OBSERVABILITY_CONTAINER_COUNT=${legacy_observability_container_count}"
 
+          if [ "$(docker inspect --format '{{.State.Status}}' repoguard-alloy 2>/dev/null || true)" = "running" ]; then
+            collector_name="repoguard-alloy"
+          else
+            collector_name="repoguard-promtail"
+          fi
+          echo "LOG_COLLECTOR_NAME=${collector_name}"
+          if docker inspect repoguard-promtail >/dev/null 2>&1; then
+            echo "PROMTAIL_CONTAINER_EXISTS=true"
+          else
+            echo "PROMTAIL_CONTAINER_EXISTS=false"
+          fi
+
           container_index=0
           volume_names=""
-          for container_name in repoguard-loki repoguard-promtail repoguard-grafana; do
+          for container_name in repoguard-loki "${collector_name}" repoguard-grafana; do
             container_index=$((container_index + 1))
             echo "CONTAINER_${container_index}_NAME=${container_name}"
             if ! docker inspect "${container_name}" >/dev/null 2>&1; then
@@ -254,6 +266,14 @@ jobs:
             echo "LOKI_LABELS_QUERY_OK=false"
           fi
 
+          if curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/label/container/values 2>/dev/null \
+            | grep -q '"repoguard-backend"'; then
+            echo "LOKI_BACKEND_CONTAINER_LABEL_OK=true"
+          else
+            echo "LOKI_BACKEND_CONTAINER_LABEL_OK=false"
+          fi
+
           count_service_errors() {
             since="$1"
             container_name="$2"
@@ -263,9 +283,45 @@ jobs:
           echo "LOKI_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-loki)"
           echo "LOKI_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-loki)"
           echo "LOKI_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-loki)"
-          echo "PROMTAIL_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-promtail)"
-          echo "PROMTAIL_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-promtail)"
-          echo "PROMTAIL_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-promtail)"
+          if docker inspect repoguard-promtail >/dev/null 2>&1; then
+            echo "PROMTAIL_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-promtail)"
+            echo "PROMTAIL_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-promtail)"
+            echo "PROMTAIL_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-promtail)"
+          else
+            echo "PROMTAIL_ERROR_LOG_COUNT_1M=not_present"
+            echo "PROMTAIL_ERROR_LOG_COUNT_5M=not_present"
+            echo "PROMTAIL_ERROR_LOG_COUNT_10M=not_present"
+          fi
+          if docker inspect repoguard-alloy >/dev/null 2>&1; then
+            echo "ALLOY_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-alloy)"
+            echo "ALLOY_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-alloy)"
+            echo "ALLOY_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-alloy)"
+            if curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready 2>/dev/null \
+              | grep -q 'Alloy is ready'; then
+              echo "ALLOY_READY_OK=true"
+            else
+              echo "ALLOY_READY_OK=false"
+            fi
+            if curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/healthy 2>/dev/null \
+              | grep -q 'All Alloy components are healthy'; then
+              echo "ALLOY_HEALTHY_OK=true"
+            else
+              echo "ALLOY_HEALTHY_OK=false"
+            fi
+            alloy_metrics="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics 2>/dev/null || true)"
+            echo "ALLOY_DOCKER_TARGET_ENTRIES_TOTAL=$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+            echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=$(printf '%s\n' "${alloy_metrics}" \
+              | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+          else
+            echo "ALLOY_ERROR_LOG_COUNT_1M=not_present"
+            echo "ALLOY_ERROR_LOG_COUNT_5M=not_present"
+            echo "ALLOY_ERROR_LOG_COUNT_10M=not_present"
+            echo "ALLOY_READY_OK=not_present"
+            echo "ALLOY_HEALTHY_OK=not_present"
+            echo "ALLOY_DOCKER_TARGET_ENTRIES_TOTAL=not_present"
+            echo "ALLOY_DOCKER_PARSING_ERRORS_TOTAL=not_present"
+          fi
           echo "GRAFANA_ERROR_LOG_COUNT_1M=$(count_service_errors 1m repoguard-grafana)"
           echo "GRAFANA_ERROR_LOG_COUNT_5M=$(count_service_errors 5m repoguard-grafana)"
           echo "GRAFANA_ERROR_LOG_COUNT_10M=$(count_service_errors 10m repoguard-grafana)"

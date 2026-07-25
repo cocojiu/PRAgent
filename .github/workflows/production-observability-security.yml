@@ -42,8 +42,13 @@ jobs:
             -f config/observability/docker-compose.production.yml
           )
           docker compose "${compose_args[@]}" config --quiet
-          images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
-          image_count="$(printf '%s\n' "${images}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+          services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
+          test "${services}" = "alloy,grafana,loki" || {
+            echo "Unexpected observability service set: ${services}" >&2
+            exit 1
+          }
+          compose_images="$(docker compose "${compose_args[@]}" config --images | sort -u)"
+          image_count="$(printf '%s\n' "${compose_images}" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
           test "${image_count}" -eq 3 || {
             echo "Expected exactly three observability images; found ${image_count}." >&2
             exit 1
@@ -66,10 +71,54 @@ jobs:
                 ;;
             esac
           done <<EOF
-          ${images}
+          ${compose_images}
           EOF
+          images="$(
+            {
+              printf '%s\n' "${compose_images}"
+              printf '%s\n' \
+                'grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc' \
+                'grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
+            } | sort -u
+          )"
           images_json="$(printf '%s\n' "${images}" | jq -Rsc 'split("\n") | map(select(length > 0))')"
           echo "images=${images_json}" >> "${GITHUB_OUTPUT}"
+
+      - name: Validate Loki and Alloy configurations
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+        run: |
+          set -euo pipefail
+          compose_args=(
+            -p repoguard-observability
+            --env-file /dev/null
+            -f docker-compose.observability.yml
+            -f config/observability/docker-compose.production.yml
+          )
+          loki_image="$(docker compose "${compose_args[@]}" config --images | grep '^grafana/loki:' | head -n 1)"
+          alloy_image="$(docker compose "${compose_args[@]}" config --images | grep '^grafana/alloy:' | head -n 1)"
+          test -n "${loki_image}"
+          test -n "${alloy_image}"
+
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -v "${PWD}/config/observability/loki.yml:/etc/loki/loki.yml:ro" \
+            "${loki_image}" \
+            -config.file=/etc/loki/loki.yml -verify-config=true
+
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            "${alloy_image}" validate /etc/alloy/config.alloy
+
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v "${PWD}/config/observability/promtail.yml:/etc/promtail/promtail.yml:ro" \
+            "${alloy_image}" convert --source-format=promtail \
+            --output=/dev/null /etc/promtail/promtail.yml
 
   scan:
     name: Report HIGH/CRITICAL CVEs · ${{ matrix.image }}
@@ -98,6 +147,6 @@ jobs:
             echo "## Observability image baseline"
             echo
             echo "- Image: \`${{ matrix.image }}\`"
-            echo "- HIGH/CRITICAL findings are reported without blocking the ownership-only migration."
-            echo "- Enforcement will be enabled when the supported Loki, Alloy, and Grafana upgrade is merged."
+            echo "- HIGH/CRITICAL findings are reported while the staged supported-version upgrade is evaluated."
+            echo "- Enforcement will be enabled after the upgraded production images pass the observation window."
           } >> "${GITHUB_STEP_SUMMARY}"

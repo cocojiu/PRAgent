@@ -1,0 +1,60 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+discovery.docker "repoguard" {
+  host             = "unix:///var/run/docker.sock"
+  refresh_interval = "5s"
+}
+
+discovery.relabel "repoguard" {
+  targets = discovery.docker.repoguard.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(repoguard-backend|repoguard-frontend|repoguard-caddy)"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    replacement   = "$1"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+}
+
+discovery.relabel "docker_stream" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+loki.source.docker "repoguard" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.repoguard.output
+  labels           = { job = "repoguard-docker" }
+  relabel_rules    = discovery.relabel.docker_stream.rules
+  refresh_interval = "5s"
+  forward_to       = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

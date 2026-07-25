@@ -1,0 +1,809 @@
+name: Production Observability Log Stack Upgrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Read-only preflight, disposable canary, or production log-stack upgrade
+        required: true
+        default: preflight
+        type: choice
+        options:
+          - preflight
+          - canary
+          - upgrade
+      confirmation:
+        description: For canary or upgrade, enter the exact confirmation phrase shown in the workflow
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-observability-log-stack-upgrade
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    name: ${{ inputs.action == 'upgrade' && 'Upgrade production log stack' || inputs.action == 'canary' && 'Canary upgraded log stack' || 'Log stack preflight' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Validate immutable upgrade assets
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+        run: |
+          set -euo pipefail
+          compose_args=(
+            -p repoguard-observability
+            --env-file /dev/null
+            -f docker-compose.observability.yml
+            -f config/observability/docker-compose.production.yml
+          )
+          docker compose "${compose_args[@]}" config --quiet
+
+          services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
+          test "${services}" = "alloy,grafana,loki" || {
+            echo "Unexpected observability service set: ${services}" >&2
+            exit 1
+          }
+
+          images="$(docker compose "${compose_args[@]}" config --images | sort)"
+          expected_images="$(
+            printf '%s\n' \
+              'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
+              'grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7' \
+              'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc' \
+              | sort
+          )"
+          test "${images}" = "${expected_images}" || {
+            echo "Observability images are not the reviewed immutable upgrade set." >&2
+            printf '%s\n' "${images}" >&2
+            exit 1
+          }
+
+          for loki_image in \
+            'grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc' \
+            'grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b' \
+            'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'; do
+            docker run --rm --network none --read-only \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -v "${PWD}/config/observability/loki.yml:/etc/loki/loki.yml:ro" \
+              "${loki_image}" \
+              -config.file=/etc/loki/loki.yml -verify-config=true
+          done
+
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
+            validate /etc/alloy/config.alloy
+
+      - name: Prepare SSH key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY secret"; exit 1; }
+          deploy_port="${DEPLOY_PORT:-22}"
+          case "${deploy_port}" in
+            *[!0-9]* | "")
+              echo "DEPLOY_PORT must be a numeric TCP port." >&2
+              exit 1
+              ;;
+          esac
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 30 -p "${deploy_port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>ssh-keyscan.err; then
+              break
+            fi
+            echo "ssh-keyscan attempt ${attempt}/5 failed; retrying." >&2
+            sleep $((attempt * 10))
+          done
+          test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
+
+      - name: Production preflight
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
+          case "${DEPLOY_USER}" in
+            *[!A-Za-z0-9_.-]*)
+              echo "DEPLOY_USER contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            *[!A-Za-z0-9_./-]*)
+              echo "DEPLOY_PATH contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' ACTION='${ACTION}' sh -s" <<'REMOTE_PREFLIGHT'
+          set -eu
+          legacy_loki_image='grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08'
+          legacy_promtail_image='grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b'
+          final_loki_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          final_alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          grafana_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+
+          command -v docker >/dev/null 2>&1 || { echo "Docker is unavailable." >&2; exit 1; }
+          command -v curl >/dev/null 2>&1 || { echo "curl is unavailable." >&2; exit 1; }
+          command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is unavailable." >&2; exit 1; }
+          docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable." >&2; exit 1; }
+          cd "${DEPLOY_PATH}"
+          test -f .env || { echo "Production .env is missing." >&2; exit 1; }
+          test -f docker-compose.observability.yml || { echo "Production observability Compose file is missing." >&2; exit 1; }
+          test -d config/observability || { echo "Production observability config is missing." >&2; exit 1; }
+          grep -q '^GRAFANA_ADMIN_PASSWORD=.' .env || {
+            echo "Grafana bootstrap password is missing from the protected production environment." >&2
+            exit 1
+          }
+
+          check_running_image() {
+            container_name="$1"
+            expected_image="$2"
+            docker inspect "${container_name}" >/dev/null 2>&1 || {
+              echo "Missing container: ${container_name}" >&2
+              return 1
+            }
+            test "$(docker inspect --format '{{.State.Status}}' "${container_name}")" = "running" || {
+              echo "Container is not running: ${container_name}" >&2
+              return 1
+            }
+            test "$(docker inspect --format '{{.Config.Image}}' "${container_name}")" = "${expected_image}" || {
+              echo "Unexpected immutable image: ${container_name}" >&2
+              return 1
+            }
+            test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "${container_name}")" = "repoguard-observability" || {
+              echo "Unexpected Compose project: ${container_name}" >&2
+              return 1
+            }
+          }
+
+          check_running_image repoguard-grafana "${grafana_image}"
+          if docker inspect repoguard-promtail >/dev/null 2>&1 \
+            && ! docker inspect repoguard-alloy >/dev/null 2>&1; then
+            deployment_state=legacy
+            check_running_image repoguard-loki "${legacy_loki_image}"
+            check_running_image repoguard-promtail "${legacy_promtail_image}"
+            docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
+              | grep -qx app_repoguard_loki_data
+          elif docker inspect repoguard-alloy >/dev/null 2>&1 \
+            && ! docker inspect repoguard-promtail >/dev/null 2>&1; then
+            deployment_state=upgraded
+            check_running_image repoguard-loki "${final_loki_image}"
+            check_running_image repoguard-alloy "${final_alloy_image}"
+            docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
+              | grep -qx repoguard_observability_loki_data_v37
+          else
+            echo "Log collector state is ambiguous; expected exactly one of Promtail or Alloy." >&2
+            exit 1
+          fi
+
+          if [ "${ACTION}" != "preflight" ] && [ "${deployment_state}" != "legacy" ]; then
+            echo "${ACTION} requires the reviewed Loki 3.4.2 and Promtail 3.4.2 baseline." >&2
+            exit 1
+          fi
+          if [ "${ACTION}" = "upgrade" ]; then
+            if docker volume inspect repoguard_observability_loki_data_v37 >/dev/null 2>&1; then
+              echo "Target Loki v3.7 volume already exists; refusing an ambiguous retry." >&2
+              exit 1
+            fi
+            if docker volume inspect repoguard_observability_alloy_data_v1 >/dev/null 2>&1; then
+              echo "Target Alloy volume already exists; refusing an ambiguous retry." >&2
+              exit 1
+            fi
+          fi
+
+          docker volume inspect app_repoguard_loki_data >/dev/null
+          docker volume inspect app_repoguard_grafana_data >/dev/null
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/ready | grep -q '^ready'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/api/health \
+            | grep -q '"database"[[:space:]]*:[[:space:]]*"ok"'
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" = "0"
+
+          echo "PREFLIGHT_OK=true"
+          echo "DEPLOYMENT_STATE=${deployment_state}"
+          echo "CURRENT_LOKI_IMAGE=$(docker inspect --format '{{.Config.Image}}' repoguard-loki)"
+          echo "CURRENT_LOKI_VOLUME=$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki)"
+          echo "AVAILABLE_KB=$(df -Pk "${DEPLOY_PATH}" | awk 'NR == 2 { print $4 }')"
+          REMOTE_PREFLIGHT
+
+      - name: Validate confirmation and upload staged assets
+        if: inputs.action != 'preflight'
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          if [ "${ACTION}" = "canary" ]; then
+            expected_confirmation="CANARY_REPOGUARD_LOG_STACK"
+          else
+            expected_confirmation="UPGRADE_REPOGUARD_LOG_STACK"
+          fi
+          test "${CONFIRMATION}" = "${expected_confirmation}" || {
+            echo "Confirmation does not match ${expected_confirmation}." >&2
+            exit 1
+          }
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+
+          stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${stage_path}/config'"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            docker-compose.observability.yml \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/docker-compose.observability.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" -r \
+            config/observability \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/config/"
+
+      - name: Run disposable data and collector canary
+        if: inputs.action == 'canary'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' CANARY_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_CANARY'
+          set -eu
+          helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
+          loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
+          loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          network_name="repoguard-observability-canary-${CANARY_ID}"
+          loki_volume="repoguard-observability-canary-loki-${CANARY_ID}"
+          alloy_volume="repoguard-observability-canary-alloy-${CANARY_ID}"
+          loki_container="repoguard-loki-canary-${CANARY_ID}"
+          alloy_container="repoguard-alloy-canary-${CANARY_ID}"
+          active_loki=false
+          active_alloy=false
+
+          cleanup() {
+            status="$?"
+            trap - EXIT
+            set +e
+            if [ "${active_alloy}" = "true" ]; then
+              docker rm -f "${alloy_container}" >/dev/null 2>&1
+            fi
+            if [ "${active_loki}" = "true" ]; then
+              docker rm -f "${loki_container}" >/dev/null 2>&1
+            fi
+            docker network rm "${network_name}" >/dev/null 2>&1
+            docker volume rm "${loki_volume}" "${alloy_volume}" >/dev/null 2>&1
+            case "${STAGE_PATH}" in
+              "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
+                rm -rf "${STAGE_PATH}"
+                ;;
+            esac
+            exit "${status}"
+          }
+          trap cleanup EXIT
+
+          wait_http() {
+            url="$1"
+            pattern="$2"
+            attempts="${3:-45}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
+              ;;
+            *)
+              echo "Staging path escaped the deployment root." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${STAGE_PATH}/config/observability/loki.yml"
+          test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
+
+          backup_archive="$(find "${DEPLOY_PATH}/backups/observability" \
+            -mindepth 2 -maxdepth 2 -type f -name 'loki-data.tar.gz' | sort | tail -n 1)"
+          test -n "${backup_archive}" || { echo "No verified Loki backup archive is available." >&2; exit 1; }
+          case "${backup_archive}" in
+            "${DEPLOY_PATH}"/backups/observability/[0-9]*/loki-data.tar.gz)
+              ;;
+            *)
+              echo "Unexpected Loki backup path." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${backup_archive}.sha256"
+          (cd "$(dirname "${backup_archive}")" && sha256sum -c loki-data.tar.gz.sha256 >/dev/null)
+
+          docker pull "${helper_image}"
+          docker pull "${loki_35_image}"
+          docker pull "${loki_36_image}"
+          docker pull "${loki_37_image}"
+          docker pull "${alloy_image}"
+          docker network create "${network_name}" >/dev/null
+          docker volume create "${loki_volume}" >/dev/null
+          docker volume create "${alloy_volume}" >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${loki_volume}:/restore" \
+            -v "$(dirname "${backup_archive}"):/backup:ro" \
+            --entrypoint /bin/tar "${helper_image}" \
+            -C /restore -xzf /backup/loki-data.tar.gz
+
+          run_loki_stage() {
+            image="$1"
+            expected_version="$2"
+            docker run -d --name "${loki_container}" \
+              --network "${network_name}" --network-alias loki \
+              --memory 384m --restart no \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -v "${STAGE_PATH}/config/observability/loki.yml:/etc/loki/loki.yml:ro" \
+              -v "${loki_volume}:/loki" \
+              "${image}" -config.file=/etc/loki/loki.yml >/dev/null
+            active_loki=true
+            loki_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${loki_container}")"
+            wait_http "http://${loki_ip}:3100/ready" '^ready' 60
+            curl -fsS --connect-timeout 5 --max-time 10 "http://${loki_ip}:3100/loki/api/v1/status/buildinfo" \
+              | grep -q "\"version\":\"${expected_version}\""
+            curl -fsS --connect-timeout 5 --max-time 10 "http://${loki_ip}:3100/loki/api/v1/labels" \
+              | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+            critical_count="$(docker logs "${loki_container}" 2>&1 \
+              | grep -Eic 'level=fatal|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
+            test "${critical_count}" -eq 0
+            docker stop -t 30 "${loki_container}" >/dev/null
+            docker rm "${loki_container}" >/dev/null
+            active_loki=false
+          }
+
+          run_loki_stage "${loki_35_image}" 3.5.12
+          run_loki_stage "${loki_36_image}" 3.6.13
+
+          docker run -d --name "${loki_container}" \
+            --network "${network_name}" --network-alias loki \
+            --memory 384m --restart no \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -v "${STAGE_PATH}/config/observability/loki.yml:/etc/loki/loki.yml:ro" \
+            -v "${loki_volume}:/loki" \
+            "${loki_37_image}" -config.file=/etc/loki/loki.yml >/dev/null
+          active_loki=true
+          loki_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${loki_container}")"
+          wait_http "http://${loki_ip}:3100/ready" '^ready' 60
+          curl -fsS --connect-timeout 5 --max-time 10 "http://${loki_ip}:3100/loki/api/v1/status/buildinfo" \
+            | grep -q '"version":"3.7.4"'
+
+          docker run -d --name "${alloy_container}" \
+            --network "${network_name}" \
+            --memory 256m --restart no \
+            --cap-drop ALL --security-opt no-new-privileges \
+            -v "${STAGE_PATH}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            -v "${alloy_volume}:/var/lib/alloy/data" \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            "${alloy_image}" \
+            run --server.http.listen-addr=0.0.0.0:12345 \
+            --storage.path=/var/lib/alloy/data --disable-reporting \
+            /etc/alloy/config.alloy >/dev/null
+          active_alloy=true
+          alloy_ip="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${alloy_container}")"
+          wait_http "http://${alloy_ip}:12345/-/ready" 'Alloy is ready' 60
+          wait_http "http://${alloy_ip}:12345/-/healthy" 'All Alloy components are healthy' 60
+
+          entries=0
+          attempt=1
+          while [ "${attempt}" -le 30 ]; do
+            entries="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+            if [ "${entries}" -gt 0 ]; then
+              break
+            fi
+            sleep 2
+            attempt=$((attempt + 1))
+          done
+          test "${entries}" -gt 0
+          parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
+            | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+          test "${parsing_errors}" -eq 0
+          sleep 5
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            "http://${loki_ip}:3100/loki/api/v1/label/container/values" \
+            | grep -q '"repoguard-backend"'
+          alloy_error_count="$(docker logs "${alloy_container}" 2>&1 \
+            | grep -Eic 'level=(error|fatal)' || true)"
+          test "${alloy_error_count}" -eq 0
+
+          echo "CANARY_OK=true"
+          echo "LOKI_UPGRADE_PATH=3.5.12,3.6.13,3.7.4"
+          echo "ALLOY_VERSION=1.18.0"
+          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_PARSING_ERRORS=0"
+          echo "SOURCE_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_archive}.sha256")"
+          REMOTE_CANARY
+
+      - name: Upgrade production log stack with copy-on-upgrade volumes
+        if: inputs.action == 'upgrade'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' sh -s" <<'REMOTE_UPGRADE'
+          set -eu
+          project=repoguard-observability
+          migration_id="$(date -u +'%Y%m%dT%H%M%SZ')"
+          backup_dir="${DEPLOY_PATH}/backups/observability-log-upgrade/${migration_id}"
+          final_base="${DEPLOY_PATH}/docker-compose.observability.yml"
+          final_config="${DEPLOY_PATH}/config/observability"
+          final_override="${final_config}/docker-compose.production.yml"
+          stage_base="${STAGE_PATH}/docker-compose.observability.yml"
+          stage_config="${STAGE_PATH}/config/observability"
+          env_file="${DEPLOY_PATH}/.env"
+          old_loki_volume=app_repoguard_loki_data
+          new_loki_volume=repoguard_observability_loki_data_v37
+          new_alloy_volume=repoguard_observability_alloy_data_v1
+          helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
+          loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
+          loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
+          alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
+          old_loki_name="repoguard-loki-pre-v37-${migration_id}"
+          old_promtail_name="repoguard-promtail-pre-alloy-${migration_id}"
+          intermediate_name=""
+          old_stopped=false
+          loki_renamed=false
+          promtail_renamed=false
+          loki_disconnected=false
+          promtail_disconnected=false
+          assets_promoted=false
+          env_updated=false
+          final_start_attempted=false
+          upgrade_verified=false
+
+          compose_final() {
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${final_base}" -f "${final_override}" "$@"
+          }
+
+          wait_http() {
+            url="$1"
+            pattern="$2"
+            attempts="${3:-60}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            echo "HTTP readiness failed: ${url}" >&2
+            return 1
+          }
+
+          rollback() {
+            status="$1"
+            trap - EXIT
+            if [ "${status}" -eq 0 ] || [ "${upgrade_verified}" = "true" ]; then
+              exit "${status}"
+            fi
+
+            set +e
+            echo "Log-stack upgrade failed; restoring the original containers and assets." >&2
+            if [ -n "${intermediate_name}" ]; then
+              docker rm -f "${intermediate_name}" >/dev/null 2>&1
+            fi
+            if [ "${final_start_attempted}" = "true" ]; then
+              docker rm -f repoguard-alloy repoguard-loki >/dev/null 2>&1
+            fi
+            if [ "${assets_promoted}" = "true" ]; then
+              if [ -d "${final_config}" ]; then
+                mv "${final_config}" "${DEPLOY_PATH}/config/observability.failed-${migration_id}"
+              fi
+              cp -a "${backup_dir}/config-observability" "${final_config}"
+              cp -a "${backup_dir}/docker-compose.observability.yml" "${final_base}"
+            fi
+            if [ "${env_updated}" = "true" ]; then
+              cp -a "${backup_dir}/production.env" "${env_file}"
+            fi
+            if [ "${loki_renamed}" = "true" ]; then
+              docker rename "${old_loki_name}" repoguard-loki >/dev/null 2>&1
+            fi
+            if [ "${promtail_renamed}" = "true" ]; then
+              docker rename "${old_promtail_name}" repoguard-promtail >/dev/null 2>&1
+            fi
+            if [ "${loki_disconnected}" = "true" ]; then
+              docker network connect --alias loki --alias repoguard-loki \
+                repoguard_observability repoguard-loki >/dev/null 2>&1
+            fi
+            if [ "${promtail_disconnected}" = "true" ]; then
+              docker network connect --alias promtail --alias repoguard-promtail \
+                repoguard_observability repoguard-promtail >/dev/null 2>&1
+            fi
+            if [ "${old_stopped}" = "true" ]; then
+              docker start repoguard-loki repoguard-promtail >/dev/null 2>&1
+              wait_http http://127.0.0.1:3100/ready '^ready' 60
+              wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 60
+            fi
+            echo "Automatic log-stack rollback attempt completed; copy-on-upgrade volumes were retained." >&2
+            exit "${status}"
+          }
+          trap 'rollback $?' EXIT
+
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.observability-log-upgrade-[0-9]*)
+              ;;
+            *)
+              echo "Staging path escaped the deployment root." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${stage_base}"
+          test -s "${stage_config}/docker-compose.production.yml"
+          test -s "${stage_config}/loki.yml"
+          test -s "${stage_config}/alloy/config.alloy"
+          test -s "${final_base}"
+          test -d "${final_config}"
+          test -s "${env_file}"
+          ! docker volume inspect "${new_loki_volume}" >/dev/null 2>&1
+          ! docker volume inspect "${new_alloy_volume}" >/dev/null 2>&1
+          ! docker inspect "${old_loki_name}" >/dev/null 2>&1
+          ! docker inspect "${old_promtail_name}" >/dev/null 2>&1
+
+          docker pull "${helper_image}"
+          docker pull "${loki_35_image}"
+          docker pull "${loki_36_image}"
+          docker pull "${loki_37_image}"
+          docker pull "${alloy_image}"
+          for image in "${loki_35_image}" "${loki_36_image}" "${loki_37_image}"; do
+            docker run --rm --network none --read-only \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -v "${stage_config}/loki.yml:/etc/loki/loki.yml:ro" \
+              "${image}" -config.file=/etc/loki/loki.yml -verify-config=true
+          done
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -v "${stage_config}/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            "${alloy_image}" validate /etc/alloy/config.alloy
+
+          previous_backup="$(find "${DEPLOY_PATH}/backups/observability" \
+            -mindepth 2 -maxdepth 2 -type f -name 'loki-data.tar.gz' | sort | tail -n 1)"
+          test -s "${previous_backup}"
+          previous_bytes="$(stat -c %s "${previous_backup}")"
+          available_kb="$(df -Pk "${DEPLOY_PATH}" | awk 'NR == 2 { print $4 }')"
+          required_kb=$(((previous_bytes / 1024) * 4 + 2097152))
+          test "${available_kb}" -ge "${required_kb}" || {
+            echo "Insufficient disk for backup plus copy-on-upgrade volumes." >&2
+            exit 1
+          }
+
+          install -m 700 -d "${backup_dir}"
+          cp -a "${final_base}" "${backup_dir}/docker-compose.observability.yml"
+          cp -a "${final_config}" "${backup_dir}/config-observability"
+          cp -a "${env_file}" "${backup_dir}/production.env"
+
+          old_stopped=true
+          docker stop -t 30 repoguard-promtail repoguard-loki >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL --cap-add DAC_READ_SEARCH --security-opt no-new-privileges \
+            -v "${old_loki_volume}:/source:ro" \
+            --entrypoint /bin/tar "${helper_image}" \
+            -C /source -czf - . > "${backup_dir}/loki-data.tar.gz"
+          test -s "${backup_dir}/loki-data.tar.gz"
+          sha256sum "${backup_dir}/loki-data.tar.gz" > "${backup_dir}/loki-data.tar.gz.sha256"
+          (cd "${backup_dir}" && sha256sum -c loki-data.tar.gz.sha256 >/dev/null)
+
+          docker volume create \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.version=loki-3.7 \
+            "${new_loki_volume}" >/dev/null
+          docker volume create \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.version=alloy-1 \
+            "${new_alloy_volume}" >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${new_loki_volume}:/restore" \
+            -v "${backup_dir}:/backup:ro" \
+            --entrypoint /bin/tar "${helper_image}" \
+            -C /restore -xzf /backup/loki-data.tar.gz
+
+          docker rename repoguard-loki "${old_loki_name}"
+          loki_renamed=true
+          docker rename repoguard-promtail "${old_promtail_name}"
+          promtail_renamed=true
+          docker network disconnect repoguard_observability "${old_loki_name}"
+          loki_disconnected=true
+          docker network disconnect repoguard_observability "${old_promtail_name}"
+          promtail_disconnected=true
+
+          assets_promoted=true
+          install -d "${final_config}/alloy"
+          cp -a "${stage_config}/." "${final_config}/"
+          cp -a "${stage_base}" "${final_base}"
+
+          set_env_key() {
+            key="$1"
+            value="$2"
+            temp_env="$(mktemp "${DEPLOY_PATH}/.env.log-upgrade.XXXXXX")"
+            awk -v key="${key}" 'index($0, key "=") != 1 { print }' "${env_file}" > "${temp_env}"
+            printf '%s=%s\n' "${key}" "${value}" >> "${temp_env}"
+            chmod 600 "${temp_env}"
+            mv "${temp_env}" "${env_file}"
+          }
+          env_updated=true
+          set_env_key LOKI_DATA_VOLUME_NAME "${new_loki_volume}"
+          set_env_key ALLOY_DATA_VOLUME_NAME "${new_alloy_volume}"
+
+          run_production_loki_stage() {
+            image="$1"
+            expected_version="$2"
+            suffix="$3"
+            intermediate_name="repoguard-loki-upgrade-${suffix}-${migration_id}"
+            docker run -d --name "${intermediate_name}" \
+              --network repoguard_observability --network-alias loki \
+              -p 127.0.0.1:3100:3100 \
+              --memory 384m --restart no \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -v "${final_config}/loki.yml:/etc/loki/loki.yml:ro" \
+              -v "${new_loki_volume}:/loki" \
+              "${image}" -config.file=/etc/loki/loki.yml >/dev/null
+            wait_http http://127.0.0.1:3100/ready '^ready' 60
+            curl -fsS --connect-timeout 5 --max-time 10 \
+              http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
+              | grep -q "\"version\":\"${expected_version}\""
+            curl -fsS --connect-timeout 5 --max-time 10 \
+              http://127.0.0.1:3100/loki/api/v1/labels \
+              | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+            critical_count="$(docker logs "${intermediate_name}" 2>&1 \
+              | grep -Eic 'level=fatal|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
+            test "${critical_count}" -eq 0
+            docker stop -t 30 "${intermediate_name}" >/dev/null
+            docker rm "${intermediate_name}" >/dev/null
+            intermediate_name=""
+          }
+
+          run_production_loki_stage "${loki_35_image}" 3.5.12 35
+          run_production_loki_stage "${loki_36_image}" 3.6.13 36
+
+          final_start_attempted=true
+          compose_final up -d loki alloy grafana
+          wait_http http://127.0.0.1:3100/ready '^ready' 60
+          wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 60
+          wait_http http://127.0.0.1:9080/-/ready 'Alloy is ready' 60
+          wait_http http://127.0.0.1:9080/-/healthy 'All Alloy components are healthy' 60
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
+            | grep -q '"version":"3.7.4"'
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+
+          entries=0
+          attempt=1
+          while [ "${attempt}" -le 30 ]; do
+            entries="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+              | awk '/^loki_source_docker_target_entries_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+            if [ "${entries}" -gt 0 ]; then
+              break
+            fi
+            sleep 2
+            attempt=$((attempt + 1))
+          done
+          test "${entries}" -gt 0
+          parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+            | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
+          test "${parsing_errors}" -eq 0
+          sleep 5
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/label/container/values \
+            | grep -q '"repoguard-backend"'
+
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
+          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
+          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" = "${project}"
+          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
+            | grep -qx "${new_loki_volume}"
+          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/alloy/data"}}{{.Name}}{{end}}{{end}}' repoguard-alloy \
+            | grep -qx "${new_alloy_volume}"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-alloy)" = "0"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" = "0"
+          critical_loki_count="$(docker logs --since 5m repoguard-loki 2>&1 \
+            | grep -Eic 'level=fatal|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
+          test "${critical_loki_count}" -eq 0
+          alloy_error_count="$(docker logs --since 5m repoguard-alloy 2>&1 \
+            | grep -Eic 'level=(error|fatal)' || true)"
+          test "${alloy_error_count}" -eq 0
+
+          upgrade_verified=true
+          docker rm "${old_loki_name}" "${old_promtail_name}" >/dev/null
+          test -z "$(docker ps -aq --filter name='^/repoguard-promtail$')"
+          rm -rf "${STAGE_PATH}"
+
+          echo "LOG_STACK_UPGRADE_OK=true"
+          echo "LOKI_VERSION=3.7.4"
+          echo "LOG_COLLECTOR=alloy-1.18.0"
+          echo "LOKI_VOLUME=${new_loki_volume}"
+          echo "ALLOY_VOLUME=${new_alloy_volume}"
+          echo "ROLLBACK_LOKI_VOLUME=${old_loki_volume}"
+          echo "LOKI_BACKUP_SHA256=$(awk '{ print $1 }' "${backup_dir}/loki-data.tar.gz.sha256")"
+          echo "BACKUP_TIMESTAMP_UTC=${migration_id}"
+          echo "ALLOY_TARGET_ENTRIES_GT_ZERO=true"
+          echo "ALLOY_PARSING_ERRORS=0"
+          REMOTE_UPGRADE
+
+      - name: Summarize preflight-only result
+        if: inputs.action == 'preflight'
+        shell: bash
+        run: |
+          {
+            echo "## Production log-stack preflight"
+            echo
+            echo "The production deployment was inspected without pulling images, restarting containers, or modifying files and volumes."
+          } >> "${GITHUB_STEP_SUMMARY}"

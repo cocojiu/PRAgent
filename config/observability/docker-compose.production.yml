@@ -5,3 +5,6 @@ volumes:
   repoguard_grafana_data:
     external: true
     name: ${GRAFANA_DATA_VOLUME_NAME:-app_repoguard_grafana_data}
+  repoguard_alloy_data:
+    external: true
+    name: ${ALLOY_DATA_VOLUME_NAME:-repoguard_observability_alloy_data_v1}
