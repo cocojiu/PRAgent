@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-observability-log-stack-upgrade
+  group: production-observability-maintenance
   cancel-in-progress: false
 
 jobs:
@@ -61,7 +61,7 @@ jobs:
           expected_images="$(
             printf '%s\n' \
               'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
-              'grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7' \
+              'grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b' \
               'grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc' \
               'wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b' \
               | sort
@@ -275,7 +275,7 @@ jobs:
           final_loki_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           final_alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
           final_proxy_image='wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
-          grafana_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          grafana_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
 
           command -v docker >/dev/null 2>&1 || { echo "Docker is unavailable." >&2; exit 1; }
           command -v curl >/dev/null 2>&1 || { echo "curl is unavailable." >&2; exit 1; }
@@ -454,7 +454,7 @@ jobs:
             -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' CANARY_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_CANARY'
           set -eu
-          helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          helper_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
           loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
@@ -887,7 +887,7 @@ jobs:
           }
           new_loki_volume="repoguard_observability_loki_data_v37_${UPGRADE_ID}"
           new_alloy_volume="repoguard_observability_alloy_data_v1_${UPGRADE_ID}"
-          helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          helper_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
           loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
           loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'

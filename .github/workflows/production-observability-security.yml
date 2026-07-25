@@ -78,6 +78,9 @@ jobs:
             {
               printf '%s\n' "${compose_images}"
               printf '%s\n' \
+                'grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7' \
+                'grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3' \
+                'grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432' \
                 'grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc' \
                 'grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
             } | sort -u
