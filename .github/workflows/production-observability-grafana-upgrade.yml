@@ -1,0 +1,979 @@
+name: Production Grafana Upgrade
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Read-only preflight, copied-volume canary, production upgrade, or legacy recovery
+        required: true
+        default: preflight
+        type: choice
+        options:
+          - preflight
+          - canary
+          - upgrade
+          - recover
+      confirmation:
+        description: For state-changing actions, enter the exact confirmation phrase shown in the workflow
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-observability-maintenance
+  cancel-in-progress: false
+
+jobs:
+  upgrade:
+    name: ${{ inputs.action == 'recover' && 'Recover Grafana 11.5' || inputs.action == 'upgrade' && 'Upgrade production Grafana' || inputs.action == 'canary' && 'Canary Grafana upgrade' || 'Grafana upgrade preflight' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Validate immutable Grafana assets
+        if: inputs.action != 'recover'
+        shell: bash
+        env:
+          GRAFANA_ADMIN_PASSWORD: validation-only
+          DOCKER_SOCKET_GID: "0"
+        run: |
+          set -euo pipefail
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          bridge_image='grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3'
+          migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
+          target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
+          compose_args=(
+            -p repoguard-observability
+            --env-file /dev/null
+            -f docker-compose.observability.yml
+            -f config/observability/docker-compose.production.yml
+          )
+
+          docker compose "${compose_args[@]}" config --quiet
+          services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
+          test "${services}" = "alloy,docker-proxy,grafana,loki"
+          configured_grafana_image="$(
+            docker compose "${compose_args[@]}" config --images | grep '^grafana/grafana:' | head -n 1
+          )"
+          test "${configured_grafana_image}" = "${target_image}"
+
+          for version_image in \
+            "11.5.2|${old_image}" \
+            "11.6.16|${bridge_image}" \
+            "12.4.6|${migration_image}" \
+            "13.1.1|${target_image}"; do
+            expected_version="${version_image%%|*}"
+            image="${version_image#*|}"
+            digest="${image##*@sha256:}"
+            test "${#digest}" -eq 64
+            case "${digest}" in
+              *[!0-9a-f]*)
+                echo "Invalid Grafana image digest: ${image}" >&2
+                exit 1
+                ;;
+            esac
+            actual_version="$(docker run --rm --network none --read-only \
+              --cap-drop ALL --security-opt no-new-privileges \
+              --entrypoint /bin/sh "${image}" \
+              -ec 'cat /usr/share/grafana/VERSION')"
+            test "${actual_version}" = "${expected_version}" || {
+              echo "Expected Grafana ${expected_version}; image reported ${actual_version}." >&2
+              exit 1
+            }
+          done
+
+          datasource_uid="$(awk '$1 == "uid:" { print $2; exit }' \
+            config/observability/grafana/provisioning/datasources/loki.yml)"
+          printf '%s\n' "${datasource_uid}" | grep -Eq '^[A-Za-z0-9-]+$'
+          test "${datasource_uid}" = "loki"
+          jq -e '.uid == "repoguard-review-observability"' \
+            config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json \
+            >/dev/null
+          grep -q 'GF_UNIFIED_STORAGE_MIGRATION_CACHE_SIZE_KB: "65536"' \
+            docker-compose.observability.yml
+          grep -q 'GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER: "true"' \
+            docker-compose.observability.yml
+
+      - name: Prepare SSH key
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
+          test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "Missing DEPLOY_SSH_KEY secret"; exit 1; }
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          deploy_port="${DEPLOY_PORT:-22}"
+          case "${deploy_port}" in
+            *[!0-9]* | "")
+              echo "DEPLOY_PORT must be a numeric TCP port." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            *[!A-Za-z0-9._/-]*)
+              echo "DEPLOY_PATH contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+          case "${DEPLOY_USER}" in
+            *[!A-Za-z0-9._-]* | "")
+              echo "DEPLOY_USER contains unsupported characters." >&2
+              exit 1
+              ;;
+          esac
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          for attempt in 1 2 3 4 5; do
+            if ssh-keyscan -T 30 -p "${deploy_port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts 2>ssh-keyscan.err; then
+              break
+            fi
+            echo "ssh-keyscan attempt ${attempt}/5 failed; retrying." >&2
+            sleep $((attempt * 10))
+          done
+          test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
+
+      - name: Production Grafana preflight
+        if: inputs.action != 'recover'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" <<'REMOTE_PREFLIGHT'
+          set -eu
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
+          old_volume=app_repoguard_grafana_data
+
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          command -v docker >/dev/null 2>&1
+          command -v curl >/dev/null 2>&1
+          command -v sha256sum >/dev/null 2>&1
+          docker info >/dev/null 2>&1
+          cd "${DEPLOY_PATH}"
+          test -s docker-compose.observability.yml
+          test -s config/observability/docker-compose.production.yml
+          test -s config/observability/grafana/provisioning/datasources/loki.yml
+          test -s config/observability/grafana/provisioning/dashboards/repoguard-review-observability.json
+          test -s .env
+          grep -q '^GRAFANA_ADMIN_PASSWORD=.' .env
+
+          for container in repoguard-loki repoguard-alloy repoguard-docker-proxy repoguard-grafana; do
+            test "$(docker inspect --format '{{.State.Status}}' "${container}")" = "running"
+            test "$(docker inspect --format '{{.RestartCount}}' "${container}")" = "0"
+          done
+          test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/ready | grep -q '^ready'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/-/ready \
+            | grep -q 'Alloy is ready'
+
+          current_image="$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)"
+          current_volume="$(docker inspect \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-grafana)"
+          case "${current_image}" in
+            "${old_image}")
+              test "${current_volume}" = "${old_volume}"
+              expected_version=11.5.2
+              ;;
+            "${target_image}")
+              printf '%s\n' "${current_volume}" \
+                | grep -Eq '^repoguard_observability_grafana_data_v13_[0-9]+-[0-9]+$'
+              expected_version=13.1.1
+              ;;
+            *)
+              echo "Unexpected production Grafana image: ${current_image}" >&2
+              exit 1
+              ;;
+          esac
+          grafana_health="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/api/health)"
+          printf '%s\n' "${grafana_health}" \
+            | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
+            | grep -qi 'grafana'
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/api/frontend/settings \
+            | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
+
+          grafana_db_bytes="$(docker exec repoguard-grafana /bin/sh -ec \
+            'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
+            | tr -d '[:space:]')"
+          grafana_volume_kb="$(docker exec repoguard-grafana /bin/sh -ec \
+            "du -sk /var/lib/grafana | awk '{ print \$1 }'" \
+            | tr -d '[:space:]')"
+          plugin_names="$(docker exec repoguard-grafana /bin/sh -ec '
+            if [ -d /var/lib/grafana/plugins ]; then
+              for plugin_path in /var/lib/grafana/plugins/*; do
+                [ -d "${plugin_path}" ] || continue
+                basename "${plugin_path}"
+              done
+            fi
+          ' | sort | paste -sd, -)"
+          if [ -n "${plugin_names}" ]; then
+            echo "Unreviewed installed Grafana plugins: ${plugin_names}" >&2
+            exit 1
+          fi
+
+          docker_root="$(docker info --format '{{.DockerRootDir}}')"
+          available_kb="$(df -Pk "${docker_root}" | awk 'NR == 2 { print $4 }')"
+          required_kb=$((grafana_volume_kb * 4 + 524288))
+          test "${available_kb}" -ge "${required_kb}" || {
+            echo "Insufficient disk headroom for copied-volume Grafana upgrade." >&2
+            exit 1
+          }
+          docker volume inspect "${old_volume}" >/dev/null
+          transient_count="$(docker ps -a --format '{{.Names}}' \
+            | grep -Ec '^repoguard-grafana-(canary|migrate)-[0-9]+-[0-9]+' || true)"
+          test "${transient_count}" -eq 0
+          recent_error_count="$(docker logs --since 1m repoguard-grafana 2>&1 \
+            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+          test "${recent_error_count}" -eq 0
+
+          echo "GRAFANA_PREFLIGHT_OK=true"
+          echo "GRAFANA_CURRENT_VERSION=${expected_version}"
+          echo "GRAFANA_CURRENT_IMAGE=${current_image}"
+          echo "GRAFANA_CURRENT_VOLUME=${current_volume}"
+          echo "GRAFANA_DB_BYTES=${grafana_db_bytes}"
+          echo "GRAFANA_VOLUME_KB=${grafana_volume_kb}"
+          echo "GRAFANA_PLUGIN_COUNT=0"
+          echo "GRAFANA_LOKI_DATASOURCE_VISIBLE=true"
+          echo "GRAFANA_DISK_AVAILABLE_KB=${available_kb}"
+          echo "GRAFANA_DISK_REQUIRED_KB=${required_kb}"
+          echo "GRAFANA_RECENT_ERROR_COUNT=0"
+          REMOTE_PREFLIGHT
+
+      - name: Validate confirmation and upload staged assets
+        if: inputs.action == 'canary' || inputs.action == 'upgrade'
+        shell: bash
+        env:
+          ACTION: ${{ inputs.action }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          if [ "${ACTION}" = "canary" ]; then
+            expected_confirmation="CANARY_REPOGUARD_GRAFANA"
+          else
+            expected_confirmation="UPGRADE_REPOGUARD_GRAFANA"
+          fi
+          test "${CONFIRMATION}" = "${expected_confirmation}" || {
+            echo "Confirmation does not match ${expected_confirmation}." >&2
+            exit 1
+          }
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+
+          stage_path="${DEPLOY_PATH}/.grafana-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "install -m 700 -d '${stage_path}/config'"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
+            docker-compose.observability.yml \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/docker-compose.observability.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" -r \
+            config/observability \
+            "${DEPLOY_USER}@${DEPLOY_HOST}:${stage_path}/config/"
+
+      - name: Run copied-volume Grafana canary
+        if: inputs.action == 'canary'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          stage_path="${DEPLOY_PATH}/.grafana-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' CANARY_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_CANARY'
+          set -eu
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          bridge_image='grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3'
+          migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
+          target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
+          old_volume=app_repoguard_grafana_data
+          network_name=repoguard_observability
+          canary_volume="repoguard_grafana_canary_data_${CANARY_ID}"
+          canary_container="repoguard-grafana-canary-${CANARY_ID}"
+          backup_dir="${DEPLOY_PATH}/backups/grafana-canary/${CANARY_ID}"
+          production_stopped=false
+
+          cleanup() {
+            status="$?"
+            trap - EXIT HUP INT TERM
+            set +e
+            docker rm -f "${canary_container}" >/dev/null 2>&1
+            docker volume rm "${canary_volume}" >/dev/null 2>&1
+            if [ "${production_stopped}" = "true" ]; then
+              docker start repoguard-grafana >/dev/null 2>&1
+            fi
+            exit "${status}"
+          }
+          trap cleanup EXIT
+          trap 'exit 129' HUP
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          wait_grafana() {
+            container_name="$1"
+            expected_version="$2"
+            attempt=1
+            while [ "${attempt}" -le 120 ]; do
+              status="$(docker inspect --format '{{.State.Status}}' "${container_name}")"
+              if [ "${status}" != "running" ]; then
+                docker inspect --format \
+                  'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+                  "${container_name}" >&2
+                docker logs --tail 200 "${container_name}" >&2
+                return 1
+              fi
+              container_ip="$(docker inspect \
+                --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+                "${container_name}")"
+              health="$(curl -fsS --connect-timeout 3 --max-time 5 \
+                "http://${container_ip}:3000/api/health" 2>/dev/null || true)"
+              if printf '%s\n' "${health}" \
+                | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            docker logs --tail 200 "${container_name}" >&2
+            return 1
+          }
+
+          wait_production_old() {
+            attempt=1
+            while [ "${attempt}" -le 60 ]; do
+              health="$(curl -fsS --connect-timeout 3 --max-time 5 \
+                http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+              if printf '%s\n' "${health}" \
+                | grep -Eq '"version"[[:space:]]*:[[:space:]]*"11\.5\.2"'; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            return 1
+          }
+
+          ensure_image() {
+            image="$1"
+            if ! docker image inspect "${image}" >/dev/null 2>&1; then
+              docker pull "${image}"
+            fi
+            docker image inspect "${image}" >/dev/null
+          }
+
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.grafana-upgrade-[0-9]*)
+              ;;
+            *)
+              echo "Staging path escaped the deployment root." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${STAGE_PATH}/docker-compose.observability.yml"
+          test -s "${STAGE_PATH}/config/observability/grafana/provisioning/datasources/loki.yml"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}"
+          test "$(docker inspect \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-grafana)" = "${old_volume}"
+          ! docker volume inspect "${canary_volume}" >/dev/null 2>&1
+          ! docker inspect "${canary_container}" >/dev/null 2>&1
+          docker network inspect "${network_name}" >/dev/null
+          ensure_image "${old_image}"
+          ensure_image "${bridge_image}"
+          ensure_image "${migration_image}"
+          ensure_image "${target_image}"
+
+          install -m 700 -d "${backup_dir}"
+          snapshot_started_at="$(date +%s)"
+          production_stopped=true
+          docker stop -t 30 repoguard-grafana >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${old_volume}:/source:ro" \
+            -v "${backup_dir}:/backup" \
+            --entrypoint /bin/tar "${old_image}" \
+            -C /source -czf /backup/grafana-data.tar.gz .
+          test -s "${backup_dir}/grafana-data.tar.gz"
+          sha256sum "${backup_dir}/grafana-data.tar.gz" \
+            > "${backup_dir}/grafana-data.tar.gz.sha256"
+          (cd "${backup_dir}" && sha256sum -c grafana-data.tar.gz.sha256 >/dev/null)
+          docker start repoguard-grafana >/dev/null
+          wait_production_old
+          production_stopped=false
+          snapshot_completed_at="$(date +%s)"
+
+          docker volume create \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.purpose=grafana-upgrade-canary \
+            "${canary_volume}" >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${canary_volume}:/restore" \
+            -v "${backup_dir}:/backup:ro" \
+            --entrypoint /bin/tar "${target_image}" \
+            -C /restore -xzf /backup/grafana-data.tar.gz
+
+          run_stage() {
+            image="$1"
+            expected_version="$2"
+            if [ "${expected_version}" = "13.1.1" ]; then
+              set -- \
+                -e GF_UNIFIED_STORAGE_MIGRATION_CACHE_SIZE_KB=65536 \
+                -e GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER=true
+            else
+              set --
+            fi
+            docker run -d --name "${canary_container}" \
+              --network "${network_name}" \
+              --memory 512m --restart no \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -e GF_SECURITY_ADMIN_PASSWORD=canary-validation-only \
+              -e GF_USERS_ALLOW_SIGN_UP=false \
+              -e GF_ANALYTICS_REPORTING_ENABLED=false \
+              -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
+              -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              "$@" \
+              -v "${canary_volume}:/var/lib/grafana" \
+              -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
+              "${image}" >/dev/null
+            wait_grafana "${canary_container}" "${expected_version}"
+            sleep 5
+            container_ip="$(docker inspect \
+              --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+              "${canary_container}")"
+            curl -fsS --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/login" | grep -qi grafana
+            curl -fsS --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/api/frontend/settings" \
+              | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
+            error_count="$(docker logs "${canary_container}" 2>&1 \
+              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            echo "GRAFANA_CANARY_${expected_version}_ERROR_COUNT=${error_count}"
+            if [ "${error_count}" -ne 0 ]; then
+              docker logs --tail 200 "${canary_container}" >&2
+              return 1
+            fi
+            db_bytes="$(docker exec "${canary_container}" /bin/sh -ec \
+              'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
+              | tr -d '[:space:]')"
+            echo "GRAFANA_CANARY_${expected_version}_DB_BYTES=${db_bytes}"
+            docker stop -t 30 "${canary_container}" >/dev/null
+            docker rm "${canary_container}" >/dev/null
+            echo "GRAFANA_CANARY_STAGE_${expected_version}=verified"
+          }
+
+          run_stage "${bridge_image}" 11.6.16
+          run_stage "${migration_image}" 12.4.6
+          run_stage "${target_image}" 13.1.1
+
+          echo "GRAFANA_CANARY_OK=true"
+          echo "GRAFANA_UPGRADE_PATH=11.5.2,11.6.16,12.4.6,13.1.1"
+          echo "GRAFANA_CANARY_PRODUCTION_DOWNTIME_SECONDS=$((snapshot_completed_at - snapshot_started_at))"
+          echo "GRAFANA_CANARY_BACKUP_SHA256=$(awk '{ print $1 }' \
+            "${backup_dir}/grafana-data.tar.gz.sha256")"
+          REMOTE_CANARY
+
+      - name: Upgrade production Grafana with a copied data volume
+        if: inputs.action == 'upgrade'
+        shell: bash
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          stage_path="${DEPLOY_PATH}/.grafana-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' UPGRADE_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_UPGRADE'
+          set -eu
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          bridge_image='grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3'
+          migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
+          target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
+          old_volume=app_repoguard_grafana_data
+          network_name=repoguard_observability
+          project=repoguard-observability
+          final_base="${DEPLOY_PATH}/docker-compose.observability.yml"
+          final_override="${DEPLOY_PATH}/config/observability/docker-compose.production.yml"
+          final_config="${DEPLOY_PATH}/config/observability"
+          env_file="${DEPLOY_PATH}/.env"
+          new_volume="repoguard_observability_grafana_data_v13_${UPGRADE_ID}"
+          migration_container="repoguard-grafana-migrate-${UPGRADE_ID}"
+          migration_id="$(date -u +%Y%m%dT%H%M%SZ)"
+          backup_dir="${DEPLOY_PATH}/backups/grafana-upgrade/${migration_id}"
+          success=false
+          production_changed=false
+          rollback_assets_ready=false
+
+          compose_final() {
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${final_base}" -f "${final_override}" "$@"
+          }
+
+          wait_host_grafana() {
+            expected_version="$1"
+            attempt=1
+            while [ "${attempt}" -le 120 ]; do
+              health="$(curl -fsS --connect-timeout 3 --max-time 5 \
+                http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+              if printf '%s\n' "${health}" \
+                | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            docker logs --tail 200 repoguard-grafana >&2 || true
+            return 1
+          }
+
+          wait_migration_grafana() {
+            expected_version="$1"
+            attempt=1
+            while [ "${attempt}" -le 120 ]; do
+              status="$(docker inspect --format '{{.State.Status}}' "${migration_container}")"
+              if [ "${status}" != "running" ]; then
+                docker inspect --format \
+                  'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+                  "${migration_container}" >&2
+                docker logs --tail 200 "${migration_container}" >&2
+                return 1
+              fi
+              container_ip="$(docker inspect \
+                --format "{{(index .NetworkSettings.Networks \"${network_name}\").IPAddress}}" \
+                "${migration_container}")"
+              health="$(curl -fsS --connect-timeout 3 --max-time 5 \
+                "http://${container_ip}:3000/api/health" 2>/dev/null || true)"
+              if printf '%s\n' "${health}" \
+                | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            docker logs --tail 200 "${migration_container}" >&2
+            return 1
+          }
+
+          rollback() {
+            status="$?"
+            trap - EXIT HUP INT TERM
+            if [ "${success}" = "true" ]; then
+              exit "${status}"
+            fi
+            if [ "${production_changed}" != "true" ]; then
+              echo "Grafana upgrade failed before production state changed; rollback was not needed." >&2
+              exit "${status}"
+            fi
+            set +e
+            echo "Grafana upgrade failed; restoring the original image, assets, and untouched volume." >&2
+            docker rm -f "${migration_container}" >/dev/null 2>&1
+            docker rm -f repoguard-grafana >/dev/null 2>&1
+            recovery_status=0
+            if [ "${rollback_assets_ready}" = "true" ]; then
+              cp -a "${backup_dir}/docker-compose.observability.yml" "${final_base}" \
+                || recovery_status=1
+              cp -a "${backup_dir}/config-observability/." "${final_config}/" \
+                || recovery_status=1
+              cp -a "${backup_dir}/production.env" "${env_file}" \
+                || recovery_status=1
+              chmod 600 "${env_file}" || recovery_status=1
+            else
+              echo "Rollback assets were not completed." >&2
+              recovery_status=1
+            fi
+            compose_final up -d --no-deps grafana || recovery_status=1
+            wait_host_grafana 11.5.2 || recovery_status=1
+            if [ "${recovery_status}" -eq 0 ] \
+              && [ "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}" ] \
+              && [ "$(docker inspect \
+                --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+                repoguard-grafana)" = "${old_volume}" ]; then
+              echo "GRAFANA_ROLLBACK_RECOVERY_OK=true" >&2
+            else
+              echo "GRAFANA_ROLLBACK_RECOVERY_OK=false" >&2
+            fi
+            echo "Grafana rollback attempt completed; copied upgrade volume was retained." >&2
+            exit "${status}"
+          }
+          trap rollback EXIT
+          trap 'exit 129' HUP
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+
+          set_env_key() {
+            key="$1"
+            value="$2"
+            temp_file="${env_file}.grafana-upgrade-${UPGRADE_ID}.tmp"
+            awk -v key="${key}" -v value="${value}" '
+              BEGIN { replaced = 0 }
+              index($0, key "=") == 1 {
+                if (!replaced) {
+                  print key "=" value
+                  replaced = 1
+                }
+                next
+              }
+              { print }
+              END {
+                if (!replaced) {
+                  print key "=" value
+                }
+              }
+            ' "${env_file}" > "${temp_file}"
+            chmod 600 "${temp_file}"
+            mv "${temp_file}" "${env_file}"
+          }
+
+          ensure_image() {
+            image="$1"
+            if ! docker image inspect "${image}" >/dev/null 2>&1; then
+              docker pull "${image}"
+            fi
+            docker image inspect "${image}" >/dev/null
+          }
+
+          run_migration_stage() {
+            image="$1"
+            expected_version="$2"
+            if [ "${expected_version}" = "13.1.1" ]; then
+              set -- \
+                -e GF_UNIFIED_STORAGE_MIGRATION_CACHE_SIZE_KB=65536 \
+                -e GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER=true
+            else
+              set --
+            fi
+            docker run -d --name "${migration_container}" \
+              --network "${network_name}" \
+              --memory 512m --restart no \
+              --cap-drop ALL --security-opt no-new-privileges \
+              -e GF_SECURITY_ADMIN_PASSWORD=migration-validation-only \
+              -e GF_USERS_ALLOW_SIGN_UP=false \
+              -e GF_ANALYTICS_REPORTING_ENABLED=false \
+              -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
+              -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              "$@" \
+              -v "${new_volume}:/var/lib/grafana" \
+              -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
+              "${image}" >/dev/null
+            wait_migration_grafana "${expected_version}"
+            sleep 5
+            error_count="$(docker logs "${migration_container}" 2>&1 \
+              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            echo "GRAFANA_MIGRATION_${expected_version}_ERROR_COUNT=${error_count}"
+            if [ "${error_count}" -ne 0 ]; then
+              docker logs --tail 200 "${migration_container}" >&2
+              return 1
+            fi
+            docker stop -t 30 "${migration_container}" >/dev/null
+            docker rm "${migration_container}" >/dev/null
+            echo "GRAFANA_MIGRATION_STAGE_${expected_version}=verified"
+          }
+
+          case "${STAGE_PATH}" in
+            "${DEPLOY_PATH}"/.grafana-upgrade-[0-9]*)
+              ;;
+            *)
+              echo "Staging path escaped the deployment root." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${STAGE_PATH}/docker-compose.observability.yml"
+          test -s "${STAGE_PATH}/config/observability/docker-compose.production.yml"
+          test -s "${STAGE_PATH}/config/observability/grafana/provisioning/datasources/loki.yml"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}"
+          test "$(docker inspect \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-grafana)" = "${old_volume}"
+          ! docker volume inspect "${new_volume}" >/dev/null 2>&1
+          ! docker inspect "${migration_container}" >/dev/null 2>&1
+          docker volume inspect "${old_volume}" >/dev/null
+          docker network inspect "${network_name}" >/dev/null
+          ensure_image "${old_image}"
+          ensure_image "${bridge_image}"
+          ensure_image "${migration_image}"
+          ensure_image "${target_image}"
+
+          install -m 700 -d "${backup_dir}"
+          cp -a "${final_base}" "${backup_dir}/docker-compose.observability.yml"
+          cp -a "${final_config}" "${backup_dir}/config-observability"
+          cp -a "${env_file}" "${backup_dir}/production.env"
+          chmod 600 "${backup_dir}/production.env"
+          rollback_assets_ready=true
+
+          cutover_started_at="$(date +%s)"
+          production_changed=true
+          docker stop -t 30 repoguard-grafana >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${old_volume}:/source:ro" \
+            -v "${backup_dir}:/backup" \
+            --entrypoint /bin/tar "${old_image}" \
+            -C /source -czf /backup/grafana-data.tar.gz .
+          test -s "${backup_dir}/grafana-data.tar.gz"
+          sha256sum "${backup_dir}/grafana-data.tar.gz" \
+            > "${backup_dir}/grafana-data.tar.gz.sha256"
+          (cd "${backup_dir}" && sha256sum -c grafana-data.tar.gz.sha256 >/dev/null)
+          printf '%s\n' verified > "${backup_dir}/backup.complete"
+          docker rm repoguard-grafana >/dev/null
+
+          docker volume create \
+            --label com.repoguard.stack=observability \
+            --label com.repoguard.version=grafana-13 \
+            "${new_volume}" >/dev/null
+          docker run --rm --network none --read-only --user 0:0 \
+            --cap-drop ALL \
+            --cap-add CHOWN --cap-add DAC_OVERRIDE --cap-add DAC_READ_SEARCH --cap-add FOWNER \
+            --security-opt no-new-privileges \
+            -v "${new_volume}:/restore" \
+            -v "${backup_dir}:/backup:ro" \
+            --entrypoint /bin/tar "${target_image}" \
+            -C /restore -xzf /backup/grafana-data.tar.gz
+
+          run_migration_stage "${bridge_image}" 11.6.16
+          run_migration_stage "${migration_image}" 12.4.6
+          run_migration_stage "${target_image}" 13.1.1
+
+          cp -a "${STAGE_PATH}/docker-compose.observability.yml" "${final_base}"
+          cp -a "${STAGE_PATH}/config/observability/." "${final_config}/"
+          set_env_key GRAFANA_DATA_VOLUME_NAME "${new_volume}"
+          compose_final up -d --no-deps grafana
+          wait_host_grafana 13.1.1
+          cutover_completed_at="$(date +%s)"
+          sleep 5
+
+          grafana_health="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/api/health)"
+          printf '%s\n' "${grafana_health}" \
+            | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
+            | grep -qi grafana
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/api/frontend/settings \
+            | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
+
+          assert_equal() {
+            label="$1"
+            actual="$2"
+            expected="$3"
+            echo "GRAFANA_POST_UPGRADE_VERIFY_${label}=${actual:-none}"
+            if [ "${actual}" != "${expected}" ]; then
+              echo "Verification failed for ${label}; expected ${expected:-none}." >&2
+              return 1
+            fi
+          }
+          assert_equal IMAGE \
+            "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" "${target_image}"
+          assert_equal PROJECT \
+            "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-grafana)" \
+            "${project}"
+          assert_equal SERVICE \
+            "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' repoguard-grafana)" \
+            "grafana"
+          assert_equal VOLUME \
+            "$(docker inspect \
+              --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+              repoguard-grafana)" "${new_volume}"
+          assert_equal NETWORKS \
+            "$(docker inspect \
+              --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+              repoguard-grafana | sed '/^$/d' | sort | paste -sd, -)" \
+            "${network_name}"
+          assert_equal RESTARTS \
+            "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" "0"
+          image_user="$(docker image inspect --format '{{.Config.User}}' "${target_image}")"
+          assert_equal USER \
+            "$(docker inspect --format '{{.Config.User}}' repoguard-grafana)" "${image_user}"
+          docker volume inspect "${old_volume}" >/dev/null
+          assert_equal VOLUME_LABEL \
+            "$(docker volume inspect --format '{{index .Labels "com.repoguard.version"}}' "${new_volume}")" \
+            "grafana-13"
+
+          db_bytes="$(docker exec repoguard-grafana /bin/sh -ec \
+            'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
+            | tr -d '[:space:]')"
+          error_count="$(docker logs --since 5m repoguard-grafana 2>&1 \
+            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+          echo "GRAFANA_POST_UPGRADE_DB_BYTES=${db_bytes}"
+          echo "GRAFANA_POST_UPGRADE_ERROR_COUNT=${error_count}"
+          if [ "${error_count}" -ne 0 ]; then
+            docker logs --since 5m repoguard-grafana >&2
+            exit 1
+          fi
+
+          success=true
+          echo "GRAFANA_UPGRADE_OK=true"
+          echo "GRAFANA_VERSION=13.1.1"
+          echo "GRAFANA_UPGRADE_PATH=11.5.2,11.6.16,12.4.6,13.1.1"
+          echo "GRAFANA_VOLUME=${new_volume}"
+          echo "GRAFANA_ROLLBACK_VOLUME=${old_volume}"
+          echo "GRAFANA_BACKUP_SHA256=$(awk '{ print $1 }' \
+            "${backup_dir}/grafana-data.tar.gz.sha256")"
+          echo "GRAFANA_BACKUP_TIMESTAMP_UTC=${migration_id}"
+          echo "GRAFANA_CUTOVER_SECONDS=$((cutover_completed_at - cutover_started_at))"
+          REMOTE_UPGRADE
+
+      - name: Recover Grafana 11.5 from the untouched volume
+        if: inputs.action == 'recover'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test "${CONFIRMATION}" = "RECOVER_REPOGUARD_GRAFANA" || {
+            echo "Confirmation does not match RECOVER_REPOGUARD_GRAFANA." >&2
+            exit 1
+          }
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" <<'REMOTE_RECOVER'
+          set -eu
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          old_volume=app_repoguard_grafana_data
+          project=repoguard-observability
+          final_base="${DEPLOY_PATH}/docker-compose.observability.yml"
+          final_override="${DEPLOY_PATH}/config/observability/docker-compose.production.yml"
+          final_config="${DEPLOY_PATH}/config/observability"
+          env_file="${DEPLOY_PATH}/.env"
+          backup_root="${DEPLOY_PATH}/backups/grafana-upgrade"
+
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          backup_dir="$(find "${backup_root}" -mindepth 2 -maxdepth 2 \
+            -type f -name backup.complete -exec dirname '{}' \; \
+            | sort | tail -n 1)"
+          test -n "${backup_dir}"
+          case "${backup_dir}" in
+            "${backup_root}"/[0-9]*)
+              ;;
+            *)
+              echo "Unexpected Grafana backup path." >&2
+              exit 1
+              ;;
+          esac
+          test -s "${backup_dir}/docker-compose.observability.yml"
+          test -d "${backup_dir}/config-observability"
+          test -s "${backup_dir}/production.env"
+          test -s "${backup_dir}/grafana-data.tar.gz"
+          test -s "${backup_dir}/grafana-data.tar.gz.sha256"
+          test -f "${backup_dir}/backup.complete"
+          (cd "${backup_dir}" && sha256sum -c grafana-data.tar.gz.sha256 >/dev/null)
+          grep -Fq "image: ${old_image}" \
+            "${backup_dir}/docker-compose.observability.yml"
+          saved_volume="$(awk -F= '
+            $1 == "GRAFANA_DATA_VOLUME_NAME" { value = $2 }
+            END { print value }
+          ' "${backup_dir}/production.env")"
+          test -z "${saved_volume}" || test "${saved_volume}" = "${old_volume}"
+          docker volume inspect "${old_volume}" >/dev/null
+          target_volume="$(docker inspect \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-grafana 2>/dev/null || true)"
+
+          docker rm -f repoguard-grafana >/dev/null 2>&1 || true
+          cp -a "${backup_dir}/docker-compose.observability.yml" "${final_base}"
+          cp -a "${backup_dir}/config-observability/." "${final_config}/"
+          cp -a "${backup_dir}/production.env" "${env_file}"
+          chmod 600 "${env_file}"
+          docker compose -p "${project}" --env-file "${env_file}" \
+            -f "${final_base}" -f "${final_override}" \
+            up -d --no-deps grafana
+
+          attempt=1
+          while [ "${attempt}" -le 120 ]; do
+            health="$(curl -fsS --connect-timeout 3 --max-time 5 \
+              http://127.0.0.1:3000/api/health 2>/dev/null || true)"
+            if printf '%s\n' "${health}" \
+              | grep -Eq '"version"[[:space:]]*:[[:space:]]*"11\.5\.2"'; then
+              break
+            fi
+            sleep 2
+            attempt=$((attempt + 1))
+          done
+          test "${attempt}" -le 120
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}"
+          test "$(docker inspect \
+            --format '{{range .Mounts}}{{if eq .Destination "/var/lib/grafana"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-grafana)" = "${old_volume}"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" = "0"
+
+          echo "GRAFANA_LEGACY_RECOVERY_OK=true"
+          echo "GRAFANA_RECOVERED_VERSION=11.5.2"
+          echo "GRAFANA_RECOVERED_VOLUME=${old_volume}"
+          echo "GRAFANA_PRESERVED_TARGET_VOLUME=${target_volume:-none}"
+          echo "GRAFANA_RECOVERY_BACKUP=$(basename "${backup_dir}")"
+          REMOTE_RECOVER
+
+      - name: Summarize preflight-only result
+        if: inputs.action == 'preflight'
+        shell: bash
+        run: echo "Grafana preflight completed without changing production state."
