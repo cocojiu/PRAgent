@@ -698,10 +698,20 @@ jobs:
           fi
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 "http://${alloy_ip}:12345/metrics" \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-          test "${parsing_errors}" -eq 0
+          echo "CANARY_ALLOY_TARGET_SERIES=${target_series}"
+          echo "CANARY_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          echo "CANARY_ALLOY_PARSING_ERRORS=${parsing_errors}"
+          if [ "${parsing_errors}" -ne 0 ]; then
+            docker logs --tail 200 "${alloy_container}" >&2
+            exit 1
+          fi
           alloy_error_count="$(docker logs "${alloy_container}" 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
-          test "${alloy_error_count}" -eq 0
+          echo "CANARY_ALLOY_ERROR_COUNT=${alloy_error_count}"
+          if [ "${alloy_error_count}" -ne 0 ]; then
+            docker logs --tail 200 "${alloy_container}" >&2
+            exit 1
+          fi
           echo "CANARY_STAGE=collector-verified"
 
           echo "CANARY_OK=true"
@@ -1027,10 +1037,21 @@ jobs:
             sleep 2
             attempt=$((attempt + 1))
           done
-          test "${target_series}" -gt 0
+          echo "POST_UPGRADE_ALLOY_TARGET_SERIES=${target_series}"
+          echo "POST_UPGRADE_ALLOY_TARGET_ENTRIES_TOTAL=${entries}"
+          if [ "${target_series}" -le 0 ]; then
+            curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
+              | grep -E '^(loki_source_docker|discovery_docker)' >&2 || true
+            docker logs --tail 200 repoguard-alloy >&2
+            exit 1
+          fi
           parsing_errors="$(curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:9080/metrics \
             | awk '/^loki_source_docker_target_parsing_errors_total[{ ]/ { total += $NF } END { printf "%.0f", total + 0 }')"
-          test "${parsing_errors}" -eq 0
+          echo "POST_UPGRADE_ALLOY_PARSING_ERRORS=${parsing_errors}"
+          if [ "${parsing_errors}" -ne 0 ]; then
+            docker logs --tail 200 repoguard-alloy >&2
+            exit 1
+          fi
 
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
@@ -1067,7 +1088,11 @@ jobs:
           test "${critical_loki_count}" -eq 0
           alloy_error_count="$(docker logs --since 5m repoguard-alloy 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
-          test "${alloy_error_count}" -eq 0
+          echo "POST_UPGRADE_ALLOY_ERROR_COUNT=${alloy_error_count}"
+          if [ "${alloy_error_count}" -ne 0 ]; then
+            docker logs --since 5m repoguard-alloy >&2
+            exit 1
+          fi
           proxy_error_count="$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
             | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
           test "${proxy_error_count}" -eq 0
