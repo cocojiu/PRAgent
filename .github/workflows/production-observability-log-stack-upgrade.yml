@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Read-only preflight, disposable canary, or production log-stack upgrade
+        description: Read-only preflight, disposable canary, production upgrade, or legacy recovery
         required: true
         default: preflight
         type: choice
@@ -12,8 +12,9 @@ on:
           - preflight
           - canary
           - upgrade
+          - recover
       confirmation:
-        description: For canary or upgrade, enter the exact confirmation phrase shown in the workflow
+        description: For state-changing actions, enter the exact confirmation phrase shown in the workflow
         required: false
         type: string
 
@@ -26,7 +27,7 @@ concurrency:
 
 jobs:
   upgrade:
-    name: ${{ inputs.action == 'upgrade' && 'Upgrade production log stack' || inputs.action == 'canary' && 'Canary upgraded log stack' || 'Log stack preflight' }}
+    name: ${{ inputs.action == 'recover' && 'Recover legacy log stack' || inputs.action == 'upgrade' && 'Upgrade production log stack' || inputs.action == 'canary' && 'Canary upgraded log stack' || 'Log stack preflight' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: production
@@ -35,6 +36,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Validate immutable upgrade assets
+        if: inputs.action != 'recover'
         shell: bash
         env:
           GRAFANA_ADMIN_PASSWORD: validation-only
@@ -118,7 +120,120 @@ jobs:
           done
           test -s ~/.ssh/known_hosts || { echo "ssh-keyscan returned no host keys."; exit 1; }
 
+      - name: Recover legacy log stack after failed upgrade
+        if: inputs.action == 'recover'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test "${CONFIRMATION}" = "RECOVER_REPOGUARD_LOG_STACK" || {
+            echo "Confirmation does not match RECOVER_REPOGUARD_LOG_STACK." >&2
+            exit 1
+          }
+          test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" <<'REMOTE_RECOVER'
+          set -eu
+          legacy_loki_image='grafana/loki:3.4.2@sha256:58a6c186ce78ba04d58bfe2a927eff296ba733a430df09645d56cdc158f3ba08'
+          legacy_promtail_image='grafana/promtail:3.4.2@sha256:c6e9a987ca086cbfef945b8ebd708eb09f98b5e78bfb659e4e5a8b3bd604d11b'
+          old_loki_volume=app_repoguard_loki_data
+          project=repoguard-observability
+
+          wait_http() {
+            url="$1"
+            pattern="$2"
+            attempts="${3:-90}"
+            attempt=1
+            while [ "${attempt}" -le "${attempts}" ]; do
+              if curl -fsS --connect-timeout 3 --max-time 5 "${url}" 2>/dev/null \
+                | grep -Eq "${pattern}"; then
+                return 0
+              fi
+              sleep 2
+              attempt=$((attempt + 1))
+            done
+            docker inspect --format \
+              'CONTAINER_STATE={{.State.Status}} EXIT_CODE={{.State.ExitCode}} OOM_KILLED={{.State.OOMKilled}} ERROR={{.State.Error}}' \
+              repoguard-loki >&2 || true
+            docker logs --tail 200 repoguard-loki >&2 || true
+            return 1
+          }
+
+          command -v docker >/dev/null 2>&1
+          command -v curl >/dev/null 2>&1
+          docker info >/dev/null 2>&1
+          cd "${DEPLOY_PATH}"
+          test -s .env
+          test -s docker-compose.observability.yml
+          test -s config/observability/docker-compose.production.yml
+          docker volume inspect "${old_loki_volume}" >/dev/null
+
+          compose_legacy() {
+            docker compose -p "${project}" --env-file .env \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml "$@"
+          }
+          services="$(compose_legacy config --services | sort | paste -sd, -)"
+          test "${services}" = "grafana,loki,promtail" || {
+            echo "Refusing recovery with unexpected Compose services: ${services}" >&2
+            exit 1
+          }
+          test "$(docker inspect --format '{{.State.Status}}' repoguard-promtail)" = "running"
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-promtail)" = "${legacy_promtail_image}"
+          ! docker inspect repoguard-alloy >/dev/null 2>&1
+          ! docker inspect repoguard-docker-proxy >/dev/null 2>&1
+
+          if docker inspect repoguard-loki >/dev/null 2>&1; then
+            test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${legacy_loki_image}"
+            docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' \
+              repoguard-loki | grep -qx "${old_loki_volume}"
+            docker start repoguard-loki >/dev/null
+          else
+            compose_legacy up -d --no-deps loki
+          fi
+
+          wait_http http://127.0.0.1:3100/ready '^ready' 90
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/status/buildinfo \
+            | grep -q '"version":"3.4.2"'
+          curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3100/loki/api/v1/labels \
+            | grep -q '"status"[[:space:]]*:[[:space:]]*"success"'
+          test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${legacy_loki_image}"
+          test "$(docker inspect --format '{{.State.Status}}' repoguard-loki)" = "running"
+          test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
+          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
+          docker inspect --format \
+            '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' \
+            repoguard-loki | grep -qx "${old_loki_volume}"
+          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/api/health \
+            | grep -q '"database"[[:space:]]*:[[:space:]]*"ok"'
+
+          echo "LEGACY_LOG_STACK_RECOVERY_OK=true"
+          echo "LOKI_VERSION=3.4.2"
+          echo "LOKI_VOLUME=${old_loki_volume}"
+          echo "PROMTAIL_RUNNING=true"
+          echo "GRAFANA_HEALTHY=true"
+          REMOTE_RECOVER
+
       - name: Production preflight
+        if: inputs.action != 'recover'
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
@@ -223,8 +338,20 @@ jobs:
             check_running_image repoguard-loki "${final_loki_image}"
             check_running_image repoguard-alloy "${final_alloy_image}"
             check_running_image repoguard-docker-proxy "${final_proxy_image}"
-            docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
-              | grep -qx repoguard_observability_loki_data_v37
+            current_loki_volume="$(docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' \
+              repoguard-loki)"
+            current_alloy_volume="$(docker inspect --format \
+              '{{range .Mounts}}{{if eq .Destination "/var/lib/alloy/data"}}{{.Name}}{{end}}{{end}}' \
+              repoguard-alloy)"
+            printf '%s\n' "${current_loki_volume}" \
+              | grep -Eq '^repoguard_observability_loki_data_v37_[0-9]+-[0-9]+$'
+            printf '%s\n' "${current_alloy_volume}" \
+              | grep -Eq '^repoguard_observability_alloy_data_v1_[0-9]+-[0-9]+$'
+            test "$(docker volume inspect --format '{{index .Labels "com.repoguard.version"}}' \
+              "${current_loki_volume}")" = "loki-3.7"
+            test "$(docker volume inspect --format '{{index .Labels "com.repoguard.version"}}' \
+              "${current_alloy_volume}")" = "alloy-1"
             test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
             test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
@@ -254,17 +381,6 @@ jobs:
             echo "${ACTION} requires the reviewed Loki 3.4.2 and Promtail 3.4.2 baseline." >&2
             exit 1
           fi
-          if [ "${ACTION}" = "upgrade" ]; then
-            if docker volume inspect repoguard_observability_loki_data_v37 >/dev/null 2>&1; then
-              echo "Target Loki v3.7 volume already exists; refusing an ambiguous retry." >&2
-              exit 1
-            fi
-            if docker volume inspect repoguard_observability_alloy_data_v1 >/dev/null 2>&1; then
-              echo "Target Alloy volume already exists; refusing an ambiguous retry." >&2
-              exit 1
-            fi
-          fi
-
           docker volume inspect app_repoguard_loki_data >/dev/null
           docker volume inspect app_repoguard_grafana_data >/dev/null
           curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3100/ready | grep -q '^ready'
@@ -283,7 +399,7 @@ jobs:
           REMOTE_PREFLIGHT
 
       - name: Validate confirmation and upload staged assets
-        if: inputs.action != 'preflight'
+        if: inputs.action == 'canary' || inputs.action == 'upgrade'
         shell: bash
         env:
           ACTION: ${{ inputs.action }}
@@ -408,28 +524,6 @@ jobs:
                 && [ "${stale_volume}" != "${alloy_volume}" ]; then
                 docker volume rm "${stale_volume}" >/dev/null
                 stale_volume_count=$((stale_volume_count + 1))
-              fi
-            done
-
-            for stale_stage in $(find "${DEPLOY_PATH}" -mindepth 1 -maxdepth 1 -type d \
-              -name '.observability-log-upgrade-*'); do
-              stale_stage_name="${stale_stage##*/}"
-              case "${stale_stage}" in
-                "${DEPLOY_PATH}"/.observability-log-upgrade-*)
-                  ;;
-                *)
-                  echo "Refusing unexpected stale staging path." >&2
-                  return 1
-                  ;;
-              esac
-              printf '%s\n' "${stale_stage_name}" \
-                | grep -Eq '^\.observability-log-upgrade-[0-9]+-[0-9]+$' || {
-                  echo "Refusing malformed stale staging directory." >&2
-                  return 1
-                }
-              if [ "${stale_stage}" != "${STAGE_PATH}" ]; then
-                rm -rf -- "${stale_stage}"
-                stale_stage_count=$((stale_stage_count + 1))
               fi
             done
 
@@ -753,7 +847,7 @@ jobs:
           stage_path="${DEPLOY_PATH}/.observability-log-upgrade-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
             -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' sh -s" <<'REMOTE_UPGRADE'
+            "DEPLOY_PATH='${DEPLOY_PATH}' STAGE_PATH='${stage_path}' UPGRADE_ID='${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}' sh -s" <<'REMOTE_UPGRADE'
           set -eu
           project=repoguard-observability
           migration_id="$(date -u +'%Y%m%dT%H%M%SZ')"
@@ -765,22 +859,20 @@ jobs:
           stage_config="${STAGE_PATH}/config/observability"
           env_file="${DEPLOY_PATH}/.env"
           old_loki_volume=app_repoguard_loki_data
-          new_loki_volume=repoguard_observability_loki_data_v37
-          new_alloy_volume=repoguard_observability_alloy_data_v1
+          printf '%s\n' "${UPGRADE_ID}" | grep -Eq '^[0-9]+-[0-9]+$' || {
+            echo "UPGRADE_ID is invalid." >&2
+            exit 1
+          }
+          new_loki_volume="repoguard_observability_loki_data_v37_${UPGRADE_ID}"
+          new_alloy_volume="repoguard_observability_alloy_data_v1_${UPGRADE_ID}"
           helper_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
           loki_35_image='grafana/loki:3.5.12@sha256:c2a6860c2f94ecc98fffce7c10e6c8b350cf25e2ea3daa255dff27d7c6a4dffc'
           loki_36_image='grafana/loki:3.6.13@sha256:b31e171ab90b521ff7e7f3a909eefc050811d4dbf02c857e44c2a2f555461b6b'
           loki_37_image='grafana/loki:3.7.4@sha256:87f0a067673756a3cede1bcbf0c74875f7df9b09fddb53e399d0c576f756cfcc'
           alloy_image='grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308'
           proxy_image='wollomatic/socket-proxy:1.12.3@sha256:74e770f5ed3cfc9ecb6350e177d2aa55873568c85bc953079834e68607dbf71b'
-          old_loki_name="repoguard-loki-pre-v37-${migration_id}"
-          old_promtail_name="repoguard-promtail-pre-alloy-${migration_id}"
           intermediate_name=""
           old_stopped=false
-          loki_renamed=false
-          promtail_renamed=false
-          loki_disconnected=false
-          promtail_disconnected=false
           assets_promoted=false
           env_updated=false
           final_start_attempted=false
@@ -817,6 +909,7 @@ jobs:
 
             set +e
             echo "Log-stack upgrade failed; restoring the original containers and assets." >&2
+            recovery_status=0
             if [ -n "${intermediate_name}" ]; then
               docker rm -f "${intermediate_name}" >/dev/null 2>&1
             fi
@@ -834,24 +927,16 @@ jobs:
             if [ "${env_updated}" = "true" ]; then
               cp -a "${backup_dir}/production.env" "${env_file}"
             fi
-            if [ "${loki_renamed}" = "true" ]; then
-              docker rename "${old_loki_name}" repoguard-loki >/dev/null 2>&1
-            fi
-            if [ "${promtail_renamed}" = "true" ]; then
-              docker rename "${old_promtail_name}" repoguard-promtail >/dev/null 2>&1
-            fi
-            if [ "${loki_disconnected}" = "true" ]; then
-              docker network connect --alias loki --alias repoguard-loki \
-                repoguard_observability repoguard-loki >/dev/null 2>&1
-            fi
-            if [ "${promtail_disconnected}" = "true" ]; then
-              docker network connect --alias promtail --alias repoguard-promtail \
-                repoguard_observability repoguard-promtail >/dev/null 2>&1
-            fi
             if [ "${old_stopped}" = "true" ]; then
-              docker start repoguard-loki repoguard-promtail >/dev/null 2>&1
-              wait_http http://127.0.0.1:3100/ready '^ready' 60
-              wait_http http://127.0.0.1:3000/api/health '"database"[[:space:]]*:[[:space:]]*"ok"' 60
+              compose_final up -d --no-deps loki promtail grafana || recovery_status=1
+              wait_http http://127.0.0.1:3100/ready '^ready' 90 || recovery_status=1
+              wait_http http://127.0.0.1:3000/api/health \
+                '"database"[[:space:]]*:[[:space:]]*"ok"' 60 || recovery_status=1
+            fi
+            if [ "${recovery_status}" -eq 0 ]; then
+              echo "ROLLBACK_RECOVERY_OK=true" >&2
+            else
+              echo "ROLLBACK_RECOVERY_OK=false" >&2
             fi
             echo "Automatic log-stack rollback attempt completed; copy-on-upgrade volumes were retained." >&2
             exit "${status}"
@@ -886,8 +971,6 @@ jobs:
           esac
           ! docker volume inspect "${new_loki_volume}" >/dev/null 2>&1
           ! docker volume inspect "${new_alloy_volume}" >/dev/null 2>&1
-          ! docker inspect "${old_loki_name}" >/dev/null 2>&1
-          ! docker inspect "${old_promtail_name}" >/dev/null 2>&1
 
           ensure_image() {
             image="$1"
@@ -961,14 +1044,7 @@ jobs:
             --entrypoint /bin/tar "${helper_image}" \
             -C /restore -xzf /backup/loki-data.tar.gz
 
-          docker rename repoguard-loki "${old_loki_name}"
-          loki_renamed=true
-          docker rename repoguard-promtail "${old_promtail_name}"
-          promtail_renamed=true
-          docker network disconnect repoguard_observability "${old_loki_name}"
-          loki_disconnected=true
-          docker network disconnect repoguard_observability "${old_promtail_name}"
-          promtail_disconnected=true
+          docker rm repoguard-loki repoguard-promtail >/dev/null
 
           assets_promoted=true
           install -d "${final_config}/alloy"
@@ -1081,40 +1157,90 @@ jobs:
             exit 1
           fi
 
-          test "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" = "${loki_37_image}"
-          test "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" = "${alloy_image}"
-          test "$(docker inspect --format '{{.Config.Image}}' repoguard-docker-proxy)" = "${proxy_image}"
-          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" = "${project}"
-          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" = "${project}"
-          test "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-docker-proxy)" = "${project}"
-          test "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" = "473:473"
-          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" = ""
-          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" = "bind:false"
-          test "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" = "65534:65534"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-docker-proxy)" = "true"
-          docker inspect --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' repoguard-docker-proxy \
-            | grep -qx "${docker_socket_gid}"
+          assert_equal() {
+            label="$1"
+            actual="$2"
+            expected="$3"
+            echo "POST_UPGRADE_VERIFY_${label}=${actual:-none}"
+            if [ "${actual}" != "${expected}" ]; then
+              echo "Verification failed for ${label}; expected ${expected:-none}." >&2
+              return 1
+            fi
+          }
+
+          assert_equal LOKI_IMAGE \
+            "$(docker inspect --format '{{.Config.Image}}' repoguard-loki)" "${loki_37_image}"
+          assert_equal ALLOY_IMAGE \
+            "$(docker inspect --format '{{.Config.Image}}' repoguard-alloy)" "${alloy_image}"
+          assert_equal PROXY_IMAGE \
+            "$(docker inspect --format '{{.Config.Image}}' repoguard-docker-proxy)" "${proxy_image}"
+          assert_equal LOKI_PROJECT \
+            "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-loki)" "${project}"
+          assert_equal ALLOY_PROJECT \
+            "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-alloy)" "${project}"
+          assert_equal PROXY_PROJECT \
+            "$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' repoguard-docker-proxy)" "${project}"
+          assert_equal ALLOY_USER \
+            "$(docker inspect --format '{{.Config.User}}' repoguard-alloy)" "473:473"
+          assert_equal ALLOY_DIRECT_SOCKET \
+            "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}direct{{end}}{{end}}' repoguard-alloy)" ""
+          assert_equal PROXY_SOCKET \
+            "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/run/docker.sock"}}{{.Type}}:{{.RW}}{{end}}{{end}}' repoguard-docker-proxy)" "bind:false"
+          assert_equal PROXY_USER \
+            "$(docker inspect --format '{{.Config.User}}' repoguard-docker-proxy)" "65534:65534"
+          assert_equal PROXY_READ_ONLY_ROOT \
+            "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' repoguard-docker-proxy)" "true"
+          proxy_group_add="$(docker inspect \
+            --format '{{range .HostConfig.GroupAdd}}{{println .}}{{end}}' \
+            repoguard-docker-proxy | sed '/^$/d' | paste -sd, -)"
+          assert_equal PROXY_GROUP_ADD "${proxy_group_add}" "${docker_socket_gid}"
           proxy_args="$(docker inspect --format '{{range .Config.Cmd}}{{println .}}{{end}}' repoguard-docker-proxy)"
-          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy'
-          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping'
-          printf '%s\n' "${proxy_args}" | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)'
-          printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|'
-          ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='
-          test "$(docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}' repoguard-docker-proxy)" = "repoguard_observability_docker_api,"
-          docker inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' repoguard-alloy \
-            | sort | paste -sd, - | grep -qx 'repoguard_observability,repoguard_observability_docker_api'
-          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki \
-            | grep -qx "${new_loki_volume}"
-          docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/alloy/data"}}{{.Name}}{{end}}{{end}}' repoguard-alloy \
-            | grep -qx "${new_alloy_volume}"
-          test "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" = "0"
-          test "$(docker inspect --format '{{.RestartCount}}' repoguard-alloy)" = "0"
-          test "$(docker inspect --format '{{.RestartCount}}' repoguard-docker-proxy)" = "0"
-          test "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" = "healthy"
-          test "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" = "0"
+          proxy_allowfrom=false
+          proxy_head_ping=false
+          proxy_container_get=false
+          proxy_network_get=false
+          proxy_post_disabled=false
+          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowfrom=alloy' && proxy_allowfrom=true
+          printf '%s\n' "${proxy_args}" | grep -qx -- '-allowHEAD=/_ping' && proxy_head_ping=true
+          printf '%s\n' "${proxy_args}" \
+            | grep -Fq -- 'containers/[A-Za-z0-9_.-]+/(json|logs)' && proxy_container_get=true
+          printf '%s\n' "${proxy_args}" | grep -Fq -- '|networks|' && proxy_network_get=true
+          if ! printf '%s\n' "${proxy_args}" | grep -q '^-allowPOST='; then
+            proxy_post_disabled=true
+          fi
+          assert_equal PROXY_ALLOW_FROM_ALLOY "${proxy_allowfrom}" "true"
+          assert_equal PROXY_HEAD_PING "${proxy_head_ping}" "true"
+          assert_equal PROXY_CONTAINER_GET "${proxy_container_get}" "true"
+          assert_equal PROXY_NETWORK_GET "${proxy_network_get}" "true"
+          assert_equal PROXY_POST_DISABLED "${proxy_post_disabled}" "true"
+          proxy_networks="$(docker inspect \
+            --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+            repoguard-docker-proxy | sort | paste -sd, -)"
+          alloy_networks="$(docker inspect \
+            --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+            repoguard-alloy | sort | paste -sd, -)"
+          assert_equal PROXY_NETWORKS "${proxy_networks}" "repoguard_observability_docker_api"
+          assert_equal ALLOY_NETWORKS "${alloy_networks}" \
+            "repoguard_observability,repoguard_observability_docker_api"
+          assert_equal LOKI_VOLUME \
+            "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/loki"}}{{.Name}}{{end}}{{end}}' repoguard-loki)" \
+            "${new_loki_volume}"
+          assert_equal ALLOY_VOLUME \
+            "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/alloy/data"}}{{.Name}}{{end}}{{end}}' repoguard-alloy)" \
+            "${new_alloy_volume}"
+          assert_equal LOKI_RESTARTS \
+            "$(docker inspect --format '{{.RestartCount}}' repoguard-loki)" "0"
+          assert_equal ALLOY_RESTARTS \
+            "$(docker inspect --format '{{.RestartCount}}' repoguard-alloy)" "0"
+          assert_equal PROXY_RESTARTS \
+            "$(docker inspect --format '{{.RestartCount}}' repoguard-docker-proxy)" "0"
+          assert_equal PROXY_HEALTH \
+            "$(docker inspect --format '{{.State.Health.Status}}' repoguard-docker-proxy)" "healthy"
+          assert_equal GRAFANA_RESTARTS \
+            "$(docker inspect --format '{{.RestartCount}}' repoguard-grafana)" "0"
           critical_loki_count="$(docker logs --since 5m repoguard-loki 2>&1 \
             | grep -Eic 'level=fatal|permission denied|operation not permitted|no space left|read-only file system|input/output error|corrupt|checksum' || true)"
-          test "${critical_loki_count}" -eq 0
+          assert_equal LOKI_CRITICAL_ERRORS "${critical_loki_count}" "0"
           alloy_error_count="$(docker logs --since 5m repoguard-alloy 2>&1 \
             | grep -Eic 'level=(error|fatal)' || true)"
           echo "POST_UPGRADE_ALLOY_ERROR_COUNT=${alloy_error_count}"
@@ -1124,11 +1250,10 @@ jobs:
           fi
           proxy_error_count="$(docker logs --since 5m repoguard-docker-proxy 2>&1 \
             | grep -Eic 'level=error|(^|[[:space:]])(err|crit|alert|emerg)([[:space:]]|$)' || true)"
-          test "${proxy_error_count}" -eq 0
+          assert_equal PROXY_ERRORS "${proxy_error_count}" "0"
 
-          upgrade_verified=true
-          docker rm "${old_loki_name}" "${old_promtail_name}" >/dev/null
           test -z "$(docker ps -aq --filter name='^/repoguard-promtail$')"
+          upgrade_verified=true
           rm -rf "${STAGE_PATH}"
 
           echo "LOG_STACK_UPGRADE_OK=true"
