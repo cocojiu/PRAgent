@@ -77,12 +77,14 @@ jobs:
                 exit 1
                 ;;
             esac
-            actual_version="$(docker run --rm --network none --read-only \
+            version_output="$(docker run --rm --network none --read-only \
               --cap-drop ALL --security-opt no-new-privileges \
-              --entrypoint /bin/sh "${image}" \
-              -ec 'cat /usr/share/grafana/VERSION')"
+              --entrypoint /usr/share/grafana/bin/grafana "${image}" \
+              server -v)"
+            actual_version="$(printf '%s\n' "${version_output}" \
+              | awk '$1 == "Version" { print $2; exit }')"
             test "${actual_version}" = "${expected_version}" || {
-              echo "Expected Grafana ${expected_version}; image reported ${actual_version}." >&2
+              echo "Expected Grafana ${expected_version}; image reported: ${version_output}" >&2
               exit 1
             }
           done
