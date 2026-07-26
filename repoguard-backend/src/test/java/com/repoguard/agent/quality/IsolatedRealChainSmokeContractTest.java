@@ -100,6 +100,17 @@ class IsolatedRealChainSmokeContractTest {
             .doesNotContain("run: mvn -B package");
     }
 
+    @Test
+    void releaseWorkflowSerializesProductionDeployments() throws IOException {
+        String release = read(".github/workflows/release-images.yml");
+
+        assertThat(release)
+            .contains("group: release-images-${{ github.ref }}")
+            .contains("group: production-deploy")
+            .doesNotContain("cancel-in-progress: true");
+        assertThat(release.split("cancel-in-progress: false", -1).length - 1).isEqualTo(2);
+    }
+
     private static String read(String relativePath) throws IOException {
         return Files.readString(repositoryRoot().resolve(relativePath), StandardCharsets.UTF_8);
     }

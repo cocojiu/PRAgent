@@ -42,6 +42,7 @@ import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
@@ -60,6 +61,7 @@ import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -702,6 +704,36 @@ class ReviewServiceImplTest {
             .contains("GITHUB_PR_PICKER", "EXISTING_REUSED");
         assertThat(result.total()).isEqualTo(1);
         assertThat(result.items().getFirst().source()).isEqualTo("github_pr_picker");
+    }
+
+    @Test
+    void getReviewListSummaryReusesListFilterConstructionForAggregation() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        ReviewTaskMapper.ReviewTaskListSummaryStat stat = new ReviewTaskMapper.ReviewTaskListSummaryStat();
+        stat.setTotal(260L);
+        stat.setHighRisk(13L);
+        stat.setFailed(26L);
+        stat.setAverageDurationSeconds(new BigDecimal("94.6"));
+        when(reviewTaskMapper.selectListSummaryStat(any())).thenReturn(stat);
+
+        var summary = service.getReviewListSummary(new ReviewQuery(
+            1,
+            1,
+            null,
+            "failed",
+            null,
+            "github_pr_picker",
+            "existing_reused",
+            null
+        ));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(reviewTaskMapper).selectListSummaryStat(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("status", "source", "trigger_source");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+            .contains("FAILED", "GITHUB_PR_PICKER", "EXISTING_REUSED");
+        assertThat(summary).isEqualTo(new ReviewTaskListSummary(260L, 13L, 26L, 95L));
     }
 
     @Test

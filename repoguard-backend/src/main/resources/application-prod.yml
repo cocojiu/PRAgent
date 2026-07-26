@@ -16,6 +16,8 @@ repoguard:
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:}
+    encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:}
+    allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
   auth:
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}
     secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}

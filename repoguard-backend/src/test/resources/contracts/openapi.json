@@ -2975,6 +2975,96 @@
         }
       }
     },
+    "/api/v1/reviews/summary" : {
+      "get" : {
+        "tags" : [ "Review" ],
+        "operationId" : "reviewControllerGetReviewListSummary",
+        "x-controller-operation" : "ReviewController#getReviewListSummary",
+        "parameters" : [ {
+          "name" : "repository",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 128
+          }
+        }, {
+          "name" : "status",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }, {
+          "name" : "riskLevel",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 32
+          }
+        }, {
+          "name" : "source",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        }, {
+          "name" : "triggerSource",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        }, {
+          "name" : "keyword",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 255
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewTaskListSummary",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewTaskListSummary"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reviews/{id}" : {
       "get" : {
         "tags" : [ "Review" ],
@@ -7097,6 +7187,29 @@
             "type" : "string"
           }
         }
+      },
+      "ReviewTaskListSummary" : {
+        "type" : "object",
+        "x-java-type" : "ReviewTaskListSummary",
+        "properties" : {
+          "total" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "highRisk" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failed" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "averageDurationSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        },
+        "required" : [ "total", "highRisk", "failed", "averageDurationSeconds" ]
       },
       "ReviewTaskStatusResponse" : {
         "type" : "object",

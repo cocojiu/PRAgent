@@ -15,6 +15,8 @@ public class AsyncExecutorProperties {
     private int dashboardQueueCapacity = 16;
     private int rabbitHealthThreads = 1;
     private int rabbitHealthQueueCapacity = 4;
+    private int llmChunkThreads = 4;
+    private int llmChunkQueueCapacity = 100;
     private int shutdownWaitSeconds = 10;
     private long rabbitHealthCacheMillis = 5_000;
     private long rabbitHealthFailureBackoffMillis = 10_000;
@@ -35,6 +37,10 @@ public class AsyncExecutorProperties {
     public void setRabbitHealthThreads(int value) { rabbitHealthThreads = value; }
     public int getRabbitHealthQueueCapacity() { return rabbitHealthQueueCapacity; }
     public void setRabbitHealthQueueCapacity(int value) { rabbitHealthQueueCapacity = value; }
+    public int getLlmChunkThreads() { return llmChunkThreads; }
+    public void setLlmChunkThreads(int value) { llmChunkThreads = value; }
+    public int getLlmChunkQueueCapacity() { return llmChunkQueueCapacity; }
+    public void setLlmChunkQueueCapacity(int value) { llmChunkQueueCapacity = value; }
     public int getShutdownWaitSeconds() { return shutdownWaitSeconds; }
     public void setShutdownWaitSeconds(int value) { shutdownWaitSeconds = value; }
     public long getRabbitHealthCacheMillis() { return rabbitHealthCacheMillis; }

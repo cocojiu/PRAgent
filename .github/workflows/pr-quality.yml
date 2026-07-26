@@ -22,6 +22,8 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Validate production Compose configuration
         run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+      - name: Validate Grafana bridge overlay configuration
+        run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml -f docker-compose.grafana-bridge.yml config --quiet
       - name: Validate production Caddy configuration
         run: >-
           docker run --rm
@@ -122,6 +124,7 @@ jobs:
       SPRING_RABBITMQ_VIRTUAL_HOST: /
       REPOGUARD_SECURITY_ENCRYPTION_KEY: Integration-Key-2026!abc123XYZ-secure
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: integration-001
+      REPOGUARD_SECURITY_ENCRYPTION_SALT: Integration-Salt-2026!abc123XYZ
       REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
       REPOGUARD_ADMIN_API_KEY: Integration-Admin-Key-2026!abc123XYZ
     steps:

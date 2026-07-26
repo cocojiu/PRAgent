@@ -9,6 +9,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
@@ -28,6 +29,11 @@ public interface ReviewService {
      * 根据接口层筛选条件查询评审任务列表，并转换为数据库查询条件。
      */
     PageResponse<ReviewTaskListItem> listReviews(ReviewQuery query);
+
+    /**
+     * 在与列表同源的筛选条件下返回聚合指标。
+     */
+    ReviewTaskListSummary getReviewListSummary(ReviewQuery query);
 
     List<String> listRepositories();
 

@@ -29,7 +29,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
 
     @Test
     void submittedConfigUsesSavedSecretWithoutPersistingStatus() {
-        IntegrationConfig savedConfig = serviceConfig("MYSQL", "mysql-existing-1234");
+        IntegrationConfig savedConfig = serviceConfig("MYSQL", secretCryptoService.encrypt("mysql-existing-1234"));
         savedConfig.setBaseUrl("jdbc:mysql://saved:3306/repoguard");
         when(integrationConfigMapper.selectOne(any())).thenReturn(savedConfig);
 
@@ -57,7 +57,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
 
     @Test
     void savedConfigFailureMarksLatestCheckResult() {
-        IntegrationConfig savedConfig = serviceConfig("RABBITMQ", "rabbit-secret-1234");
+        IntegrationConfig savedConfig = serviceConfig("RABBITMQ", secretCryptoService.encrypt("rabbit-secret-1234"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(savedConfig);
 
         CapturingServiceRunner runner = new CapturingServiceRunner(

@@ -135,7 +135,12 @@ npm run dev
 - `SPRING_RABBITMQ_PASSWORD`
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY`
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`
+- `REPOGUARD_SECURITY_ENCRYPTION_SALT`
+- `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS`
 - `REPOGUARD_AUTH_TOKEN_SECRET`
+- `REPOGUARD_AUTH_TOKEN_SECRET_ID`
+- `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS`
+- `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID`
 - `REPOGUARD_ADMIN_API_KEY`
 - `REPOGUARD_GITHUB_WEBHOOK_SECRET`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`
@@ -157,7 +162,7 @@ npm run dev
 
 - `REPOGUARD_RUNTIME_ROLE` 只接受 `combined`、`api`、`worker`。`combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库栅栏保护的定时任务；`worker` 同时承载消费者与这些定时任务。
 - `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
-- 当前认证/Webhook 限流和 Dashboard 快照仍是进程本地状态，因此 API/combined 角色要求 `REPOGUARD_API_INSTANCE_COUNT=1`。迁移到共享限流与跨节点缓存失效前，不允许横向扩展 API。
+- 当前认证/Webhook 限流和 Dashboard 快照仍是进程本地状态，因此 API/combined 角色要求 `REPOGUARD_API_INSTANCE_COUNT=1`。迁移到共享限流与跨节点缓存失效前，不允许横向扩展 API。认证限流阈值（`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP`、`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP`）为单实例语义，若未来放开横向扩展需按实例数调低；实际生效阈值会在 API 启动日志中打印。
 - Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
 - 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 

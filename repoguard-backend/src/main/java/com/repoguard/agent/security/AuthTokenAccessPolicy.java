@@ -2,10 +2,13 @@ package com.repoguard.agent.security;
 
 import java.util.List;
 import java.util.Locale;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 final class AuthTokenAccessPolicy {
 
-    private static final String API_PREFIX = "/api/v1";
+    private static final PathPattern API_PATTERN = apiPattern();
 
     private static final List<PublicEndpoint> PUBLIC_ENDPOINTS = List.of(
         new PublicEndpoint("POST", "/api/v1/auth/register", "User registration"),
@@ -21,38 +24,68 @@ final class AuthTokenAccessPolicy {
 
     static boolean requiresAuth(String method, String path) {
         String normalizedMethod = normalizeMethod(method);
-        String normalizedPath = normalizePath(path);
-        if (!isApiPath(normalizedPath)) {
+        PathContainer parsedPath = parsePath(path);
+        if (!API_PATTERN.matches(parsedPath)) {
             return false;
         }
         return PUBLIC_ENDPOINTS.stream()
-            .noneMatch(endpoint -> endpoint.matches(normalizedMethod, normalizedPath));
+            .noneMatch(endpoint -> endpoint.matches(normalizedMethod, parsedPath));
     }
 
     static List<PublicEndpoint> publicEndpoints() {
         return PUBLIC_ENDPOINTS;
     }
 
-    private static boolean isApiPath(String path) {
-        return path.equals(API_PREFIX) || path.startsWith(API_PREFIX + "/");
+    private static PathPattern apiPattern() {
+        PathPatternParser parser = new PathPatternParser();
+        parser.setCaseSensitive(false);
+        return parser.parse("/api/v1/**");
     }
 
     private static String normalizeMethod(String method) {
         return method == null ? "" : method.toUpperCase(Locale.ROOT);
     }
 
-    private static String normalizePath(String path) {
+    private static PathContainer parsePath(String path) {
         if (path == null || path.isBlank()) {
-            return "";
+            return PathContainer.parsePath("");
         }
         int queryIndex = path.indexOf('?');
-        return queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+        return PathContainer.parsePath(queryIndex >= 0 ? path.substring(0, queryIndex) : path);
     }
 
-    record PublicEndpoint(String method, String pathPattern, String description) {
+    static final class PublicEndpoint {
+
+        private final String method;
+        private final String pathPattern;
+        private final String description;
+        private final PathPattern compiledPattern;
+
+        private PublicEndpoint(String method, String pathPattern, String description) {
+            this.method = method;
+            this.pathPattern = pathPattern;
+            this.description = description;
+            this.compiledPattern = PathPatternParser.defaultInstance.parse(pathPattern);
+        }
+
+        String method() {
+            return method;
+        }
+
+        String pathPattern() {
+            return pathPattern;
+        }
+
+        String description() {
+            return description;
+        }
 
         boolean matches(String actualMethod, String actualPath) {
-            return method.equals(actualMethod) && pathPattern.equals(actualPath);
+            return matches(normalizeMethod(actualMethod), parsePath(actualPath));
+        }
+
+        private boolean matches(String actualMethod, PathContainer actualPath) {
+            return method.equals(actualMethod) && compiledPattern.matches(actualPath);
         }
     }
 }

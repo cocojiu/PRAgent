@@ -17,14 +17,21 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ServletRequestPathUtils;
 
 public class AdminApiKeyFilter extends OncePerRequestFilter {
 
     private final AdminApiKeyProperties properties;
+    private final AuthTokenService authTokenService;
     private final ObjectMapper objectMapper;
 
-    public AdminApiKeyFilter(AdminApiKeyProperties properties, ObjectMapper objectMapper) {
+    public AdminApiKeyFilter(
+        AdminApiKeyProperties properties,
+        AuthTokenService authTokenService,
+        ObjectMapper objectMapper
+    ) {
         this.properties = properties;
+        this.authTokenService = authTokenService;
         this.objectMapper = objectMapper;
     }
 
@@ -34,11 +41,11 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
-        if (CorsUtils.isPreFlightRequest(request) || !requiresAdminKey(request) || !properties.isProtectionActive()) {
+        if (CorsUtils.isPreFlightRequest(request) || !properties.isProtectionActive() || !requiresAdminKey(request)) {
             filterChain.doFilter(request, response);
             return;
         }
-        if (hasBearerToken(request)) {
+        if (hasVerifiedBearerToken(request)) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -59,13 +66,19 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    private boolean hasBearerToken(HttpServletRequest request) {
+    private boolean hasVerifiedBearerToken(HttpServletRequest request) {
         String authorization = request.getHeader("Authorization");
-        return authorization != null && authorization.startsWith("Bearer ") && authorization.length() > "Bearer ".length();
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return false;
+        }
+        return authTokenService.verify(authorization.substring("Bearer ".length()).trim()).isPresent();
     }
 
     private boolean requiresAdminKey(HttpServletRequest request) {
-        return AdminApiKeyAccessPolicy.requiresAdminKey(request.getMethod(), request.getRequestURI());
+        return AdminApiKeyAccessPolicy.requiresAdminKey(
+            request.getMethod(),
+            ServletRequestPathUtils.parseAndCache(request).pathWithinApplication().value()
+        );
     }
 
     private boolean secureEquals(String expected, String actual) {

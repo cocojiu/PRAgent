@@ -22,6 +22,7 @@ import org.springframework.web.servlet.HandlerMapping;
 public class ApiRequestObservationFilter extends OncePerRequestFilter {
 
     private static final String API_PREFIX = "/api/v1";
+    private static final String UNMATCHED_PATH = API_PREFIX + "/unmatched";
     private final RepoGuardMetrics metrics;
     private final ObservabilityThresholdMonitor thresholdMonitor;
     private final ObservationPathNormalizer pathNormalizer;
@@ -77,9 +78,9 @@ public class ApiRequestObservationFilter extends OncePerRequestFilter {
     private String observationPath(HttpServletRequest request) {
         Object bestMatchingPattern = request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE);
         if (bestMatchingPattern instanceof String pattern && StringUtils.hasText(pattern)) {
-            return pattern;
+            return pathNormalizer.normalizeApiPath(pattern);
         }
-        return pathNormalizer.normalizeApiPath(apiPath(request));
+        return UNMATCHED_PATH;
     }
 
     private String apiPath(HttpServletRequest request) {

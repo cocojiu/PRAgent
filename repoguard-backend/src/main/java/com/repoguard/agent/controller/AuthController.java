@@ -22,6 +22,10 @@ import com.repoguard.agent.web.RequestAuthentication;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Objects;
 import org.springframework.util.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,22 +48,26 @@ public class AuthController {
     private final AuthService authService;
     private final AuthSessionCookieManager cookieManager;
     private final AuthAttemptLimiter attemptLimiter;
+    private final AuditClientIpResolver clientIpResolver;
 
     @Autowired
     public AuthController(
         AuthService authService,
         AuthSessionCookieManager cookieManager,
-        AuthAttemptLimiter attemptLimiter
+        AuthAttemptLimiter attemptLimiter,
+        AuditClientIpResolver clientIpResolver
     ) {
         this.authService = Objects.requireNonNull(authService, "authService must not be null");
         this.cookieManager = Objects.requireNonNull(cookieManager, "cookieManager must not be null");
         this.attemptLimiter = attemptLimiter;
+        this.clientIpResolver = clientIpResolver;
     }
 
     public AuthController(AuthService authService, AuthSessionCookieManager cookieManager) {
         this.authService = Objects.requireNonNull(authService, "authService must not be null");
         this.cookieManager = Objects.requireNonNull(cookieManager, "cookieManager must not be null");
         this.attemptLimiter = null;
+        this.clientIpResolver = null;
     }
 
     @AllowAnonymous
@@ -115,7 +123,7 @@ public class AuthController {
         HttpServletRequest httpRequest,
         HttpServletResponse httpResponse
     ) {
-        limit("refresh", cookieRefreshToken, httpRequest);
+        limit("refresh", refreshTokenBucketKey(cookieRefreshToken), httpRequest);
         rejectBodyRefreshToken(request);
         cookieManager.validateCookieTokenCsrf(cookieRefreshToken, csrfCookieToken, httpRequest);
         AuthResponse response = authService.refresh(new AuthRefreshRequest(cookieRefreshToken));
@@ -173,7 +181,20 @@ public class AuthController {
 
     private void limit(String operation, String account, HttpServletRequest request) {
         if (attemptLimiter != null) {
-            attemptLimiter.requireAllowed(operation, account, AuditClientIpResolver.resolve(request));
+            attemptLimiter.requireAllowed(operation, account, clientIpResolver.resolve(request));
+        }
+    }
+
+    private static String refreshTokenBucketKey(String refreshToken) {
+        if (!StringUtils.hasText(refreshToken)) {
+            return null;
+        }
+        try {
+            return HexFormat.of()
+                .formatHex(MessageDigest.getInstance("SHA-256").digest(refreshToken.getBytes(StandardCharsets.UTF_8)))
+                .substring(0, 16);
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("Refresh token hashing is not available", ex);
         }
     }
 

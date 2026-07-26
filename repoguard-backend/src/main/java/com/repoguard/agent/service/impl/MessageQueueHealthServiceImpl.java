@@ -1,10 +1,13 @@
 package com.repoguard.agent.service.impl;
 
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.MessageQueueHealthResponse;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.service.MessageQueueHealthService;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,11 +26,13 @@ public class MessageQueueHealthServiceImpl implements MessageQueueHealthService 
     }
 
     @Override
+    @Cacheable(cacheNames = CacheNames.MESSAGE_QUEUE_HEALTH, key = "'health'", sync = true)
     public MessageQueueHealthResponse getHealth() {
         return healthQueryService.getHealth();
     }
 
     @Override
+    @CacheEvict(cacheNames = CacheNames.MESSAGE_QUEUE_HEALTH, allEntries = true)
     public MessageQueueRequeueResponse requeueTask(Long taskId) {
         return requeueService.requeueTask(taskId);
     }

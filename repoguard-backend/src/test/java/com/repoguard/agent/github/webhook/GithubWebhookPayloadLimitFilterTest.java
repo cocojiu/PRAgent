@@ -1,6 +1,7 @@
 package com.repoguard.agent.github.webhook;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -9,6 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletRequest;
@@ -33,7 +37,8 @@ class GithubWebhookPayloadLimitFilterTest {
         GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
             properties,
             rateLimiter,
-            OBJECT_MAPPER
+            OBJECT_MAPPER,
+            clientIpResolver()
         );
         MockHttpServletRequest request = webhookRequest("12345".getBytes(StandardCharsets.UTF_8));
         MockHttpServletResponse response = new MockHttpServletResponse();
@@ -53,7 +58,8 @@ class GithubWebhookPayloadLimitFilterTest {
         GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
             properties,
             rateLimiter,
-            OBJECT_MAPPER
+            OBJECT_MAPPER,
+            clientIpResolver()
         );
         UnknownLengthRequest request = webhookRequestWithoutContentLength(
             "1234567890".getBytes(StandardCharsets.UTF_8)
@@ -76,7 +82,8 @@ class GithubWebhookPayloadLimitFilterTest {
         GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
             properties,
             rateLimiter,
-            OBJECT_MAPPER
+            OBJECT_MAPPER,
+            clientIpResolver()
         );
         byte[] payload = "1234".getBytes(StandardCharsets.UTF_8);
         MockHttpServletRequest request = webhookRequestWithoutContentLength(payload);
@@ -101,9 +108,11 @@ class GithubWebhookPayloadLimitFilterTest {
         GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
             properties,
             rateLimiter,
-            OBJECT_MAPPER
+            OBJECT_MAPPER,
+            clientIpResolver()
         );
         MockHttpServletRequest request = webhookRequest("12345".getBytes(StandardCharsets.UTF_8));
+        request.setRemoteAddr("172.18.0.2");
         request.addHeader("X-Real-IP", "203.0.113.8");
         MockHttpServletResponse response = new MockHttpServletResponse();
         FilterChain chain = mock(FilterChain.class);
@@ -111,14 +120,220 @@ class GithubWebhookPayloadLimitFilterTest {
         filter.doFilter(request, response, chain);
 
         assertRejected(response, 429, "TOO_MANY_REQUESTS");
+        verify(rateLimiter).tryAcquireIp("203.0.113.8");
         verify(rateLimiter).rejected("ip_rate_limit");
         verifyNoInteractions(chain);
+    }
+
+    @Test
+    void ignoresSpoofedForwardedIpFromUntrustedPeerWhenRateLimiting() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = allowingRateLimiter();
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        byte[] payload = "1234".getBytes(StandardCharsets.UTF_8);
+        MockHttpServletRequest request = webhookRequest(payload);
+        request.addHeader("X-Real-IP", "203.0.113.99");
+        request.addHeader("X-Forwarded-For", "203.0.113.99");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(rateLimiter).tryAcquireIp("198.51.100.10");
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void bucketsMalformedForwardedIpUnderThePeerAddress() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = allowingRateLimiter();
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        byte[] payload = "1234".getBytes(StandardCharsets.UTF_8);
+        MockHttpServletRequest request = webhookRequest(payload);
+        request.setRemoteAddr("172.18.0.2");
+        request.addHeader("X-Real-IP", "x".repeat(2048));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(rateLimiter).tryAcquireIp("172.18.0.2");
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void pathParameterVariantEntersFilterAndCountsIpRateLimit() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = mock(GithubWebhookRateLimiter.class);
+        when(rateLimiter.tryAcquireIp("198.51.100.10")).thenReturn(false);
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = webhookRequest(WEBHOOK_PATH + ";x=1", "1234".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertRejected(response, 429, "TOO_MANY_REQUESTS");
+        verify(rateLimiter).tryAcquireIp("198.51.100.10");
+        verify(rateLimiter).rejected("ip_rate_limit");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void percentEncodedVariantEntersFilterAndTruncatesOversizedStream() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = allowingRateLimiter();
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        UnknownLengthRequest request = webhookRequestWithoutContentLength(
+            "/api/v1/github/%77ebhooks",
+            "1234567890".getBytes(StandardCharsets.UTF_8)
+        );
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertRejected(response, 413, "PAYLOAD_TOO_LARGE");
+        assertThat(request.bytesRead()).isEqualTo(5);
+        verify(rateLimiter).tryAcquireIp("198.51.100.10");
+        verify(rateLimiter).rejected("stream_limit");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void pathParameterWithQueryVariantEntersFilterAndRejectsOversizedPayload() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = allowingRateLimiter();
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = webhookRequest(WEBHOOK_PATH + ";x=1?y=2", "12345".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertRejected(response, 413, "PAYLOAD_TOO_LARGE");
+        verify(rateLimiter).tryAcquireIp("198.51.100.10");
+        verify(rateLimiter).rejected("content_length");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void duplicateSlashVariantEntersFilterAndRejectsOversizedPayload() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = allowingRateLimiter();
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = webhookRequest("/api/v1/github//webhooks", "12345".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        assertRejected(response, 413, "PAYLOAD_TOO_LARGE");
+        verify(rateLimiter).tryAcquireIp("198.51.100.10");
+        verify(rateLimiter).rejected("content_length");
+        verifyNoInteractions(chain);
+    }
+
+    @Test
+    void malformedEncodedPathRejectsRequestInsteadOfSkippingFilter() {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = mock(GithubWebhookRateLimiter.class);
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = webhookRequest("/api/v1/github/%zzebhooks", "1234".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        assertThatThrownBy(() -> filter.doFilter(request, response, chain))
+            .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(chain, rateLimiter);
+    }
+
+    @Test
+    void nonWebhookPathSkipsFilter() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = mock(GithubWebhookRateLimiter.class);
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/reviews");
+        request.setRemoteAddr("198.51.100.10");
+        request.setContent("1234567890".getBytes(StandardCharsets.UTF_8));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verifyNoInteractions(rateLimiter);
+    }
+
+    @Test
+    void nonPostMethodSkipsFilter() throws Exception {
+        GithubWebhookProperties properties = propertiesWithLimit(4);
+        GithubWebhookRateLimiter rateLimiter = mock(GithubWebhookRateLimiter.class);
+        GithubWebhookPayloadLimitFilter filter = new GithubWebhookPayloadLimitFilter(
+            properties,
+            rateLimiter,
+            OBJECT_MAPPER,
+            clientIpResolver()
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", WEBHOOK_PATH);
+        request.setRemoteAddr("198.51.100.10");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        filter.doFilter(request, response, chain);
+
+        verify(chain).doFilter(request, response);
+        verifyNoInteractions(rateLimiter);
     }
 
     private GithubWebhookRateLimiter allowingRateLimiter() {
         GithubWebhookRateLimiter rateLimiter = mock(GithubWebhookRateLimiter.class);
         when(rateLimiter.tryAcquireIp(anyString())).thenReturn(true);
         return rateLimiter;
+    }
+
+    private TrustedProxyClientIpResolver clientIpResolver() {
+        return new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry());
     }
 
     private GithubWebhookProperties propertiesWithLimit(int limit) {
@@ -128,14 +343,22 @@ class GithubWebhookPayloadLimitFilterTest {
     }
 
     private MockHttpServletRequest webhookRequest(byte[] payload) {
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", WEBHOOK_PATH);
+        return webhookRequest(WEBHOOK_PATH, payload);
+    }
+
+    private MockHttpServletRequest webhookRequest(String requestUri, byte[] payload) {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", requestUri);
         request.setRemoteAddr("198.51.100.10");
         request.setContent(payload);
         return request;
     }
 
     private UnknownLengthRequest webhookRequestWithoutContentLength(byte[] payload) {
-        UnknownLengthRequest request = new UnknownLengthRequest(payload);
+        return webhookRequestWithoutContentLength(WEBHOOK_PATH, payload);
+    }
+
+    private UnknownLengthRequest webhookRequestWithoutContentLength(String requestUri, byte[] payload) {
+        UnknownLengthRequest request = new UnknownLengthRequest(requestUri, payload);
         request.setRemoteAddr("198.51.100.10");
         return request;
     }
@@ -149,8 +372,8 @@ class GithubWebhookPayloadLimitFilterTest {
         private final byte[] body;
         private int bytesRead;
 
-        private UnknownLengthRequest(byte[] body) {
-            super("POST", WEBHOOK_PATH);
+        private UnknownLengthRequest(String requestUri, byte[] body) {
+            super("POST", requestUri);
             this.body = body;
         }
 

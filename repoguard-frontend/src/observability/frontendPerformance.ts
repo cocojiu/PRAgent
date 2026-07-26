@@ -82,7 +82,7 @@ const flushFrontendPerformance = async () => {
   }
   const report = drainFrontendPerformanceReport(routeResolver());
   try {
-    await apiRequest("reportFrontendPerformance", report);
+    await apiRequest("reportFrontendPerformance", report, { keepalive: true });
   } catch {
     // Observability must not affect user workflows.
   }

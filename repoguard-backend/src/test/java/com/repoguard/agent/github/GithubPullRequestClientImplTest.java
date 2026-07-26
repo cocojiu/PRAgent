@@ -226,9 +226,82 @@ class GithubPullRequestClientImplTest {
     }
 
     @Test
-    void publishPullRequestCommentsDowngradesUnresolvableLineCommentToPrComment() throws Exception {
+    void publishPullRequestCommentsPublishesLineCommentsAsSingleReviewBatch() throws Exception {
         try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            server.setReviewCommentsResponse("""
+                [{"id":7002,"html_url":"https://github.com/octocat/api/pull/7#discussion_r7002","path":"src/Util.java","line":30,"original_line":30,"body":"Util comment"},
+                 {"id":7001,"html_url":"https://github.com/octocat/api/pull/7#discussion_r7001","path":"src/App.java","line":12,"original_line":12,"body":"App comment"}]
+                """);
+            List<GithubReviewCommentDraft> drafts = List.of(
+                new GithubReviewCommentDraft(10L, null, null, "PR summary", "pull_request"),
+                new GithubReviewCommentDraft(11L, "src/App.java", 12, "App comment", "line"),
+                new GithubReviewCommentDraft(12L, "src/Util.java", 30, "Util comment", "line")
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), drafts);
+
+            assertThat(results).hasSize(3);
+            assertThat(results.get(0).success()).isTrue();
+            assertThat(results.get(0).status()).isEqualTo("published");
+            assertThat(results.get(0).targetType()).isEqualTo("pull_request");
+            assertThat(results.get(0).commentId()).isEqualTo(9001L);
+            assertThat(results.get(1).success()).isTrue();
+            assertThat(results.get(1).status()).isEqualTo("published");
+            assertThat(results.get(1).targetType()).isEqualTo("line");
+            assertThat(results.get(1).commentId()).isEqualTo(7001L);
+            assertThat(results.get(1).url()).isEqualTo("https://github.com/octocat/api/pull/7#discussion_r7001");
+            assertThat(results.get(2).commentId()).isEqualTo(7002L);
+            assertThat(results.get(2).url()).isEqualTo("https://github.com/octocat/api/pull/7#discussion_r7002");
+            assertThat(server.commentPaths()).containsExactly(
+                "/repos/octocat/api/issues/7/comments",
+                "/repos/octocat/api/pulls/7/reviews"
+            );
+            assertThat(server.reviewCommentListRequests())
+                .containsExactly("/repos/octocat/api/pulls/7/reviews/5001/comments?per_page=100");
+            assertThat(server.commentBodies().get(1))
+                .contains("\"commit_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"")
+                .contains("\"event\":\"COMMENT\"")
+                .contains("\"path\":\"src/App.java\"")
+                .contains("\"path\":\"src/Util.java\"")
+                .contains("\"side\":\"RIGHT\"");
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsFallsBackToPerCommentPublishingWhenReviewRejected() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextReviewWithStatus(422, "{\"message\":\"Validation Failed\"}");
             server.failNextLineCommentAsUnresolvable();
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            List<GithubReviewCommentDraft> drafts = List.of(
+                new GithubReviewCommentDraft(11L, "src/App.java", 12, "Line comment", "line"),
+                new GithubReviewCommentDraft(12L, "src/Util.java", 30, "Other comment", "line")
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), drafts);
+
+            assertThat(results).hasSize(2);
+            assertThat(results.get(0).success()).isTrue();
+            assertThat(results.get(0).status()).isEqualTo("downgraded_to_pr_comment");
+            assertThat(results.get(0).targetType()).isEqualTo("pull_request");
+            assertThat(results.get(1).success()).isTrue();
+            assertThat(results.get(1).status()).isEqualTo("published");
+            assertThat(results.get(1).targetType()).isEqualTo("line");
+            assertThat(results.get(1).commentId()).isEqualTo(9002L);
+            assertThat(server.commentPaths()).containsExactly(
+                "/repos/octocat/api/pulls/7/reviews",
+                "/repos/octocat/api/pulls/7/comments",
+                "/repos/octocat/api/issues/7/comments",
+                "/repos/octocat/api/pulls/7/comments"
+            );
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsKeepsSuccessWhenReviewCommentListingFails() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextReviewCommentsWithStatus(500);
             when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
             GithubReviewCommentDraft draft = new GithubReviewCommentDraft(
                 11L,
@@ -242,12 +315,32 @@ class GithubPullRequestClientImplTest {
 
             assertThat(results).hasSize(1);
             assertThat(results.get(0).success()).isTrue();
-            assertThat(results.get(0).status()).isEqualTo("downgraded_to_pr_comment");
-            assertThat(results.get(0).targetType()).isEqualTo("pull_request");
-            assertThat(server.commentPaths()).containsExactly(
-                "/repos/octocat/api/pulls/7/comments",
-                "/repos/octocat/api/issues/7/comments"
+            assertThat(results.get(0).status()).isEqualTo("published");
+            assertThat(results.get(0).commentId()).isNull();
+            assertThat(results.get(0).url()).isEqualTo("https://github.com/octocat/api/pull/7#pullrequestreview-5001");
+            assertThat(server.commentPaths()).containsExactly("/repos/octocat/api/pulls/7/reviews");
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsFailsAllLineCommentsWhenReviewRejectedWithoutValidationError() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextReviewWithStatus(403, "{\"message\":\"You have exceeded a secondary rate limit\"}");
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            List<GithubReviewCommentDraft> drafts = List.of(
+                new GithubReviewCommentDraft(11L, "src/App.java", 12, "Line comment", "line"),
+                new GithubReviewCommentDraft(12L, "src/Util.java", 30, "Other comment", "line")
             );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), drafts);
+
+            assertThat(results).hasSize(2);
+            assertThat(results.get(0).success()).isFalse();
+            assertThat(results.get(0).status()).isEqualTo("failed");
+            assertThat(results.get(0).message()).contains("github_permission_denied").contains("status=403");
+            assertThat(results.get(1).success()).isFalse();
+            assertThat(results.get(1).status()).isEqualTo("failed");
+            assertThat(server.commentPaths()).containsExactly("/repos/octocat/api/pulls/7/reviews");
         }
     }
 
@@ -346,11 +439,16 @@ class GithubPullRequestClientImplTest {
         List<Integer> pullRequestPageRequests = new ArrayList<>();
         List<String> commentPaths = new ArrayList<>();
         List<String> commentBodies = new ArrayList<>();
+        List<String> reviewCommentListRequests = new ArrayList<>();
         AtomicInteger lineCommentFailures = new AtomicInteger();
         AtomicInteger filesFailureStatus = new AtomicInteger();
         AtomicInteger prCommentFailureStatus = new AtomicInteger();
         AtomicReference<String> prCommentFailureRetryAfter = new AtomicReference<>();
         AtomicReference<String> prCommentFailureBody = new AtomicReference<>();
+        AtomicInteger reviewFailureStatus = new AtomicInteger();
+        AtomicReference<String> reviewFailureBody = new AtomicReference<>();
+        AtomicInteger reviewCommentsFailureStatus = new AtomicInteger();
+        AtomicReference<String> reviewCommentsBody = new AtomicReference<>("[]");
         server.createContext("/", exchange -> {
             URI uri = exchange.getRequestURI();
             String body;
@@ -374,6 +472,37 @@ class GithubPullRequestClientImplTest {
                 int perPage = queryInt(uri, "per_page", 30);
                 pullRequestPageRequests.add(page);
                 body = pullRequestsJson(pullRequestCount, page, perPage);
+            } else if ("POST".equals(exchange.getRequestMethod())
+                && "/repos/octocat/api/pulls/7/reviews".equals(uri.getPath())) {
+                commentPaths.add(uri.getPath());
+                commentBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                int failureStatus = reviewFailureStatus.getAndSet(0);
+                if (failureStatus > 0) {
+                    body = reviewFailureBody.get();
+                    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(failureStatus, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                    return;
+                }
+                body = "{\"id\":5001,\"html_url\":\"https://github.com/octocat/api/pull/7#pullrequestreview-5001\"}";
+            } else if ("GET".equals(exchange.getRequestMethod())
+                && "/repos/octocat/api/pulls/7/reviews/5001/comments".equals(uri.getPath())) {
+                reviewCommentListRequests.add(
+                    uri.getPath() + (uri.getRawQuery() == null ? "" : "?" + uri.getRawQuery())
+                );
+                int failureStatus = reviewCommentsFailureStatus.getAndSet(0);
+                if (failureStatus > 0) {
+                    body = "{\"message\":\"server error\"}";
+                    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+                    exchange.getResponseHeaders().set("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(failureStatus, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                    return;
+                }
+                body = reviewCommentsBody.get();
             } else if ("POST".equals(exchange.getRequestMethod())
                 && "/repos/octocat/api/pulls/7/comments".equals(uri.getPath())) {
                 commentPaths.add(uri.getPath());
@@ -426,11 +555,16 @@ class GithubPullRequestClientImplTest {
             pullRequestPageRequests,
             commentPaths,
             commentBodies,
+            reviewCommentListRequests,
             lineCommentFailures,
             filesFailureStatus,
             prCommentFailureStatus,
             prCommentFailureRetryAfter,
-            prCommentFailureBody
+            prCommentFailureBody,
+            reviewFailureStatus,
+            reviewFailureBody,
+            reviewCommentsFailureStatus,
+            reviewCommentsBody
         );
     }
 
@@ -479,11 +613,16 @@ class GithubPullRequestClientImplTest {
         List<Integer> pullRequestPageRequests,
         List<String> commentPaths,
         List<String> commentBodies,
+        List<String> reviewCommentListRequests,
         AtomicInteger lineCommentFailures,
         AtomicInteger filesFailureStatus,
         AtomicInteger prCommentFailureStatus,
         AtomicReference<String> prCommentFailureRetryAfter,
-        AtomicReference<String> prCommentFailureBody
+        AtomicReference<String> prCommentFailureBody,
+        AtomicInteger reviewFailureStatus,
+        AtomicReference<String> reviewFailureBody,
+        AtomicInteger reviewCommentsFailureStatus,
+        AtomicReference<String> reviewCommentsBody
     ) implements AutoCloseable {
 
         @Override
@@ -503,6 +642,19 @@ class GithubPullRequestClientImplTest {
             prCommentFailureStatus.set(status);
             prCommentFailureRetryAfter.set(retryAfter);
             prCommentFailureBody.set(body);
+        }
+
+        void failNextReviewWithStatus(int status, String body) {
+            reviewFailureStatus.set(status);
+            reviewFailureBody.set(body);
+        }
+
+        void failNextReviewCommentsWithStatus(int status) {
+            reviewCommentsFailureStatus.set(status);
+        }
+
+        void setReviewCommentsResponse(String body) {
+            reviewCommentsBody.set(body);
         }
     }
 }

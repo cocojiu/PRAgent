@@ -7,9 +7,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AuthProperties {
 
     private static final String DEFAULT_TOKEN_SECRET = "changeme-local-dev";
+    private static final String DEFAULT_TOKEN_SECRET_ID = "k1";
+    private static final String TOKEN_SECRET_ID_PATTERN = "[A-Za-z0-9._-]{1,32}";
     private static final int MIN_PRODUCTION_TOKEN_SECRET_LENGTH = 32;
 
     private String tokenSecret = DEFAULT_TOKEN_SECRET;
+    private String tokenSecretId = DEFAULT_TOKEN_SECRET_ID;
+    private String tokenSecretPrevious;
+    private String tokenSecretPreviousId;
     private long accessTokenTtlSeconds = 900;
     private long refreshTokenTtlSeconds = 7200;
     private long rememberTokenTtlSeconds = 2592000;
@@ -25,6 +30,30 @@ public class AuthProperties {
 
     public void setTokenSecret(String tokenSecret) {
         this.tokenSecret = tokenSecret;
+    }
+
+    public String getTokenSecretId() {
+        return tokenSecretId;
+    }
+
+    public void setTokenSecretId(String tokenSecretId) {
+        this.tokenSecretId = tokenSecretId == null ? null : tokenSecretId.trim();
+    }
+
+    public String getTokenSecretPrevious() {
+        return tokenSecretPrevious;
+    }
+
+    public void setTokenSecretPrevious(String tokenSecretPrevious) {
+        this.tokenSecretPrevious = tokenSecretPrevious;
+    }
+
+    public String getTokenSecretPreviousId() {
+        return tokenSecretPreviousId;
+    }
+
+    public void setTokenSecretPreviousId(String tokenSecretPreviousId) {
+        this.tokenSecretPreviousId = tokenSecretPreviousId == null ? null : tokenSecretPreviousId.trim();
     }
 
     public long getAccessTokenTtlSeconds() {
@@ -98,6 +127,7 @@ public class AuthProperties {
         requireNonNegative("repoguard.auth.refresh-concurrency-grace-seconds", refreshConcurrencyGraceSeconds);
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-ip", publicAuthRequestsPerMinutePerIp);
         requirePositive("repoguard.auth.public-auth-requests-per-minute-per-account-ip", publicAuthRequestsPerMinutePerAccountIp);
+        validateTokenSecretIds();
 
         boolean productionProfile = RuntimeProfilePolicy.isProductionLike(activeProfiles);
         if (!productionProfile) {
@@ -110,8 +140,47 @@ public class AuthProperties {
         if (normalizedTokenSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
             throw new IllegalStateException("repoguard.auth.token-secret must be at least 32 characters in a production-like profile");
         }
+        String normalizedPreviousSecret = tokenSecretPrevious == null ? "" : tokenSecretPrevious.trim();
+        if (!normalizedPreviousSecret.isBlank()) {
+            if (DEFAULT_TOKEN_SECRET.equals(normalizedPreviousSecret)) {
+                throw new IllegalStateException("repoguard.auth.token-secret-previous must not reuse the development default in a production-like profile");
+            }
+            if (normalizedPreviousSecret.length() < MIN_PRODUCTION_TOKEN_SECRET_LENGTH) {
+                throw new IllegalStateException("repoguard.auth.token-secret-previous must be at least 32 characters in a production-like profile");
+            }
+        }
         if (!secureCookies) {
             throw new IllegalStateException("repoguard.auth.secure-cookies must be true in a production-like profile");
+        }
+    }
+
+    private void validateTokenSecretIds() {
+        String activeKeyId = tokenSecretId == null ? "" : tokenSecretId;
+        if (!activeKeyId.matches(TOKEN_SECRET_ID_PATTERN)) {
+            throw new IllegalStateException("repoguard.auth.token-secret-id must match " + TOKEN_SECRET_ID_PATTERN);
+        }
+        boolean previousSecretConfigured = tokenSecretPrevious != null && !tokenSecretPrevious.isBlank();
+        boolean previousKeyIdConfigured = tokenSecretPreviousId != null && !tokenSecretPreviousId.isBlank();
+        if (previousSecretConfigured != previousKeyIdConfigured) {
+            throw new IllegalStateException(
+                "repoguard.auth.token-secret-previous and repoguard.auth.token-secret-previous-id must be configured together"
+            );
+        }
+        if (!previousSecretConfigured) {
+            return;
+        }
+        if (!tokenSecretPreviousId.matches(TOKEN_SECRET_ID_PATTERN)) {
+            throw new IllegalStateException("repoguard.auth.token-secret-previous-id must match " + TOKEN_SECRET_ID_PATTERN);
+        }
+        if (activeKeyId.equals(tokenSecretPreviousId)) {
+            throw new IllegalStateException(
+                "repoguard.auth.token-secret-previous-id must differ from repoguard.auth.token-secret-id"
+            );
+        }
+        if (tokenSecretPrevious.equals(tokenSecret)) {
+            throw new IllegalStateException(
+                "repoguard.auth.token-secret-previous must differ from repoguard.auth.token-secret"
+            );
         }
     }
 

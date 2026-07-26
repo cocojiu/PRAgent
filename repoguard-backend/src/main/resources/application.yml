@@ -162,8 +162,13 @@ repoguard:
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
+    encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:}
+    allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
   auth:
     token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET}
+    token-secret-id: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:k1}
+    token-secret-previous: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:}
+    token-secret-previous-id: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:}
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
@@ -183,6 +188,8 @@ app:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
       header-name: ${REPOGUARD_ADMIN_API_KEY_HEADER:X-RepoGuard-Admin-Key}
+    trusted-proxy:
+      networks: ${REPOGUARD_TRUSTED_PROXY_NETWORKS:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     outbound:
       github-allowed-hosts: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS:api.github.com}
       llm-allowed-hosts: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS:dashscope.aliyuncs.com,api.openai.com}
@@ -260,6 +267,7 @@ app:
       review-recovery-batch-size: ${REPOGUARD_REVIEW_RECOVERY_BATCH_SIZE:20}
       worker-concurrency: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}
       health-check-timeout-ms: ${REPOGUARD_REVIEW_HEALTH_CHECK_TIMEOUT_MS:1500}
+      health-query-window-days: ${REPOGUARD_REVIEW_HEALTH_QUERY_WINDOW_DAYS:30}
     notification:
       exchange: ${REPOGUARD_NOTIFICATION_EXCHANGE:repoguard.notification.exchange}
       queue: ${REPOGUARD_NOTIFICATION_QUEUE:repoguard.notification.queue}

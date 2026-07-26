@@ -9,21 +9,18 @@ import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.retention.DataRetentionArchiveWriter;
 import com.repoguard.agent.retention.DataRetentionCandidateQuery;
 import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import com.repoguard.agent.service.DataRetentionService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class DataRetentionServiceImpl implements DataRetentionService {
@@ -31,15 +28,17 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     private static final String CONFIRM_TEXT = "CLEANUP";
     private static final int DEFAULT_RETENTION_DAYS = 90;
     private static final int DEFAULT_MAX_TASKS = 500;
+    private static final int CLEANUP_SLICE_SIZE = 50;
     private static final int BACKUP_REFERENCE_MAX_LENGTH = 128;
     private static final Pattern BACKUP_REFERENCE_PATTERN = Pattern.compile(
         "^backup://[A-Za-z0-9][A-Za-z0-9._-]{0,63}/[A-Za-z0-9._~:@%+/-]+$"
     );
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final DataRetentionDeleteExecutor.DeletionResult EMPTY_DELETION =
+        new DataRetentionDeleteExecutor.DeletionResult(0, 0, 0, 0, 0, 0, 0);
 
     private final DataRetentionCandidateQuery candidateQuery;
-    private final DataRetentionArchiveWriter archiveWriter;
-    private final DataRetentionDeleteExecutor deleteExecutor;
+    private final DataRetentionCleanupSliceExecutor sliceExecutor;
     private final SystemSettingsProvider systemSettingsProvider;
     private final DataRetentionMetricsRecorder metricsRecorder;
     private final DataRetentionCleanupAuditRecorder auditRecorder;
@@ -51,8 +50,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     @Autowired
     public DataRetentionServiceImpl(
         DataRetentionCandidateQuery candidateQuery,
-        DataRetentionArchiveWriter archiveWriter,
-        DataRetentionDeleteExecutor deleteExecutor,
+        DataRetentionCleanupSliceExecutor sliceExecutor,
         SystemSettingsProvider systemSettingsProvider,
         DataRetentionMetricsRecorder metricsRecorder,
         DataRetentionCleanupAuditRecorder auditRecorder,
@@ -61,8 +59,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         DataRetentionProperties dataRetentionProperties
     ) {
         this.candidateQuery = Objects.requireNonNull(candidateQuery, "candidateQuery");
-        this.archiveWriter = Objects.requireNonNull(archiveWriter, "archiveWriter");
-        this.deleteExecutor = Objects.requireNonNull(deleteExecutor, "deleteExecutor");
+        this.sliceExecutor = Objects.requireNonNull(sliceExecutor, "sliceExecutor");
         this.systemSettingsProvider = systemSettingsProvider;
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.auditRecorder = Objects.requireNonNull(auditRecorder, "auditRecorder");
@@ -72,7 +69,6 @@ public class DataRetentionServiceImpl implements DataRetentionService {
     }
 
     @Override
-    @Transactional
     public DataRetentionCleanupResponse cleanup(DataRetentionCleanupRequest request) {
         boolean execute = request != null && Boolean.TRUE.equals(request.execute());
         if (!cleanupLock.tryLock()) {
@@ -92,9 +88,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             metricsRecorder.recordFailure(execute, ex);
             throw ex;
         } finally {
-            if (!deferCleanupReleaseUntilTransactionCompletion(lease)) {
-                releaseCleanupResources(lease);
-            }
+            releaseCleanupResources(lease);
         }
     }
 
@@ -146,13 +140,14 @@ public class DataRetentionServiceImpl implements DataRetentionService {
 
         LocalDateTime cutoff = LocalDateTime.now().minusDays(retentionDays);
         Long cleanupBatchId = auditRecorder.start(execute, retentionDays, maxTasks, backupReference, cutoff);
+        SliceProgress progress = null;
         try {
             DataRetentionCandidateQuery.CandidateSelection candidates = candidateQuery.select(cutoff, maxTasks);
             long candidateTasks = candidates.candidateTasks();
             List<Long> taskIds = candidates.taskIds();
 
             if (!execute || taskIds.isEmpty()) {
-                return completedAfterCommit(cleanupBatchId, execute, response(
+                return completed(cleanupBatchId, response(
                     false,
                     cleanupBatchId,
                     retentionDays,
@@ -161,20 +156,17 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                     cutoff,
                     candidateTasks,
                     taskIds.size(),
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0
+                    EMPTY_DELETION
                 ));
             }
 
-            archiveWriter.write(cleanupBatchId, backupReference, taskIds);
-            DataRetentionDeleteExecutor.DeletionResult deletion = deleteExecutor.delete(taskIds);
+            List<List<Long>> slices = partition(taskIds);
+            progress = new SliceProgress(candidateTasks, taskIds.size(), slices.size());
+            for (List<Long> slice : slices) {
+                progress.accumulate(sliceExecutor.archiveAndDelete(cleanupBatchId, backupReference, slice));
+            }
 
-            return completedAfterCommit(cleanupBatchId, execute, response(
+            return completed(cleanupBatchId, response(
                 true,
                 cleanupBatchId,
                 retentionDays,
@@ -183,18 +175,32 @@ public class DataRetentionServiceImpl implements DataRetentionService {
                 cutoff,
                 candidateTasks,
                 taskIds.size(),
-                deletion.deletedBatchItems(),
-                deletion.deletedPublications(),
-                deletion.deletedBatches(),
-                deletion.deletedChangedFiles(),
-                deletion.deletedTimelines(),
-                deletion.deletedFindings(),
-                deletion.deletedTasks()
+                progress.deletion
             ));
         } catch (RuntimeException ex) {
-            auditRecorder.fail(cleanupBatchId, ex);
+            if (progress == null) {
+                auditRecorder.fail(cleanupBatchId, ex);
+            } else {
+                auditRecorder.fail(
+                    cleanupBatchId,
+                    ex,
+                    progress.candidateTasks,
+                    progress.selectedTasks,
+                    progress.completedSlices,
+                    progress.totalSlices,
+                    progress.deletion
+                );
+            }
             throw ex;
         }
+    }
+
+    private List<List<Long>> partition(List<Long> taskIds) {
+        List<List<Long>> slices = new ArrayList<>();
+        for (int from = 0; from < taskIds.size(); from += CLEANUP_SLICE_SIZE) {
+            slices.add(taskIds.subList(from, Math.min(from + CLEANUP_SLICE_SIZE, taskIds.size())));
+        }
+        return slices;
     }
 
     private int resolveRetentionDays(DataRetentionCleanupRequest request) {
@@ -280,13 +286,7 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         LocalDateTime cutoff,
         long candidateTasks,
         int selectedTasks,
-        int deletedBatchItems,
-        int deletedPublications,
-        int deletedBatches,
-        int deletedChangedFiles,
-        int deletedTimelines,
-        int deletedFindings,
-        int deletedTasks
+        DataRetentionDeleteExecutor.DeletionResult deletion
     ) {
         return new DataRetentionCleanupResponse(
             executed,
@@ -297,13 +297,13 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             cutoff.format(DATE_TIME_FORMATTER),
             candidateTasks,
             selectedTasks,
-            deletedBatchItems,
-            deletedPublications,
-            deletedBatches,
-            deletedChangedFiles,
-            deletedTimelines,
-            deletedFindings,
-            deletedTasks
+            deletion.deletedBatchItems(),
+            deletion.deletedPublications(),
+            deletion.deletedBatches(),
+            deletion.deletedChangedFiles(),
+            deletion.deletedTimelines(),
+            deletion.deletedFindings(),
+            deletion.deletedTasks()
         );
     }
 
@@ -312,53 +312,9 @@ public class DataRetentionServiceImpl implements DataRetentionService {
         return response;
     }
 
-    private DataRetentionCleanupResponse completedAfterCommit(
-        Long cleanupBatchId,
-        boolean execute,
-        DataRetentionCleanupResponse response
-    ) {
-        if (!transactionSynchronizationActive()) {
-            auditRecorder.complete(cleanupBatchId, response);
-            return recorded(response);
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                auditRecorder.complete(cleanupBatchId, response);
-                metricsRecorder.record(response);
-            }
-
-            @Override
-            public void afterCompletion(int status) {
-                if (status == TransactionSynchronization.STATUS_COMMITTED) {
-                    return;
-                }
-                IllegalStateException failure = new IllegalStateException(
-                    "Data retention cleanup transaction did not commit"
-                );
-                auditRecorder.fail(cleanupBatchId, failure);
-                metricsRecorder.recordFailure(execute, failure);
-            }
-        });
-        return response;
-    }
-
-    private boolean deferCleanupReleaseUntilTransactionCompletion(DataRetentionCleanupLeaseStore.Lease lease) {
-        if (lease == null || !transactionSynchronizationActive()) {
-            return false;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int status) {
-                releaseCleanupResources(lease);
-            }
-        });
-        return true;
-    }
-
-    private boolean transactionSynchronizationActive() {
-        return TransactionSynchronizationManager.isActualTransactionActive()
-            && TransactionSynchronizationManager.isSynchronizationActive();
+    private DataRetentionCleanupResponse completed(Long cleanupBatchId, DataRetentionCleanupResponse response) {
+        auditRecorder.complete(cleanupBatchId, response);
+        return recorded(response);
     }
 
     private void releaseCleanupResources(DataRetentionCleanupLeaseStore.Lease lease) {
@@ -366,6 +322,34 @@ public class DataRetentionServiceImpl implements DataRetentionService {
             leaseStore.release(lease);
         } finally {
             cleanupLock.unlock();
+        }
+    }
+
+    private static final class SliceProgress {
+
+        private final long candidateTasks;
+        private final int selectedTasks;
+        private final int totalSlices;
+        private int completedSlices;
+        private DataRetentionDeleteExecutor.DeletionResult deletion = EMPTY_DELETION;
+
+        private SliceProgress(long candidateTasks, int selectedTasks, int totalSlices) {
+            this.candidateTasks = candidateTasks;
+            this.selectedTasks = selectedTasks;
+            this.totalSlices = totalSlices;
+        }
+
+        private void accumulate(DataRetentionDeleteExecutor.DeletionResult sliceDeletion) {
+            completedSlices++;
+            deletion = new DataRetentionDeleteExecutor.DeletionResult(
+                deletion.deletedBatchItems() + sliceDeletion.deletedBatchItems(),
+                deletion.deletedPublications() + sliceDeletion.deletedPublications(),
+                deletion.deletedBatches() + sliceDeletion.deletedBatches(),
+                deletion.deletedChangedFiles() + sliceDeletion.deletedChangedFiles(),
+                deletion.deletedTimelines() + sliceDeletion.deletedTimelines(),
+                deletion.deletedFindings() + sliceDeletion.deletedFindings(),
+                deletion.deletedTasks() + sliceDeletion.deletedTasks()
+            );
         }
     }
 }

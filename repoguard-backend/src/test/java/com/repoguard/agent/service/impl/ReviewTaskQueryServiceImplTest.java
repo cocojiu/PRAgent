@@ -9,12 +9,14 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTask;
@@ -23,10 +25,12 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.Cacheable;
 
 class ReviewTaskQueryServiceImplTest {
 
@@ -223,6 +227,50 @@ class ReviewTaskQueryServiceImplTest {
         org.assertj.core.api.Assertions.assertThat(repositories)
             .containsExactly("org-a/repo-guard", "org-b/repo-guard");
         verify(repositoryDimensionService).listRepositoryLabels();
+    }
+
+    @Test
+    void getReviewListSummaryAggregatesThroughSharedFilterQuery() {
+        ReviewTaskMapper.ReviewTaskListSummaryStat stat = new ReviewTaskMapper.ReviewTaskListSummaryStat();
+        stat.setTotal(321L);
+        stat.setHighRisk(12L);
+        stat.setFailed(7L);
+        stat.setAverageDurationSeconds(new BigDecimal("95.5"));
+        when(reviewTaskMapper.selectListSummaryStat(any(Wrapper.class))).thenReturn(stat);
+
+        var summary = service().getReviewListSummary(new ReviewQuery(1, 1, null, null, null, null, null, null));
+
+        org.assertj.core.api.Assertions.assertThat(summary)
+            .isEqualTo(new ReviewTaskListSummary(321L, 12L, 7L, 96L));
+        verify(reviewTaskMapper).selectListSummaryStat(any(Wrapper.class));
+        verify(reviewTaskMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
+        verify(reviewTaskMapper, never()).selectCount(any(Wrapper.class));
+    }
+
+    @Test
+    void getReviewListSummaryReturnsZeroesWhenAggregateRowIsMissing() {
+        when(reviewTaskMapper.selectListSummaryStat(any(Wrapper.class))).thenReturn(null);
+
+        var summary = service().getReviewListSummary(new ReviewQuery(1, 1, null, null, null, null, null, null));
+
+        org.assertj.core.api.Assertions.assertThat(summary)
+            .isEqualTo(new ReviewTaskListSummary(0L, 0L, 0L, 0L));
+    }
+
+    @Test
+    void getReviewListSummaryUsesSynchronizedFilterKeyedCache() throws Exception {
+        Cacheable cacheable = ReviewTaskQueryServiceImpl.class
+            .getMethod("getReviewListSummary", ReviewQuery.class)
+            .getAnnotation(Cacheable.class);
+
+        org.assertj.core.api.Assertions.assertThat(cacheable).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(cacheable.cacheNames())
+            .containsExactly(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        org.assertj.core.api.Assertions.assertThat(cacheable.sync()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(cacheable.key()).isEqualTo("#query.listSummaryCacheKey()");
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, " org/repo ", "failed", null, null, null, null).listSummaryCacheKey()
+        ).isEqualTo("org/repo|failed||||");
     }
 
     @Test

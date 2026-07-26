@@ -32,6 +32,9 @@ import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.CannotAcquireLockException;
@@ -47,6 +50,8 @@ class ReviewTaskExecutorImplTest {
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
+    private final SqlSessionFactory sqlSessionFactory = org.mockito.Mockito.mock(SqlSessionFactory.class);
+    private final SqlSession batchSqlSession = org.mockito.Mockito.mock(SqlSession.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final PullRequestReviewer pullRequestReviewer = org.mockito.Mockito.mock(PullRequestReviewer.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
@@ -401,14 +406,20 @@ class ReviewTaskExecutorImplTest {
             new ReviewTimelineAppender(reviewTimelineMapper),
             new ReviewExecutionTimelineLabelFormatter()
         );
+        when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(batchSqlSession);
+        when(batchSqlSession.getMapper(ChangedFileMapper.class)).thenReturn(changedFileMapper);
+        when(batchSqlSession.getMapper(ReviewFindingMapper.class)).thenReturn(reviewFindingMapper);
+        MapperBatchInserter batchInserter = new MapperBatchInserter(sqlSessionFactory);
         ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
             changedFileMapper,
-            new ChangedFileEntityMapper()
+            new ChangedFileEntityMapper(),
+            batchInserter
         );
         ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
             reviewFindingMapper,
             findingDeduplicator,
-            new ReviewFindingEntityMapper()
+            new ReviewFindingEntityMapper(),
+            batchInserter
         );
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
             reviewTaskStateMachine,

@@ -18,6 +18,7 @@ import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidati
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
@@ -35,12 +36,14 @@ class DefaultIdentityAccountLifecycleTest {
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final IdentitySessionLifecycle sessionLifecycle = Mockito.mock(IdentitySessionLifecycle.class);
     private final AuthProperties authProperties = new AuthProperties();
+    private final AuthAccountCache authAccountCache = Mockito.mock(AuthAccountCache.class);
     private final DefaultIdentityAccountLifecycle lifecycle = new DefaultIdentityAccountLifecycle(
         userAccountMapper,
         auditRecorder,
         passwordHashService,
         sessionLifecycle,
-        authProperties
+        authProperties,
+        authAccountCache
     );
 
     @Test
@@ -172,6 +175,7 @@ class DefaultIdentityAccountLifecycleTest {
             "Safer456"
         ));
 
+        verify(authAccountCache).invalidate(1001L);
         verify(sessionLifecycle).invalidateAccountSessions(
             eq(1001L),
             eq(SessionInvalidationMode.REFRESH_TOKENS_ONLY),
@@ -189,6 +193,7 @@ class DefaultIdentityAccountLifecycleTest {
             passwordHashService,
             sessionLifecycle,
             authProperties,
+            authAccountCache,
             transactionManager
         );
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);

@@ -12,6 +12,7 @@ import com.repoguard.agent.external.OutboundEndpointType;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -74,6 +75,11 @@ public class GithubCommentWriter {
         }
 
         LocalDateTime startedAt = LocalDateTime.now();
+        String reviewUrl = UriComponentsBuilder
+            .fromUriString(baseUrl)
+            .path("/repos/{owner}/{repo}/pulls/{pullNumber}/reviews")
+            .build(owner, repository, task.getPrNumber())
+            .toString();
         String lineCommentUrl = UriComponentsBuilder
             .fromUriString(baseUrl)
             .path("/repos/{owner}/{repo}/pulls/{pullNumber}/comments")
@@ -85,68 +91,46 @@ public class GithubCommentWriter {
             .build(owner, repository, task.getPrNumber())
             .toString();
 
-        String commitSha = null;
-
-        List<GithubReviewCommentResult> results = new ArrayList<>();
+        GithubReviewCommentResult[] results = new GithubReviewCommentResult[drafts.size()];
+        List<Integer> lineDraftIndexes = new ArrayList<>();
         int failedCount = 0;
-        for (GithubReviewCommentDraft draft : drafts) {
+        for (int index = 0; index < drafts.size(); index++) {
+            GithubReviewCommentDraft draft = drafts.get(index);
+            if (!GithubCommentTargetType.from(draft.targetType()).isPullRequest()) {
+                lineDraftIndexes.add(index);
+                continue;
+            }
             try {
-                GithubReviewCommentResponse response;
-                GithubCommentTargetType draftTargetType = GithubCommentTargetType.from(draft.targetType());
-                GithubCommentTargetType actualTargetType = draftTargetType;
-                if (draftTargetType.isPullRequest()) {
-                    response = publishPullRequestComment(prCommentUrl, draft.body(), settings, effectiveResilience);
-                } else {
-                    if (!StringUtils.hasText(commitSha)) {
-                        commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings, effectiveResilience);
-                    }
-                    try {
-                        response = publishLineComment(lineCommentUrl, draft, commitSha, settings, effectiveResilience);
-                    } catch (RuntimeException ex) {
-                        if (!isUnresolvableLineComment(ex)) {
-                            throw ex;
-                        }
-                        actualTargetType = GithubCommentTargetType.PULL_REQUEST;
-                        response = publishPullRequestComment(prCommentUrl, draft.body(), settings, effectiveResilience);
-                    }
-                }
-                boolean downgradedToPrComment = actualTargetType.isPullRequest() && !draftTargetType.isPullRequest();
-                results.add(new GithubReviewCommentResult(
-                    draft.findingId(),
-                    draft.path(),
-                    draft.line(),
-                    actualTargetType.code(),
-                    true,
-                    downgradedToPrComment
-                        ? GithubCommentPublicationStatus.DOWNGRADED_TO_PR_COMMENT.code()
-                        : GithubCommentPublicationStatus.PUBLISHED.code(),
-                    downgradedToPrComment
-                        ? "GitHub line comment could not be resolved; published as PR comment"
-                        : "GitHub comment published",
-                    response == null ? null : response.htmlUrl(),
-                    response == null ? null : response.id()
-                ));
+                GithubReviewCommentResponse response = publishPullRequestComment(
+                    prCommentUrl,
+                    draft.body(),
+                    settings,
+                    effectiveResilience
+                );
+                results[index] = publishedResult(draft, GithubCommentTargetType.PULL_REQUEST, false, response);
                 healthReporter.markChecked(settings, null);
             } catch (RuntimeException ex) {
-                RuntimeException classified = ExternalCallErrorClassifier.github(ex);
                 failedCount++;
-                healthReporter.recordGithubApiRequest(startedAt, "publish_pull_request_comments", "failed", classified);
-                healthReporter.recordExternalFailure(classified);
-                String message = healthReporter.conciseError(classified);
-                results.add(new GithubReviewCommentResult(
-                    draft.findingId(),
-                    draft.path(),
-                    draft.line(),
-                    draft.targetType(),
-                    false,
-                    GithubCommentPublicationStatus.FAILED.code(),
-                    message,
-                    null,
-                    null
-                ));
-                healthReporter.markChecked(settings, message);
+                results[index] = failedResult(startedAt, settings, draft, ex);
             }
         }
+
+        failedCount += publishLineDrafts(
+            settings,
+            baseUrl,
+            owner,
+            repository,
+            task,
+            drafts,
+            lineDraftIndexes,
+            results,
+            reviewUrl,
+            lineCommentUrl,
+            prCommentUrl,
+            effectiveResilience,
+            startedAt
+        );
+
         healthReporter.recordGithubApiRequest(
             startedAt,
             "publish_pull_request_comments",
@@ -154,7 +138,285 @@ public class GithubCommentWriter {
             null,
             null
         );
-        return results;
+        return List.of(results);
+    }
+
+    private int publishLineDrafts(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        ReviewTask task,
+        List<GithubReviewCommentDraft> drafts,
+        List<Integer> lineDraftIndexes,
+        GithubReviewCommentResult[] results,
+        String reviewUrl,
+        String lineCommentUrl,
+        String prCommentUrl,
+        ExternalCallResilience resilience,
+        LocalDateTime startedAt
+    ) {
+        if (lineDraftIndexes.isEmpty()) {
+            return 0;
+        }
+        String commitSha;
+        try {
+            commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings, resilience);
+        } catch (RuntimeException ex) {
+            return failLineDrafts(startedAt, settings, drafts, lineDraftIndexes, results, ex);
+        }
+        List<GithubReviewCommentDraft> lineDrafts = lineDraftIndexes.stream().map(drafts::get).toList();
+        GithubReviewResponse review;
+        try {
+            review = publishReview(reviewUrl, lineDrafts, commitSha, settings, resilience);
+        } catch (RuntimeException ex) {
+            if (isReviewValidationFailure(ex)) {
+                return publishLineDraftsIndividually(
+                    settings,
+                    drafts,
+                    lineDraftIndexes,
+                    results,
+                    lineCommentUrl,
+                    prCommentUrl,
+                    commitSha,
+                    resilience,
+                    startedAt
+                );
+            }
+            return failLineDrafts(startedAt, settings, drafts, lineDraftIndexes, results, ex);
+        }
+        List<GithubReviewCommentDetail> reviewComments = listReviewCommentsQuietly(reviewUrl, review, settings, resilience);
+        List<GithubReviewCommentDetail> unmatched = new ArrayList<>(reviewComments);
+        String reviewUrlFallback = review == null ? null : review.htmlUrl();
+        for (Integer index : lineDraftIndexes) {
+            GithubReviewCommentDraft draft = drafts.get(index);
+            GithubReviewCommentDetail matched = takeMatchingReviewComment(unmatched, draft);
+            results[index] = new GithubReviewCommentResult(
+                draft.findingId(),
+                draft.path(),
+                draft.line(),
+                GithubCommentTargetType.LINE.code(),
+                true,
+                GithubCommentPublicationStatus.PUBLISHED.code(),
+                "GitHub comment published",
+                matched != null && StringUtils.hasText(matched.htmlUrl()) ? matched.htmlUrl() : reviewUrlFallback,
+                matched == null ? null : matched.id()
+            );
+        }
+        healthReporter.markChecked(settings, null);
+        return 0;
+    }
+
+    private int publishLineDraftsIndividually(
+        GithubIntegrationSettings settings,
+        List<GithubReviewCommentDraft> drafts,
+        List<Integer> lineDraftIndexes,
+        GithubReviewCommentResult[] results,
+        String lineCommentUrl,
+        String prCommentUrl,
+        String commitSha,
+        ExternalCallResilience resilience,
+        LocalDateTime startedAt
+    ) {
+        int failedCount = 0;
+        for (Integer index : lineDraftIndexes) {
+            GithubReviewCommentDraft draft = drafts.get(index);
+            try {
+                GithubCommentTargetType actualTargetType = GithubCommentTargetType.LINE;
+                GithubReviewCommentResponse response;
+                try {
+                    response = publishLineComment(lineCommentUrl, draft, commitSha, settings, resilience);
+                } catch (RuntimeException ex) {
+                    if (!isUnresolvableLineComment(ex)) {
+                        throw ex;
+                    }
+                    actualTargetType = GithubCommentTargetType.PULL_REQUEST;
+                    response = publishPullRequestComment(prCommentUrl, draft.body(), settings, resilience);
+                }
+                results[index] = publishedResult(draft, actualTargetType, actualTargetType.isPullRequest(), response);
+                healthReporter.markChecked(settings, null);
+            } catch (RuntimeException ex) {
+                failedCount++;
+                results[index] = failedResult(startedAt, settings, draft, ex);
+            }
+        }
+        return failedCount;
+    }
+
+    private int failLineDrafts(
+        LocalDateTime startedAt,
+        GithubIntegrationSettings settings,
+        List<GithubReviewCommentDraft> drafts,
+        List<Integer> lineDraftIndexes,
+        GithubReviewCommentResult[] results,
+        RuntimeException ex
+    ) {
+        RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+        healthReporter.recordGithubApiRequest(startedAt, "publish_pull_request_comments", "failed", classified);
+        healthReporter.recordExternalFailure(classified);
+        String message = healthReporter.conciseError(classified);
+        for (Integer index : lineDraftIndexes) {
+            GithubReviewCommentDraft draft = drafts.get(index);
+            results[index] = new GithubReviewCommentResult(
+                draft.findingId(),
+                draft.path(),
+                draft.line(),
+                draft.targetType(),
+                false,
+                GithubCommentPublicationStatus.FAILED.code(),
+                message,
+                null,
+                null
+            );
+        }
+        healthReporter.markChecked(settings, message);
+        return lineDraftIndexes.size();
+    }
+
+    private GithubReviewCommentResult publishedResult(
+        GithubReviewCommentDraft draft,
+        GithubCommentTargetType actualTargetType,
+        boolean downgradedToPrComment,
+        GithubReviewCommentResponse response
+    ) {
+        return new GithubReviewCommentResult(
+            draft.findingId(),
+            draft.path(),
+            draft.line(),
+            actualTargetType.code(),
+            true,
+            downgradedToPrComment
+                ? GithubCommentPublicationStatus.DOWNGRADED_TO_PR_COMMENT.code()
+                : GithubCommentPublicationStatus.PUBLISHED.code(),
+            downgradedToPrComment
+                ? "GitHub line comment could not be resolved; published as PR comment"
+                : "GitHub comment published",
+            response == null ? null : response.htmlUrl(),
+            response == null ? null : response.id()
+        );
+    }
+
+    private GithubReviewCommentResult failedResult(
+        LocalDateTime startedAt,
+        GithubIntegrationSettings settings,
+        GithubReviewCommentDraft draft,
+        RuntimeException ex
+    ) {
+        RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+        healthReporter.recordGithubApiRequest(startedAt, "publish_pull_request_comments", "failed", classified);
+        healthReporter.recordExternalFailure(classified);
+        String message = healthReporter.conciseError(classified);
+        GithubReviewCommentResult result = new GithubReviewCommentResult(
+            draft.findingId(),
+            draft.path(),
+            draft.line(),
+            draft.targetType(),
+            false,
+            GithubCommentPublicationStatus.FAILED.code(),
+            message,
+            null,
+            null
+        );
+        healthReporter.markChecked(settings, message);
+        return result;
+    }
+
+    private GithubReviewResponse publishReview(
+        String reviewUrl,
+        List<GithubReviewCommentDraft> lineDrafts,
+        String commitSha,
+        GithubIntegrationSettings settings,
+        ExternalCallResilience resilience
+    ) {
+        List<Map<String, Object>> comments = lineDrafts.stream()
+            .map(draft -> Map.<String, Object>of(
+                "path", draft.path(),
+                "line", draft.line(),
+                "side", "RIGHT",
+                "body", draft.body()
+            ))
+            .toList();
+        return executeGithub("publish_pull_request_review", resilience, () -> restClient.post()
+            .uri(reviewUrl)
+            .headers(headers -> applyGithubHeaders(headers, settings))
+            .body(Map.of(
+                "commit_id", commitSha,
+                "event", "COMMENT",
+                "body", "",
+                "comments", comments
+            ))
+            .exchange((request, response) -> readJsonResponse(
+                response,
+                GithubReviewResponse.class,
+                "publish_pull_request_review"
+            )));
+    }
+
+    private List<GithubReviewCommentDetail> listReviewCommentsQuietly(
+        String reviewUrl,
+        GithubReviewResponse review,
+        GithubIntegrationSettings settings,
+        ExternalCallResilience resilience
+    ) {
+        if (review == null || review.id() == null) {
+            return List.of();
+        }
+        String url = reviewUrl + "/" + review.id() + "/comments?per_page=100";
+        try {
+            GithubReviewCommentDetail[] comments = executeGithub(
+                "list_pull_request_review_comments",
+                resilience,
+                () -> restClient.get()
+                    .uri(url)
+                    .headers(headers -> applyGithubHeaders(headers, settings))
+                    .exchange((request, response) -> readJsonResponse(
+                        response,
+                        GithubReviewCommentDetail[].class,
+                        "list_pull_request_review_comments"
+                    ))
+            );
+            return comments == null ? List.of() : Arrays.asList(comments);
+        } catch (RuntimeException ex) {
+            RuntimeException classified = ExternalCallErrorClassifier.github(ex);
+            healthReporter.recordExternalFailure(classified);
+            return List.of();
+        }
+    }
+
+    private GithubReviewCommentDetail takeMatchingReviewComment(
+        List<GithubReviewCommentDetail> comments,
+        GithubReviewCommentDraft draft
+    ) {
+        GithubReviewCommentDetail matched = null;
+        for (GithubReviewCommentDetail comment : comments) {
+            if (!matchesDraftLocation(comment, draft)) {
+                continue;
+            }
+            if (Objects.equals(comment.body(), draft.body())) {
+                matched = comment;
+                break;
+            }
+            if (matched == null) {
+                matched = comment;
+            }
+        }
+        if (matched != null) {
+            comments.remove(matched);
+        }
+        return matched;
+    }
+
+    private boolean matchesDraftLocation(GithubReviewCommentDetail comment, GithubReviewCommentDraft draft) {
+        return Objects.equals(comment.path(), draft.path())
+            && (Objects.equals(comment.line(), draft.line()) || Objects.equals(comment.originalLine(), draft.line()));
+    }
+
+    private boolean isReviewValidationFailure(RuntimeException ex) {
+        if (ex instanceof RestClientResponseException responseException) {
+            return responseException.getStatusCode().value() == 422;
+        }
+        String message = ex.getMessage();
+        return StringUtils.hasText(message) && message.contains("422");
     }
 
     private GithubReviewCommentResponse publishPullRequestComment(
@@ -277,6 +539,25 @@ public class GithubCommentWriter {
         Long id,
         @JsonProperty("html_url")
         String htmlUrl
+    ) {
+    }
+
+    private record GithubReviewResponse(
+        Long id,
+        @JsonProperty("html_url")
+        String htmlUrl
+    ) {
+    }
+
+    private record GithubReviewCommentDetail(
+        Long id,
+        @JsonProperty("html_url")
+        String htmlUrl,
+        String path,
+        Integer line,
+        @JsonProperty("original_line")
+        Integer originalLine,
+        String body
     ) {
     }
 

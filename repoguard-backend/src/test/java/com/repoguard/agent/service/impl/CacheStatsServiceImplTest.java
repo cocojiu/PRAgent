@@ -213,6 +213,15 @@ class CacheStatsServiceImplTest {
         assertThat(meterRegistry.find("repoguard.dashboard.cache.access")
             .tag("cache", CacheNames.GITHUB_OPEN_PULL_REQUESTS.toLowerCase())
             .counter()).isNull();
+
+        Cache messageQueueHealthCache = observedCacheManager.getCache(CacheNames.MESSAGE_QUEUE_HEALTH);
+        assertThat(messageQueueHealthCache).isNotNull();
+        messageQueueHealthCache.put("health", "healthResponse");
+        assertThat(messageQueueHealthCache.get("health")).isNotNull();
+
+        assertThat(meterRegistry.find("repoguard.dashboard.cache.access")
+            .tag("cache", CacheNames.MESSAGE_QUEUE_HEALTH.toLowerCase())
+            .counter()).isNull();
     }
 
     private CacheStatsItemDto statsFor(String cacheName) {

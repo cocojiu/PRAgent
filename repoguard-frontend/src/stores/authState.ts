@@ -5,9 +5,20 @@ import type { CurrentUser } from "@/api/auth";
 export const currentUser = ref<CurrentUser>();
 export const canManage = computed(() => currentUser.value?.role === "ADMIN");
 
-export const loadCurrentUser = async () => {
-  currentUser.value = await getCurrentUser();
-  return currentUser.value;
+let pendingLoad: Promise<CurrentUser> | undefined;
+
+export const loadCurrentUser = () => {
+  if (!pendingLoad) {
+    pendingLoad = getCurrentUser()
+      .then((user) => {
+        currentUser.value = user;
+        return user;
+      })
+      .finally(() => {
+        pendingLoad = undefined;
+      });
+  }
+  return pendingLoad;
 };
 
 export const resetCurrentUser = () => {

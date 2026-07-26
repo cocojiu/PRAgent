@@ -2,14 +2,22 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.config.ReviewPolicySettings;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class LlmChunkReviewAggregator {
 
     static final String CHUNK_PARTIAL_FAILURE_CATEGORY = "chunk_partial_failure";
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(LlmChunkReviewAggregator.class);
 
     private final RuleBasedPullRequestReviewer ruleBasedReviewer;
     private final LlmReviewPromptBuilder promptBuilder;
@@ -17,6 +25,7 @@ class LlmChunkReviewAggregator {
     private final LlmReviewQualityScorer qualityScorer;
     private final LlmReviewCostEstimator costEstimator;
     private final RepoGuardMetrics metrics;
+    private final Executor chunkExecutor;
 
     LlmChunkReviewAggregator(
         RuleBasedPullRequestReviewer ruleBasedReviewer,
@@ -24,7 +33,8 @@ class LlmChunkReviewAggregator {
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
         LlmReviewCostEstimator costEstimator,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        Executor chunkExecutor
     ) {
         this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
@@ -32,6 +42,7 @@ class LlmChunkReviewAggregator {
         this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
         this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.chunkExecutor = Objects.requireNonNull(chunkExecutor, "chunkExecutor");
     }
 
     ReviewResult aggregate(
@@ -41,9 +52,17 @@ class LlmChunkReviewAggregator {
         LlmReviewResultParser reviewResultParser
     ) {
         ReviewPolicySettings settings = context.settings();
-        ChunkAggregation aggregation = ChunkAggregation.empty();
+        String traceId = LogContext.currentTraceId();
+        List<CompletableFuture<ChunkReviewOutcome>> outcomes = new ArrayList<>(chunks.size());
         for (PullRequestDiffChunk chunk : chunks) {
-            aggregation = reviewChunk(context, settings, chunk, reviewResultParser, aggregation);
+            outcomes.add(CompletableFuture.supplyAsync(
+                () -> reviewChunk(context, settings, chunk, reviewResultParser, traceId),
+                chunkExecutor
+            ));
+        }
+        ChunkAggregation aggregation = ChunkAggregation.empty();
+        for (CompletableFuture<ChunkReviewOutcome> outcome : outcomes) {
+            aggregation = join(outcome).applyTo(aggregation, reviewMerger);
         }
         return ReviewResult.completed(
             aggregation.riskLevel(),
@@ -70,26 +89,60 @@ class LlmChunkReviewAggregator {
         );
     }
 
-    private ChunkAggregation reviewChunk(
+    private ChunkReviewOutcome reviewChunk(
         ReviewPipelineContext context,
         ReviewPolicySettings settings,
         PullRequestDiffChunk chunk,
         LlmReviewResultParser reviewResultParser,
-        ChunkAggregation aggregation
+        String traceId
     ) {
+        try (LogContext.Scope ignored = LogContext.withReviewTask(context.task(), traceId)) {
+            try {
+                LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
+                ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
+                return ChunkReviewOutcome.llm(parsed, callResult);
+            } catch (RuntimeException ex) {
+                LOGGER.warn(
+                    "LLM chunk review failed chunkIndex={} chunkTotal={} operation=llm_chunk_review result=fallback exceptionType={}",
+                    chunk.index(),
+                    chunk.total(),
+                    ex.getClass().getName(),
+                    ex
+                );
+                metrics.llmFallback(CHUNK_PARTIAL_FAILURE_CATEGORY);
+                ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
+                return ChunkReviewOutcome.fallback(ruleReview);
+            }
+        }
+    }
+
+    private ChunkReviewOutcome join(CompletableFuture<ChunkReviewOutcome> outcome) {
         try {
-            LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
-            ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
-            return aggregation.addLlmResult(parsed, callResult, reviewMerger);
-        } catch (RuntimeException ex) {
-            metrics.llmFallback(CHUNK_PARTIAL_FAILURE_CATEGORY);
-            ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
-            return aggregation.addFallbackResult(ruleReview, reviewMerger);
+            return outcome.join();
+        } catch (CompletionException ex) {
+            throw ex.getCause() instanceof RuntimeException cause ? cause : ex;
         }
     }
 
     private Integer zeroToNull(int value) {
         return value <= 0 ? null : value;
+    }
+
+    private record ChunkReviewOutcome(ReviewResult review, LlmCallResult callResult) {
+
+        static ChunkReviewOutcome llm(ReviewResult parsed, LlmCallResult callResult) {
+            return new ChunkReviewOutcome(parsed, callResult);
+        }
+
+        static ChunkReviewOutcome fallback(ReviewResult ruleReview) {
+            return new ChunkReviewOutcome(ruleReview, null);
+        }
+
+        ChunkAggregation applyTo(ChunkAggregation aggregation, LlmRuleReviewMerger reviewMerger) {
+            return callResult == null
+                ? aggregation.addFallbackResult(review, reviewMerger)
+                : aggregation.addLlmResult(review, callResult, reviewMerger);
+        }
     }
 
     private record ChunkAggregation(

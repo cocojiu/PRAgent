@@ -62,6 +62,35 @@ describe("apiRequest", () => {
     expect(init.method).toBeUndefined();
   });
 
+  it("builds review summary query parameters from the shared list filters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      total: 260,
+      highRisk: 13,
+      failed: 26,
+      averageDurationSeconds: 95
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await apiRequest("fetchReviewListSummary", {
+      repository: "repo",
+      status: "failed",
+      riskLevel: "high",
+      source: undefined,
+      triggerSource: "github_webhook",
+      keyword: ""
+    });
+
+    expect(result).toEqual({ total: 260, highRisk: 13, failed: 26, averageDurationSeconds: 95 });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/reviews/summary");
+    expect(url).toContain("repository=repo");
+    expect(url).toContain("status=failed");
+    expect(url).toContain("riskLevel=high");
+    expect(url).toContain("triggerSource=github_webhook");
+    expect(url).not.toContain("keyword=");
+    expect(init.method).toBeUndefined();
+  });
+
   it("forwards cancellation signals through the typed API contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({}));
     vi.stubGlobal("fetch", fetchMock);

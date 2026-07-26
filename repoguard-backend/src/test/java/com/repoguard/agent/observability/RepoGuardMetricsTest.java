@@ -373,6 +373,27 @@ class RepoGuardMetricsTest {
             .hasSize(FrontendPerformanceMeterFilterConfig.MAX_THRESHOLD_SUBJECTS);
     }
 
+    @Test
+    void capsApiRequestPathDimensions() {
+        ApiRequestMeterFilterConfig config = new ApiRequestMeterFilterConfig();
+
+        SimpleMeterRegistry durationRegistry = filteredRegistry(config.apiRequestDurationPathCardinalityLimit());
+        RepoGuardMetrics durationMetrics = metrics(durationRegistry);
+        for (int index = 0; index <= ApiRequestMeterFilterConfig.MAX_API_PATHS; index++) {
+            durationMetrics.apiRequest(Duration.ofMillis(1), "GET", "/api/v1/path-" + index, 200, "success", 1L);
+        }
+        assertThat(durationRegistry.find("repoguard.api.request.duration").timers())
+            .hasSize(ApiRequestMeterFilterConfig.MAX_API_PATHS);
+
+        SimpleMeterRegistry bytesRegistry = filteredRegistry(config.apiResponseBytesPathCardinalityLimit());
+        RepoGuardMetrics bytesMetrics = metrics(bytesRegistry);
+        for (int index = 0; index <= ApiRequestMeterFilterConfig.MAX_API_PATHS; index++) {
+            bytesMetrics.apiRequest(Duration.ofMillis(1), "GET", "/api/v1/path-" + index, 200, "success", 1L);
+        }
+        assertThat(bytesRegistry.find("repoguard.api.response.bytes").summaries())
+            .hasSize(ApiRequestMeterFilterConfig.MAX_API_PATHS);
+    }
+
     private SimpleMeterRegistry filteredRegistry(MeterFilter filter) {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         registry.config().meterFilter(filter);

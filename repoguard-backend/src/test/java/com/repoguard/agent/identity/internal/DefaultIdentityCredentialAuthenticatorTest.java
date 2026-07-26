@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserLoginAudit;
 import com.repoguard.agent.identity.IdentityAccount;
@@ -19,6 +21,8 @@ import com.repoguard.agent.identity.IdentityCredentialAuthenticator.Authenticati
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.web.AuditClientIpResolver;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,7 +36,10 @@ class DefaultIdentityCredentialAuthenticatorTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
     private final PasswordHashService passwordHashService = new PasswordHashService();
-    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(userLoginAuditMapper);
+    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(
+        userLoginAuditMapper,
+        new AuditClientIpResolver(new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry()))
+    );
     private final DefaultIdentityCredentialAuthenticator authenticator =
         new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, auditRecorder);
 

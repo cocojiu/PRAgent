@@ -55,4 +55,20 @@ public record ReviewQuery(
             null
         );
     }
+
+    public String listSummaryCacheKey() {
+        return String.join(
+            "|",
+            keyPart(repository),
+            keyPart(status),
+            keyPart(riskLevel),
+            keyPart(source),
+            keyPart(triggerSource),
+            keyPart(keyword)
+        );
+    }
+
+    private static String keyPart(String value) {
+        return value == null ? "" : value.trim();
+    }
 }

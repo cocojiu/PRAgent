@@ -23,6 +23,11 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: ${MYSQL_MEM_LIMIT:-700m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rabbitmq:
     image: rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3
@@ -44,6 +49,11 @@ services:
       retries: 4
       start_period: 20s
     mem_limit: ${RABBITMQ_MEM_LIMIT:-384m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     image: ${BACKEND_IMAGE}
@@ -72,7 +82,11 @@ services:
       REPOGUARD_API_INSTANCE_COUNT: ${REPOGUARD_API_INSTANCE_COUNT:-1}
       REPOGUARD_SECURITY_ENCRYPTION_KEY: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
+      REPOGUARD_SECURITY_ENCRYPTION_SALT: ${REPOGUARD_SECURITY_ENCRYPTION_SALT}
       REPOGUARD_AUTH_TOKEN_SECRET: ${REPOGUARD_AUTH_TOKEN_SECRET}
+      REPOGUARD_AUTH_TOKEN_SECRET_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:-k1}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:-}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:-}
       REPOGUARD_AUTH_REGISTRATION_ENABLED: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:-false}
       REPOGUARD_AUTH_SECURE_COOKIES: ${REPOGUARD_AUTH_SECURE_COOKIES:-true}
       REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS: ${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}
@@ -117,6 +131,11 @@ services:
       timeout: 5s
       retries: 20
     mem_limit: ${BACKEND_MEM_LIMIT:-800m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   backend-worker:
     profiles:
@@ -147,7 +166,11 @@ services:
       REPOGUARD_API_INSTANCE_COUNT: 0
       REPOGUARD_SECURITY_ENCRYPTION_KEY: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
+      REPOGUARD_SECURITY_ENCRYPTION_SALT: ${REPOGUARD_SECURITY_ENCRYPTION_SALT}
       REPOGUARD_AUTH_TOKEN_SECRET: ${REPOGUARD_AUTH_TOKEN_SECRET}
+      REPOGUARD_AUTH_TOKEN_SECRET_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:-k1}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:-}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:-}
       REPOGUARD_AUTH_REGISTRATION_ENABLED: false
       REPOGUARD_AUTH_SECURE_COOKIES: ${REPOGUARD_AUTH_SECURE_COOKIES:-true}
       REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS: ${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}
@@ -192,6 +215,11 @@ services:
       timeout: 5s
       retries: 20
     mem_limit: ${WORKER_MEM_LIMIT:-800m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   frontend:
     image: ${FRONTEND_IMAGE}
@@ -205,6 +233,11 @@ services:
     expose:
       - "8080"
     mem_limit: ${FRONTEND_MEM_LIMIT:-128m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   caddy:
     image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
@@ -223,6 +256,11 @@ services:
       - repoguard_caddy_data:/data
       - repoguard_caddy_config:/config
     mem_limit: ${CADDY_MEM_LIMIT:-128m}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   repoguard_mysql_data:

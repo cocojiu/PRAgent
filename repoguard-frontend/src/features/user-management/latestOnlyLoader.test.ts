@@ -18,6 +18,27 @@ describe("latest-only loader", () => {
     expect(applied).toEqual(["new"]);
   });
 
+  it("keeps only the latest audit page when rapid pagination responses resolve out of order", async () => {
+    let audits: number[] = [];
+    let auditTotal = 0;
+    const loader = createLatestOnlyLoader<{ items: number[]; total: number }>((page) => {
+      audits = page.items;
+      auditTotal = page.total;
+    });
+    const firstPage = deferred<{ items: number[]; total: number }>();
+    const secondPage = deferred<{ items: number[]; total: number }>();
+
+    const firstLoad = loader.load(() => firstPage.promise);
+    const secondLoad = loader.load(() => secondPage.promise);
+    secondPage.resolve({ items: [201, 202], total: 42 });
+    await expect(secondLoad).resolves.toBe(true);
+    firstPage.resolve({ items: [101, 102], total: 41 });
+    await expect(firstLoad).resolves.toBe(false);
+
+    expect(audits).toEqual([201, 202]);
+    expect(auditTotal).toBe(42);
+  });
+
   it("suppresses stale errors and invalidates requests on cancel", async () => {
     const apply = vi.fn();
     const loader = createLatestOnlyLoader<string>(apply);

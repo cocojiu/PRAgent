@@ -170,6 +170,8 @@ import {
 } from "@lucide/vue";
 import { logout } from "@/api/auth";
 import { fetchNotifications } from "@/api/notifications";
+import { createPageAwarePoller } from "@/composables/pageAwarePoller";
+import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
@@ -187,6 +189,7 @@ const loadingNotifications = ref(false);
 const notificationError = ref("");
 const readNotificationIds = ref<Set<string>>(new Set());
 const NOTIFICATION_READ_KEY = "repoguard-read-notifications";
+const NOTIFICATION_POLL_INTERVAL_MS = 90000;
 let notificationWarmupTimer: ReturnType<typeof setTimeout> | undefined;
 
 const navItems = [
@@ -250,13 +253,30 @@ const loadNotifications = async (options: { force?: boolean } = {}) => {
   loadingNotifications.value = true;
   notificationError.value = "";
   try {
-    notificationCenter.value = await fetchNotifications();
+    const center = await fetchNotifications();
+    notificationCenter.value = center;
+    pruneReadNotifications(center.items);
   } catch (error) {
     notificationError.value = error instanceof Error ? error.message : "通知加载失败";
   } finally {
     loadingNotifications.value = false;
   }
 };
+
+const pruneReadNotifications = (items: NotificationItem[]) => {
+  const pruned = pruneReadNotificationIds(readNotificationIds.value, items.map((item) => item.id));
+  if (pruned.size === readNotificationIds.value.size) {
+    return;
+  }
+  readNotificationIds.value = pruned;
+  persistReadNotificationIds();
+};
+
+const notificationPoller = createPageAwarePoller({
+  intervalMs: () => NOTIFICATION_POLL_INTERVAL_MS,
+  isEnabled: () => true,
+  poll: () => loadNotifications({ force: true })
+});
 
 const markAllRead = () => {
   if (!notifications.value.length) {
@@ -351,6 +371,7 @@ onMounted(() => {
     notificationWarmupTimer = undefined;
     void loadNotifications();
   }, 12000);
+  notificationPoller.start();
 });
 
 onBeforeUnmount(() => {
@@ -359,5 +380,6 @@ onBeforeUnmount(() => {
   if (notificationWarmupTimer) {
     clearTimeout(notificationWarmupTimer);
   }
+  notificationPoller.dispose();
 });
 </script>

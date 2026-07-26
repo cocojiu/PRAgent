@@ -19,6 +19,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
@@ -90,6 +91,31 @@ public class ReviewController {
             totalHint
         );
         return ApiResponse.ok(reviewService.listReviews(query));
+    }
+
+    /**
+     * 返回当前筛选条件下的评审任务聚合指标，筛选口径与列表接口同源。
+     */
+    @GetMapping("/summary")
+    public ApiResponse<ReviewTaskListSummary> getReviewListSummary(
+        @RequestParam(required = false) @Size(max = 128) String repository,
+        @RequestParam(required = false) @Size(max = 32) String status,
+        @RequestParam(required = false) @Size(max = 32) String riskLevel,
+        @RequestParam(required = false) @Size(max = 64) String source,
+        @RequestParam(required = false) @Size(max = 64) String triggerSource,
+        @RequestParam(required = false) @Size(max = 255) String keyword
+    ) {
+        ReviewQuery query = new ReviewQuery(
+            1,
+            1,
+            checkedParam("repository", repository, 128),
+            checkedParam("status", status, 32),
+            checkedParam("riskLevel", riskLevel, 32),
+            checkedParam("source", source, 64),
+            checkedParam("triggerSource", triggerSource, 64),
+            checkedParam("keyword", keyword, 255)
+        );
+        return ApiResponse.ok(reviewService.getReviewListSummary(query));
     }
 
     @GetMapping("/repositories")

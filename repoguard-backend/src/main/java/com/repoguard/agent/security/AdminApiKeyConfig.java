@@ -15,12 +15,13 @@ public class AdminApiKeyConfig {
     @Bean
     public FilterRegistrationBean<AdminApiKeyFilter> adminApiKeyFilterRegistration(
         AdminApiKeyProperties properties,
+        AuthTokenService authTokenService,
         ObjectMapper objectMapper,
         Environment environment
     ) {
         properties.validateForProfiles(environment.getActiveProfiles());
         FilterRegistrationBean<AdminApiKeyFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new AdminApiKeyFilter(properties, objectMapper));
+        registration.setFilter(new AdminApiKeyFilter(properties, authTokenService, objectMapper));
         registration.addUrlPatterns("/api/v1/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 5);
         return registration;

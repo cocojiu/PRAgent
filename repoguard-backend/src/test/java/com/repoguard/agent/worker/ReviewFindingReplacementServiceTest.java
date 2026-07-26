@@ -12,24 +12,33 @@ import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.RiskLevelRanker;
 import java.util.List;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 class ReviewFindingReplacementServiceTest {
 
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final ReviewFindingEntityMapper findingEntityMapper = org.mockito.Mockito.mock(ReviewFindingEntityMapper.class);
+    private final SqlSessionFactory sqlSessionFactory = org.mockito.Mockito.mock(SqlSessionFactory.class);
+    private final SqlSession sqlSession = org.mockito.Mockito.mock(SqlSession.class);
     private final ReviewFindingReplacementService service = new ReviewFindingReplacementService(
         reviewFindingMapper,
         new ReviewFindingDeduplicator(
             new ReviewFindingDeduplicationKeyResolver(),
             new ReviewFindingMergeService(new RiskLevelRanker())
         ),
-        findingEntityMapper
+        findingEntityMapper,
+        new MapperBatchInserter(sqlSessionFactory)
     );
 
     @Test
     void deletesExistingFindingsAndStoresMappedDeduplicatedFindings() {
+        when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(sqlSession);
+        when(sqlSession.getMapper(ReviewFindingMapper.class)).thenReturn(reviewFindingMapper);
         ReviewFindingResult firstFinding = new ReviewFindingResult(
             "LOW",
             "LLM",
@@ -67,7 +76,6 @@ class ReviewFindingReplacementServiceTest {
         int count = service.replace(42L, reviewResult);
 
         assertThat(count).isEqualTo(2);
-        verify(reviewFindingMapper).delete(any());
         ArgumentCaptor<ReviewFindingResult> findingResultCaptor = ArgumentCaptor.forClass(ReviewFindingResult.class);
         verify(findingEntityMapper, org.mockito.Mockito.times(2)).toEntity(eq(42L), findingResultCaptor.capture());
         assertThat(findingResultCaptor.getAllValues()).extracting(ReviewFindingResult::filePath).containsExactly(
@@ -83,8 +91,12 @@ class ReviewFindingReplacementServiceTest {
         assertThat(mergedFinding.isBlocking()).isTrue();
         assertThat(mergedFinding.fixExample()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.reviewDimension()).contains("LLM").contains("PROJECT_RULE");
+        InOrder inOrder = org.mockito.Mockito.inOrder(reviewFindingMapper, sqlSession);
+        inOrder.verify(reviewFindingMapper).delete(any());
         ArgumentCaptor<ReviewFinding> findingCaptor = ArgumentCaptor.forClass(ReviewFinding.class);
-        verify(reviewFindingMapper, org.mockito.Mockito.times(2)).insert(findingCaptor.capture());
+        inOrder.verify(reviewFindingMapper, org.mockito.Mockito.times(2)).insert(findingCaptor.capture());
+        inOrder.verify(sqlSession).flushStatements();
+        inOrder.verify(sqlSession).close();
         assertThat(findingCaptor.getAllValues()).extracting(ReviewFinding::getFilePath).containsExactly(
             "src/App.java",
             "src/Task.java"
@@ -98,6 +110,7 @@ class ReviewFindingReplacementServiceTest {
         assertThat(count).isZero();
         verify(reviewFindingMapper).delete(any());
         verify(reviewFindingMapper, org.mockito.Mockito.never()).insert(any(ReviewFinding.class));
+        org.mockito.Mockito.verifyNoInteractions(sqlSessionFactory);
     }
 
     private ReviewFinding finding(String filePath) {

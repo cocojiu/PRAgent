@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
 import com.repoguard.agent.user.UserManagementLifecycle;
 import com.repoguard.agent.user.UserManagementLifecycle.AuditContext;
 import com.repoguard.agent.user.UserManagementLifecycle.CreateCommand;
@@ -22,6 +24,8 @@ import com.repoguard.agent.user.UserManagementLifecycle.PageResult;
 import com.repoguard.agent.user.UserManagementLifecycle.RoleChangeCommand;
 import com.repoguard.agent.user.UserManagementLifecycle.StatusChangeCommand;
 import com.repoguard.agent.user.UserManagementLifecycle.UserSearch;
+import com.repoguard.agent.web.AuditClientIpResolver;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -35,7 +39,7 @@ class UserManagementControllerTest {
 
     private final UserManagementLifecycle lifecycle = Mockito.mock(UserManagementLifecycle.class);
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new UserManagementController(lifecycle))
+        .standaloneSetup(new UserManagementController(lifecycle, clientIpResolver()))
         .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
         .build();
 
@@ -102,7 +106,7 @@ class UserManagementControllerTest {
         ArgumentCaptor<CreateCommand> commandCaptor = ArgumentCaptor.forClass(CreateCommand.class);
         verify(lifecycle).createUser(contextCaptor.capture(), commandCaptor.capture());
         assertThat(contextCaptor.getValue().operatorId()).isEqualTo(1001L);
-        assertThat(contextCaptor.getValue().clientIp()).isEqualTo("10.0.0.7");
+        assertThat(contextCaptor.getValue().clientIp()).isEqualTo("192.0.2.10");
         assertThat(commandCaptor.getValue()).isEqualTo(new CreateCommand(
             "viewer",
             "viewer@repoguard.dev",
@@ -146,7 +150,7 @@ class UserManagementControllerTest {
                 .header("X-Real-IP", "10.0.0.7")
                 .header("User-Agent", "JUnit")
                 .with(request -> {
-                    request.setRemoteAddr("192.0.2.11");
+                    request.setRemoteAddr("172.18.0.2");
                     return request;
                 })
                 .contentType(MediaType.APPLICATION_JSON)
@@ -182,6 +186,12 @@ class UserManagementControllerTest {
 
     private AuthenticatedPrincipal principal() {
         return new AuthenticatedPrincipal(1001L, "admin", "ADMIN", 9999999999L);
+    }
+
+    private static AuditClientIpResolver clientIpResolver() {
+        return new AuditClientIpResolver(
+            new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry())
+        );
     }
 
     private ManagedUser user(Long id, String username, String role, String status) {

@@ -3,6 +3,7 @@ package com.repoguard.agent.github.webhook;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.common.ApiResponse;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
@@ -16,31 +17,59 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import org.springframework.http.MediaType;
+import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ServletRequestPathUtils;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 @Component
 public class GithubWebhookPayloadLimitFilter extends OncePerRequestFilter {
 
     private static final String WEBHOOK_PATH = "/api/v1/github/webhooks";
+    private static final PathPattern WEBHOOK_PATTERN = webhookPattern();
 
     private final GithubWebhookProperties properties;
     private final GithubWebhookRateLimiter rateLimiter;
     private final ObjectMapper objectMapper;
+    private final TrustedProxyClientIpResolver clientIpResolver;
 
     public GithubWebhookPayloadLimitFilter(
         GithubWebhookProperties properties,
         GithubWebhookRateLimiter rateLimiter,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        TrustedProxyClientIpResolver clientIpResolver
     ) {
         this.properties = properties;
         this.rateLimiter = rateLimiter;
         this.objectMapper = objectMapper;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !"POST".equalsIgnoreCase(request.getMethod()) || !WEBHOOK_PATH.equals(request.getRequestURI());
+        if (!"POST".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+        return !WEBHOOK_PATTERN.matches(parsePath(
+            ServletRequestPathUtils.parseAndCache(request).pathWithinApplication().value()
+        ));
+    }
+
+    private static PathPattern webhookPattern() {
+        PathPatternParser parser = new PathPatternParser();
+        parser.setCaseSensitive(false);
+        return parser.parse(WEBHOOK_PATH);
+    }
+
+    private static PathContainer parsePath(String path) {
+        if (path == null || path.isBlank()) {
+            return PathContainer.parsePath("");
+        }
+        int queryIndex = path.indexOf('?');
+        String withoutQuery = queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+        return PathContainer.parsePath(withoutQuery.replaceAll("/{2,}", "/"));
     }
 
     @Override
@@ -49,7 +78,7 @@ public class GithubWebhookPayloadLimitFilter extends OncePerRequestFilter {
         HttpServletResponse response,
         FilterChain filterChain
     ) throws ServletException, IOException {
-        if (!rateLimiter.tryAcquireIp(clientIp(request))) {
+        if (!rateLimiter.tryAcquireIp(clientIpResolver.resolve(request))) {
             reject(response, ErrorCode.TOO_MANY_REQUESTS, 429, "ip_rate_limit");
             return;
         }
@@ -72,11 +101,6 @@ public class GithubWebhookPayloadLimitFilter extends OncePerRequestFilter {
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         objectMapper.writeValue(response.getOutputStream(), ApiResponse.error(code, "GitHub webhook request was rejected"));
-    }
-
-    private String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Real-IP");
-        return forwarded == null || forwarded.isBlank() ? request.getRemoteAddr() : forwarded;
     }
 
     private static final class CachedBodyRequest extends HttpServletRequestWrapper {

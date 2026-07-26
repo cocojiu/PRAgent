@@ -16,6 +16,11 @@
     handle @health {
         reverse_proxy frontend:8080
     }
+    @sub2api_public host 47.111.168.74
+    handle @sub2api_public {
+        encode zstd gzip
+        reverse_proxy sub2api:8080
+    }
     handle {
         respond "HTTPS canonical host required" 421
     }

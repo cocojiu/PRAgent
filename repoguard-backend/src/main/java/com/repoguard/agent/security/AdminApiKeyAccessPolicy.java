@@ -2,10 +2,14 @@ package com.repoguard.agent.security;
 
 import java.util.List;
 import java.util.Locale;
+import org.springframework.http.server.PathContainer;
+import org.springframework.web.util.pattern.PathPattern;
+import org.springframework.web.util.pattern.PathPatternParser;
 
 final class AdminApiKeyAccessPolicy {
 
     private static final String ANY_METHOD = "*";
+    private static final PathPatternParser PATTERN_PARSER = caseInsensitiveParser();
 
     private static final List<ProtectedEndpoint> PROTECTED_ENDPOINTS = List.of(
         new ProtectedEndpoint(ANY_METHOD, "/api/v1/config/**", "Configuration read and write APIs"),
@@ -27,73 +31,69 @@ final class AdminApiKeyAccessPolicy {
 
     static boolean requiresAdminKey(String method, String path) {
         String normalizedMethod = normalizeMethod(method);
-        String normalizedPath = normalizePath(path);
+        PathContainer parsedPath = parsePath(path);
         return PROTECTED_ENDPOINTS.stream()
-            .anyMatch(endpoint -> endpoint.matches(normalizedMethod, normalizedPath));
+            .anyMatch(endpoint -> endpoint.matches(normalizedMethod, parsedPath));
     }
 
     static List<ProtectedEndpoint> protectedEndpoints() {
         return PROTECTED_ENDPOINTS;
     }
 
+    private static PathPatternParser caseInsensitiveParser() {
+        PathPatternParser parser = new PathPatternParser();
+        parser.setCaseSensitive(false);
+        return parser;
+    }
+
     private static String normalizeMethod(String method) {
         return method == null ? "" : method.toUpperCase(Locale.ROOT);
     }
 
-    private static String normalizePath(String path) {
+    private static PathContainer parsePath(String path) {
         if (path == null || path.isBlank()) {
-            return "";
+            return PathContainer.parsePath("");
         }
         int queryIndex = path.indexOf('?');
-        return queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+        String withoutQuery = queryIndex >= 0 ? path.substring(0, queryIndex) : path;
+        return PathContainer.parsePath(withoutQuery.replaceAll("/{2,}", "/"));
     }
 
-    record ProtectedEndpoint(String method, String pathPattern, String description) {
+    static final class ProtectedEndpoint {
+
+        private final String method;
+        private final String pathPattern;
+        private final String description;
+        private final PathPattern compiledPattern;
+
+        private ProtectedEndpoint(String method, String pathPattern, String description) {
+            this.method = method;
+            this.pathPattern = pathPattern;
+            this.description = description;
+            this.compiledPattern = PATTERN_PARSER.parse(pathPattern.replaceAll("\\{([^}/]+)}", "{$1:[0-9]+}"));
+        }
+
+        String method() {
+            return method;
+        }
+
+        String pathPattern() {
+            return pathPattern;
+        }
+
+        String description() {
+            return description;
+        }
 
         boolean matches(String actualMethod, String actualPath) {
+            return matches(normalizeMethod(actualMethod), parsePath(actualPath));
+        }
+
+        private boolean matches(String actualMethod, PathContainer actualPath) {
             if (!ANY_METHOD.equals(method) && !method.equals(actualMethod)) {
                 return false;
             }
-            if (pathPattern.endsWith("/**")) {
-                String prefix = pathPattern.substring(0, pathPattern.length() - 3);
-                return actualPath.startsWith(prefix + "/");
-            }
-            String[] expectedParts = pathPattern.split("/");
-            String[] actualParts = actualPath.split("/");
-            if (expectedParts.length != actualParts.length) {
-                return false;
-            }
-            for (int index = 0; index < expectedParts.length; index++) {
-                String expectedPart = expectedParts[index];
-                String actualPart = actualParts[index];
-                if (isPathVariable(expectedPart)) {
-                    if (!isPositiveNumeric(actualPart)) {
-                        return false;
-                    }
-                    continue;
-                }
-                if (!expectedPart.equals(actualPart)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        private boolean isPathVariable(String part) {
-            return part.startsWith("{") && part.endsWith("}");
-        }
-
-        private boolean isPositiveNumeric(String value) {
-            if (value == null || value.isBlank()) {
-                return false;
-            }
-            for (int index = 0; index < value.length(); index++) {
-                char character = value.charAt(index);
-                if (character < '0' || character > '9') {
-                    return false;
-                }
-            }
-            return true;
+            return compiledPattern.matches(actualPath);
         }
     }
 }

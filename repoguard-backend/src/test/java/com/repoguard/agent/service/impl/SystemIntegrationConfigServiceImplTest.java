@@ -73,7 +73,7 @@ class SystemIntegrationConfigServiceImplTest {
 
     @Test
     void updateGithubIntegrationStoresNewTokenAndEvictsDashboardOverviewCompatibility() {
-        IntegrationConfig config = githubConfig("old-token");
+        IntegrationConfig config = githubConfig(secretCryptoService.encrypt("old-token"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
@@ -83,7 +83,7 @@ class SystemIntegrationConfigServiceImplTest {
             "spring-boot-demo"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("ghp_new_secret_1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(config.getLastError()).isNull();
@@ -94,7 +94,7 @@ class SystemIntegrationConfigServiceImplTest {
 
     @Test
     void updateGithubIntegrationClearsTokenWhenBlankValueIsSubmitted() {
-        IntegrationConfig config = githubConfig("old-token");
+        IntegrationConfig config = githubConfig(secretCryptoService.encrypt("old-token"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
@@ -174,7 +174,7 @@ class SystemIntegrationConfigServiceImplTest {
 
     @Test
     void updateMysqlIntegrationKeepsExistingSecretWhenMaskedValueIsSubmitted() {
-        IntegrationConfig config = serviceConfig("MYSQL", "mysql-existing-1234");
+        IntegrationConfig config = serviceConfig("MYSQL", secretCryptoService.encrypt("mysql-existing-1234"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateMysqlIntegration(new ServiceIntegrationConfigRequest(
@@ -184,7 +184,7 @@ class SystemIntegrationConfigServiceImplTest {
             "repoguard"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("mysql-existing-1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.secret()).isEqualTo("****1234");

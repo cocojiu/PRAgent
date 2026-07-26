@@ -3,6 +3,7 @@ import { useReviewTasksList } from "./useReviewTasksList";
 import type { ReviewTask } from "@/types";
 
 const reviewApi = vi.hoisted(() => ({
+  fetchReviewListSummary: vi.fn(),
   fetchReviewRepositories: vi.fn(),
   fetchReviews: vi.fn()
 }));
@@ -51,6 +52,92 @@ describe("useReviewTasksList", () => {
     expect(list.totalTasks.value).toBe(26);
     expect(list.repositories.value).toEqual(["codex/repo-guard", "openai/repo-guard"]);
     expect(list.loading.value).toBe(false);
+  });
+
+  it("builds the metric cards from the server-side summary under the current filters", async () => {
+    reviewApi.fetchReviews.mockResolvedValue({
+      items: [reviewTask],
+      total: 260
+    });
+    reviewApi.fetchReviewListSummary.mockResolvedValue({
+      total: 260,
+      highRisk: 13,
+      failed: 26,
+      averageDurationSeconds: 95
+    });
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(1);
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledWith({
+      repository: "",
+      status: "",
+      riskLevel: "",
+      triggerSource: "",
+      keyword: ""
+    });
+    const [totalMetric, highRiskMetric, failedMetric, durationMetric] = list.taskSummaryMetrics.value;
+    expect(totalMetric.value).toBe("260");
+    expect(highRiskMetric.value).toBe("13");
+    expect(highRiskMetric.note).toBe("5% 占比");
+    expect(failedMetric.value).toBe("26");
+    expect(failedMetric.note).toBe("10% 占比");
+    expect(durationMetric.value).toBe("1 分 35 秒");
+  });
+
+  it("does not reload the summary when only the page changes", async () => {
+    reviewApi.fetchReviews.mockResolvedValue({
+      items: [reviewTask],
+      total: 26
+    });
+    reviewApi.fetchReviewListSummary.mockResolvedValue({
+      total: 26,
+      highRisk: 2,
+      failed: 1,
+      averageDurationSeconds: 65
+    });
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+
+    list.currentPage.value = 2;
+    await flushAsync();
+
+    expect(reviewApi.fetchReviews).toHaveBeenCalledTimes(2);
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the summary with the list and falls back to zeroed metrics on failure", async () => {
+    reviewApi.fetchReviews.mockResolvedValue({
+      items: [reviewTask],
+      total: 26
+    });
+    reviewApi.fetchReviewListSummary
+      .mockResolvedValueOnce({
+        total: 26,
+        highRisk: 2,
+        failed: 1,
+        averageDurationSeconds: 65
+      })
+      .mockRejectedValueOnce(new Error("summary failed"));
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+    expect(list.taskSummaryMetrics.value[0].value).toBe("26");
+
+    list.refreshTasks();
+    await flushAsync();
+
+    expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(2);
+    expect(list.taskSummaryMetrics.value[0].value).toBe("0");
+    expect(list.taskSummaryMetrics.value[3].value).toBe("0 分 0 秒");
   });
 
   it("uses the previous page tail as cursor when loading the next page", async () => {

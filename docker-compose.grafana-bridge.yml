@@ -1,0 +1,21 @@
+# Optional overlay that connects the frontend container to the observability
+# network so Nginx can reach Grafana at http://grafana:3000.
+#
+# Requires the observability stack to be running first:
+#   docker compose -f docker-compose.observability.yml up -d
+#
+# Then start the application stack with both files:
+#   docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.grafana-bridge.yml up -d
+#
+# Do not fold this into docker-compose.prod.yml: the external network would make
+# `up` fail on servers where the observability stack has not been started.
+services:
+  frontend:
+    networks:
+      - default
+      - observability
+
+networks:
+  observability:
+    name: repoguard_observability
+    external: true

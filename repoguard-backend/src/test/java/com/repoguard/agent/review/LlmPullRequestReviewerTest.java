@@ -543,7 +543,8 @@ class LlmPullRequestReviewerTest {
             parser(objectMapper),
             metrics,
             new LlmFallbackReasonClassifier(),
-            diffChunker
+            diffChunker,
+            Runnable::run
         );
     }
 

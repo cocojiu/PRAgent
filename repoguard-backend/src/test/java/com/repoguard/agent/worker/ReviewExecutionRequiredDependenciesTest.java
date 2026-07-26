@@ -6,6 +6,7 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.RiskLevelRanker;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 
 class ReviewExecutionRequiredDependenciesTest {
@@ -78,7 +79,12 @@ class ReviewExecutionRequiredDependenciesTest {
     void findingReplacementServiceRequiresDeduplicatorDependency() {
         ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
 
-        assertThatThrownBy(() -> new ReviewFindingReplacementService(reviewFindingMapper, null, new ReviewFindingEntityMapper()))
+        assertThatThrownBy(() -> new ReviewFindingReplacementService(
+            reviewFindingMapper,
+            null,
+            new ReviewFindingEntityMapper(),
+            batchInserter()
+        ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("findingDeduplicator");
     }
@@ -93,10 +99,28 @@ class ReviewExecutionRequiredDependenciesTest {
                 new ReviewFindingDeduplicationKeyResolver(),
                 new ReviewFindingMergeService(new RiskLevelRanker())
             ),
-            null
+            null,
+            batchInserter()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("findingEntityMapper");
+    }
+
+    @Test
+    void findingReplacementServiceRequiresBatchInserterDependency() {
+        ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
+
+        assertThatThrownBy(() -> new ReviewFindingReplacementService(
+            reviewFindingMapper,
+            new ReviewFindingDeduplicator(
+                new ReviewFindingDeduplicationKeyResolver(),
+                new ReviewFindingMergeService(new RiskLevelRanker())
+            ),
+            new ReviewFindingEntityMapper(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("batchInserter");
     }
 
     @Test
@@ -205,7 +229,8 @@ class ReviewExecutionRequiredDependenciesTest {
                 new ReviewFindingDeduplicationKeyResolver(),
                 new ReviewFindingMergeService(riskLevelRanker)
             ),
-            new ReviewFindingEntityMapper()
+            new ReviewFindingEntityMapper(),
+            batchInserter()
         );
         ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
             reviewTaskMapper,
@@ -220,5 +245,9 @@ class ReviewExecutionRequiredDependenciesTest {
             null,
             new ReviewExecutionFailureClassifier()
         );
+    }
+
+    private MapperBatchInserter batchInserter() {
+        return new MapperBatchInserter(org.mockito.Mockito.mock(SqlSessionFactory.class));
     }
 }

@@ -16,7 +16,6 @@ import com.repoguard.agent.config.SystemSettingsProvider;
 import com.repoguard.agent.dto.DataRetentionCleanupAuditDto;
 import com.repoguard.agent.dto.DataRetentionCleanupRequest;
 import com.repoguard.agent.dto.PageResponse;
-import com.repoguard.agent.retention.DataRetentionArchiveWriter;
 import com.repoguard.agent.retention.DataRetentionCandidateQuery;
 import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import java.util.List;
@@ -25,17 +24,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class DataRetentionServiceImplTest {
 
+    private static final String BACKUP_REFERENCE = "backup://mysql/prod/2026-07-07T22:00:00";
+
     private final DataRetentionCandidateQuery candidateQuery = org.mockito.Mockito.mock(DataRetentionCandidateQuery.class);
-    private final DataRetentionArchiveWriter archiveWriter = org.mockito.Mockito.mock(DataRetentionArchiveWriter.class);
-    private final DataRetentionDeleteExecutor deleteExecutor = org.mockito.Mockito.mock(DataRetentionDeleteExecutor.class);
+    private final DataRetentionCleanupSliceExecutor sliceExecutor = org.mockito.Mockito.mock(
+        DataRetentionCleanupSliceExecutor.class
+    );
     private final SystemSettingsProvider systemSettingsProvider = org.mockito.Mockito.mock(SystemSettingsProvider.class);
     private final DataRetentionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(DataRetentionMetricsRecorder.class);
     private final DataRetentionCleanupAuditRecorder auditRecorder = org.mockito.Mockito.mock(DataRetentionCleanupAuditRecorder.class);
@@ -46,8 +48,7 @@ class DataRetentionServiceImplTest {
     private final DataRetentionProperties dataRetentionProperties = new DataRetentionProperties();
     private final DataRetentionServiceImpl service = new DataRetentionServiceImpl(
         candidateQuery,
-        archiveWriter,
-        deleteExecutor,
+        sliceExecutor,
         systemSettingsProvider,
         metricsRecorder,
         auditRecorder,
@@ -75,80 +76,142 @@ class DataRetentionServiceImplTest {
         verify(auditRecorder).complete(101L, response);
         verify(metricsRecorder).record(response);
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
-        verify(archiveWriter, never()).write(
+        verify(sliceExecutor, never()).archiveAndDelete(
             org.mockito.Mockito.anyLong(),
             org.mockito.Mockito.any(),
             org.mockito.Mockito.anyList()
         );
-        verify(deleteExecutor, never()).delete(org.mockito.Mockito.anyList());
     }
 
     @Test
-    void cleanupExecuteArchivesBeforeDeletingChildrenAndTasks() {
+    void cleanupExecuteRunsSingleSelectionSliceAndCompletesAudit() {
         stubLeaseAcquired();
         stubAuditStart(102L);
         when(candidateQuery.select(any(), org.mockito.Mockito.eq(50)))
             .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(1L, List.of(9L)));
-        when(deleteExecutor.delete(List.of(9L))).thenReturn(new DataRetentionDeleteExecutor.DeletionResult(
-            3,
-            2,
-            1,
-            4,
-            5,
-            6,
-            1
-        ));
+        when(sliceExecutor.archiveAndDelete(102L, BACKUP_REFERENCE, List.of(9L)))
+            .thenReturn(new DataRetentionDeleteExecutor.DeletionResult(3, 2, 1, 4, 5, 6, 1));
 
-        var response = service.cleanup(new DataRetentionCleanupRequest(
-            7,
-            50,
-            true,
-            "backup://mysql/prod/2026-07-07T22:00:00",
-            "CLEANUP"
-        ));
+        var response = service.cleanup(new DataRetentionCleanupRequest(7, 50, true, BACKUP_REFERENCE, "CLEANUP"));
 
         assertThat(response.executed()).isTrue();
         assertThat(response.cleanupBatchId()).isEqualTo(102L);
-        assertThat(response.backupReference()).isEqualTo("backup://mysql/prod/2026-07-07T22:00:00");
+        assertThat(response.backupReference()).isEqualTo(BACKUP_REFERENCE);
         assertThat(response.deletedBatchItems()).isEqualTo(3);
         assertThat(response.deletedTasks()).isEqualTo(1);
+        verify(sliceExecutor).archiveAndDelete(102L, BACKUP_REFERENCE, List.of(9L));
         verify(auditRecorder).complete(102L, response);
         verify(metricsRecorder).record(response);
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
-        InOrder order = inOrder(archiveWriter, deleteExecutor);
-        order.verify(archiveWriter).write(
-            102L,
-            "backup://mysql/prod/2026-07-07T22:00:00",
-            List.of(9L)
-        );
-        order.verify(deleteExecutor).delete(List.of(9L));
     }
 
     @Test
-    void cleanupExecuteDoesNotDeleteWhenArchiveSummaryFails() {
+    void cleanupExecuteSplitsSelectionIntoSlicesOfFiftyAndAggregatesCounts() {
+        stubLeaseAcquired();
+        stubAuditStart(108L);
+        List<Long> taskIds = LongStream.rangeClosed(1, 120).boxed().toList();
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(120)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(200L, taskIds));
+        when(sliceExecutor.archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(0, 50)))
+            .thenReturn(new DataRetentionDeleteExecutor.DeletionResult(1, 2, 3, 4, 5, 6, 50));
+        when(sliceExecutor.archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(50, 100)))
+            .thenReturn(new DataRetentionDeleteExecutor.DeletionResult(10, 20, 30, 40, 50, 60, 50));
+        when(sliceExecutor.archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(100, 120)))
+            .thenReturn(new DataRetentionDeleteExecutor.DeletionResult(100, 200, 300, 400, 500, 600, 20));
+
+        var response = service.cleanup(new DataRetentionCleanupRequest(7, 120, true, BACKUP_REFERENCE, "CLEANUP"));
+
+        assertThat(response.executed()).isTrue();
+        assertThat(response.candidateTasks()).isEqualTo(200);
+        assertThat(response.selectedTasks()).isEqualTo(120);
+        assertThat(response.deletedBatchItems()).isEqualTo(111);
+        assertThat(response.deletedPublications()).isEqualTo(222);
+        assertThat(response.deletedBatches()).isEqualTo(333);
+        assertThat(response.deletedChangedFiles()).isEqualTo(444);
+        assertThat(response.deletedTimelines()).isEqualTo(555);
+        assertThat(response.deletedFindings()).isEqualTo(666);
+        assertThat(response.deletedTasks()).isEqualTo(120);
+        InOrder order = inOrder(sliceExecutor);
+        order.verify(sliceExecutor).archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(0, 50));
+        order.verify(sliceExecutor).archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(50, 100));
+        order.verify(sliceExecutor).archiveAndDelete(108L, BACKUP_REFERENCE, taskIds.subList(100, 120));
+        verify(auditRecorder).complete(108L, response);
+        verify(metricsRecorder).record(response);
+        verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
+    }
+
+    @Test
+    void cleanupExecuteKeepsCompletedSlicesWhenLaterSliceFails() {
+        stubLeaseAcquired();
+        stubAuditStart(109L);
+        List<Long> taskIds = LongStream.rangeClosed(1, 120).boxed().toList();
+        when(candidateQuery.select(any(), org.mockito.Mockito.eq(120)))
+            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(200L, taskIds));
+        DataAccessResourceFailureException failure = new DataAccessResourceFailureException("database unavailable");
+        when(sliceExecutor.archiveAndDelete(109L, BACKUP_REFERENCE, taskIds.subList(0, 50)))
+            .thenReturn(new DataRetentionDeleteExecutor.DeletionResult(1, 2, 3, 4, 5, 6, 50));
+        when(sliceExecutor.archiveAndDelete(109L, BACKUP_REFERENCE, taskIds.subList(50, 100)))
+            .thenThrow(failure);
+
+        assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
+            7,
+            120,
+            true,
+            BACKUP_REFERENCE,
+            "CLEANUP"
+        )))
+            .isSameAs(failure);
+
+        verify(sliceExecutor, times(2)).archiveAndDelete(
+            org.mockito.Mockito.anyLong(),
+            org.mockito.Mockito.any(),
+            org.mockito.Mockito.anyList()
+        );
+        verify(sliceExecutor, never()).archiveAndDelete(109L, BACKUP_REFERENCE, taskIds.subList(100, 120));
+        verify(auditRecorder).fail(
+            109L,
+            failure,
+            200L,
+            120,
+            1,
+            3,
+            new DataRetentionDeleteExecutor.DeletionResult(1, 2, 3, 4, 5, 6, 50)
+        );
+        verify(auditRecorder, never()).fail(109L, failure);
+        verify(auditRecorder, never()).complete(org.mockito.Mockito.eq(109L), any());
+        verify(metricsRecorder).recordFailure(true, failure);
+        verify(metricsRecorder, never()).record(any());
+        verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
+    }
+
+    @Test
+    void cleanupExecuteRecordsZeroCompletedSlicesWhenFirstSliceFails() {
         stubLeaseAcquired();
         stubAuditStart(105L);
         when(candidateQuery.select(any(), org.mockito.Mockito.eq(50)))
             .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(1L, List.of(11L)));
         DataAccessResourceFailureException failure = new DataAccessResourceFailureException("archive unavailable");
-        org.mockito.Mockito.doThrow(failure).when(archiveWriter).write(
-            105L,
-            "backup://mysql/prod/2026-07-07T22:00:00",
-            List.of(11L)
-        );
+        when(sliceExecutor.archiveAndDelete(105L, BACKUP_REFERENCE, List.of(11L))).thenThrow(failure);
 
         assertThatThrownBy(() -> service.cleanup(new DataRetentionCleanupRequest(
             7,
             50,
             true,
-            "backup://mysql/prod/2026-07-07T22:00:00",
+            BACKUP_REFERENCE,
             "CLEANUP"
         )))
             .isSameAs(failure);
 
-        verify(auditRecorder).fail(105L, failure);
+        verify(auditRecorder).fail(
+            105L,
+            failure,
+            1L,
+            1,
+            0,
+            1,
+            new DataRetentionDeleteExecutor.DeletionResult(0, 0, 0, 0, 0, 0, 0)
+        );
         verify(metricsRecorder).recordFailure(true, failure);
-        verify(deleteExecutor, never()).delete(org.mockito.Mockito.anyList());
         verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
     }
 
@@ -158,7 +221,7 @@ class DataRetentionServiceImplTest {
             7,
             50,
             true,
-            "backup://mysql/prod/2026-07-07T22:00:00",
+            BACKUP_REFERENCE,
             null
         )))
             .isInstanceOf(BusinessException.class)
@@ -229,7 +292,7 @@ class DataRetentionServiceImplTest {
             7,
             50,
             true,
-            "backup://mysql/prod/2026-07-07T22:00:00",
+            BACKUP_REFERENCE,
             "CLEANUP"
         )))
             .isInstanceOf(BusinessException.class)
@@ -267,65 +330,23 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
-    void cleanupCompletesAuditAndReleasesLeaseOnlyAfterTransactionCommit() {
+    void cleanupCompletesAuditAndReleasesLeaseWithoutWaitingForCallerTransaction() {
         stubLeaseAcquired();
         stubAuditStart(106L);
         when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
         when(candidateQuery.select(any(), org.mockito.Mockito.eq(100)))
             .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(0L, List.of()));
-        List<TransactionSynchronization> synchronizations = List.of();
-        boolean transactionCompleted = false;
         beginTransactionSynchronization();
         try {
             var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
-            synchronizations = TransactionSynchronizationManager.getSynchronizations();
 
-            verify(auditRecorder, never()).complete(106L, response);
-            verify(metricsRecorder, never()).record(response);
-            verify(leaseStore, never()).release(any());
-
-            synchronizations.forEach(TransactionSynchronization::afterCommit);
-            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_COMMITTED));
-            transactionCompleted = true;
-
+            assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
             verify(auditRecorder).complete(106L, response);
             verify(metricsRecorder).record(response);
             verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
             verify(auditRecorder, never()).fail(org.mockito.Mockito.eq(106L), any());
         } finally {
-            finishTransactionSynchronization(synchronizations, transactionCompleted);
-        }
-    }
-
-    @Test
-    void cleanupMarksAuditFailedAndReleasesLeaseWhenCommitRollsBack() {
-        stubLeaseAcquired();
-        stubAuditStart(107L);
-        when(systemSettingsProvider.getSettings()).thenReturn(systemSettings(30));
-        when(candidateQuery.select(any(), org.mockito.Mockito.eq(100)))
-            .thenReturn(new DataRetentionCandidateQuery.CandidateSelection(0L, List.of()));
-        List<TransactionSynchronization> synchronizations = List.of();
-        boolean transactionCompleted = false;
-        beginTransactionSynchronization();
-        try {
-            var response = service.cleanup(new DataRetentionCleanupRequest(null, 100, false, null, null));
-            synchronizations = TransactionSynchronizationManager.getSynchronizations();
-
-            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
-            transactionCompleted = true;
-
-            verify(auditRecorder, never()).complete(107L, response);
-            verify(auditRecorder).fail(
-                org.mockito.Mockito.eq(107L),
-                org.mockito.ArgumentMatchers.isA(IllegalStateException.class)
-            );
-            verify(metricsRecorder).recordFailure(
-                org.mockito.Mockito.eq(false),
-                org.mockito.ArgumentMatchers.isA(IllegalStateException.class)
-            );
-            verify(leaseStore).release(org.mockito.Mockito.any(DataRetentionCleanupLeaseStore.Lease.class));
-        } finally {
-            finishTransactionSynchronization(synchronizations, transactionCompleted);
+            finishTransactionSynchronization();
         }
     }
 
@@ -375,7 +396,7 @@ class DataRetentionServiceImplTest {
                 7,
                 50,
                 true,
-                "backup://mysql/prod/2026-07-07T22:00:00",
+                BACKUP_REFERENCE,
                 "CLEANUP"
             )))
                 .isInstanceOf(BusinessException.class)
@@ -404,7 +425,7 @@ class DataRetentionServiceImplTest {
     @Test
     void listCleanupAuditsDelegatesToQueryService() {
         PageResponse<DataRetentionCleanupAuditDto> expected = new PageResponse<>(List.of(), 0);
-        when(auditQueryService.listAudits(2, 50, "execute", "completed", "backup://mysql/prod/2026-07-07T22:00:00"))
+        when(auditQueryService.listAudits(2, 50, "execute", "completed", BACKUP_REFERENCE))
             .thenReturn(expected);
 
         var response = service.listCleanupAudits(
@@ -412,7 +433,7 @@ class DataRetentionServiceImplTest {
             50,
             "execute",
             "completed",
-            "backup://mysql/prod/2026-07-07T22:00:00"
+            BACKUP_REFERENCE
         );
 
         assertThat(response).isSameAs(expected);
@@ -421,7 +442,7 @@ class DataRetentionServiceImplTest {
             50,
             "execute",
             "completed",
-            "backup://mysql/prod/2026-07-07T22:00:00"
+            BACKUP_REFERENCE
         );
     }
 
@@ -429,8 +450,7 @@ class DataRetentionServiceImplTest {
     void constructorRejectsMissingCandidateQuery() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             null,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             metricsRecorder,
             auditRecorder,
@@ -443,27 +463,9 @@ class DataRetentionServiceImplTest {
     }
 
     @Test
-    void constructorRejectsMissingArchiveWriter() {
+    void constructorRejectsMissingSliceExecutor() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            null,
-            deleteExecutor,
-            systemSettingsProvider,
-            metricsRecorder,
-            auditRecorder,
-            auditQueryService,
-            leaseStore,
-            dataRetentionProperties
-        ))
-            .isInstanceOf(NullPointerException.class)
-            .hasMessage("archiveWriter");
-    }
-
-    @Test
-    void constructorRejectsMissingDeleteExecutor() {
-        assertThatThrownBy(() -> new DataRetentionServiceImpl(
-            candidateQuery,
-            archiveWriter,
             null,
             systemSettingsProvider,
             metricsRecorder,
@@ -473,15 +475,14 @@ class DataRetentionServiceImplTest {
             dataRetentionProperties
         ))
             .isInstanceOf(NullPointerException.class)
-            .hasMessage("deleteExecutor");
+            .hasMessage("sliceExecutor");
     }
 
     @Test
     void constructorRejectsMissingMetricsRecorder() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             null,
             auditRecorder,
@@ -497,8 +498,7 @@ class DataRetentionServiceImplTest {
     void constructorRejectsMissingAuditRecorder() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             metricsRecorder,
             null,
@@ -514,8 +514,7 @@ class DataRetentionServiceImplTest {
     void constructorRejectsMissingAuditQueryService() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             metricsRecorder,
             auditRecorder,
@@ -531,8 +530,7 @@ class DataRetentionServiceImplTest {
     void constructorRejectsMissingLeaseStore() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             metricsRecorder,
             auditRecorder,
@@ -548,8 +546,7 @@ class DataRetentionServiceImplTest {
     void constructorRejectsMissingDataRetentionProperties() {
         assertThatThrownBy(() -> new DataRetentionServiceImpl(
             candidateQuery,
-            archiveWriter,
-            deleteExecutor,
+            sliceExecutor,
             systemSettingsProvider,
             metricsRecorder,
             auditRecorder,
@@ -570,13 +567,7 @@ class DataRetentionServiceImplTest {
         TransactionSynchronizationManager.initSynchronization();
     }
 
-    private void finishTransactionSynchronization(
-        List<TransactionSynchronization> synchronizations,
-        boolean transactionCompleted
-    ) {
-        if (!transactionCompleted) {
-            synchronizations.forEach(sync -> sync.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK));
-        }
+    private void finishTransactionSynchronization() {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.clearSynchronization();
         }

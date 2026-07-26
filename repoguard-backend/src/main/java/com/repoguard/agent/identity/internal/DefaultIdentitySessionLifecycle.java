@@ -13,6 +13,7 @@ import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import java.time.LocalDateTime;
@@ -42,6 +43,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
     private final RepoGuardMetrics metrics;
+    private final AuthAccountCache authAccountCache;
     private final TransactionTemplate sessionWriteTransaction;
     private final TransactionTemplate isolatedSessionWriteTransaction;
 
@@ -54,6 +56,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache,
         PlatformTransactionManager transactionManager
     ) {
         this(
@@ -64,6 +67,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRED),
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRES_NEW)
         );
@@ -76,7 +80,8 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache
     ) {
         this(
             userAccountMapper,
@@ -86,6 +91,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             null,
             null
         );
@@ -99,6 +105,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache,
         TransactionTemplate sessionWriteTransaction,
         TransactionTemplate isolatedSessionWriteTransaction
     ) {
@@ -115,6 +122,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         this.authProperties = Objects.requireNonNull(authProperties, "authProperties must not be null");
         this.authTokenService = Objects.requireNonNull(authTokenService, "authTokenService must not be null");
         this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
+        this.authAccountCache = Objects.requireNonNull(authAccountCache, "authAccountCache must not be null");
         this.sessionWriteTransaction = sessionWriteTransaction;
         this.isolatedSessionWriteTransaction = isolatedSessionWriteTransaction;
     }
@@ -414,12 +422,14 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         update.setSessionVersion(rotated.sessionVersion());
         update.setUpdatedAt(now);
         userAccountMapper.updateById(update);
+        authAccountCache.invalidate(rotated.id());
         return rotated;
     }
 
     private void rotateSessionVersionAndPersist(UserAccount user, LocalDateTime now) {
         rotateSessionVersion(user, now);
         userAccountMapper.updateById(user);
+        authAccountCache.invalidate(user.getId());
     }
 
     private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
@@ -432,6 +442,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         if (updated != 1) {
             throw new IllegalStateException("Account session version rotation affected " + updated + " rows");
         }
+        authAccountCache.invalidate(userId);
     }
 
     private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {

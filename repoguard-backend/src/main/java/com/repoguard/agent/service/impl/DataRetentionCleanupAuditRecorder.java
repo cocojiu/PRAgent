@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.entity.DataRetentionCleanupAudit;
 import com.repoguard.agent.mapper.DataRetentionCleanupAuditMapper;
+import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -90,6 +91,45 @@ public class DataRetentionCleanupAuditRecorder {
         audit.setCompletedAt(now);
         audit.setUpdatedAt(now);
         auditMapper.updateById(audit);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void fail(
+        Long auditId,
+        RuntimeException ex,
+        long candidateTasks,
+        int selectedTasks,
+        int completedSlices,
+        int totalSlices,
+        DataRetentionDeleteExecutor.DeletionResult deletion
+    ) {
+        if (auditId == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        DataRetentionCleanupAudit audit = new DataRetentionCleanupAudit();
+        audit.setId(auditId);
+        audit.setStatus(STATUS_FAILED);
+        audit.setCandidateTasks(candidateTasks);
+        audit.setSelectedTasks(selectedTasks);
+        audit.setDeletedBatchItems(deletion.deletedBatchItems());
+        audit.setDeletedPublications(deletion.deletedPublications());
+        audit.setDeletedBatches(deletion.deletedBatches());
+        audit.setDeletedChangedFiles(deletion.deletedChangedFiles());
+        audit.setDeletedTimelines(deletion.deletedTimelines());
+        audit.setDeletedFindings(deletion.deletedFindings());
+        audit.setDeletedTasks(deletion.deletedTasks());
+        audit.setFailureReason(DataRetentionCleanupFailureClassifier.classify(ex));
+        audit.setFailureMessage(truncate(sliceFailureMessage(completedSlices, totalSlices, ex)));
+        audit.setCompletedAt(now);
+        audit.setUpdatedAt(now);
+        auditMapper.updateById(audit);
+    }
+
+    private String sliceFailureMessage(int completedSlices, int totalSlices, RuntimeException ex) {
+        String prefix = "已提交 " + completedSlices + "/" + totalSlices + " 个分片";
+        String message = ex == null ? null : ex.getMessage();
+        return message == null ? prefix : prefix + ": " + message;
     }
 
     private String truncate(String value) {

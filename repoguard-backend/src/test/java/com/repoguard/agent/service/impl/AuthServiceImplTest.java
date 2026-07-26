@@ -12,6 +12,8 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
 import com.repoguard.agent.dto.AuthPasswordChangeRequest;
@@ -34,9 +36,12 @@ import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserLoginAuditMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.security.PasswordHashService;
+import com.repoguard.agent.web.AuditClientIpResolver;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -54,13 +59,17 @@ class AuthServiceImplTest {
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
     private final UserLoginAuditMapper userLoginAuditMapper = Mockito.mock(UserLoginAuditMapper.class);
-    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(userLoginAuditMapper);
+    private final IdentityAuditRecorder auditRecorder = new IdentityAuditRecorder(
+        userLoginAuditMapper,
+        new AuditClientIpResolver(new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry()))
+    );
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final IdentityCredentialAuthenticator credentialAuthenticator =
         new DefaultIdentityCredentialAuthenticator(userAccountMapper, passwordHashService, auditRecorder);
     private final AuthProperties authProperties = new AuthProperties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
     private final RepoGuardMetrics metrics = Mockito.mock(RepoGuardMetrics.class);
+    private final AuthAccountCache authAccountCache = new AuthAccountCache(userAccountMapper);
     private final IdentitySessionLifecycle sessionLifecycle = new DefaultIdentitySessionLifecycle(
         userAccountMapper,
         userRefreshTokenMapper,
@@ -68,14 +77,16 @@ class AuthServiceImplTest {
         credentialAuthenticator,
         authProperties,
         authTokenService,
-        metrics
+        metrics,
+        authAccountCache
     );
     private final IdentityAccountLifecycle accountLifecycle = new DefaultIdentityAccountLifecycle(
         userAccountMapper,
         auditRecorder,
         passwordHashService,
         sessionLifecycle,
-        authProperties
+        authProperties,
+        authAccountCache
     );
     private final AuthServiceImpl authService = new AuthServiceImpl(
         accountLifecycle,
@@ -117,6 +128,11 @@ class AuthServiceImplTest {
         assertThat(response.refreshToken()).isNotBlank();
         assertThat(response.user().username()).isEqualTo("admin");
         assertThat(response.user().role()).isEqualTo("VIEWER");
+        var issuedPrincipal = authTokenService.verify(response.accessToken());
+        assertThat(issuedPrincipal).isPresent();
+        assertThat(issuedPrincipal.get().username()).isEqualTo("admin");
+        assertThat(issuedPrincipal.get().role()).isEqualTo("VIEWER");
+        assertThat(issuedPrincipal.get().sessionVersion()).isZero();
 
         ArgumentCaptor<UserRefreshToken> refreshCaptor = ArgumentCaptor.forClass(UserRefreshToken.class);
         verify(userRefreshTokenMapper).insert(refreshCaptor.capture());
@@ -248,7 +264,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void loginAuditUsesProxySuppliedRealIpInsteadOfForwardedChain() {
+    void loginAuditIgnoresForwardedHeadersFromUntrustedRemoteAddress() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
@@ -262,7 +278,25 @@ class AuthServiceImplTest {
 
         ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(auditCaptor.capture());
-        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("10.0.0.7");
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("192.0.2.20");
+    }
+
+    @Test
+    void loginAuditUsesRealIpSuppliedByTrustedProxy() {
+        UserAccount user = existingUser();
+        user.setPasswordHash(passwordHashService.hash("Secure123"));
+        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        request.setRemoteAddr("172.18.0.2");
+        request.addHeader("X-Forwarded-For", "203.0.113.7, 203.0.113.8");
+        request.addHeader("X-Real-IP", "203.0.113.7");
+        RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+        authService.login(new AuthLoginRequest("admin", "Secure123", false));
+
+        ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
+        verify(userLoginAuditMapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("203.0.113.7");
     }
 
     @Test
@@ -373,6 +407,7 @@ class AuthServiceImplTest {
         AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken));
 
         assertThat(response.accessToken()).isNotBlank();
+        assertThat(authTokenService.verify(response.accessToken())).isPresent();
         assertThat(response.refreshToken()).isNotEqualTo(refreshToken);
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
         verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
@@ -469,6 +504,7 @@ class AuthServiceImplTest {
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             transactionManager
         );
         AuthServiceImpl transactionalAuthService = new AuthServiceImpl(
@@ -498,6 +534,7 @@ class AuthServiceImplTest {
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             transactionManager
         );
 

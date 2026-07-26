@@ -139,7 +139,7 @@ class ConnectionTestServiceImplTest {
     @Test
     void testGithubIntegrationClearsStaleErrorOnSuccess() throws Exception {
         try (ProbeServer server = startProbeServer("/rate_limit", 200, "{}")) {
-            IntegrationConfig config = githubConfig("ghp_test_1234");
+            IntegrationConfig config = githubConfig(secretCryptoService.encrypt("ghp_test_1234"));
             config.setBaseUrl(server.baseUrl());
             config.setStatus("FAILED");
             config.setLastError("stale GitHub error");
@@ -159,7 +159,7 @@ class ConnectionTestServiceImplTest {
     @Test
     void testGithubIntegrationUsesCurrentFormConfigWithoutPersistingStatus() throws Exception {
         try (ProbeServer server = startProbeServer("/rate_limit", 200, "{}")) {
-            IntegrationConfig savedConfig = githubConfig("ghp_saved_1234");
+            IntegrationConfig savedConfig = githubConfig(secretCryptoService.encrypt("ghp_saved_1234"));
             savedConfig.setBaseUrl("https://api.github.com");
             when(integrationConfigMapper.selectOne(any())).thenReturn(savedConfig);
 
@@ -204,7 +204,7 @@ class ConnectionTestServiceImplTest {
     @Test
     void testGithubIntegrationRecordsLatestErrorOnFailure() throws Exception {
         try (ProbeServer server = startProbeServer("/rate_limit", 500, "{\"message\":\"boom\"}")) {
-            IntegrationConfig config = githubConfig("ghp_test_1234");
+            IntegrationConfig config = githubConfig(secretCryptoService.encrypt("ghp_test_1234"));
             config.setBaseUrl(server.baseUrl());
             when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
@@ -224,7 +224,7 @@ class ConnectionTestServiceImplTest {
             {"choices":[{"message":{"content":"{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}"}}]}
             """;
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
-            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
             config.setMaxTokens(64);
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
@@ -247,7 +247,7 @@ class ConnectionTestServiceImplTest {
             {"choices":[{"message":{"content":[{"type":"text","text":"```json\\n{\\"riskLevel\\":\\"INFO\\",\\"findings\\":[]}\\n```"}]}}]}
             """;
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
-            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
@@ -264,7 +264,7 @@ class ConnectionTestServiceImplTest {
             {"choices":[{"message":{"content":"OK"}}]}
             """;
         try (ProbeServer server = startLlmProbeServer(llmResponse)) {
-            ReviewPolicyConfig config = reviewPolicyConfig("sk-test-1234");
+            ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-test-1234"));
             config.setBaseUrl(server.baseUrl());
             when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
@@ -291,7 +291,7 @@ class ConnectionTestServiceImplTest {
 
     @Test
     void testMysqlConnectionReportsSubmittedConfigDiagnosticsWithoutPersistingStatus() {
-        IntegrationConfig savedConfig = serviceConfig("MYSQL", "mysql-existing-1234");
+        IntegrationConfig savedConfig = serviceConfig("MYSQL", secretCryptoService.encrypt("mysql-existing-1234"));
         savedConfig.setBaseUrl("jdbc:invalid://saved");
         savedConfig.setStatus("CONFIGURED");
         savedConfig.setLastError(null);

@@ -63,6 +63,96 @@ class AuthPropertiesTest {
     }
 
     @Test
+    void rejectsTokenSecretIdWithUnsupportedCharacters() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecretId("k1:evil");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("repoguard.auth.token-secret-id");
+    }
+
+    @Test
+    void rejectsBlankTokenSecretId() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecretId("  ");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("repoguard.auth.token-secret-id");
+    }
+
+    @Test
+    void rejectsPreviousTokenSecretWithoutKeyId() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecretPrevious("previous-secret");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("must be configured together");
+    }
+
+    @Test
+    void rejectsPreviousKeyIdWithoutPreviousTokenSecret() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecretPreviousId("k0");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("must be configured together");
+    }
+
+    @Test
+    void rejectsPreviousKeyIdCollidingWithActiveKeyId() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecretId("k1");
+        properties.setTokenSecretPrevious("previous-secret");
+        properties.setTokenSecretPreviousId("k1");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("must differ from repoguard.auth.token-secret-id");
+    }
+
+    @Test
+    void rejectsPreviousTokenSecretIdenticalToActiveTokenSecret() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("same-secret");
+        properties.setTokenSecretPrevious("same-secret");
+        properties.setTokenSecretPreviousId("k0");
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"dev"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("must differ from repoguard.auth.token-secret");
+    }
+
+    @Test
+    void allowsRotationPairWithDistinctKeyIds() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("0123456789abcdef0123456789abcdef");
+        properties.setTokenSecretId("k2");
+        properties.setTokenSecretPrevious("fedcba9876543210fedcba9876543210");
+        properties.setTokenSecretPreviousId("k1");
+        properties.setSecureCookies(true);
+
+        assertThatCode(() -> properties.validateForProfiles(new String[] {"prod"})).doesNotThrowAnyException();
+    }
+
+    @Test
+    void productionProfileRejectsShortPreviousTokenSecret() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("0123456789abcdef0123456789abcdef");
+        properties.setTokenSecretId("k2");
+        properties.setTokenSecretPrevious("short-previous-secret");
+        properties.setTokenSecretPreviousId("k1");
+        properties.setSecureCookies(true);
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("repoguard.auth.token-secret-previous must be at least 32 characters");
+    }
+
+    @Test
     void rejectsNonPositiveAccessTokenTtl() {
         AuthProperties properties = new AuthProperties();
         properties.setAccessTokenTtlSeconds(0);

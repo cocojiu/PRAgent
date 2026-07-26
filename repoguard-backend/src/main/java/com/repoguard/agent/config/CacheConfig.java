@@ -39,6 +39,8 @@ public class CacheConfig {
             observedCache(CacheNames.DASHBOARD_RULES, Duration.ofSeconds(30), 256, metrics),
             observedCache(CacheNames.DASHBOARD_HIGH_RISK_REVIEWS, Duration.ofSeconds(30), 256, metrics),
             observedCache(CacheNames.DASHBOARD_LLM_QUALITY, Duration.ofSeconds(30), 256, metrics),
+            observedCache(CacheNames.MESSAGE_QUEUE_HEALTH, Duration.ofSeconds(30), 64, metrics),
+            observedCache(CacheNames.REVIEW_TASK_LIST_SUMMARY, Duration.ofSeconds(30), 256, metrics),
             observedCache(CacheNames.GITHUB_OPEN_PULL_REQUESTS, Duration.ofSeconds(60), 128, metrics),
             observedCache(CacheNames.REVIEW_RULES, Duration.ofMinutes(10), 64, metrics)
         ));

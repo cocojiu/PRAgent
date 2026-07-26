@@ -12,6 +12,7 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.DataRetentionCleanupResponse;
 import com.repoguard.agent.entity.DataRetentionCleanupAudit;
 import com.repoguard.agent.mapper.DataRetentionCleanupAuditMapper;
+import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -135,6 +136,53 @@ class DataRetentionCleanupAuditRecorderTest {
     @Test
     void failIgnoresMissingAuditContext() {
         recorder.fail(null, new IllegalStateException("boom"));
+
+        verify(auditMapper, never()).updateById(any(DataRetentionCleanupAudit.class));
+    }
+
+    @Test
+    void failWithSliceProgressRecordsPartialCountsAndCompletedSlices() {
+        recorder.fail(
+            77L,
+            new org.springframework.dao.DataAccessResourceFailureException("database unavailable"),
+            12L,
+            120,
+            2,
+            3,
+            new DataRetentionDeleteExecutor.DeletionResult(3, 2, 1, 4, 5, 6, 100)
+        );
+
+        ArgumentCaptor<DataRetentionCleanupAudit> auditCaptor = ArgumentCaptor.forClass(DataRetentionCleanupAudit.class);
+        verify(auditMapper).updateById(auditCaptor.capture());
+        DataRetentionCleanupAudit audit = auditCaptor.getValue();
+        assertThat(audit.getId()).isEqualTo(77L);
+        assertThat(audit.getStatus()).isEqualTo("FAILED");
+        assertThat(audit.getFailureReason()).isEqualTo("database_error");
+        assertThat(audit.getFailureMessage()).isEqualTo("已提交 2/3 个分片: database unavailable");
+        assertThat(audit.getCandidateTasks()).isEqualTo(12L);
+        assertThat(audit.getSelectedTasks()).isEqualTo(120);
+        assertThat(audit.getDeletedBatchItems()).isEqualTo(3);
+        assertThat(audit.getDeletedPublications()).isEqualTo(2);
+        assertThat(audit.getDeletedBatches()).isEqualTo(1);
+        assertThat(audit.getDeletedChangedFiles()).isEqualTo(4);
+        assertThat(audit.getDeletedTimelines()).isEqualTo(5);
+        assertThat(audit.getDeletedFindings()).isEqualTo(6);
+        assertThat(audit.getDeletedTasks()).isEqualTo(100);
+        assertThat(audit.getCompletedAt()).isNotNull();
+        assertThat(audit.getUpdatedAt()).isEqualTo(audit.getCompletedAt());
+    }
+
+    @Test
+    void failWithSliceProgressIgnoresMissingAuditContext() {
+        recorder.fail(
+            null,
+            new IllegalStateException("boom"),
+            1L,
+            1,
+            0,
+            1,
+            new DataRetentionDeleteExecutor.DeletionResult(0, 0, 0, 0, 0, 0, 0)
+        );
 
         verify(auditMapper, never()).updateById(any(DataRetentionCleanupAudit.class));
     }

@@ -178,7 +178,7 @@ class SystemConfigServiceImplTest {
             "spring-boot-demo"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("ghp_new_secret_1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.token()).isEqualTo("****1234");
@@ -209,7 +209,7 @@ class SystemConfigServiceImplTest {
             BigDecimal.valueOf(1.50)
         ));
 
-        assertThat(config.getApiKeyValue()).startsWith("enc:v2:local:");
+        assertThat(config.getApiKeyValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
         assertThat(config.getWorkerConcurrency()).isEqualTo(2);
@@ -282,7 +282,7 @@ class SystemConfigServiceImplTest {
             "repoguard"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("mysql-existing-1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.secret()).isEqualTo("****1234");
@@ -543,7 +543,7 @@ class SystemConfigServiceImplTest {
         config.setProvider("GITHUB");
         config.setStatus("CONFIGURED");
         config.setBaseUrl("https://api.github.com");
-        config.setTokenValue(token);
+        config.setTokenValue(secretCryptoService.encrypt(token));
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
@@ -557,7 +557,7 @@ class SystemConfigServiceImplTest {
         config.setBaseUrl("MYSQL".equals(provider) ? "jdbc:mysql://localhost:3306/repoguard" : "amqp://localhost:5672");
         config.setDefaultOwner("repoguard");
         config.setDefaultRepo("MYSQL".equals(provider) ? "repoguard" : "/");
-        config.setTokenValue(secret);
+        config.setTokenValue(secretCryptoService.encrypt(secret));
         config.setCreatedAt(LocalDateTime.now());
         config.setUpdatedAt(LocalDateTime.now());
         return config;
@@ -570,7 +570,7 @@ class SystemConfigServiceImplTest {
         config.setLlmProvider("dashscope");
         config.setModelName("qwen-plus");
         config.setBaseUrl("https://dashscope.aliyuncs.com/compatible-mode/v1");
-        config.setApiKeyValue(apiKey);
+        config.setApiKeyValue(secretCryptoService.encrypt(apiKey));
         config.setTimeoutSeconds(60);
         config.setTemperature(BigDecimal.valueOf(0.20));
         config.setMaxTokens(4096);

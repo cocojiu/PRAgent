@@ -8,6 +8,7 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
+DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -437,6 +438,12 @@ verify_deployment() {
   fi
   print_service_release_identity frontend
 }
+
+exec 9>"$DEPLOY_LOCK_FILE"
+if ! flock -n 9; then
+  echo "Another deployment already holds $DEPLOY_LOCK_FILE; refusing to run concurrently." >&2
+  exit 1
+fi
 
 echo "Deploying RepoGuard images:"
 echo "  backend:  $BACKEND_IMAGE"

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.RabbitMqIntegrationProvider;
 import com.repoguard.agent.config.RabbitMqIntegrationSettings;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
@@ -39,8 +40,11 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
+import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.ChannelCallback;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
@@ -95,6 +99,7 @@ class MessageQueueHealthServiceImplTest {
     void healthQueryServiceRejectsMissingRuntimeConfigAssembler() {
         assertThatThrownBy(() -> new MessageQueueHealthQueryService(
             reviewTaskMapper,
+            properties,
             rabbitMqIntegrationProvider,
             null,
             exceptionTaskAssembler,
@@ -160,8 +165,8 @@ class MessageQueueHealthServiceImplTest {
 
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
-        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(7L, 3L, 1L, 1L, 1L, 1L));
-        when(reviewTaskMapper.selectLatestPublishFailureReason()).thenReturn("routing failed");
+        when(reviewTaskMapper.selectMessageQueueHealthSummary(any())).thenReturn(summary(7L, 3L, 1L, 1L, 1L, 1L));
+        when(reviewTaskMapper.selectLatestPublishFailureReason(any())).thenReturn("routing failed");
         when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of(
             task(1L, "QUEUED", 0, null, null, null, LocalDateTime.of(2026, 6, 10, 20, 0)),
             task(2L, "PUBLISH_FAILED", 2, LocalDateTime.of(2026, 6, 10, 21, 10), null, "publisher confirm timed out", LocalDateTime.of(2026, 6, 10, 21, 0)),
@@ -201,10 +206,52 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
+    void healthQueriesAreBoundedByConfiguredCreatedAtWindow() {
+        properties.setHealthQueryWindowDays(7);
+        when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
+        when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenReturn(true);
+        when(reviewTaskMapper.selectMessageQueueHealthSummary(any())).thenReturn(summary(0L, 0L, 0L, 0L, 0L, 0L));
+        when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of());
+
+        service.getHealth();
+
+        ArgumentCaptor<LocalDateTime> createdAfter = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(reviewTaskMapper).selectMessageQueueHealthSummary(createdAfter.capture());
+        verify(reviewTaskMapper).selectLatestPublishFailureReason(createdAfter.capture());
+        LocalDateTime expected = LocalDateTime.now().minusDays(7);
+        assertThat(createdAfter.getAllValues())
+            .hasSize(2)
+            .allSatisfy(value -> assertThat(value).isBetween(expected.minusMinutes(1), expected.plusMinutes(1)));
+    }
+
+    @Test
+    void healthUsesSynchronizedThirtySecondCache() throws Exception {
+        Cacheable cacheable = MessageQueueHealthServiceImpl.class
+            .getMethod("getHealth")
+            .getAnnotation(Cacheable.class);
+
+        assertThat(cacheable).isNotNull();
+        assertThat(cacheable.cacheNames()).containsExactly(CacheNames.MESSAGE_QUEUE_HEALTH);
+        assertThat(cacheable.sync()).isTrue();
+        assertThat(cacheable.key()).isEqualTo("'health'");
+    }
+
+    @Test
+    void requeueTaskEvictsHealthCache() throws Exception {
+        CacheEvict cacheEvict = MessageQueueHealthServiceImpl.class
+            .getMethod("requeueTask", Long.class)
+            .getAnnotation(CacheEvict.class);
+
+        assertThat(cacheEvict).isNotNull();
+        assertThat(cacheEvict.cacheNames()).containsExactly(CacheNames.MESSAGE_QUEUE_HEALTH);
+        assertThat(cacheEvict.allEntries()).isTrue();
+    }
+
+    @Test
     void healthReturnsDisconnectedWhenRuntimeProbeTimesOut() {
         properties.setHealthCheckTimeoutMs(50);
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
-        when(reviewTaskMapper.selectMessageQueueHealthSummary()).thenReturn(summary(0L, 0L, 0L, 0L, 0L, 0L));
+        when(reviewTaskMapper.selectMessageQueueHealthSummary(any())).thenReturn(summary(0L, 0L, 0L, 0L, 0L, 0L));
         when(reviewTaskMapper.selectMessageQueueExceptionTasks()).thenReturn(List.of());
         when(rabbitTemplate.execute(org.mockito.ArgumentMatchers.<ChannelCallback<Boolean>>any())).thenAnswer(invocation -> {
             Thread.sleep(500);
@@ -369,6 +416,7 @@ class MessageQueueHealthServiceImplTest {
     private MessageQueueHealthServiceImpl createService(RecordingTransactionManager transactionManager) {
         MessageQueueHealthQueryService healthQueryService = new MessageQueueHealthQueryService(
             reviewTaskMapper,
+            properties,
             rabbitMqIntegrationProvider,
             runtimeConfigAssembler,
             exceptionTaskAssembler,

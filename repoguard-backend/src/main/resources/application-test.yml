@@ -16,6 +16,8 @@ repoguard:
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY:repoguard-local-dev-encryption-key}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:local}
+    encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:repoguard-local-dev-encryption-salt}
+    allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
   auth:
     token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET:changeme-local-dev}
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}

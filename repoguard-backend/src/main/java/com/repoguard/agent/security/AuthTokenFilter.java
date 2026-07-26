@@ -5,7 +5,6 @@ import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.UserAccount;
-import com.repoguard.agent.mapper.UserAccountMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,22 +17,23 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ServletRequestPathUtils;
 
 public class AuthTokenFilter extends OncePerRequestFilter {
 
     private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final AuthTokenService authTokenService;
-    private final UserAccountMapper userAccountMapper;
+    private final AuthAccountCache authAccountCache;
     private final ObjectMapper objectMapper;
 
     public AuthTokenFilter(
         AuthTokenService authTokenService,
-        UserAccountMapper userAccountMapper,
+        AuthAccountCache authAccountCache,
         ObjectMapper objectMapper
     ) {
         this.authTokenService = authTokenService;
-        this.userAccountMapper = userAccountMapper;
+        this.authAccountCache = authAccountCache;
         this.objectMapper = objectMapper;
     }
 
@@ -63,7 +63,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
         }
-        UserAccount currentUser = userAccountMapper.selectById(authenticatedUser.get().id());
+        UserAccount currentUser = authAccountCache.findById(authenticatedUser.get().id());
         if (currentUser == null || !STATUS_ACTIVE.equals(currentUser.getStatus())) {
             writeUnauthorized(response, "Authentication token is invalid or expired");
             return;
@@ -87,7 +87,10 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     }
 
     private boolean requiresAuth(HttpServletRequest request) {
-        return AuthTokenAccessPolicy.requiresAuth(request.getMethod(), request.getRequestURI());
+        return AuthTokenAccessPolicy.requiresAuth(
+            request.getMethod(),
+            ServletRequestPathUtils.parseAndCache(request).pathWithinApplication().value()
+        );
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
