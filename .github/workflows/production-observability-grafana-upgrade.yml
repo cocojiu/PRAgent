@@ -229,8 +229,9 @@ jobs:
             http://127.0.0.1:3000/api/health)"
           printf '%s\n' "${grafana_health}" \
             | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""
-          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
-            | grep -qi 'grafana'
+          login_page="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/login)"
+          printf '%s\n' "${login_page}" | grep -qi 'grafana'
 
           grafana_db_bytes="$(docker exec repoguard-grafana /bin/sh -ec \
             'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
@@ -608,8 +609,9 @@ jobs:
             container_ip="$(docker inspect \
               --format "{{(index .NetworkSettings.Networks \"${canary_network}\").IPAddress}}" \
               "${canary_container}")"
-            curl -fsSL --connect-timeout 5 --max-time 10 \
-              "http://${container_ip}:3000/" | grep -qi grafana
+            root_page="$(curl -fsSL --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/")"
+            printf '%s\n' "${root_page}" | grep -qi grafana
             frontend_settings="$(curl -fsS --connect-timeout 5 --max-time 10 \
               "http://${container_ip}:3000/api/frontend/settings")"
             printf '%s\n' "${frontend_settings}" \
@@ -930,8 +932,9 @@ jobs:
             http://127.0.0.1:3000/api/health)"
           printf '%s\n' "${grafana_health}" \
             | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'
-          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
-            | grep -qi grafana
+          login_page="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/login)"
+          printf '%s\n' "${login_page}" | grep -qi grafana
 
           assert_equal() {
             label="$1"
