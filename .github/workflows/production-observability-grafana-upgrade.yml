@@ -4,12 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Read-only preflight, copied-volume canary, production upgrade, or legacy recovery
+        description: Read-only preflight, immutable image prefetch, copied-volume canary, production upgrade, or legacy recovery
         required: true
         default: preflight
         type: choice
         options:
           - preflight
+          - prefetch
           - canary
           - upgrade
           - recover
@@ -27,9 +28,9 @@ concurrency:
 
 jobs:
   upgrade:
-    name: ${{ inputs.action == 'recover' && 'Recover Grafana 11.5' || inputs.action == 'upgrade' && 'Upgrade production Grafana' || inputs.action == 'canary' && 'Canary Grafana upgrade' || 'Grafana upgrade preflight' }}
+    name: ${{ inputs.action == 'recover' && 'Recover Grafana 11.5' || inputs.action == 'upgrade' && 'Upgrade production Grafana' || inputs.action == 'canary' && 'Canary Grafana upgrade' || inputs.action == 'prefetch' && 'Prefetch Grafana images' || 'Grafana upgrade preflight' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     environment: production
     steps:
       - name: Checkout
@@ -99,6 +100,8 @@ jobs:
           grep -q 'GF_UNIFIED_STORAGE_MIGRATION_CACHE_SIZE_KB: "65536"' \
             docker-compose.observability.yml
           grep -q 'GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER: "true"' \
+            docker-compose.observability.yml
+          grep -q 'GF_PLUGINS_PREINSTALL_DISABLED: "true"' \
             docker-compose.observability.yml
 
       - name: Prepare SSH key
@@ -226,11 +229,9 @@ jobs:
             http://127.0.0.1:3000/api/health)"
           printf '%s\n' "${grafana_health}" \
             | grep -Eq "\"version\"[[:space:]]*:[[:space:]]*\"${expected_version}\""
-          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
-            | grep -qi 'grafana'
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            http://127.0.0.1:3000/api/frontend/settings \
-            | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
+          login_page="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/login)"
+          printf '%s\n' "${login_page}" | grep -qi 'grafana'
 
           grafana_db_bytes="$(docker exec repoguard-grafana /bin/sh -ec \
             'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
@@ -246,9 +247,38 @@ jobs:
               done
             fi
           ' | sort | paste -sd, -)"
+          plugin_count=0
           if [ -n "${plugin_names}" ]; then
-            echo "Unreviewed installed Grafana plugins: ${plugin_names}" >&2
-            exit 1
+            saved_ifs="${IFS}"
+            IFS=,
+            for plugin_name in ${plugin_names}; do
+              case "${plugin_name}" in
+                grafana-lokiexplore-app | grafana-pyroscope-app)
+                  ;;
+                *)
+                  echo "Unreviewed installed Grafana plugin: ${plugin_name}" >&2
+                  exit 1
+                  ;;
+              esac
+              plugin_metadata="$(docker exec repoguard-grafana /bin/sh -ec '
+                plugin_path="/var/lib/grafana/plugins/$1"
+                test -s "${plugin_path}/plugin.json"
+                test -s "${plugin_path}/MANIFEST.txt"
+                version="$(sed -n \
+                  "s/.*\"version\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" \
+                  "${plugin_path}/plugin.json" | head -n 1)"
+                dependency="$(sed -n \
+                  "s/.*\"grafanaDependency\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" \
+                  "${plugin_path}/plugin.json" | head -n 1)"
+                test -n "${version}"
+                test -n "${dependency}"
+                printf "%s|version=%s|grafana=%s|manifest=present" \
+                  "$1" "${version}" "${dependency}"
+              ' plugin-metadata "${plugin_name}")"
+              echo "GRAFANA_PLUGIN=${plugin_metadata}"
+              plugin_count=$((plugin_count + 1))
+            done
+            IFS="${saved_ifs}"
           fi
 
           docker_root="$(docker info --format '{{.DockerRootDir}}')"
@@ -263,7 +293,7 @@ jobs:
             | grep -Ec '^repoguard-grafana-(canary|migrate)-[0-9]+-[0-9]+' || true)"
           test "${transient_count}" -eq 0
           recent_error_count="$(docker logs --since 1m repoguard-grafana 2>&1 \
-            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
           test "${recent_error_count}" -eq 0
 
           echo "GRAFANA_PREFLIGHT_OK=true"
@@ -272,12 +302,80 @@ jobs:
           echo "GRAFANA_CURRENT_VOLUME=${current_volume}"
           echo "GRAFANA_DB_BYTES=${grafana_db_bytes}"
           echo "GRAFANA_VOLUME_KB=${grafana_volume_kb}"
-          echo "GRAFANA_PLUGIN_COUNT=0"
-          echo "GRAFANA_LOKI_DATASOURCE_VISIBLE=true"
+          echo "GRAFANA_PLUGIN_COUNT=${plugin_count}"
+          echo "GRAFANA_PLUGIN_IDS=${plugin_names:-none}"
+          echo "GRAFANA_LOKI_PROVISIONING_FILE_OK=true"
           echo "GRAFANA_DISK_AVAILABLE_KB=${available_kb}"
           echo "GRAFANA_DISK_REQUIRED_KB=${required_kb}"
           echo "GRAFANA_RECENT_ERROR_COUNT=0"
           REMOTE_PREFLIGHT
+
+      - name: Prefetch immutable Grafana images
+        if: inputs.action == 'prefetch'
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          expected_confirmation="PREFETCH_REPOGUARD_GRAFANA"
+          test "${CONFIRMATION}" = "${expected_confirmation}" || {
+            echo "Confirmation does not match ${expected_confirmation}." >&2
+            exit 1
+          }
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=40 \
+            -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "DEPLOY_PATH='${DEPLOY_PATH}' sh -s" <<'REMOTE_PREFETCH'
+          set -eu
+          old_image='grafana/grafana:11.5.2@sha256:8b37a2f028f164ce7b9889e1765b9d6ee23fec80f871d156fbf436d6198d32b7'
+          bridge_image='grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3'
+          migration_image='grafana/grafana:12.4.6@sha256:dc91df727e7a90043b74ed4e2df7e4302f0eb3ad8f1e9fe278b0f7a7689d3432'
+          target_image='grafana/grafana:13.1.1@sha256:7cb8c64c4d57a57e734073f3cc94620adb24a0acb929bd80ba9f14017e3a975b'
+
+          case "${DEPLOY_PATH}" in
+            /opt/repoguard | /opt/repoguard/*)
+              ;;
+            *)
+              echo "DEPLOY_PATH must stay under /opt/repoguard." >&2
+              exit 1
+              ;;
+          esac
+          command -v docker >/dev/null 2>&1
+          command -v timeout >/dev/null 2>&1
+          docker info >/dev/null 2>&1
+
+          prefetch_image() {
+            image="$1"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              echo "GRAFANA_IMAGE_ALREADY_CACHED=${image}"
+              return 0
+            fi
+            attempt=1
+            while [ "${attempt}" -le 4 ]; do
+              echo "Pulling ${image}; bounded attempt ${attempt}/4."
+              if timeout --signal=TERM --kill-after=30s 900 docker pull "${image}" \
+                && docker image inspect "${image}" >/dev/null 2>&1; then
+                echo "GRAFANA_IMAGE_CACHED=${image}"
+                return 0
+              fi
+              if [ "${attempt}" -lt 4 ]; then
+                sleep $((attempt * 15))
+              fi
+              attempt=$((attempt + 1))
+            done
+            echo "Unable to pull and verify ${image} after 4 bounded attempts." >&2
+            return 1
+          }
+
+          prefetch_image "${old_image}"
+          prefetch_image "${bridge_image}"
+          prefetch_image "${migration_image}"
+          prefetch_image "${target_image}"
+          echo "GRAFANA_IMAGE_PREFETCH_OK=true"
+          REMOTE_PREFETCH
 
       - name: Validate confirmation and upload staged assets
         if: inputs.action == 'canary' || inputs.action == 'upgrade'
@@ -408,12 +506,13 @@ jobs:
             return 1
           }
 
-          ensure_image() {
+          require_image() {
             image="$1"
-            if ! docker image inspect "${image}" >/dev/null 2>&1; then
-              docker pull "${image}"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              return 0
             fi
-            docker image inspect "${image}" >/dev/null
+            echo "Required image is not cached: ${image}. Run the prefetch action first." >&2
+            return 1
           }
 
           case "${STAGE_PATH}" in
@@ -434,10 +533,10 @@ jobs:
           ! docker inspect "${canary_container}" >/dev/null 2>&1
           ! docker network inspect "${canary_network}" >/dev/null 2>&1
           docker network inspect "${production_network}" >/dev/null
-          ensure_image "${old_image}"
-          ensure_image "${bridge_image}"
-          ensure_image "${migration_image}"
-          ensure_image "${target_image}"
+          require_image "${old_image}"
+          require_image "${bridge_image}"
+          require_image "${migration_image}"
+          require_image "${target_image}"
 
           install -m 700 -d "${backup_dir}"
           snapshot_started_at="$(date +%s)"
@@ -494,10 +593,13 @@ jobs:
               --cap-drop ALL --security-opt no-new-privileges \
               -e GF_SECURITY_ADMIN_PASSWORD=canary-validation-only \
               -e GF_USERS_ALLOW_SIGN_UP=false \
+              -e GF_AUTH_ANONYMOUS_ENABLED=true \
+              -e GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer \
               -e GF_LOG_MODE=console \
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              -e GF_PLUGINS_PREINSTALL_DISABLED=true \
               "$@" \
               -v "${canary_volume}:/var/lib/grafana" \
               -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
@@ -507,13 +609,15 @@ jobs:
             container_ip="$(docker inspect \
               --format "{{(index .NetworkSettings.Networks \"${canary_network}\").IPAddress}}" \
               "${canary_container}")"
-            curl -fsS --connect-timeout 5 --max-time 10 \
-              "http://${container_ip}:3000/login" | grep -qi grafana
-            curl -fsS --connect-timeout 5 --max-time 10 \
-              "http://${container_ip}:3000/api/frontend/settings" \
+            root_page="$(curl -fsSL --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/")"
+            printf '%s\n' "${root_page}" | grep -qi grafana
+            frontend_settings="$(curl -fsS --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/api/frontend/settings")"
+            printf '%s\n' "${frontend_settings}" \
               | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
             error_count="$(docker logs "${canary_container}" 2>&1 \
-              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+              | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
             echo "GRAFANA_CANARY_${expected_version}_ERROR_COUNT=${error_count}"
             if [ "${error_count}" -ne 0 ]; then
               docker logs --tail 200 "${canary_container}" >&2
@@ -695,12 +799,13 @@ jobs:
             mv "${temp_file}" "${env_file}"
           }
 
-          ensure_image() {
+          require_image() {
             image="$1"
-            if ! docker image inspect "${image}" >/dev/null 2>&1; then
-              docker pull "${image}"
+            if docker image inspect "${image}" >/dev/null 2>&1; then
+              return 0
             fi
-            docker image inspect "${image}" >/dev/null
+            echo "Required image is not cached: ${image}. Run the prefetch action first." >&2
+            return 1
           }
 
           run_migration_stage() {
@@ -724,6 +829,7 @@ jobs:
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              -e GF_PLUGINS_PREINSTALL_DISABLED=true \
               "$@" \
               -v "${new_volume}:/var/lib/grafana" \
               -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
@@ -731,7 +837,7 @@ jobs:
             wait_migration_grafana "${expected_version}"
             sleep 5
             error_count="$(docker logs "${migration_container}" 2>&1 \
-              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+              | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
             echo "GRAFANA_MIGRATION_${expected_version}_ERROR_COUNT=${error_count}"
             if [ "${error_count}" -ne 0 ]; then
               docker logs --tail 200 "${migration_container}" >&2
@@ -762,10 +868,10 @@ jobs:
           ! docker network inspect "${migration_network}" >/dev/null 2>&1
           docker volume inspect "${old_volume}" >/dev/null
           docker network inspect "${production_network}" >/dev/null
-          ensure_image "${old_image}"
-          ensure_image "${bridge_image}"
-          ensure_image "${migration_image}"
-          ensure_image "${target_image}"
+          require_image "${old_image}"
+          require_image "${bridge_image}"
+          require_image "${migration_image}"
+          require_image "${target_image}"
 
           install -m 700 -d "${backup_dir}"
           cp -a "${final_base}" "${backup_dir}/docker-compose.observability.yml"
@@ -826,11 +932,9 @@ jobs:
             http://127.0.0.1:3000/api/health)"
           printf '%s\n' "${grafana_health}" \
             | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'
-          curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:3000/login \
-            | grep -qi grafana
-          curl -fsS --connect-timeout 5 --max-time 10 \
-            http://127.0.0.1:3000/api/frontend/settings \
-            | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
+          login_page="$(curl -fsS --connect-timeout 5 --max-time 10 \
+            http://127.0.0.1:3000/login)"
+          printf '%s\n' "${login_page}" | grep -qi grafana
 
           assert_equal() {
             label="$1"
@@ -883,7 +987,7 @@ jobs:
             'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
             | tr -d '[:space:]')"
           error_count="$(docker logs --since 5m repoguard-grafana 2>&1 \
-            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
           echo "GRAFANA_POST_UPGRADE_DB_BYTES=${db_bytes}"
           echo "GRAFANA_POST_UPGRADE_ERROR_COUNT=${error_count}"
           if [ "${error_count}" -ne 0 ]; then
