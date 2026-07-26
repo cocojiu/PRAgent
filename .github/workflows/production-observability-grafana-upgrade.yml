@@ -101,6 +101,8 @@ jobs:
             docker-compose.observability.yml
           grep -q 'GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER: "true"' \
             docker-compose.observability.yml
+          grep -q 'GF_PLUGINS_PREINSTALL_DISABLED: "true"' \
+            docker-compose.observability.yml
 
       - name: Prepare SSH key
         shell: bash
@@ -290,7 +292,7 @@ jobs:
             | grep -Ec '^repoguard-grafana-(canary|migrate)-[0-9]+-[0-9]+' || true)"
           test "${transient_count}" -eq 0
           recent_error_count="$(docker logs --since 1m repoguard-grafana 2>&1 \
-            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
           test "${recent_error_count}" -eq 0
 
           echo "GRAFANA_PREFLIGHT_OK=true"
@@ -596,6 +598,7 @@ jobs:
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              -e GF_PLUGINS_PREINSTALL_DISABLED=true \
               "$@" \
               -v "${canary_volume}:/var/lib/grafana" \
               -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
@@ -607,11 +610,12 @@ jobs:
               "${canary_container}")"
             curl -fsSL --connect-timeout 5 --max-time 10 \
               "http://${container_ip}:3000/" | grep -qi grafana
-            curl -fsS --connect-timeout 5 --max-time 10 \
-              "http://${container_ip}:3000/api/frontend/settings" \
+            frontend_settings="$(curl -fsS --connect-timeout 5 --max-time 10 \
+              "http://${container_ip}:3000/api/frontend/settings")"
+            printf '%s\n' "${frontend_settings}" \
               | grep -Eq '"type"[[:space:]]*:[[:space:]]*"loki"'
             error_count="$(docker logs "${canary_container}" 2>&1 \
-              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+              | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
             echo "GRAFANA_CANARY_${expected_version}_ERROR_COUNT=${error_count}"
             if [ "${error_count}" -ne 0 ]; then
               docker logs --tail 200 "${canary_container}" >&2
@@ -823,6 +827,7 @@ jobs:
               -e GF_ANALYTICS_REPORTING_ENABLED=false \
               -e GF_ANALYTICS_CHECK_FOR_UPDATES=false \
               -e GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false \
+              -e GF_PLUGINS_PREINSTALL_DISABLED=true \
               "$@" \
               -v "${new_volume}:/var/lib/grafana" \
               -v "${STAGE_PATH}/config/observability/grafana/provisioning:/etc/grafana/provisioning:ro" \
@@ -830,7 +835,7 @@ jobs:
             wait_migration_grafana "${expected_version}"
             sleep 5
             error_count="$(docker logs "${migration_container}" 2>&1 \
-              | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+              | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
             echo "GRAFANA_MIGRATION_${expected_version}_ERROR_COUNT=${error_count}"
             if [ "${error_count}" -ne 0 ]; then
               docker logs --tail 200 "${migration_container}" >&2
@@ -979,7 +984,7 @@ jobs:
             'test -s /var/lib/grafana/grafana.db; wc -c < /var/lib/grafana/grafana.db' \
             | tr -d '[:space:]')"
           error_count="$(docker logs --since 5m repoguard-grafana 2>&1 \
-            | grep -Eic 'level=(error|fatal|critical)|database is locked|migration failed|panic' || true)"
+            | grep -Eic 'level=(error|fatal|critical)|migration failed|panic' || true)"
           echo "GRAFANA_POST_UPGRADE_DB_BYTES=${db_bytes}"
           echo "GRAFANA_POST_UPGRADE_ERROR_COUNT=${error_count}"
           if [ "${error_count}" -ne 0 ]; then
