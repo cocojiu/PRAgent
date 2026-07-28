@@ -49,7 +49,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
       JAVA_TOOL_OPTIONS: ${SMOKE_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:+UseSerialGC}
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${SMOKE_MYSQL_DATABASE:-repoguard}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: ${SMOKE_MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${SMOKE_MYSQL_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq

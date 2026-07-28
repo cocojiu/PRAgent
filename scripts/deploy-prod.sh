@@ -2,6 +2,7 @@
 set -eu
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_ADDITIONAL_FILES="${COMPOSE_ADDITIONAL_FILES:-}"
 ENV_FILE="${ENV_FILE:-.env}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/actuator/health}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
@@ -81,6 +82,10 @@ if [ -z "$COMPOSE_PROJECT_NAME" ]; then
   COMPOSE_PROJECT_NAME="$(read_env_value COMPOSE_PROJECT_NAME)"
 fi
 
+if [ -z "$COMPOSE_ADDITIONAL_FILES" ]; then
+  COMPOSE_ADDITIONAL_FILES="$(read_env_value COMPOSE_ADDITIONAL_FILES)"
+fi
+
 if [ -z "${COMPOSE_PROFILES:-}" ]; then
   COMPOSE_PROFILES="$(read_env_value COMPOSE_PROFILES)"
 fi
@@ -89,7 +94,12 @@ export COMPOSE_PROJECT_NAME
 export COMPOSE_PROFILES
 
 compose() {
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  compose_file_list="$COMPOSE_FILE"
+  for additional_file in $COMPOSE_ADDITIONAL_FILES; do
+    compose_file_list="${compose_file_list}:${additional_file}"
+  done
+  COMPOSE_FILE="$compose_file_list" COMPOSE_PATH_SEPARATOR=: \
+    docker compose --env-file "$ENV_FILE" "$@"
 }
 
 validate_required_bind_sources() {
@@ -107,6 +117,26 @@ config/rabbitmq/rabbitmq.conf
       return 1
     fi
   done
+
+  metrics_bridge_enabled=false
+  for additional_file in $COMPOSE_ADDITIONAL_FILES; do
+    if [ ! -f "$additional_file" ] || [ ! -r "$additional_file" ] || [ ! -s "$additional_file" ]; then
+      echo "Missing, unreadable, or empty additional Compose file: $additional_file" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+    if [ "$(basename "$additional_file")" = "docker-compose.metrics-bridge.yml" ]; then
+      metrics_bridge_enabled=true
+    fi
+  done
+
+  if [ "$metrics_bridge_enabled" = "true" ] \
+    && ! docker network inspect repoguard_observability >/dev/null 2>&1; then
+    echo "Metrics bridge requires the repoguard_observability network." >&2
+    echo "Start the observability stack before deploying the application." >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
 
   if ! command -v sha256sum >/dev/null 2>&1; then
     echo "Missing required deployment command: sha256sum" >&2
@@ -462,7 +492,7 @@ restore_deployment_assets() {
 
   compose_directory="$(dirname "$COMPOSE_FILE")"
   restored_assets=false
-  for relative_path in config/rabbitmq/rabbitmq.conf Caddyfile; do
+  for relative_path in config/rabbitmq/rabbitmq.conf Caddyfile docker-compose.metrics-bridge.yml; do
     backup_path="${DEPLOY_ASSET_BACKUP_DIR}/${relative_path}"
     target_path="${compose_directory}/${relative_path}"
     if [ -f "$backup_path" ]; then

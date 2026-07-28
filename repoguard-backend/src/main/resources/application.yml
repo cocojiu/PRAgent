@@ -48,7 +48,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
@@ -190,6 +190,7 @@ repoguard:
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
     refresh-concurrency-grace-seconds: ${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:5}
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}
+    secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}
     public-auth-requests-per-minute-per-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP:30}
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
 

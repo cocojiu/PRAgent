@@ -11,6 +11,17 @@ discovery.docker "repoguard" {
 discovery.relabel "repoguard" {
   targets = discovery.docker.repoguard.targets
 
+  // Docker discovery emits one target per container per network, so a container
+  // bridged onto this network (see docker-compose.grafana-bridge.yml and
+  // docker-compose.metrics-bridge.yml) would otherwise be tailed twice. Drop the
+  // observability-network copy so each container yields exactly one log target.
+  // This is a no-op for containers that are not bridged.
+  rule {
+    source_labels = ["__meta_docker_network_name"]
+    regex         = "repoguard_observability"
+    action        = "drop"
+  }
+
   rule {
     source_labels = ["__meta_docker_container_name"]
     regex         = "/(repoguard-backend|repoguard-frontend|repoguard-caddy)"

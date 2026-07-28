@@ -1,0 +1,73 @@
+// Optional metrics pipeline. This file is mounted only by
+// config/observability/docker-compose.metrics.yml.
+//
+// The base config owns Docker discovery. Application containers are attached
+// to repoguard_observability by docker-compose.metrics-bridge.yml.
+discovery.relabel "repoguard_metrics" {
+  targets = discovery.docker.repoguard.targets
+
+  // Docker discovery emits one target per container per network. Keep only the
+  // observability-network copy so each bridged process is scraped once.
+  rule {
+    source_labels = ["__meta_docker_network_name"]
+    regex         = "repoguard_observability"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(repoguard-backend|repoguard-backend-worker)"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    replacement   = "$1:8081"
+    target_label  = "__address__"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    replacement   = "$1"
+    target_label  = "container"
+  }
+}
+
+prometheus.scrape "repoguard_backend" {
+  targets         = discovery.relabel.repoguard_metrics.output
+  metrics_path    = "/actuator/prometheus"
+  scrape_interval = "30s"
+  scrape_timeout  = "10s"
+  forward_to      = [prometheus.relabel.repoguard_keep.receiver]
+}
+
+// Keep the series needed by the 2C4G acceptance criteria. The application
+// stamps every series with stable application and runtime-role labels.
+prometheus.relabel "repoguard_keep" {
+  forward_to = [prometheus.remote_write.metrics_store.receiver]
+
+  rule {
+    source_labels = ["__name__"]
+    regex         = "repoguard_.*|jvm_memory_used_bytes|jvm_gc_pause_seconds.*|hikaricp_connections.*|rabbitmq_.*|spring_rabbitmq_.*|http_server_requests_seconds.*|process_cpu_usage|system_cpu_usage"
+    action        = "keep"
+  }
+}
+
+prometheus.remote_write "metrics_store" {
+  endpoint {
+    url = sys.env("METRICS_REMOTE_WRITE_URL")
+
+    basic_auth {
+      username = sys.env("METRICS_REMOTE_WRITE_USERNAME")
+      password = sys.env("METRICS_REMOTE_WRITE_PASSWORD")
+    }
+  }
+
+  // Bound the in-memory WAL on a 2C4G host.
+  wal {
+    truncate_frequency = "30m"
+    max_keepalive_time = "2h"
+  }
+}

@@ -20,8 +20,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Validate production Compose configuration
-        run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+      - name: Validate Compose configuration matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+          REPOGUARD_RUNTIME_ROLE=api \
+          REPOGUARD_DEPLOYMENT_MODE=split \
+            docker compose --profile worker-split \
+              --env-file .env.prod.example \
+              -f docker-compose.prod.yml config --quiet
+          SMOKE_BACKEND_IMAGE=repoguard/backend:validation \
+          SMOKE_BACKEND_PORT=18081 \
+          SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
+          SMOKE_MYSQL_PASSWORD=validation-db \
+          SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY=Validation-Encryption-Key-2026 \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
+          REPOGUARD_SECURITY_ENCRYPTION_SALT=validation-salt-2026 \
+          SMOKE_AUTH_TOKEN_SECRET=Validation-Auth-Token-2026 \
+          SMOKE_ADMIN_API_KEY=Validation-Admin-Key-2026 \
+          REPOGUARD_GITHUB_WEBHOOK_SECRET=Validation-Webhook-Secret-2026 \
+            docker compose -f docker-compose.smoke.yml config --quiet
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml \
+            -f docker-compose.metrics-bridge.yml config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              -f config/observability/docker-compose.metrics.yml \
+              config --quiet
       - name: Validate Grafana bridge overlay configuration
         run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml -f docker-compose.grafana-bridge.yml config --quiet
       - name: Validate production Caddy configuration

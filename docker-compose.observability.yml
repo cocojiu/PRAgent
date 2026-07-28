@@ -76,7 +76,7 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - --storage.path=/var/lib/alloy/data
       - --disable-reporting
-      - /etc/alloy/config.alloy
+      - /etc/alloy
     cap_drop:
       - ALL
     security_opt:
@@ -96,7 +96,7 @@ services:
       - docker_api
     ports:
       - "${ALLOY_PORT_BIND:-127.0.0.1:9080}:12345"
-    mem_limit: 256m
+    mem_limit: ${ALLOY_MEM_LIMIT:-256m}
     logging:
       driver: json-file
       options:

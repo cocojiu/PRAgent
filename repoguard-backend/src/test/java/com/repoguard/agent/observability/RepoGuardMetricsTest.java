@@ -2,6 +2,7 @@ package com.repoguard.agent.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.config.RuntimeRoleContract;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.config.MeterFilter;
@@ -17,6 +18,27 @@ class RepoGuardMetricsTest {
         meterRegistry,
         new ReviewExecutionFailureClassifier()
     );
+
+    @Test
+    void stampsMetersWithApplicationAndResolvedRuntimeRole() {
+        RuntimeRoleContract runtimeRole = new RuntimeRoleContract(
+            RuntimeRoleContract.Mode.API,
+            RuntimeRoleContract.DeploymentMode.SPLIT,
+            1,
+            false
+        );
+        SimpleMeterRegistry taggedRegistry = filteredRegistry(
+            new MetricsCommonTagsConfig().repoGuardCommonTags(runtimeRole)
+        );
+
+        taggedRegistry.counter("repoguard.test.counter").increment();
+
+        assertThat(taggedRegistry.find("repoguard.test.counter")
+            .tag("application", "repoguard-backend")
+            .tag("role", "api")
+            .counter()
+            .count()).isEqualTo(1.0);
+    }
 
     @Test
     void recordsReviewTaskCountersWithStableTags() {

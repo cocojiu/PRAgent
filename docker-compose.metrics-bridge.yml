@@ -1,0 +1,32 @@
+# Optional overlay that connects the backend containers to the observability
+# network so Alloy can scrape http://backend:8081/actuator/prometheus.
+#
+# Requires the metrics-enabled observability stack to be running first:
+#   docker compose --env-file .env \
+#     -f docker-compose.observability.yml \
+#     -f config/observability/docker-compose.metrics.yml up -d
+#
+# Then start the application stack with both files:
+#   docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.metrics-bridge.yml up -d
+#
+# Combine with the Grafana bridge when the frontend must also reach Grafana:
+#   docker compose --env-file .env -f docker-compose.prod.yml \
+#     -f docker-compose.grafana-bridge.yml -f docker-compose.metrics-bridge.yml up -d
+#
+# Do not fold this into docker-compose.prod.yml: the external network would make
+# `up` fail on servers where the observability stack has not been started.
+services:
+  backend:
+    networks:
+      - default
+      - observability
+
+  backend-worker:
+    networks:
+      - default
+      - observability
+
+networks:
+  observability:
+    name: repoguard_observability
+    external: true

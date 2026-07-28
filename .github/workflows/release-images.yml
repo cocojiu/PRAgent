@@ -69,6 +69,37 @@ jobs:
           docker compose --profile worker-split \
             --env-file .env.prod.example \
             -f docker-compose.prod.yml config --quiet
+          SMOKE_BACKEND_IMAGE=repoguard/backend:validation \
+          SMOKE_BACKEND_PORT=18081 \
+          SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
+          SMOKE_MYSQL_PASSWORD=validation-db \
+          SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY=Validation-Encryption-Key-2026 \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
+          REPOGUARD_SECURITY_ENCRYPTION_SALT=validation-salt-2026 \
+          SMOKE_AUTH_TOKEN_SECRET=Validation-Auth-Token-2026 \
+          SMOKE_ADMIN_API_KEY=Validation-Admin-Key-2026 \
+          REPOGUARD_GITHUB_WEBHOOK_SECRET=Validation-Webhook-Secret-2026 \
+            docker compose -f docker-compose.smoke.yml config --quiet
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml \
+            -f docker-compose.metrics-bridge.yml config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              -f config/observability/docker-compose.metrics.yml \
+              config --quiet
 
       - name: Set up Java
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
@@ -271,6 +302,7 @@ jobs:
           test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
           test -s config/rabbitmq/rabbitmq.conf || { echo "Missing RabbitMQ deployment config"; exit 1; }
+          test -s docker-compose.metrics-bridge.yml || { echo "Missing metrics bridge overlay"; exit 1; }
           asset_backup_dir="${DEPLOY_PATH}/.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -eu
@@ -280,6 +312,10 @@ jobs:
                       '${asset_backup_dir}/config/rabbitmq'
              if [ -f '${DEPLOY_PATH}/docker-compose.prod.yml' ]; then
                cp -p '${DEPLOY_PATH}/docker-compose.prod.yml' '${asset_backup_dir}/docker-compose.prod.yml'
+             fi
+             if [ -f '${DEPLOY_PATH}/docker-compose.metrics-bridge.yml' ]; then
+               cp -p '${DEPLOY_PATH}/docker-compose.metrics-bridge.yml' \
+                     '${asset_backup_dir}/docker-compose.metrics-bridge.yml'
              fi
              if [ -f '${DEPLOY_PATH}/Caddyfile' ]; then
                cp -p '${DEPLOY_PATH}/Caddyfile' '${asset_backup_dir}/Caddyfile'
@@ -292,6 +328,7 @@ jobs:
           # Upload bind sources before the compose file that references them.
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" config/rabbitmq/rabbitmq.conf "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.metrics-bridge.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.metrics-bridge.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"

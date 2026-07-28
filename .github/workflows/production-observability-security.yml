@@ -43,6 +43,11 @@ jobs:
             -f config/observability/docker-compose.production.yml
           )
           docker compose "${compose_args[@]}" config --quiet
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose "${compose_args[@]}" \
+              -f config/observability/docker-compose.metrics.yml config --quiet
           services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
           test "${services}" = "alloy,docker-proxy,grafana,loki" || {
             echo "Unexpected observability service set: ${services}" >&2
@@ -117,6 +122,16 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
             "${alloy_image}" validate /etc/alloy/config.alloy
+
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -e METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+            -e METRICS_REMOTE_WRITE_USERNAME=validation \
+            -e METRICS_REMOTE_WRITE_PASSWORD=validation \
+            -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            -v "${PWD}/config/observability/alloy/metrics.alloy:/etc/alloy/metrics.alloy:ro" \
+            "${alloy_image}" validate /etc/alloy
 
           docker run --rm --network none --read-only \
             --cap-drop ALL --security-opt no-new-privileges \
