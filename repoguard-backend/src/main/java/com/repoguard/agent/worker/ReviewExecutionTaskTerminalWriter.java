@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -46,9 +47,26 @@ class ReviewExecutionTaskTerminalWriter {
         return new FailedTaskWrite(failedAt, true);
     }
 
+    SupersededTaskWrite applySuperseded(
+        ReviewTask task,
+        LocalDateTime startedAt,
+        String claimId,
+        GithubPullRequestHeadChangedException ex
+    ) {
+        LocalDateTime supersededAt = clock.now();
+        completionApplier.applySuperseded(task, startedAt, supersededAt, ex);
+        if (!claimService.writeTerminalStateIfClaimOwned(task, claimId)) {
+            return new SupersededTaskWrite(supersededAt, false);
+        }
+        return new SupersededTaskWrite(supersededAt, true);
+    }
+
     record CompletedTaskWrite(LocalDateTime finishedAt, boolean humanReviewRequired) {
     }
 
     record FailedTaskWrite(LocalDateTime failedAt, boolean applied) {
+    }
+
+    record SupersededTaskWrite(LocalDateTime supersededAt, boolean applied) {
     }
 }

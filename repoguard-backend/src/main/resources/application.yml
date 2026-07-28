@@ -236,7 +236,7 @@ app:
         - synchronize
         - ready_for_review
       allowed-repositories: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES:}
-      allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:PRAgent-test}
+      allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
   external-call:

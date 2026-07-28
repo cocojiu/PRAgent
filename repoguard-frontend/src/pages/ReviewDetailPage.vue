@@ -54,7 +54,7 @@
                 @click="confirmRetryReview"
               >
                 <RefreshCw :size="16" />
-                重试
+                {{ retryButtonText }}
               </el-button>
             </span>
           </el-tooltip>
@@ -65,7 +65,7 @@
         <div class="failure-banner-main">
           <span class="failure-banner-icon"><ShieldAlert :size="22" /></span>
           <div>
-            <span>审查失败</span>
+            <span>{{ failureBannerTitle }}</span>
             <strong>{{ failureReason }}</strong>
             <p v-if="failureSuggestion">{{ failureSuggestion }}</p>
           </div>
@@ -77,7 +77,7 @@
           @click="confirmRetryReview"
         >
           <RefreshCw :size="16" />
-          重试
+          {{ retryButtonText }}
         </el-button>
       </section>
 
@@ -140,7 +140,7 @@
           <ReviewDetailGithubCommentsCard
             :can-manage="canManageHotTask"
             :archived="isArchivedTask"
-            :can-load-github-comments="isTerminalTask && !isArchivedTask"
+            :can-load-github-comments="canLoadGithubComments"
             :can-publish-github-comments="canPublishGithubComments"
             :preview-loading="previewLoading"
             :history-loading="historyLoading"
@@ -290,6 +290,7 @@ const route = useRoute();
 const isTerminalReviewStatus = (status?: ReviewStatus | string) =>
   status === "completed"
     || status === "failed"
+    || status === "superseded"
     || status === "pending_human_review"
     || status === "approved"
     || status === "changes_requested"
@@ -352,6 +353,7 @@ const canPublishGithubComments = computed(() =>
   Boolean(
     canManage.value
       && !isArchivedTask.value
+      && !isSupersededTask.value
       && githubCommentPreview.value?.commentableCount
       && writebackCheck.value?.tokenConfigured !== false
       && isHumanReviewPublishAllowed.value
@@ -363,6 +365,10 @@ const isTerminalTask = computed(() => {
   return isTerminalReviewStatus(selectedTask.value?.status);
 });
 const isArchivedTask = computed(() => selectedTask.value?.archived === true);
+const isSupersededTask = computed(() => selectedTask.value?.status === "superseded");
+const canLoadGithubComments = computed(() =>
+  isTerminalTask.value && !isSupersededTask.value && !isArchivedTask.value
+);
 const sectionLoaders = useReviewDetailSectionLoaders({ isArchivedTask, selectedTask });
 const {
   changedFilesLoaded,
@@ -387,9 +393,14 @@ const {
 resetDetailSections = sectionLoaders.resetDetailSections;
 const canManageHotTask = computed(() => canManage.value && !isArchivedTask.value);
 const shouldPollTask = computed(() => Boolean(selectedTask.value && !isTerminalTask.value));
-const canRetryTask = computed(() => selectedTask.value?.status === "failed" && !isArchivedTask.value);
+const canRetryTask = computed(() =>
+  (selectedTask.value?.status === "failed" || selectedTask.value?.status === "superseded")
+    && !isArchivedTask.value
+);
 const failureReason = computed(() => selectedTask.value?.failureReason ?? "");
 const failureSuggestion = computed(() => selectedTask.value?.failureSuggestion ?? "");
+const failureBannerTitle = computed(() => isSupersededTask.value ? "审查已过期" : "审查失败");
+const retryButtonText = computed(() => isSupersededTask.value ? "按最新提交重评" : "重试");
 const archiveNotice = computed(() => {
   if (!selectedTask.value?.archived) {
     return "";
@@ -435,7 +446,10 @@ const {
 });
 const retryTooltip = computed(() => {
   if (!canRetryTask.value) {
-    return "仅失败任务支持重试";
+    return "仅失败或已过期任务支持重试";
+  }
+  if (isSupersededTask.value) {
+    return failureSuggestion.value || "读取 PR 最新提交并重新审查";
   }
   return failureSuggestion.value || "重新入队执行审查";
 });
@@ -520,7 +534,7 @@ const refreshLoadedGithubCommentPreview = async (id: number) => {
 
 const loadGithubCommentPreviewPage = async (page: number) => {
   const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !isTerminalTask.value || !githubCommentPreview.value) {
+  if (!Number.isFinite(id) || !canLoadGithubComments.value || !githubCommentPreview.value) {
     return;
   }
   await loadGithubCommentPreview(id, { page });
@@ -528,7 +542,7 @@ const loadGithubCommentPreviewPage = async (page: number) => {
 
 const loadGithubCommentPreviewCommentableOnly = async (commentableOnly: boolean) => {
   const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !isTerminalTask.value) {
+  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
     return;
   }
   await loadGithubCommentPreview(id, { page: 1, commentableOnly });
@@ -536,7 +550,7 @@ const loadGithubCommentPreviewCommentableOnly = async (commentableOnly: boolean)
 
 const loadGithubCommentPublicationHistoryPage = async (page: number) => {
   const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !isTerminalTask.value) {
+  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
     return;
   }
   await loadGithubCommentPublicationHistory(id, { page });
@@ -575,7 +589,7 @@ const openPrUrl = () => {
 
 const loadGithubCommentData = async () => {
   const id = Number(route.params.id);
-  if (!Number.isFinite(id) || !isTerminalTask.value || isArchivedTask.value) {
+  if (!Number.isFinite(id) || !canLoadGithubComments.value) {
     return;
   }
   await Promise.all([

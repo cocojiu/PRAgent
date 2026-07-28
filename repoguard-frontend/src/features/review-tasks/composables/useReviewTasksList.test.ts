@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useReviewTasksList } from "./useReviewTasksList";
 import type { ReviewTask } from "@/types";
+import { statusClass, statusText } from "@/utils/status";
+import {
+  canRetryReviewTask,
+  reviewTaskRetryText,
+  reviewTaskRetryTooltip
+} from "../reviewTaskDisplayMappers";
 
 const reviewApi = vi.hoisted(() => ({
   fetchReviewListSummary: vi.fn(),
@@ -199,6 +205,20 @@ describe("useReviewTasksList", () => {
       cursorId: undefined,
       totalHint: undefined
     }));
+  });
+
+  it("exposes superseded tasks as retryable against the latest pull request head", () => {
+    const supersededTask: ReviewTask = {
+      ...reviewTask,
+      status: "superseded",
+      failureSuggestion: "请按最新提交重新发起审查。"
+    };
+
+    expect(canRetryReviewTask(supersededTask)).toBe(true);
+    expect(reviewTaskRetryText(supersededTask)).toBe("按最新提交重评");
+    expect(reviewTaskRetryTooltip(supersededTask)).toContain("最新提交");
+    expect(statusText("superseded")).toBe("已过期");
+    expect(statusClass("superseded")).toBe("warning");
   });
 });
 

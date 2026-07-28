@@ -22,6 +22,12 @@ public class GithubCommentPublishGuard {
     }
 
     public void ensurePublishAllowed(ReviewTask task) {
+        if (reviewTaskStateMachine.isSuperseded(task.getStatus())) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Superseded review tasks cannot publish GitHub comments"
+            );
+        }
         String humanReviewStatus = resolveHumanReviewStatus(task);
         if (reviewTaskStateMachine.canPublishGithubComments(
             Boolean.TRUE.equals(task.getHumanReviewRequired()),

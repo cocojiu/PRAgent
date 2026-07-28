@@ -2,6 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewResult;
@@ -128,6 +129,22 @@ class ReviewExecutionLog {
             task.getPrNumber(),
             failureCategory,
             ex.getClass().getName(),
+            Duration.between(startedAt, clock.now()).toMillis()
+        );
+    }
+
+    void superseded(
+        ReviewTask task,
+        GithubPullRequestHeadChangedException ex,
+        LocalDateTime startedAt
+    ) {
+        LOGGER.info(
+            "Review task superseded taskId={} repository={} prNumber={} operation=review_execute result=superseded expectedCommit={} currentHead={} durationMs={}",
+            task.getId(),
+            logContextFormatter.repositorySlug(task),
+            task.getPrNumber(),
+            logContextFormatter.safePart(ex.expectedHeadSha()),
+            logContextFormatter.safePart(ex.currentHeadSha()),
             Duration.between(startedAt, clock.now()).toMillis()
         );
     }

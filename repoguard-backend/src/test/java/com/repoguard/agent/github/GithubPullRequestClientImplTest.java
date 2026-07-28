@@ -61,6 +61,7 @@ class GithubPullRequestClientImplTest {
             githubIntegrationProvider,
             null,
             new GithubPullRequestReader(paginator),
+            new GithubPullRequestHeadReader(RestClient.builder(), jsonResponseReader),
             new GithubChangedFileReader(paginator),
             commentWriter(RestClient.builder(), healthReporter),
             healthReporter
@@ -79,6 +80,7 @@ class GithubPullRequestClientImplTest {
             RestClient.builder(),
             healthReporter,
             jsonResponseReader,
+            new GithubPullRequestHeadReader(RestClient.builder(), jsonResponseReader),
             endpointPolicy
         );
 
@@ -122,8 +124,10 @@ class GithubPullRequestClientImplTest {
             GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
 
             assertThat(diff.files()).hasSize(30);
+            assertThat(diff.headSha()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
             assertThat(diff.files().get(0).filename()).isEqualTo("src/File001.java");
             assertThat(server.filesPageRequests()).containsExactly(1);
+            assertThat(server.headRequests().get()).isEqualTo(2);
             var counter = meterRegistry.find("repoguard.github.api.request")
                 .tag("operation", "fetch_pull_request_diff")
                 .tag("result", "success")
@@ -132,6 +136,37 @@ class GithubPullRequestClientImplTest {
                 .counter();
             assertThat(counter).isNotNull();
             assertThat(counter.count()).isEqualTo(1.0);
+        }
+    }
+
+    @Test
+    void fetchPullRequestDiffStopsBeforeFilesWhenTaskCommitIsNotCurrentHead() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(30, 0)) {
+            server.setHeadSha("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            assertThatThrownBy(() -> client.fetchPullRequestDiff(reviewTask()))
+                .isInstanceOf(GithubPullRequestHeadChangedException.class)
+                .hasMessageContaining("expected=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .hasMessageContaining("current=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+            assertThat(server.filesPageRequests()).isEmpty();
+            assertThat(server.headRequests().get()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void fetchPullRequestDiffRejectsHeadChangeWhileFilesAreBeingFetched() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(30, 0)) {
+            server.changeHeadAfterNextFilesRequest("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+
+            assertThatThrownBy(() -> client.fetchPullRequestDiff(reviewTask()))
+                .isInstanceOf(GithubPullRequestHeadChangedException.class)
+                .hasMessageContaining("current=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+
+            assertThat(server.filesPageRequests()).containsExactly(1);
+            assertThat(server.headRequests().get()).isEqualTo(2);
         }
     }
 
@@ -269,6 +304,62 @@ class GithubPullRequestClientImplTest {
     }
 
     @Test
+    void publishPullRequestCommentsDowngradesAllLineDraftsWhenHeadChanged() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.setHeadSha("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            List<GithubReviewCommentDraft> drafts = List.of(
+                new GithubReviewCommentDraft(11L, "src/App.java", 12, "App comment", "line"),
+                new GithubReviewCommentDraft(12L, "src/Util.java", 30, "Util comment", "line")
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), drafts);
+
+            assertThat(results).allSatisfy(result -> {
+                assertThat(result.success()).isTrue();
+                assertThat(result.status()).isEqualTo("downgraded_to_pr_comment");
+                assertThat(result.targetType()).isEqualTo("pull_request");
+                assertThat(result.commentId()).isEqualTo(9001L);
+            });
+            assertThat(server.commentPaths()).containsExactly("/repos/octocat/api/issues/7/comments");
+            assertThat(server.commentBodies().get(0))
+                .contains("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .contains("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+                .contains("src/App.java:12")
+                .contains("src/Util.java:30");
+            assertThat(server.headRequests().get()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void publishPullRequestCommentsStopsInlineFallbackWhenHeadChangesAfterBatchValidation() throws Exception {
+        try (GithubApiServer server = startGithubApiServer(0, 0)) {
+            server.failNextReviewWithStatus(422, "{\"message\":\"Validation Failed\"}");
+            server.changeHeadAfterNextReviewRequest("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+            when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
+            List<GithubReviewCommentDraft> drafts = List.of(
+                new GithubReviewCommentDraft(11L, "src/App.java", 12, "App comment", "line"),
+                new GithubReviewCommentDraft(12L, "src/Util.java", 30, "Util comment", "line")
+            );
+
+            List<GithubReviewCommentResult> results = client.publishPullRequestComments(reviewTask(), drafts);
+
+            assertThat(results).allSatisfy(result -> {
+                assertThat(result.success()).isTrue();
+                assertThat(result.status()).isEqualTo("downgraded_to_pr_comment");
+                assertThat(result.targetType()).isEqualTo("pull_request");
+            });
+            assertThat(server.commentPaths()).containsExactly(
+                "/repos/octocat/api/pulls/7/reviews",
+                "/repos/octocat/api/issues/7/comments"
+            );
+            assertThat(server.commentBodies().get(1))
+                .contains("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+                .contains("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        }
+    }
+
+    @Test
     void publishPullRequestCommentsFallsBackToPerCommentPublishingWhenReviewRejected() throws Exception {
         try (GithubApiServer server = startGithubApiServer(0, 0)) {
             server.failNextReviewWithStatus(422, "{\"message\":\"Validation Failed\"}");
@@ -393,10 +484,15 @@ class GithubPullRequestClientImplTest {
         GithubIntegrationHealthReporter healthReporter
     ) {
         GithubPaginator paginator = paginator(restClientBuilder);
+        GithubPullRequestHeadReader headReader = new GithubPullRequestHeadReader(
+            restClientBuilder,
+            jsonResponseReader
+        );
         return new GithubPullRequestClientImpl(
             githubIntegrationProvider,
             passthroughResilience(),
             new GithubPullRequestReader(paginator),
+            headReader,
             new GithubChangedFileReader(paginator),
             commentWriter(restClientBuilder, healthReporter),
             healthReporter
@@ -449,10 +545,18 @@ class GithubPullRequestClientImplTest {
         AtomicReference<String> reviewFailureBody = new AtomicReference<>();
         AtomicInteger reviewCommentsFailureStatus = new AtomicInteger();
         AtomicReference<String> reviewCommentsBody = new AtomicReference<>("[]");
+        AtomicReference<String> headSha = new AtomicReference<>("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        AtomicReference<String> headAfterFilesSha = new AtomicReference<>();
+        AtomicReference<String> headAfterReviewSha = new AtomicReference<>();
+        AtomicInteger headRequests = new AtomicInteger();
         server.createContext("/", exchange -> {
             URI uri = exchange.getRequestURI();
             String body;
-            if ("/repos/octocat/api/pulls/7/files".equals(uri.getPath())) {
+            if ("GET".equals(exchange.getRequestMethod())
+                && "/repos/octocat/api/pulls/7".equals(uri.getPath())) {
+                headRequests.incrementAndGet();
+                body = "{\"head\":{\"sha\":\"" + headSha.get() + "\"}}";
+            } else if ("/repos/octocat/api/pulls/7/files".equals(uri.getPath())) {
                 int failureStatus = filesFailureStatus.getAndSet(0);
                 if (failureStatus > 0) {
                     body = "{\"message\":\"API rate limit exceeded\"}";
@@ -467,6 +571,10 @@ class GithubPullRequestClientImplTest {
                 int perPage = queryInt(uri, "per_page", 30);
                 filesPageRequests.add(page);
                 body = changedFilesJson(changedFileCount, page, perPage);
+                String replacementHeadSha = headAfterFilesSha.getAndSet(null);
+                if (replacementHeadSha != null) {
+                    headSha.set(replacementHeadSha);
+                }
             } else if ("/repos/octocat/api/pulls".equals(uri.getPath())) {
                 int page = queryInt(uri, "page", 1);
                 int perPage = queryInt(uri, "per_page", 30);
@@ -476,6 +584,10 @@ class GithubPullRequestClientImplTest {
                 && "/repos/octocat/api/pulls/7/reviews".equals(uri.getPath())) {
                 commentPaths.add(uri.getPath());
                 commentBodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+                String replacementHeadSha = headAfterReviewSha.getAndSet(null);
+                if (replacementHeadSha != null) {
+                    headSha.set(replacementHeadSha);
+                }
                 int failureStatus = reviewFailureStatus.getAndSet(0);
                 if (failureStatus > 0) {
                     body = reviewFailureBody.get();
@@ -564,7 +676,11 @@ class GithubPullRequestClientImplTest {
             reviewFailureStatus,
             reviewFailureBody,
             reviewCommentsFailureStatus,
-            reviewCommentsBody
+            reviewCommentsBody,
+            headSha,
+            headAfterFilesSha,
+            headAfterReviewSha,
+            headRequests
         );
     }
 
@@ -622,7 +738,11 @@ class GithubPullRequestClientImplTest {
         AtomicInteger reviewFailureStatus,
         AtomicReference<String> reviewFailureBody,
         AtomicInteger reviewCommentsFailureStatus,
-        AtomicReference<String> reviewCommentsBody
+        AtomicReference<String> reviewCommentsBody,
+        AtomicReference<String> headSha,
+        AtomicReference<String> headAfterFilesSha,
+        AtomicReference<String> headAfterReviewSha,
+        AtomicInteger headRequests
     ) implements AutoCloseable {
 
         @Override
@@ -655,6 +775,18 @@ class GithubPullRequestClientImplTest {
 
         void setReviewCommentsResponse(String body) {
             reviewCommentsBody.set(body);
+        }
+
+        void setHeadSha(String sha) {
+            headSha.set(sha);
+        }
+
+        void changeHeadAfterNextFilesRequest(String sha) {
+            headAfterFilesSha.set(sha);
+        }
+
+        void changeHeadAfterNextReviewRequest(String sha) {
+            headAfterReviewSha.set(sha);
         }
     }
 }

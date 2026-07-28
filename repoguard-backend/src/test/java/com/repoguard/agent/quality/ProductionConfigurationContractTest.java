@@ -201,6 +201,39 @@ class ProductionConfigurationContractTest {
     }
 
     @Test
+    void webhookBranchPolicyHasNoSharedTestDefaultAndFailsFastInProduction() throws IOException {
+        Path root = findRepositoryRoot();
+        String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
+        String testApplication = read(
+            root.resolve("repoguard-backend/src/main/resources/application-test.yml")
+        );
+        String properties = read(
+            root.resolve(
+                "repoguard-backend/src/main/java/com/repoguard/agent/github/webhook/GithubWebhookProperties.java"
+            )
+        );
+        Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
+        String template = read(root.resolve(".env.prod.example"));
+        String key = "REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES";
+
+        assertThat(application)
+            .contains("allowed-head-branches: ${" + key + ":}")
+            .doesNotContain(key + ":PRAgent-test");
+        assertThat(properties)
+            .contains("private List<String> allowedHeadBranches = new ArrayList<>();")
+            .doesNotContain("List.of(\"PRAgent-test\")");
+        assertThat(testApplication).contains("allowed-head-branches:", "- PRAgent-test");
+        for (String service : List.of("backend", "backend-worker")) {
+            assertThat(environment(production, service).get(key).toString()).contains(":?");
+        }
+        assertThat(environment(ip, "backend").get(key).toString()).contains(":?");
+        assertThat(environment(smoke, "backend")).containsEntry(key, "PRAgent-test");
+        assertThat(template).contains(key + "=main");
+    }
+
+    @Test
     void deploymentAndCiKeepTheOptionalMetricsTopology() throws IOException {
         Path root = findRepositoryRoot();
         String deploy = read(root.resolve("scripts/deploy-prod.sh"));

@@ -15,6 +15,7 @@ class DashboardStatusMapperTest {
     void mapsReviewTaskStatusesToDisplayText() {
         assertThat(mapper.reviewTaskStatusText("COMPLETED")).isEqualTo("已完成");
         assertThat(mapper.reviewTaskStatusText("reviewing")).isEqualTo("审查中");
+        assertThat(mapper.reviewTaskStatusText("SUPERSEDED")).isEqualTo("已过期");
         assertThat(mapper.reviewTaskStatusText("PUBLISH_FAILED")).isEqualTo("发布失败");
         assertThat(mapper.reviewTaskStatusText("EXECUTION_TIMEOUT")).isEqualTo("执行超时");
         assertThat(mapper.reviewTaskStatusText("REQUEUE_PENDING")).isEqualTo("重入队中");

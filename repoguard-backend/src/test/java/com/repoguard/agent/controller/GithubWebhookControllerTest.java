@@ -293,6 +293,7 @@ class GithubWebhookControllerTest {
     private GithubWebhookProperties webhookProperties() {
         GithubWebhookProperties result = new GithubWebhookProperties();
         result.setSecret(SIGNING_KEY);
+        result.setAllowedHeadBranches(java.util.List.of("PRAgent-test"));
         return result;
     }
 

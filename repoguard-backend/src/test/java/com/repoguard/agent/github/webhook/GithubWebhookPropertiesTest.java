@@ -3,6 +3,7 @@ package com.repoguard.agent.github.webhook;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class GithubWebhookPropertiesTest {
@@ -52,6 +53,28 @@ class GithubWebhookPropertiesTest {
         assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("allowed-repositories");
+    }
+
+    @Test
+    void prodProfileRequiresHeadBranchAllowList() {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+        properties.setSecret("secret");
+        properties.setAllowedRepositories(List.of("octocat/api"));
+
+        assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("allowed-head-branches");
+    }
+
+    @Test
+    void prodProfileAcceptsCompleteWebhookPolicy() {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+        properties.setSecret("secret");
+        properties.setAllowedRepositories(List.of("octocat/api"));
+        properties.setAllowedHeadBranches(List.of("main"));
+
+        assertThatCode(() -> properties.validateForProfiles(new String[] {"prod"}))
+            .doesNotThrowAnyException();
     }
 
     @Test

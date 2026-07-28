@@ -22,6 +22,17 @@ class ReviewFailureSummaryResolverTest {
     }
 
     @Test
+    void resolvesSupersededTaskAsLatestHeadRetryGuidance() {
+        ReviewTask task = task("SUPERSEDED");
+
+        var result = resolver.resolve(task, List.of("Review superseded: expected aaa, current bbb"));
+
+        assertThat(result.category()).isEqualTo("review_superseded");
+        assertThat(result.reason()).contains("PR Head 已变化");
+        assertThat(result.suggestion()).contains("最新提交");
+    }
+
+    @Test
     void resolvesLatestStructuredFailureCategory() {
         ReviewTask task = task("FAILED");
 

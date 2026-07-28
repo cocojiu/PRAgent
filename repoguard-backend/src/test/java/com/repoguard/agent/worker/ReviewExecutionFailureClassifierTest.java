@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.external.ExternalCallException;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -91,6 +92,12 @@ class ReviewExecutionFailureClassifierTest {
     void classifiesStateConflict() {
         assertThat(classifier.failureCategory(new CannotAcquireLockException("deadlock")))
             .isEqualTo("review_state_conflict");
+    }
+
+    @Test
+    void classifiesPullRequestHeadChangeAsSuperseded() {
+        assertThat(classifier.failureCategory(new GithubPullRequestHeadChangedException("aaa", "bbb")))
+            .isEqualTo("review_superseded");
     }
 
     @Test

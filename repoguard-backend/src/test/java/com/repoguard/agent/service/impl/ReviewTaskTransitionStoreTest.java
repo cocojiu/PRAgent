@@ -41,6 +41,7 @@ class ReviewTaskTransitionStoreTest {
         assertThat(update.getSqlSet()).contains(
             "status",
             "mq_retries",
+            "commit_sha",
             "llm_provider",
             "llm_model",
             "llm_duration_ms",
@@ -58,7 +59,28 @@ class ReviewTaskTransitionStoreTest {
             .contains("FAILED", "QUEUED", "PENDING", "NOT_REQUIRED", 3, 0);
         assertQueuedAndCleared(task);
         assertThat(task.getMqRetries()).isEqualTo(3);
+        assertThat(task.getCommitSha()).isEqualTo("old-commit");
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+    }
+
+    @Test
+    void supersededRetryUsesObservedStatusAndCommitFenceThenReplacesCommit() {
+        ReviewTask task = staleFailedTask();
+        task.setStatus("SUPERSEDED");
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+
+        store.retryReviewTask(task, 3, "latest-commit");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        UpdateWrapper<ReviewTask> update = wrapperCaptor.getValue();
+        assertThat(update.getSqlSegment()).contains("status", "commit_sha");
+        assertThat(update.getSqlSet()).contains("commit_sha", "status", "llm_fallback_reason");
+        assertThat(update.getParamNameValuePairs().values())
+            .contains("SUPERSEDED", "old-commit", "latest-commit", "QUEUED");
+        assertQueuedAndCleared(task);
+        assertThat(task.getCommitSha()).isEqualTo("latest-commit");
     }
 
     @Test
@@ -143,6 +165,7 @@ class ReviewTaskTransitionStoreTest {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
         task.setStatus("FAILED");
+        task.setCommitSha("old-commit");
         task.setRiskLevel("HIGH");
         task.setMqRetries(2);
         task.setPublishAttempts(4);

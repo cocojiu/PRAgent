@@ -46,6 +46,8 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class ReviewTaskExecutorImplTest {
 
+    private static final String COMMIT_SHA = "a1b2c3d";
+
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
@@ -71,6 +73,7 @@ class ReviewTaskExecutorImplTest {
     void executeMovesQueuedTaskToCompletedAndWritesTimeline() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -82,6 +85,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -113,6 +117,7 @@ class ReviewTaskExecutorImplTest {
     void executeMovesMediumRiskTaskToPendingHumanReview() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -122,6 +127,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -143,6 +149,7 @@ class ReviewTaskExecutorImplTest {
     void executeDeduplicatesFindingsBeforePersisting() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -152,6 +159,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -178,6 +186,7 @@ class ReviewTaskExecutorImplTest {
     void executeStoresLlmQualityMetadata() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -187,6 +196,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -216,6 +226,7 @@ class ReviewTaskExecutorImplTest {
     void executeWritesPartialFallbackTimelineWhenChunkedReviewFallsBack() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -225,6 +236,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -255,6 +267,7 @@ class ReviewTaskExecutorImplTest {
     void executeIgnoresCompletedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("COMPLETED");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
 
@@ -268,6 +281,7 @@ class ReviewTaskExecutorImplTest {
     void executeIgnoresTaskAlreadyInProgress() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("REVIEWING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
 
@@ -283,6 +297,7 @@ class ReviewTaskExecutorImplTest {
     void executeStopsWhenQueuedTaskWasClaimedByAnotherConsumer() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
@@ -299,6 +314,7 @@ class ReviewTaskExecutorImplTest {
     void executeDiscardsResultWhenRecoveryHasReplacedExecutionClaim() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -308,6 +324,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -326,6 +343,7 @@ class ReviewTaskExecutorImplTest {
     void executeMarksTaskFailedWhenDiffFetchFails() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -346,6 +364,42 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
+    void executeMarksTaskSupersededWithoutCallingReviewerWhenDiffHeadChanged() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            "b2c3d4e",
+            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"new\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+
+        executor.execute(message());
+
+        assertThat(task.getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
+        assertThat(task.getLlmFallbackReason())
+            .contains("expected=" + COMMIT_SHA)
+            .contains("current=b2c3d4e");
+        assertThat(task.getReviewClaimedAt()).isNull();
+        assertThat(task.getReviewClaimedBy()).isNull();
+        verify(pullRequestReviewer, never()).review(any(ReviewTask.class), any(GithubPullRequestDiff.class));
+        verify(changedFileMapper, never()).insert(any(ChangedFile.class));
+        verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
+        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
+        verify(reviewTimelineMapper, times(2)).insert(timelineCaptor.capture());
+        assertThat(timelineCaptor.getAllValues().get(1).getLabel()).startsWith("Review superseded:");
+    }
+
+    @Test
     void executeRetriesConcurrencyFailureUsingReadCommittedTransactions() {
         PlatformTransactionManager transactionManager = org.mockito.Mockito.mock(PlatformTransactionManager.class);
         TransactionStatus transactionStatus = org.mockito.Mockito.mock(TransactionStatus.class);
@@ -356,6 +410,7 @@ class ReviewTaskExecutorImplTest {
         );
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
@@ -367,6 +422,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
@@ -391,7 +447,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            "a1b2c3d",
+            COMMIT_SHA,
             LocalDateTime.parse("2026-06-05T18:00:00")
         );
     }
@@ -449,6 +505,12 @@ class ReviewTaskExecutorImplTest {
             cacheInvalidator,
             failureClassifier
         );
+        ReviewExecutionSupersededHandler supersededHandler = new ReviewExecutionSupersededHandler(
+            taskTerminalWriter,
+            timelineRecorder,
+            metricsRecorder,
+            cacheInvalidator
+        );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
             taskTerminalWriter,
             changedFileReplacementService,
@@ -471,6 +533,7 @@ class ReviewTaskExecutorImplTest {
             timelineRecorder,
             claimService,
             failureHandler,
+            supersededHandler,
             resultWriter,
             new ReviewExecutionNotifier(
                 org.mockito.Mockito.mock(NotificationDispatchService.class),

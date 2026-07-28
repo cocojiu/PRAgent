@@ -1,7 +1,9 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
@@ -65,6 +67,34 @@ class ReviewTaskCompletionApplier {
         task.setLlmStatus(failureOutcomePolicy.failedLlmStatus());
         task.setFinishedAt(failedAt);
         task.setDurationSeconds(durationPolicy.durationSeconds(startedAt, failedAt));
+    }
+
+    void applySuperseded(
+        ReviewTask task,
+        LocalDateTime startedAt,
+        LocalDateTime supersededAt,
+        GithubPullRequestHeadChangedException ex
+    ) {
+        task.setStatus(reviewTaskStateMachine.statusWhenSuperseded());
+        task.setRiskLevel("INFO");
+        task.setLlmStatus(LlmStatus.PENDING.code());
+        task.setLlmProvider(null);
+        task.setLlmModel(null);
+        task.setLlmDurationMs(null);
+        task.setLlmParseStatus(null);
+        task.setLlmFallbackReason(ex.getMessage());
+        task.setLlmPromptSummary(null);
+        task.setLlmPromptTokens(null);
+        task.setLlmCompletionTokens(null);
+        task.setLlmTotalTokens(null);
+        task.setLlmEstimatedCost(null);
+        task.setHumanReviewRequired(false);
+        task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
+        task.setHumanReviewNote(null);
+        task.setHumanReviewBy(null);
+        task.setHumanReviewedAt(null);
+        task.setFinishedAt(supersededAt);
+        task.setDurationSeconds(durationPolicy.durationSeconds(startedAt, supersededAt));
     }
 
 }

@@ -11,6 +11,7 @@ import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 public class ReviewTaskTransitionStore {
@@ -36,16 +37,32 @@ public class ReviewTaskTransitionStore {
     }
 
     public void retryFailedTask(ReviewTask task, int retryCount) {
+        retryReviewTask(task, retryCount, task.getCommitSha());
+    }
+
+    public void retryReviewTask(ReviewTask task, int retryCount, String replacementCommitSha) {
         Objects.requireNonNull(task, "task");
+        if (!StringUtils.hasText(replacementCommitSha)) {
+            throw new IllegalArgumentException("replacementCommitSha must not be blank");
+        }
+        String observedStatus = task.getStatus();
+        String observedCommitSha = task.getCommitSha();
         UpdateWrapper<ReviewTask> update = resetForQueuedExecution(
             new UpdateWrapper<ReviewTask>()
                 .eq("id", task.getId())
-                .eq("status", reviewTaskStateMachine.statusWhenFailed())
+                .eq("status", observedStatus)
                 .set("mq_retries", retryCount)
+                .set("commit_sha", replacementCommitSha.trim())
         );
+        if (StringUtils.hasText(observedCommitSha)) {
+            update.eq("commit_sha", observedCommitSha);
+        } else {
+            update.isNull("commit_sha");
+        }
         ensureTransitioned(reviewTaskMapper.update(update));
         applyQueuedExecutionState(task);
         task.setMqRetries(retryCount);
+        task.setCommitSha(replacementCommitSha.trim());
     }
 
     public void completeHumanReview(

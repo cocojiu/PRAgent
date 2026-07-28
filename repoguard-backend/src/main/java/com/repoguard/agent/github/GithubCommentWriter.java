@@ -28,9 +28,12 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Component
 public class GithubCommentWriter {
 
+    private static final int MAX_SUPERSEDED_SUMMARY_LENGTH = 60_000;
+
     private final RestClient restClient;
     private final GithubIntegrationHealthReporter healthReporter;
     private final ExternalHttpJsonResponseReader jsonResponseReader;
+    private final GithubPullRequestHeadReader headReader;
     private final OutboundEndpointPolicy endpointPolicy;
 
     @Autowired
@@ -38,11 +41,13 @@ public class GithubCommentWriter {
         RestClient.Builder restClientBuilder,
         GithubIntegrationHealthReporter healthReporter,
         ExternalHttpJsonResponseReader jsonResponseReader,
+        GithubPullRequestHeadReader headReader,
         OutboundEndpointPolicy endpointPolicy
     ) {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
         this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
+        this.headReader = Objects.requireNonNull(headReader, "headReader");
         this.endpointPolicy = Objects.requireNonNull(endpointPolicy, "endpointPolicy");
     }
 
@@ -54,6 +59,7 @@ public class GithubCommentWriter {
         this.restClient = GithubRestClientFactory.build(Objects.requireNonNull(restClientBuilder, "restClientBuilder"));
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
         this.jsonResponseReader = Objects.requireNonNull(jsonResponseReader, "jsonResponseReader");
+        this.headReader = new GithubPullRequestHeadReader(restClientBuilder, jsonResponseReader);
         this.endpointPolicy = null;
     }
 
@@ -159,26 +165,84 @@ public class GithubCommentWriter {
         if (lineDraftIndexes.isEmpty()) {
             return 0;
         }
-        String commitSha;
+        String expectedCommitSha;
+        String currentHeadSha;
         try {
-            commitSha = resolvePullRequestHeadSha(baseUrl, owner, repository, task, settings, resilience);
+            expectedCommitSha = requiredTaskCommitSha(task);
+            currentHeadSha = fetchCurrentHeadSha(
+                settings,
+                baseUrl,
+                owner,
+                repository,
+                task,
+                resilience
+            );
         } catch (RuntimeException ex) {
             return failLineDrafts(startedAt, settings, drafts, lineDraftIndexes, results, ex);
+        }
+        if (!sameCommit(expectedCommitSha, currentHeadSha)) {
+            return publishSupersededLineSummary(
+                settings,
+                drafts,
+                lineDraftIndexes,
+                results,
+                prCommentUrl,
+                expectedCommitSha,
+                currentHeadSha,
+                resilience,
+                startedAt
+            );
         }
         List<GithubReviewCommentDraft> lineDrafts = lineDraftIndexes.stream().map(drafts::get).toList();
         GithubReviewResponse review;
         try {
-            review = publishReview(reviewUrl, lineDrafts, commitSha, settings, resilience);
+            review = publishReview(reviewUrl, lineDrafts, expectedCommitSha, settings, resilience);
         } catch (RuntimeException ex) {
             if (isReviewValidationFailure(ex)) {
+                try {
+                    currentHeadSha = fetchCurrentHeadSha(
+                        settings,
+                        baseUrl,
+                        owner,
+                        repository,
+                        task,
+                        resilience
+                    );
+                } catch (RuntimeException headReadException) {
+                    return failLineDrafts(
+                        startedAt,
+                        settings,
+                        drafts,
+                        lineDraftIndexes,
+                        results,
+                        headReadException
+                    );
+                }
+                if (!sameCommit(expectedCommitSha, currentHeadSha)) {
+                    return publishSupersededLineSummary(
+                        settings,
+                        drafts,
+                        lineDraftIndexes,
+                        results,
+                        prCommentUrl,
+                        expectedCommitSha,
+                        currentHeadSha,
+                        resilience,
+                        startedAt
+                    );
+                }
                 return publishLineDraftsIndividually(
                     settings,
+                    baseUrl,
+                    owner,
+                    repository,
+                    task,
                     drafts,
                     lineDraftIndexes,
                     results,
                     lineCommentUrl,
                     prCommentUrl,
-                    commitSha,
+                    expectedCommitSha,
                     resilience,
                     startedAt
                 );
@@ -209,6 +273,10 @@ public class GithubCommentWriter {
 
     private int publishLineDraftsIndividually(
         GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        ReviewTask task,
         List<GithubReviewCommentDraft> drafts,
         List<Integer> lineDraftIndexes,
         GithubReviewCommentResult[] results,
@@ -219,9 +287,32 @@ public class GithubCommentWriter {
         LocalDateTime startedAt
     ) {
         int failedCount = 0;
-        for (Integer index : lineDraftIndexes) {
+        for (int position = 0; position < lineDraftIndexes.size(); position++) {
+            Integer index = lineDraftIndexes.get(position);
             GithubReviewCommentDraft draft = drafts.get(index);
             try {
+                String currentHeadSha = fetchCurrentHeadSha(
+                    settings,
+                    baseUrl,
+                    owner,
+                    repository,
+                    task,
+                    resilience
+                );
+                if (!sameCommit(commitSha, currentHeadSha)) {
+                    List<Integer> remainingIndexes = lineDraftIndexes.subList(position, lineDraftIndexes.size());
+                    return failedCount + publishSupersededLineSummary(
+                        settings,
+                        drafts,
+                        remainingIndexes,
+                        results,
+                        prCommentUrl,
+                        commitSha,
+                        currentHeadSha,
+                        resilience,
+                        startedAt
+                    );
+                }
                 GithubCommentTargetType actualTargetType = GithubCommentTargetType.LINE;
                 GithubReviewCommentResponse response;
                 try {
@@ -229,6 +320,28 @@ public class GithubCommentWriter {
                 } catch (RuntimeException ex) {
                     if (!isUnresolvableLineComment(ex)) {
                         throw ex;
+                    }
+                    currentHeadSha = fetchCurrentHeadSha(
+                        settings,
+                        baseUrl,
+                        owner,
+                        repository,
+                        task,
+                        resilience
+                    );
+                    if (!sameCommit(commitSha, currentHeadSha)) {
+                        List<Integer> remainingIndexes = lineDraftIndexes.subList(position, lineDraftIndexes.size());
+                        return failedCount + publishSupersededLineSummary(
+                            settings,
+                            drafts,
+                            remainingIndexes,
+                            results,
+                            prCommentUrl,
+                            commitSha,
+                            currentHeadSha,
+                            resilience,
+                            startedAt
+                        );
                     }
                     actualTargetType = GithubCommentTargetType.PULL_REQUEST;
                     response = publishPullRequestComment(prCommentUrl, draft.body(), settings, resilience);
@@ -241,6 +354,77 @@ public class GithubCommentWriter {
             }
         }
         return failedCount;
+    }
+
+    private int publishSupersededLineSummary(
+        GithubIntegrationSettings settings,
+        List<GithubReviewCommentDraft> drafts,
+        List<Integer> lineDraftIndexes,
+        GithubReviewCommentResult[] results,
+        String prCommentUrl,
+        String expectedCommitSha,
+        String currentHeadSha,
+        ExternalCallResilience resilience,
+        LocalDateTime startedAt
+    ) {
+        try {
+            GithubReviewCommentResponse response = publishPullRequestComment(
+                prCommentUrl,
+                supersededSummaryBody(drafts, lineDraftIndexes, expectedCommitSha, currentHeadSha),
+                settings,
+                resilience
+            );
+            for (Integer index : lineDraftIndexes) {
+                GithubReviewCommentDraft draft = drafts.get(index);
+                results[index] = new GithubReviewCommentResult(
+                    draft.findingId(),
+                    draft.path(),
+                    draft.line(),
+                    GithubCommentTargetType.PULL_REQUEST.code(),
+                    true,
+                    GithubCommentPublicationStatus.DOWNGRADED_TO_PR_COMMENT.code(),
+                    "Pull request head changed; line comment for commit "
+                        + shortCommit(expectedCommitSha)
+                        + " was published in a traceable PR summary",
+                    response == null ? null : response.htmlUrl(),
+                    response == null ? null : response.id()
+                );
+            }
+            healthReporter.markChecked(settings, null);
+            return 0;
+        } catch (RuntimeException ex) {
+            return failLineDrafts(startedAt, settings, drafts, lineDraftIndexes, results, ex);
+        }
+    }
+
+    private String supersededSummaryBody(
+        List<GithubReviewCommentDraft> drafts,
+        List<Integer> lineDraftIndexes,
+        String expectedCommitSha,
+        String currentHeadSha
+    ) {
+        StringBuilder body = new StringBuilder()
+            .append("## RepoGuard review comments (superseded)\n\n")
+            .append("The pull request head changed before inline comments were published. ")
+            .append("To avoid attaching findings to the wrong code, the original line comments are recorded here.\n\n")
+            .append("- Reviewed commit: `").append(expectedCommitSha).append("`\n")
+            .append("- Current head: `").append(currentHeadSha).append("`\n\n");
+        int omitted = 0;
+        for (Integer index : lineDraftIndexes) {
+            GithubReviewCommentDraft draft = drafts.get(index);
+            String section = "### `" + draft.path() + ":" + draft.line() + "`\n\n"
+                + draft.body()
+                + "\n\n";
+            if (body.length() + section.length() > MAX_SUPERSEDED_SUMMARY_LENGTH) {
+                omitted++;
+                continue;
+            }
+            body.append(section);
+        }
+        if (omitted > 0) {
+            body.append("_").append(omitted).append(" additional comment(s) omitted because of GitHub size limits._\n");
+        }
+        return body.toString();
     }
 
     private int failLineDrafts(
@@ -471,35 +655,37 @@ public class GithubCommentWriter {
             && containsUnresolvableLineSignal(message);
     }
 
-    private String resolvePullRequestHeadSha(
+    private String fetchCurrentHeadSha(
+        GithubIntegrationSettings settings,
         String baseUrl,
         String owner,
         String repository,
         ReviewTask task,
-        GithubIntegrationSettings settings,
         ExternalCallResilience resilience
     ) {
-        if (StringUtils.hasText(task.getCommitSha()) && task.getCommitSha().trim().matches("[a-fA-F0-9]{40}|[a-fA-F0-9]{64}")) {
-            return task.getCommitSha().trim();
+        return headReader.fetchHeadSha(
+            settings,
+            baseUrl,
+            owner,
+            repository,
+            task.getPrNumber(),
+            resilience
+        );
+    }
+
+    private String requiredTaskCommitSha(ReviewTask task) {
+        if (!StringUtils.hasText(task.getCommitSha())) {
+            throw new IllegalStateException("Review task commit SHA is unavailable");
         }
-        String url = UriComponentsBuilder
-            .fromUriString(baseUrl)
-            .path("/repos/{owner}/{repo}/pulls/{pullNumber}")
-            .build(owner, repository, task.getPrNumber())
-            .toString();
-        GithubPullRequestResponse response = executeGithub("resolve_pull_request_head", resilience, () -> restClient.get()
-            .uri(url)
-            .headers(headers -> applyGithubHeaders(headers, settings))
-            .exchange((request, clientResponse) -> readJsonResponse(
-                clientResponse,
-                GithubPullRequestResponse.class,
-                "resolve_pull_request_head"
-            )));
-        String sha = response == null || response.head() == null ? null : response.head().sha();
-        if (!StringUtils.hasText(sha)) {
-            throw new IllegalStateException("GitHub pull request head SHA is unavailable");
-        }
-        return sha.trim();
+        return task.getCommitSha().trim();
+    }
+
+    private boolean sameCommit(String expectedCommitSha, String currentHeadSha) {
+        return expectedCommitSha.equalsIgnoreCase(currentHeadSha);
+    }
+
+    private String shortCommit(String commitSha) {
+        return commitSha.length() <= 12 ? commitSha : commitSha.substring(0, 12);
     }
 
     private <T> T readJsonResponse(
@@ -561,14 +747,4 @@ public class GithubCommentWriter {
     ) {
     }
 
-    private record GithubPullRequestResponse(
-        GithubPullRequestHead head
-    ) {
-    }
-
-    private record GithubPullRequestHead(
-        String ref,
-        String sha
-    ) {
-    }
 }

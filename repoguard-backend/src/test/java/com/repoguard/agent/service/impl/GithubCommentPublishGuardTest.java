@@ -51,6 +51,17 @@ class GithubCommentPublishGuardTest {
     }
 
     @Test
+    void ensurePublishAllowedRejectsSupersededTask() {
+        ReviewTask task = new ReviewTask();
+        task.setStatus("SUPERSEDED");
+        task.setHumanReviewRequired(false);
+
+        assertThatThrownBy(() -> guard.ensurePublishAllowed(task))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Superseded review tasks");
+    }
+
+    @Test
     void resolveHumanReviewStatusFallsBackToPendingWhenRequiredStatusMissing() {
         ReviewTask task = new ReviewTask();
         task.setHumanReviewRequired(true);

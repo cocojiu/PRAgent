@@ -26,6 +26,10 @@ class ReviewExecutionMetricsRecorder {
         metrics.reviewTaskDuration(Duration.between(startedAt, failedAt), "failed");
     }
 
+    void recordSuperseded(LocalDateTime startedAt, LocalDateTime supersededAt) {
+        metrics.reviewTaskDuration(Duration.between(startedAt, supersededAt), "superseded");
+    }
+
     void recordGithubDiffFetch(Duration duration, String result) {
         metrics.githubDiffDuration(duration, result);
     }

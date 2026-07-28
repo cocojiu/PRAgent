@@ -252,7 +252,8 @@ class ReviewServiceImplTest {
             timelineAppender(),
             reviewTaskStateMachine,
             afterCommitPublisher,
-            cacheEvictionService
+            cacheEvictionService,
+            githubPullRequestClient
         );
     }
 
@@ -1226,7 +1227,7 @@ class ReviewServiceImplTest {
 
         assertThatThrownBy(() -> service.retryReview(521L))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("Only failed review tasks can be retried");
+            .hasMessageContaining("Only failed or superseded review tasks can be retried");
 
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));

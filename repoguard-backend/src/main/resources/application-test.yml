@@ -23,6 +23,10 @@ repoguard:
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:true}
 
 app:
+  github:
+    webhook:
+      allowed-head-branches:
+        - PRAgent-test
   cors:
     allowed-origins:
       - http://localhost:5173

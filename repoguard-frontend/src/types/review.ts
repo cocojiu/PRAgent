@@ -4,6 +4,7 @@ export type ReviewStatus =
   | "completed"
   | "reviewing"
   | "failed"
+  | "superseded"
   | "queued"
   | "fallback"
   | "pending"

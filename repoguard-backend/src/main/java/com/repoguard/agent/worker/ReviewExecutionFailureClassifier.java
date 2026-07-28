@@ -2,6 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalFailureSignals;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DeadlockLoserDataAccessException;
@@ -16,6 +17,9 @@ import org.springframework.web.client.RestClientResponseException;
 public class ReviewExecutionFailureClassifier {
 
     public String failureCategory(RuntimeException ex) {
+        if (ex instanceof GithubPullRequestHeadChangedException) {
+            return "review_superseded";
+        }
         if (ex instanceof ExternalCallException externalCallException) {
             return externalCallException.getCategory();
         }

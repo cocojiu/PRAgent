@@ -9,6 +9,8 @@ public interface GithubPullRequestClient {
 
     List<GithubPullRequestSummary> listOpenPullRequests();
 
+    String fetchPullRequestHeadSha(ReviewTask task);
+
     GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task);
 
     List<GithubReviewCommentResult> publishPullRequestComments(ReviewTask task, List<GithubReviewCommentDraft> drafts);

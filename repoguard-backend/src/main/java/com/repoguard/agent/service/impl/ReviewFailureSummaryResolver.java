@@ -13,6 +13,13 @@ public class ReviewFailureSummaryResolver {
     private static final ReviewFailureSummary NO_FAILURE_SUMMARY = new ReviewFailureSummary(null, null, null);
 
     public ReviewFailureSummary resolve(ReviewTask task, List<String> timelineLabels) {
+        if ("SUPERSEDED".equalsIgnoreCase(task.getStatus())) {
+            return new ReviewFailureSummary(
+                "review_superseded",
+                "PR Head 已变化，本次审查未执行",
+                "请按最新提交重新发起审查。"
+            );
+        }
         if (!"FAILED".equals(task.getStatus())) {
             return NO_FAILURE_SUMMARY;
         }

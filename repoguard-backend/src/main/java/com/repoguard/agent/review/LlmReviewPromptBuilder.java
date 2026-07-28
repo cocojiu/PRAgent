@@ -25,10 +25,18 @@ class LlmReviewPromptBuilder {
               ]
             }
             PR: %s/%s#%d
+            Commit SHA: %s
             标题：%s
             Diff:
             %s
-            """.formatted(diff.owner(), diff.repository(), diff.prNumber(), task.getTitle(), compactDiff(diff));
+            """.formatted(
+                diff.owner(),
+                diff.repository(),
+                diff.prNumber(),
+                diff.headSha(),
+                task.getTitle(),
+                compactDiff(diff)
+            );
     }
 
     String promptSummary(GithubPullRequestDiff diff) {
@@ -53,6 +61,7 @@ class LlmReviewPromptBuilder {
             files.append(", ...");
         }
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; commit=" + diff.headSha()
             + "; files=" + fileCount
             + "; additions=" + additions
             + "; deletions=" + deletions
@@ -75,6 +84,7 @@ class LlmReviewPromptBuilder {
             .reduce((first, second) -> first + "," + second)
             .orElse("standard");
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; commit=" + diff.headSha()
             + "; chunked=true"
             + "; chunks=" + chunks.size()
             + "; files=" + (diff.files() == null ? 0 : diff.files().size())

@@ -175,6 +175,30 @@ class ProductionRuntimeContextIntegrationTest {
                 )).isOne();
                 assertRetryStateWasCleared(jdbcTemplate, retryTaskId);
 
+                Long supersededTaskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9105,
+                    "SUPERSEDED",
+                    false,
+                    "NOT_REQUIRED"
+                );
+                populateRetryResidue(jdbcTemplate, supersededTaskId);
+                ReviewTask supersededFirst = reviewTaskMapper.selectById(supersededTaskId);
+                ReviewTask supersededSecond = reviewTaskMapper.selectById(supersededTaskId);
+                String latestCommit = "fedcba9876543210fedcba9876543210fedcba98";
+
+                assertThat(runConcurrently(
+                    () -> transitionStore.retryReviewTask(supersededFirst, 3, latestCommit),
+                    () -> transitionStore.retryReviewTask(supersededSecond, 3, latestCommit)
+                )).isOne();
+                assertRetryStateWasCleared(jdbcTemplate, supersededTaskId);
+                assertThat(jdbcTemplate.queryForObject(
+                    "select commit_sha from review_task where id = ?",
+                    String.class,
+                    supersededTaskId
+                )).isEqualTo(latestCommit);
+
                 Long humanTaskId = insertReviewTask(
                     jdbcTemplate,
                     organization,

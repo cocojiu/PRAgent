@@ -3,6 +3,7 @@ package com.repoguard.agent.worker;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.Duration;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -57,12 +58,14 @@ class GithubPullRequestDiffFetcher {
             return diff;
         } catch (RuntimeException ex) {
             Duration duration = Duration.between(startedAt, clock.now());
-            metricsRecorder.recordGithubDiffFetch(duration, "failed");
+            String result = ex instanceof GithubPullRequestHeadChangedException ? "superseded" : "failed";
+            metricsRecorder.recordGithubDiffFetch(duration, result);
             LOGGER.warn(
-                "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
+                "GitHub diff fetch ended taskId={} repository={} prNumber={} operation=github_diff_fetch result={} failureCategory={} exceptionType={} durationMs={}",
                 task.getId(),
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
+                result,
                 failureClassifier.failureCategory(ex),
                 ex.getClass().getName(),
                 duration.toMillis()

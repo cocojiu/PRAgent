@@ -22,6 +22,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     private final GithubIntegrationProvider githubIntegrationProvider;
     private final ExternalCallResilience resilience;
     private final GithubPullRequestReader pullRequestReader;
+    private final GithubPullRequestHeadReader headReader;
     private final GithubChangedFileReader changedFileReader;
     private final GithubCommentWriter commentWriter;
     private final GithubIntegrationHealthReporter healthReporter;
@@ -32,29 +33,52 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         GithubIntegrationProvider githubIntegrationProvider,
         ExternalCallResilience resilience,
         GithubPullRequestReader pullRequestReader,
+        GithubPullRequestHeadReader headReader,
         GithubChangedFileReader changedFileReader,
         GithubCommentWriter commentWriter,
         GithubIntegrationHealthReporter healthReporter,
         OutboundEndpointPolicy endpointPolicy
     ) {
-        this(githubIntegrationProvider, resilience, pullRequestReader, changedFileReader, commentWriter, healthReporter, endpointPolicy, true);
+        this(
+            githubIntegrationProvider,
+            resilience,
+            pullRequestReader,
+            headReader,
+            changedFileReader,
+            commentWriter,
+            healthReporter,
+            endpointPolicy,
+            true
+        );
     }
 
     public GithubPullRequestClientImpl(
         GithubIntegrationProvider githubIntegrationProvider,
         ExternalCallResilience resilience,
         GithubPullRequestReader pullRequestReader,
+        GithubPullRequestHeadReader headReader,
         GithubChangedFileReader changedFileReader,
         GithubCommentWriter commentWriter,
         GithubIntegrationHealthReporter healthReporter
     ) {
-        this(githubIntegrationProvider, resilience, pullRequestReader, changedFileReader, commentWriter, healthReporter, null, true);
+        this(
+            githubIntegrationProvider,
+            resilience,
+            pullRequestReader,
+            headReader,
+            changedFileReader,
+            commentWriter,
+            healthReporter,
+            null,
+            true
+        );
     }
 
     private GithubPullRequestClientImpl(
         GithubIntegrationProvider githubIntegrationProvider,
         ExternalCallResilience resilience,
         GithubPullRequestReader pullRequestReader,
+        GithubPullRequestHeadReader headReader,
         GithubChangedFileReader changedFileReader,
         GithubCommentWriter commentWriter,
         GithubIntegrationHealthReporter healthReporter,
@@ -64,6 +88,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
         this.githubIntegrationProvider = Objects.requireNonNull(githubIntegrationProvider, "githubIntegrationProvider");
         this.resilience = Objects.requireNonNull(resilience, "resilience");
         this.pullRequestReader = Objects.requireNonNull(pullRequestReader, "pullRequestReader");
+        this.headReader = Objects.requireNonNull(headReader, "headReader");
         this.changedFileReader = Objects.requireNonNull(changedFileReader, "changedFileReader");
         this.commentWriter = Objects.requireNonNull(commentWriter, "commentWriter");
         this.healthReporter = Objects.requireNonNull(healthReporter, "healthReporter");
@@ -102,17 +127,43 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
+    public String fetchPullRequestHeadSha(ReviewTask task) {
+        GithubIntegrationSettings settings = loadGithubSettings();
+        GithubRepositoryRef repositoryRef = repositoryForTask(task, settings);
+        String baseUrl = baseUrl(settings);
+        return healthReporter.recordReadOperation(
+            settings,
+            "fetch_pull_request_head",
+            () -> headReader.fetchHeadSha(
+                settings,
+                baseUrl,
+                repositoryRef.owner(),
+                repositoryRef.repository(),
+                task.getPrNumber(),
+                resilience
+            )
+        );
+    }
+
+    @Override
     public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         GithubIntegrationSettings settings = loadGithubSettings();
-        String owner = choose(task.getOrganization(), settings.defaultOwner());
-        String repository = choose(task.getRepository(), settings.defaultRepo());
-        if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
-            throw new IllegalStateException("GitHub owner or repository is not configured");
-        }
-
+        GithubRepositoryRef repositoryRef = repositoryForTask(task, settings);
+        String owner = repositoryRef.owner();
+        String repository = repositoryRef.repository();
         String baseUrl = baseUrl(settings);
+        String expectedHeadSha = requiredTaskCommitSha(task);
 
         return healthReporter.recordReadOperation(settings, "fetch_pull_request_diff", () -> {
+            String headBeforeFetch = headReader.fetchHeadSha(
+                settings,
+                baseUrl,
+                owner,
+                repository,
+                task.getPrNumber(),
+                resilience
+            );
+            ensureExpectedHead(expectedHeadSha, headBeforeFetch);
             List<GithubChangedFile> changedFiles = changedFileReader.fetchChangedFiles(
                 settings,
                 baseUrl,
@@ -121,8 +172,22 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 task.getPrNumber(),
                 resilience
             );
-
-            return new GithubPullRequestDiff(owner, repository, task.getPrNumber(), changedFiles);
+            String headAfterFetch = headReader.fetchHeadSha(
+                settings,
+                baseUrl,
+                owner,
+                repository,
+                task.getPrNumber(),
+                resilience
+            );
+            ensureExpectedHead(expectedHeadSha, headAfterFetch);
+            return new GithubPullRequestDiff(
+                owner,
+                repository,
+                task.getPrNumber(),
+                expectedHeadSha,
+                changedFiles
+            );
         });
     }
 
@@ -156,6 +221,29 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
             StringUtils.hasText(owner) ? owner.trim() : null,
             StringUtils.hasText(repository) ? repository.trim() : null
         );
+    }
+
+    private GithubRepositoryRef repositoryForTask(ReviewTask task, GithubIntegrationSettings settings) {
+        Objects.requireNonNull(task, "task");
+        String owner = choose(task.getOrganization(), settings.defaultOwner());
+        String repository = choose(task.getRepository(), settings.defaultRepo());
+        if (!StringUtils.hasText(owner) || !StringUtils.hasText(repository)) {
+            throw new IllegalStateException("GitHub owner or repository is not configured");
+        }
+        return new GithubRepositoryRef(owner, repository);
+    }
+
+    private String requiredTaskCommitSha(ReviewTask task) {
+        if (!StringUtils.hasText(task.getCommitSha())) {
+            throw new IllegalStateException("Review task commit SHA is unavailable");
+        }
+        return task.getCommitSha().trim();
+    }
+
+    private void ensureExpectedHead(String expectedHeadSha, String currentHeadSha) {
+        if (!expectedHeadSha.equalsIgnoreCase(currentHeadSha)) {
+            throw new GithubPullRequestHeadChangedException(expectedHeadSha, currentHeadSha);
+        }
     }
 
     private String baseUrl(GithubIntegrationSettings settings) {

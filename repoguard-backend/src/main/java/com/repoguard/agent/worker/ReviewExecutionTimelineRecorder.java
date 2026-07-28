@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
@@ -46,5 +47,19 @@ class ReviewExecutionTimelineRecorder {
 
     void reviewFailed(ReviewTask task, RuntimeException ex, LocalDateTime eventTime) {
         timelineAppender.append(task.getId(), labelFormatter.reviewFailed(ex), eventTime, ReviewTimelineStatus.FAILED, 5);
+    }
+
+    void reviewSuperseded(
+        ReviewTask task,
+        GithubPullRequestHeadChangedException ex,
+        LocalDateTime eventTime
+    ) {
+        timelineAppender.append(
+            task.getId(),
+            labelFormatter.reviewSuperseded(ex),
+            eventTime,
+            ReviewTimelineStatus.DONE,
+            5
+        );
     }
 }

@@ -20,11 +20,18 @@ export const reviewTaskSourceClass = (source?: string) => {
   return source ? classes[source] ?? "manual" : "manual";
 };
 
-export const canRetryReviewTask = (task: ReviewTask) => task.status === "failed";
+export const canRetryReviewTask = (task: ReviewTask) =>
+  task.status === "failed" || task.status === "superseded";
 
 export const reviewTaskRetryTooltip = (task: ReviewTask) => {
   if (!canRetryReviewTask(task)) {
-    return "仅失败任务支持重试";
+    return "仅失败或已过期任务支持重试";
+  }
+  if (task.status === "superseded") {
+    return task.failureSuggestion || "读取 PR 最新提交并重新审查";
   }
   return task.failureSuggestion || "重新入队执行审查";
 };
+
+export const reviewTaskRetryText = (task: ReviewTask) =>
+  task.status === "superseded" ? "按最新提交重评" : "重试";

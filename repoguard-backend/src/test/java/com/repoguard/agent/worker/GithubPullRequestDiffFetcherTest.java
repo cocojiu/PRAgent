@@ -9,6 +9,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -56,6 +57,18 @@ class GithubPullRequestDiffFetcherTest {
         assertThatThrownBy(() -> fetcher.fetch(task)).isSameAs(failure);
 
         verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(3), "failed");
+    }
+
+    @Test
+    void fetchRecordsSupersededMetricWhenHeadChanged() {
+        ReviewTask task = task();
+        GithubPullRequestHeadChangedException failure = new GithubPullRequestHeadChangedException("aaa", "bbb");
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenThrow(failure);
+        clock.setTimes("2026-07-04T22:42:00", "2026-07-04T22:42:02");
+
+        assertThatThrownBy(() -> fetcher.fetch(task)).isSameAs(failure);
+
+        verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(2), "superseded");
     }
 
     private ReviewTask task() {

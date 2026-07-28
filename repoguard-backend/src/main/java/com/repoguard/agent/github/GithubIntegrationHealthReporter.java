@@ -47,6 +47,10 @@ public class GithubIntegrationHealthReporter {
             recordGithubApiRequest(startedAt, operation, "success", null, null);
             markChecked(settings, null);
             return result;
+        } catch (GithubPullRequestHeadChangedException ex) {
+            recordGithubApiRequest(startedAt, operation, "superseded", null, null);
+            markChecked(settings, null);
+            throw ex;
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
             recordGithubApiRequest(startedAt, operation, "failed", classified);

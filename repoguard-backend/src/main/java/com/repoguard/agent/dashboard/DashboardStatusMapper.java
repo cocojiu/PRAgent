@@ -40,6 +40,7 @@ public class DashboardStatusMapper {
             case COMPLETED -> "已完成";
             case REVIEWING -> "审查中";
             case FAILED -> "失败";
+            case SUPERSEDED -> "已过期";
             case QUEUED -> "排队中";
             case PUBLISH_FAILED -> "发布失败";
             case EXECUTION_TIMEOUT -> "执行超时";

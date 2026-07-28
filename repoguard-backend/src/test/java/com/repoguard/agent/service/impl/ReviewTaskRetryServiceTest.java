@@ -1,7 +1,10 @@
 package com.repoguard.agent.service.impl;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -9,9 +12,12 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class ReviewTaskRetryServiceTest {
 
@@ -22,7 +28,8 @@ class ReviewTaskRetryServiceTest {
             org.mockito.Mockito.mock(ReviewTimelineAppender.class),
             null,
             org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class),
-            null
+            org.mockito.Mockito.mock(CacheEvictionService.class),
+            org.mockito.Mockito.mock(GithubPullRequestClient.class)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -35,7 +42,8 @@ class ReviewTaskRetryServiceTest {
             org.mockito.Mockito.mock(ReviewTimelineAppender.class),
             new ReviewTaskStateMachine(),
             org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class),
-            null
+            null,
+            org.mockito.Mockito.mock(GithubPullRequestClient.class)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
@@ -47,20 +55,23 @@ class ReviewTaskRetryServiceTest {
         ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
         ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+        GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
         ReviewTask task = new ReviewTask();
         task.setId(42L);
         task.setStatus("FAILED");
+        task.setCommitSha("aaaaaaaa");
         task.setMqRetries(1);
         when(transitionStore.findById(42L)).thenReturn(task);
         doThrow(new BusinessException(ErrorCode.CONFLICT, ReviewTaskTransitionStore.STATE_CHANGED_MESSAGE))
             .when(transitionStore)
-            .retryFailedTask(task, 2);
+            .retryReviewTask(task, 2, "aaaaaaaa");
         ReviewTaskRetryService service = new ReviewTaskRetryService(
             transitionStore,
             timelineAppender,
             new ReviewTaskStateMachine(),
             publisher,
-            cacheEvictionService
+            cacheEvictionService,
+            githubPullRequestClient
         );
 
         assertThatThrownBy(() -> service.retry(42L))
@@ -70,6 +81,56 @@ class ReviewTaskRetryServiceTest {
             ).isEqualTo(ErrorCode.CONFLICT))
             .hasMessage(ReviewTaskTransitionStore.STATE_CHANGED_MESSAGE);
 
-        verifyNoInteractions(timelineAppender, publisher, cacheEvictionService);
+        verifyNoInteractions(timelineAppender, publisher, cacheEvictionService, githubPullRequestClient);
+    }
+
+    @Test
+    void supersededRetryRefreshesHeadAndPublishesMessageForLatestCommit() {
+        ReviewTaskTransitionStore transitionStore = org.mockito.Mockito.mock(ReviewTaskTransitionStore.class);
+        ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
+        ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
+        CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+        GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setOrganization("octocat");
+        task.setRepository("api");
+        task.setPrNumber(7);
+        task.setStatus("SUPERSEDED");
+        task.setCommitSha("aaaaaaaa");
+        task.setMqRetries(1);
+        when(transitionStore.findById(42L)).thenReturn(task);
+        when(githubPullRequestClient.fetchPullRequestHeadSha(task)).thenReturn("bbbbbbbb");
+        doAnswer(invocation -> {
+            task.setStatus("QUEUED");
+            task.setCommitSha("bbbbbbbb");
+            return null;
+        }).when(transitionStore).retryReviewTask(task, 2, "bbbbbbbb");
+        when(publisher.publishAfterCommit(
+            org.mockito.ArgumentMatchers.eq(task),
+            org.mockito.ArgumentMatchers.any(ReviewTaskMessage.class),
+            org.mockito.ArgumentMatchers.any()
+        )).thenReturn(true);
+        ReviewTaskRetryService service = new ReviewTaskRetryService(
+            transitionStore,
+            timelineAppender,
+            new ReviewTaskStateMachine(),
+            publisher,
+            cacheEvictionService,
+            githubPullRequestClient
+        );
+
+        var response = service.retry(42L);
+
+        assertThat(response.status()).isEqualTo("queued");
+        verify(githubPullRequestClient).fetchPullRequestHeadSha(task);
+        verify(transitionStore).retryReviewTask(task, 2, "bbbbbbbb");
+        ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
+        verify(publisher).publishAfterCommit(
+            org.mockito.ArgumentMatchers.eq(task),
+            messageCaptor.capture(),
+            org.mockito.ArgumentMatchers.any()
+        );
+        assertThat(messageCaptor.getValue().commit()).isEqualTo("bbbbbbbb");
     }
 }

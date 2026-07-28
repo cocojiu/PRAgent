@@ -27,6 +27,7 @@ class PullRequestDiffChunkFactoryTest {
         assertThat(chunk.additions()).isEqualTo(120);
         assertThat(chunk.deletions()).isEqualTo(15);
         assertThat(chunk.diff().files()).containsExactly(migration, security);
+        assertThat(chunk.diff().headSha()).isEqualTo("reviewed-commit");
         assertThat(chunk.reasons()).contains("multi_file", "database_migration", "security_sensitive");
     }
 
@@ -54,11 +55,12 @@ class PullRequestDiffChunkFactoryTest {
         assertThat(chunk.additions()).isEqualTo(120);
         assertThat(chunk.deletions()).isEqualTo(12);
         assertThat(chunk.diff().files()).containsExactly(service, service, controller);
+        assertThat(chunk.diff().headSha()).isEqualTo("reviewed-commit");
         assertThat(chunk.reasons()).contains("semantic_scope", "multi_file", "code_scope");
     }
 
     private GithubPullRequestDiff diff(List<GithubChangedFile> files) {
-        return new GithubPullRequestDiff("octocat", "repo", 17, files);
+        return new GithubPullRequestDiff("octocat", "repo", 17, "reviewed-commit", files);
     }
 
     private GithubChangedFile file(String path, Integer additions, Integer deletions) {

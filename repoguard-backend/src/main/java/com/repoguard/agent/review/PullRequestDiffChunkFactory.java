@@ -57,7 +57,13 @@ class PullRequestDiffChunkFactory {
     }
 
     private GithubPullRequestDiff subDiff(GithubPullRequestDiff source, List<GithubChangedFile> files) {
-        return new GithubPullRequestDiff(source.owner(), source.repository(), source.prNumber(), files);
+        return new GithubPullRequestDiff(
+            source.owner(),
+            source.repository(),
+            source.prNumber(),
+            source.headSha(),
+            files
+        );
     }
 
     private int additions(List<GithubChangedFile> files) {
