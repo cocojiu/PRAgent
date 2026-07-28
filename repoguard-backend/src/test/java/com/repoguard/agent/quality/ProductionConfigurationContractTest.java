@@ -388,6 +388,57 @@ class ProductionConfigurationContractTest {
         assertThat(notificationCoordinator).contains("eventPublisher.publishOnce(");
     }
 
+    @Test
+    void applicationContainersAreHealthCheckedAndLeastPrivilege() throws IOException {
+        Path root = findRepositoryRoot();
+        Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
+        Map<String, Object> ipDeployment = yaml(root.resolve("docker-compose.ip.yml"));
+
+        for (String serviceName : List.of("backend", "backend-worker", "frontend", "caddy")) {
+            assertLeastPrivilegeApplicationContainer(production, serviceName);
+            assertThat(map(service(production, serviceName).get("healthcheck")))
+                .as("production healthcheck for %s", serviceName)
+                .containsKey("test");
+        }
+        for (String serviceName : List.of("backend", "frontend")) {
+            assertLeastPrivilegeApplicationContainer(ipDeployment, serviceName);
+            assertThat(map(service(ipDeployment, serviceName).get("healthcheck")))
+                .as("IP deployment healthcheck for %s", serviceName)
+                .containsKey("test");
+        }
+
+        Map<String, Object> frontendDependency = map(map(service(production, "caddy").get("depends_on"))
+            .get("frontend"));
+        assertThat(frontendDependency).containsEntry("condition", "service_healthy");
+        assertThat(stringList(map(service(production, "frontend").get("healthcheck")).get("test")).toString())
+            .contains("/healthz");
+        assertThat(stringList(map(service(production, "caddy").get("healthcheck")).get("test")).toString())
+            .contains("/healthz");
+        assertThat(read(root.resolve("repoguard-frontend/nginx.ip.conf")))
+            .contains("location = /healthz")
+            .contains("return 200 \"ok\\n\"");
+        assertThat(read(root.resolve("Caddyfile")))
+            .contains("path /healthz")
+            .contains("respond \"ok\" 200");
+    }
+
+    private void assertLeastPrivilegeApplicationContainer(
+        Map<String, Object> compose,
+        String serviceName
+    ) {
+        Map<String, Object> application = service(compose, serviceName);
+        assertThat(application)
+            .as("least-privilege configuration for %s", serviceName)
+            .containsEntry("read_only", true);
+        assertThat(stringList(application.get("cap_drop"))).containsExactly("ALL");
+        assertThat(stringList(application.get("security_opt"))).contains("no-new-privileges:true");
+        assertThat(stringList(application.get("tmpfs"))).isNotEmpty();
+
+        Map<String, Object> logging = map(application.get("logging"));
+        assertThat(logging).containsEntry("driver", "json-file");
+        assertThat(map(logging.get("options"))).containsKeys("max-size", "max-file");
+    }
+
     private Set<String> repoguardKeys(Map<String, Object> environment) {
         Set<String> keys = new LinkedHashSet<>();
         environment.keySet().stream()

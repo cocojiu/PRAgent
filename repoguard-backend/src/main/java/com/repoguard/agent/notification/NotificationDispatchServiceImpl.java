@@ -1,5 +1,6 @@
 package com.repoguard.agent.notification;
 
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;

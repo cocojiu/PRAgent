@@ -8,10 +8,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicyProvider;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardHighRiskReviewAssembler;
 import com.repoguard.agent.dashboard.DashboardLlmQualityFormatter;
@@ -29,7 +29,6 @@ import com.repoguard.agent.dashboard.DashboardRuleDisplayMapper;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.dashboard.DashboardStatusMapper;
 import com.repoguard.agent.dashboard.DashboardSystemHealthProbe;
-import com.repoguard.agent.dto.DashboardHighRiskReview;
 import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
 import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
 import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
@@ -39,6 +38,7 @@ import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.dto.DashboardRuleHitCount;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.mapper.DashboardMapper;
+import com.repoguard.agent.mapper.projection.DashboardProjections.HighRiskReview;
 import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -515,7 +515,7 @@ class DashboardServiceImplTest {
         return stat;
     }
 
-    private DashboardHighRiskReview highRiskReview(
+    private HighRiskReview highRiskReview(
         String title,
         String repository,
         String riskLevel,
@@ -523,14 +523,7 @@ class DashboardServiceImplTest {
         String status,
         LocalDateTime createdAt
     ) {
-        DashboardHighRiskReview review = new DashboardHighRiskReview();
-        review.setTitle(title);
-        review.setRepository(repository);
-        review.setRiskLevel(riskLevel);
-        review.setRuleHits(ruleHits);
-        review.setStatus(status);
-        review.setCreatedAt(createdAt);
-        return review;
+        return new HighRiskReview(title, repository, riskLevel, ruleHits, createdAt, status);
     }
 
     private DashboardLlmQualityTrendCount llmQualityTrendCount(

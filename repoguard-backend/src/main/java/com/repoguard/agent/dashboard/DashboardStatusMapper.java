@@ -1,7 +1,7 @@
 package com.repoguard.agent.dashboard;
 
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.review.ReviewTaskStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;

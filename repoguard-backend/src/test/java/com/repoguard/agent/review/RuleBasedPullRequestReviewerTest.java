@@ -3,8 +3,8 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.config.ReviewRuleProvider;
-import com.repoguard.agent.config.ReviewRuleSettings;
+import com.repoguard.agent.review.ReviewRuleProvider;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import com.repoguard.agent.github.GithubChangedFile;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;

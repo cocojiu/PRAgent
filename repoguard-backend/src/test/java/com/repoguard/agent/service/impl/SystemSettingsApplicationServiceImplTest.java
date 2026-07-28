@@ -5,7 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;

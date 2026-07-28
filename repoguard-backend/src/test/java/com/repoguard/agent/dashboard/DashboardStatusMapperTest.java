@@ -2,8 +2,8 @@ package com.repoguard.agent.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 

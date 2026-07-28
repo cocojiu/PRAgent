@@ -2,7 +2,7 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.config.ReviewRuleSettings;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 

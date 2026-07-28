@@ -1,10 +1,10 @@
 package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicyProvider;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.dto.NotificationCenterDto;
 import com.repoguard.agent.dto.NotificationItemDto;
 import com.repoguard.agent.entity.ReviewTask;

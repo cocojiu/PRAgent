@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;

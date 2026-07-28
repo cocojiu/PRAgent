@@ -1,6 +1,6 @@
 package com.repoguard.agent.github;
 
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;

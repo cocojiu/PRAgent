@@ -43,37 +43,43 @@ public class DashboardDailySnapshotService {
 
     public DashboardMetricStat selectMetricStat(LocalDate startDate) {
         ensureReviewSnapshot(startDate);
-        return snapshotMapper.selectMetricStat(startDate);
+        return DashboardMapperProjectionAssembler.toDto(snapshotMapper.selectMetricStat(startDate));
     }
 
     public List<DashboardReviewTrendCount> selectReviewTrendCounts(LocalDate startDate) {
         ensureReviewSnapshot(startDate);
-        return snapshotMapper.selectReviewTrendCounts(startDate);
+        return DashboardMapperProjectionAssembler.toReviewTrendDtos(snapshotMapper.selectReviewTrendCounts(startDate));
     }
 
     public List<DashboardRiskLevelCount> selectRiskLevelCounts(LocalDate startDate) {
         ensureReviewSnapshot(startDate);
-        return snapshotMapper.selectRiskLevelCounts(startDate);
+        return DashboardMapperProjectionAssembler.toRiskLevelDtos(snapshotMapper.selectRiskLevelCounts(startDate));
     }
 
     public List<DashboardRuleHitCount> selectRuleHitCounts(LocalDate startDate) {
         ensureReviewSnapshot(startDate);
-        return snapshotMapper.selectRuleHitCounts(startDate);
+        return DashboardMapperProjectionAssembler.toRuleHitDtos(snapshotMapper.selectRuleHitCounts(startDate));
     }
 
     public List<DashboardLlmQualityTrendCount> selectLlmQualityTrendCounts(LocalDate startDate) {
         ensureLlmQualitySnapshot(startDate);
-        return snapshotMapper.selectLlmQualityTrendCounts(startDate);
+        return DashboardMapperProjectionAssembler.toLlmQualityTrendDtos(
+            snapshotMapper.selectLlmQualityTrendCounts(startDate)
+        );
     }
 
     public List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats(LocalDate startDate) {
         ensureLlmQualitySnapshot(startDate);
-        return snapshotMapper.selectLlmQualityByModelStats(startDate);
+        return DashboardMapperProjectionAssembler.toLlmQualityModelDtos(
+            snapshotMapper.selectLlmQualityByModelStats(startDate)
+        );
     }
 
     public List<DashboardLlmQualityRepositoryStat> selectLlmQualityByRepositoryStats(LocalDate startDate) {
         ensureLlmQualitySnapshot(startDate);
-        return snapshotMapper.selectLlmQualityByRepositoryStats(startDate);
+        return DashboardMapperProjectionAssembler.toLlmQualityRepositoryDtos(
+            snapshotMapper.selectLlmQualityByRepositoryStats(startDate)
+        );
     }
 
     @Transactional

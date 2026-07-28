@@ -1,6 +1,6 @@
 package com.repoguard.agent.worker;
 
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 

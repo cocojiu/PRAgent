@@ -1,8 +1,8 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.review.ReviewPolicyProvider;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;

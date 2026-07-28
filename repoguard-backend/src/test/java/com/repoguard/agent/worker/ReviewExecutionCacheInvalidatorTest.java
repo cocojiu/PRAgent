@@ -3,7 +3,7 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import org.junit.jupiter.api.Test;
 
 class ReviewExecutionCacheInvalidatorTest {

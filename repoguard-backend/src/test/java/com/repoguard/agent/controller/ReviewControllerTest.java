@@ -50,6 +50,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 
 class ReviewControllerTest {
 
@@ -463,9 +464,17 @@ class ReviewControllerTest {
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new ReviewController(reviewService))
+        .standaloneSetup(validated(new ReviewController(reviewService)))
         .setControllerAdvice(new GlobalExceptionHandler())
         .build();
+
+    @SuppressWarnings("unchecked")
+    private <T> T validated(T controller) {
+        MethodValidationPostProcessor processor = new MethodValidationPostProcessor();
+        processor.setProxyTargetClass(true);
+        processor.afterPropertiesSet();
+        return (T) processor.postProcessAfterInitialization(controller, controller.getClass().getName());
+    }
 
     @Test
     void listReviewsReturnsPagedItems() throws Exception {

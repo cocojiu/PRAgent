@@ -2,6 +2,8 @@ package com.repoguard.agent.messaging;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskPublisher;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;

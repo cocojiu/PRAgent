@@ -5,6 +5,8 @@ import com.repoguard.agent.concurrency.RecoveryWorkDispatcher;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskPublisher;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
 import java.util.List;

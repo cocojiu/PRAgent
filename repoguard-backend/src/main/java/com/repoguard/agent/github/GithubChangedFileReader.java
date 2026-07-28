@@ -1,7 +1,7 @@
 package com.repoguard.agent.github;
 
 import com.repoguard.agent.config.GithubDiffBudgetProperties;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

@@ -1,7 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.service.NotificationDispatchService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Objects;

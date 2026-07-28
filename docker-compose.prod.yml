@@ -69,6 +69,13 @@ services:
     image: ${BACKEND_IMAGE}
     container_name: repoguard-backend
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     depends_on:
       mysql:
         condition: service_healthy
@@ -177,6 +184,13 @@ services:
     image: ${BACKEND_IMAGE}
     container_name: repoguard-backend-worker
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     depends_on:
       mysql:
         condition: service_healthy
@@ -292,6 +306,15 @@ services:
     image: ${FRONTEND_IMAGE}
     container_name: repoguard-frontend
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /etc/nginx/conf.d:rw,noexec,nosuid,size=4m
     depends_on:
       backend:
         condition: service_healthy
@@ -299,6 +322,11 @@ services:
       REPOGUARD_FRONTEND_SERVER_NAME: "${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}"
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     mem_limit: ${FRONTEND_MEM_LIMIT:-128m}
     logging:
       driver: json-file
@@ -310,9 +338,18 @@ services:
     image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
     container_name: repoguard-caddy
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
     environment:
       REPOGUARD_FRONTEND_SERVER_NAME: "${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}"
     ports:
@@ -327,6 +364,11 @@ services:
           create_host_path: false
       - repoguard_caddy_data:/data
       - repoguard_caddy_config:/config
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     mem_limit: ${CADDY_MEM_LIMIT:-128m}
     logging:
       driver: json-file

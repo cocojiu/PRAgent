@@ -1,7 +1,7 @@
 package com.repoguard.agent.github;
 
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.observability.RepoGuardMetrics;

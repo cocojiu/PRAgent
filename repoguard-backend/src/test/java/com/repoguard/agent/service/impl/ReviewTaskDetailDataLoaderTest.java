@@ -6,12 +6,12 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -38,7 +38,7 @@ class ReviewTaskDetailDataLoaderTest {
             page(List.of(missingTest()))
         );
         when(reviewFindingMapper.selectFindingSeverityCounts(521L))
-            .thenReturn(new FindingSeverityCountsDto(0L, 3L, 2L, 1L, 0L));
+            .thenReturn(new SeverityCounts(0L, 3L, 2L, 1L, 0L));
         when(timelineQueryService.loadLatestItemsByTaskId(521L, 20)).thenReturn(List.of(
             new ReviewTimelineItem("Review completed", "10:21:00", "done"),
             new ReviewTimelineItem("Review running", "10:20:00", "current")
@@ -85,7 +85,7 @@ class ReviewTaskDetailDataLoaderTest {
         when(changedFileMapper.selectCount(any())).thenReturn(12L);
         when(reviewFindingMapper.selectCount(any())).thenReturn(30L, 4L);
         when(reviewFindingMapper.selectFindingSeverityCounts(521L))
-            .thenReturn(new FindingSeverityCountsDto(1L, 2L, 3L, 24L, 0L));
+            .thenReturn(new SeverityCounts(1L, 2L, 3L, 24L, 0L));
 
         var result = loader.loadSummary(521L);
 

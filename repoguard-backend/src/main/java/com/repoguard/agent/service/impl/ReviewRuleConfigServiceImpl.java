@@ -3,7 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
@@ -13,6 +13,7 @@ import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
+import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -153,11 +154,15 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     private Map<String, Long> loadRuleHitCounts() {
-        return buildRuleHitCounts(reviewFindingMapper.selectReviewRuleHitCounts());
+        return buildRuleHitCounts(
+            ReviewFindingProjectionAssembler.toRuleHitDtos(reviewFindingMapper.selectReviewRuleHitCounts())
+        );
     }
 
     private ReviewRuleFeedbackStat loadRuleFeedbackStat() {
-        ReviewRuleFeedbackStat feedbackStat = reviewFindingMapper.selectReviewRuleFeedbackStat();
+        ReviewRuleFeedbackStat feedbackStat = ReviewFindingProjectionAssembler.toDto(
+            reviewFindingMapper.selectReviewRuleFeedbackStat()
+        );
         return feedbackStat == null ? new ReviewRuleFeedbackStat() : feedbackStat;
     }
 

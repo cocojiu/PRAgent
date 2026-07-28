@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.rabbitmq.client.Channel;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 

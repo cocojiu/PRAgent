@@ -1,8 +1,8 @@
 package com.repoguard.agent.github;
 
 import com.repoguard.agent.config.CacheNames;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.OutboundEndpointPolicy;

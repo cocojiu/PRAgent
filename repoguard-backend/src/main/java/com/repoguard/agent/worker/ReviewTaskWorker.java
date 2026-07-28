@@ -2,7 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import java.io.IOException;
 import java.util.Objects;

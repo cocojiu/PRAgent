@@ -7,13 +7,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
-import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
-import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -174,19 +174,16 @@ class ReviewRuleConfigServiceImplTest {
         return rule;
     }
 
-    private ReviewRuleHitCount ruleHitCount(String ruleId, Long total) {
-        ReviewRuleHitCount count = new ReviewRuleHitCount();
-        count.setRuleId(ruleId);
-        count.setTotal(total);
-        return count;
+    private RuleHitCount ruleHitCount(String ruleId, Long total) {
+        return new RuleHitCount(ruleId, total);
     }
 
-    private ReviewRuleFeedbackStat ruleFeedbackStat(Long totalHits, Long validCount, Long falsePositiveCount, Long reviewedCount) {
-        ReviewRuleFeedbackStat stat = new ReviewRuleFeedbackStat();
-        stat.setTotalHits(totalHits);
-        stat.setValidCount(validCount);
-        stat.setFalsePositiveCount(falsePositiveCount);
-        stat.setReviewedCount(reviewedCount);
-        return stat;
+    private RuleFeedbackStat ruleFeedbackStat(
+        Long totalHits,
+        Long validCount,
+        Long falsePositiveCount,
+        Long reviewedCount
+    ) {
+        return new RuleFeedbackStat(totalHits, validCount, falsePositiveCount, reviewedCount);
     }
 }

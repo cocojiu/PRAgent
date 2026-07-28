@@ -3,7 +3,7 @@ package com.repoguard.agent.worker;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.Duration;

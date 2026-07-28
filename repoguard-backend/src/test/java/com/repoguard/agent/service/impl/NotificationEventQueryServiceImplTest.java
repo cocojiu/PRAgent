@@ -14,7 +14,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.notification.NotificationDeliveryStatus;
-import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.notification.NotificationEventStatus;
 import com.repoguard.agent.notification.NotificationEventType;
 import java.time.LocalDateTime;

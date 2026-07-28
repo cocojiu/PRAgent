@@ -34,6 +34,7 @@ class ApplicationArchitectureTest {
 
     private static final String BASE_PACKAGE = "com.repoguard.agent";
     private static final String AUTHENTICATION_PACKAGE = BASE_PACKAGE + ".authentication";
+    private static final String CONFIG_PACKAGE = BASE_PACKAGE + ".config";
     private static final String CONTROLLER_PACKAGE = BASE_PACKAGE + ".controller";
     private static final String DTO_PACKAGE = BASE_PACKAGE + ".dto";
     private static final String ENTITY_PACKAGE = BASE_PACKAGE + ".entity";
@@ -41,6 +42,7 @@ class ApplicationArchitectureTest {
     private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
     private static final String SECURITY_PACKAGE = BASE_PACKAGE + ".security";
+    private static final String SERVICE_IMPL_PACKAGE = BASE_PACKAGE + ".service.impl";
     private static final String USER_PACKAGE = BASE_PACKAGE + ".user";
     private static final String USER_INTERNAL_PACKAGE = USER_PACKAGE + ".internal";
     private static final String WEB_PACKAGE = BASE_PACKAGE + ".web";
@@ -49,18 +51,21 @@ class ApplicationArchitectureTest {
         Pattern.compile("\\bReviewTaskMapper\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\b");
     private static final Set<String> REVIEW_TASK_UPDATE_STORES = Set.of(
         "com/repoguard/agent/messaging/ReviewTaskPublishOutboxStore.java",
-        "com/repoguard/agent/service/impl/ReviewTaskTransitionStore.java",
+        "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 36;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
+        "cache",
         "config",
         "controller",
         "dto",
         "entity",
         "mapper",
-        "service"
+        "service",
+        "settings"
     );
 
     // Existing cyclic edges are reviewed architecture debt. Removing an entry is safe; adding one is not.
@@ -108,6 +113,75 @@ class ApplicationArchitectureTest {
         assertThat(controllers).as("controller source discovery").isNotEmpty();
         assertThat(violations)
             .as("Controllers must call application services instead of persistence types")
+            .isEmpty();
+    }
+
+    @Test
+    void mappersReturnPersistenceOwnedTypesInsteadOfApiDtos() {
+        List<String> mapperSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), MAPPER_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), MAPPER_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, DTO_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(mapperSources).as("mapper source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Persistence mappers must expose mapper projections or entities, never API DTOs")
+            .isEmpty();
+    }
+
+    @Test
+    void serviceImplementationPackageCanOnlyShrink() {
+        List<String> implementationSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), SERVICE_IMPL_PACKAGE))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(implementationSources).as("service implementation source discovery").isNotEmpty();
+        assertThat(implementationSources.size())
+            .as("The service.impl migration baseline may only move down")
+            .isLessThanOrEqualTo(SERVICE_IMPL_SOURCE_BASELINE);
+    }
+
+    @Test
+    void configPackageContainsOnlyConfigurationInfrastructure() {
+        List<String> configSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), CONFIG_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), CONFIG_PACKAGE))
+            .filter(source -> source.sourceText().contains("@Service")
+                || source.sourceText().contains("@Repository")
+                || source.path().matches(".*(?:Provider|Settings|Service|Mapper|Assembler)\\.java$"))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(configSources).as("configuration source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Business providers, settings and services must live in their owning domain")
+            .isEmpty();
+    }
+
+    @Test
+    void sqlVerificationPlansStayOutOfProductionBeans() {
+        List<String> violations = SOURCES.stream()
+            .map(SourceUnit::path)
+            .filter(path -> path.endsWith("SqlVerificationPlan.java"))
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("SQL verification plans are test infrastructure and must not ship in production")
             .isEmpty();
     }
 

@@ -15,9 +15,9 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -28,6 +28,23 @@ import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.github.GithubWritebackFailureClassifier;
+import com.repoguard.agent.github.comment.GithubCommentApplicationServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentDraftPublisher;
+import com.repoguard.agent.github.comment.GithubCommentHistoryQueryServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentPreviewDataLoader;
+import com.repoguard.agent.github.comment.GithubCommentPreviewItemBuilder;
+import com.repoguard.agent.github.comment.GithubCommentPreviewPublicationLoader;
+import com.repoguard.agent.github.comment.GithubCommentPreviewResponseAssembler;
+import com.repoguard.agent.github.comment.GithubCommentPreviewServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentPublicationHistoryAssembler;
+import com.repoguard.agent.github.comment.GithubCommentPublicationRecorder;
+import com.repoguard.agent.github.comment.GithubCommentPublishCandidateLoader;
+import com.repoguard.agent.github.comment.GithubCommentPublishExecutor;
+import com.repoguard.agent.github.comment.GithubCommentPublishGuard;
+import com.repoguard.agent.github.comment.GithubCommentPublishMetricsRecorder;
+import com.repoguard.agent.github.comment.GithubCommentPublishPlanBuilder;
+import com.repoguard.agent.github.comment.GithubCommentPublishServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentWritebackCheckBuilder;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -36,23 +53,30 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.dto.FindingSeverityCountsDto;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
-import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.messaging.MessagePublishException;
-import com.repoguard.agent.messaging.ReviewTaskPublisher;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskPublisher;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.task.HumanReviewCommandService;
+import com.repoguard.agent.review.task.ReviewFailureSummaryResolver;
+import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisher;
+import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
+import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
+import com.repoguard.agent.review.task.ReviewTaskRetryService;
+import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubCommentHistoryQueryService;
@@ -68,7 +92,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -163,7 +186,7 @@ class ReviewServiceImplTest {
         );
     private final GithubCommentPublishMetricsRecorder githubCommentPublishMetricsRecorder =
         new GithubCommentPublishMetricsRecorder(metrics);
-    private final Executor githubCommentPublishExecutor = Runnable::run;
+    private final GithubCommentPublishExecutor githubCommentPublishExecutor = directGithubCommentPublishExecutor();
     private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
         githubIntegrationProvider,
@@ -282,8 +305,28 @@ class ReviewServiceImplTest {
                 timelineAppender(),
                 reviewTaskStateMachine
             ),
-            Runnable::run
+            directReviewTaskPublishExecutor()
         );
+    }
+
+    private GithubCommentPublishExecutor directGithubCommentPublishExecutor() {
+        GithubCommentPublishExecutor executor = org.mockito.Mockito.mock(GithubCommentPublishExecutor.class);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(executor).execute(any(Runnable.class));
+        return executor;
+    }
+
+    private ReviewTaskAfterCommitPublisherExecutor directReviewTaskPublishExecutor() {
+        ReviewTaskAfterCommitPublisherExecutor executor = org.mockito.Mockito.mock(
+            ReviewTaskAfterCommitPublisherExecutor.class
+        );
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(executor).execute(any(Runnable.class));
+        return executor;
     }
 
     private ReviewTimelineAppender timelineAppender() {
@@ -1332,20 +1375,16 @@ class ReviewServiceImplTest {
         long commentableFindings,
         long publishedFindings
     ) {
-        GithubCommentPreviewFindingStat stat = new GithubCommentPreviewFindingStat();
-        stat.setTotalFindings(totalFindings);
-        stat.setCommentableFindings(commentableFindings);
-        stat.setPublishedFindings(publishedFindings);
-        return stat;
+        return new GithubCommentPreviewFindingStat(totalFindings, commentableFindings, publishedFindings);
     }
 
-    private FindingSeverityCountsDto severityCounts(List<ReviewFinding> findings) {
+    private SeverityCounts severityCounts(List<ReviewFinding> findings) {
         long critical = findings.stream().filter(finding -> "CRITICAL".equalsIgnoreCase(finding.getSeverity())).count();
         long high = findings.stream().filter(finding -> "HIGH".equalsIgnoreCase(finding.getSeverity())).count();
         long medium = findings.stream().filter(finding -> "MEDIUM".equalsIgnoreCase(finding.getSeverity())).count();
         long low = findings.stream().filter(finding -> "LOW".equalsIgnoreCase(finding.getSeverity())).count();
         long known = critical + high + medium + low;
-        return new FindingSeverityCountsDto(critical, high, medium, low, findings.size() - known);
+        return new SeverityCounts(critical, high, medium, low, findings.size() - known);
     }
 
     private <T> Page<T> page(List<T> records) {

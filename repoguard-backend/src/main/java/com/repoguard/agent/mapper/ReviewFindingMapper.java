@@ -1,11 +1,11 @@
 package com.repoguard.agent.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.repoguard.agent.dto.FindingSeverityCountsDto;
-import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
-import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
-import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.entity.ReviewFinding;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -20,7 +20,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
           and trim(rule_id) <> ''
         group by rule_id
         """)
-    List<ReviewRuleHitCount> selectReviewRuleHitCounts();
+    List<RuleHitCount> selectReviewRuleHitCounts();
 
     @Select("""
         select
@@ -37,7 +37,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         from review_finding
         where category = 'FINDING'
         """)
-    ReviewRuleFeedbackStat selectReviewRuleFeedbackStat();
+    RuleFeedbackStat selectReviewRuleFeedbackStat();
 
     @Select("""
         select
@@ -60,7 +60,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         where task_id = #{taskId}
           and category = 'FINDING'
         """)
-    FindingSeverityCountsDto selectFindingSeverityCounts(Long taskId);
+    SeverityCounts selectFindingSeverityCounts(Long taskId);
 
     @Select("""
         select

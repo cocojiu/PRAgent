@@ -20,14 +20,23 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 
 class NotificationIntegrationControllerTest {
 
     private final RecordingNotificationIntegrationService service = new RecordingNotificationIntegrationService();
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new NotificationIntegrationController(service))
+        .standaloneSetup(validated(new NotificationIntegrationController(service)))
         .setControllerAdvice(new GlobalExceptionHandler())
         .build();
+
+    @SuppressWarnings("unchecked")
+    private <T> T validated(T controller) {
+        MethodValidationPostProcessor processor = new MethodValidationPostProcessor();
+        processor.setProxyTargetClass(true);
+        processor.afterPropertiesSet();
+        return (T) processor.postProcessAfterInitialization(controller, controller.getClass().getName());
+    }
 
     @Test
     void listBindingsKeepsNotificationBindingContract() throws Exception {

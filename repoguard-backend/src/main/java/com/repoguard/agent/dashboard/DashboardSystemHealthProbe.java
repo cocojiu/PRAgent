@@ -1,7 +1,7 @@
 package com.repoguard.agent.dashboard;
 
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.ReviewPolicyProvider;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.review.ReviewPolicyProvider;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.util.List;

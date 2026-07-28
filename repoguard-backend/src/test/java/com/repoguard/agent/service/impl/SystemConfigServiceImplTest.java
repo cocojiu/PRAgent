@@ -10,14 +10,12 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsRequest;
-import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
-import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.dto.SecuritySettingsRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsRequest;
@@ -27,12 +25,16 @@ import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.entity.SystemSettingsConfig;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.integration.connection.ConnectionTestServiceImpl;
+import com.repoguard.agent.integration.connection.ConnectionTestServiceTestFactory;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import com.repoguard.agent.mapper.SystemSettingsConfigMapper;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
 import com.repoguard.agent.review.LlmChatCompletionResponseExtractor;
 import com.repoguard.agent.review.LlmConnectionProbeResponseParser;
 import com.repoguard.agent.review.LlmReviewFindingMapper;
@@ -51,7 +53,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.web.client.RestClient;
 
 class SystemConfigServiceImplTest {
 
@@ -65,59 +66,12 @@ class SystemConfigServiceImplTest {
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
-    private final GithubConnectionProbe githubConnectionProbe =
-        new GithubConnectionProbe(RestClient.builder(), secretCryptoService, responseReader);
-    private final LlmConnectionProbe llmConnectionProbe =
-        new LlmConnectionProbe(RestClient.builder(), responseParser(), secretCryptoService, responseReader);
-    private final MysqlConnectionProbe mysqlConnectionProbe = new MysqlConnectionProbe(null, secretCryptoService);
-    private final RabbitMqProbeConnectionFactory rabbitMqConnectionFactory =
-        new RabbitMqProbeConnectionFactory(secretCryptoService);
-    private final RabbitMqConnectionProbe rabbitMqConnectionProbe =
-        new RabbitMqConnectionProbe(null, rabbitMqConnectionFactory);
-    private final GithubIntegrationConnectionTestRunner githubConnectionTestRunner =
-        new GithubIntegrationConnectionTestRunner(githubConnectionProbe);
-    private final LlmReviewPolicyConnectionTestRunner llmConnectionTestRunner =
-        new LlmReviewPolicyConnectionTestRunner(llmConnectionProbe);
-    private final ServiceIntegrationConnectionTestRunner mysqlConnectionTestRunner =
-        new ServiceIntegrationConnectionTestRunner(
-            "MySQL connection test succeeded",
-            "MySQL runtime connection test succeeded",
-            mysqlConnectionProbe::runtimeProbe,
-            mysqlConnectionProbe
-        );
-    private final ServiceIntegrationConnectionTestRunner rabbitMqConnectionTestRunner =
-        new ServiceIntegrationConnectionTestRunner(
-            "RabbitMQ connection test succeeded",
-            "RabbitMQ runtime connection test succeeded",
-            rabbitMqConnectionProbe::runtimeProbe,
-            rabbitMqConnectionProbe
-        );
-    private final ConnectionTestConfigFactory connectionTestConfigFactory =
-        new ConnectionTestConfigFactory(secretCryptoService);
-    private final IntegrationConnectionCheckMarker connectionCheckMarker =
-        new IntegrationConnectionCheckMarker(integrationConfigMapper);
-    private final GithubIntegrationConnectionTestExecutor githubIntegrationConnectionTestExecutor =
-        new GithubIntegrationConnectionTestExecutor(
-            integrationConfigMapper,
-            connectionTestConfigFactory,
-            connectionCheckMarker
-        );
-    private final ServiceIntegrationConnectionTestExecutor serviceIntegrationConnectionTestExecutor =
-        new ServiceIntegrationConnectionTestExecutor(
-            integrationConfigMapper,
-            connectionTestConfigFactory,
-            connectionCheckMarker
-    );
-    private final ReviewPolicyConnectionTestExecutor reviewPolicyConnectionTestExecutor =
-        new ReviewPolicyConnectionTestExecutor(reviewPolicyConfigMapper, connectionTestConfigFactory);
-    private final ConnectionTestServiceImpl connectionTestService = new ConnectionTestServiceImpl(
-        githubConnectionTestRunner,
-        githubIntegrationConnectionTestExecutor,
-        llmConnectionTestRunner,
-        reviewPolicyConnectionTestExecutor,
-        mysqlConnectionTestRunner,
-        rabbitMqConnectionTestRunner,
-        serviceIntegrationConnectionTestExecutor
+    private final ConnectionTestServiceImpl connectionTestService = ConnectionTestServiceTestFactory.create(
+        integrationConfigMapper,
+        reviewPolicyConfigMapper,
+        secretCryptoService,
+        responseParser(),
+        responseReader
     );
     private final SystemIntegrationConfigServiceImpl systemIntegrationConfigService =
         new SystemIntegrationConfigServiceImpl(
@@ -633,20 +587,17 @@ class SystemConfigServiceImplTest {
         return rule;
     }
 
-    private ReviewRuleHitCount ruleHitCount(String ruleId, Long total) {
-        ReviewRuleHitCount count = new ReviewRuleHitCount();
-        count.setRuleId(ruleId);
-        count.setTotal(total);
-        return count;
+    private RuleHitCount ruleHitCount(String ruleId, Long total) {
+        return new RuleHitCount(ruleId, total);
     }
 
-    private ReviewRuleFeedbackStat ruleFeedbackStat(Long totalHits, Long validCount, Long falsePositiveCount, Long reviewedCount) {
-        ReviewRuleFeedbackStat stat = new ReviewRuleFeedbackStat();
-        stat.setTotalHits(totalHits);
-        stat.setValidCount(validCount);
-        stat.setFalsePositiveCount(falsePositiveCount);
-        stat.setReviewedCount(reviewedCount);
-        return stat;
+    private RuleFeedbackStat ruleFeedbackStat(
+        Long totalHits,
+        Long validCount,
+        Long falsePositiveCount,
+        Long reviewedCount
+    ) {
+        return new RuleFeedbackStat(totalHits, validCount, falsePositiveCount, reviewedCount);
     }
 
     private ProbeServer startLlmProbeServer(String responseBody) throws IOException {

@@ -1,6 +1,8 @@
 package com.repoguard.agent.messaging;
 
-public class MessagePublishException extends RuntimeException {
+import com.repoguard.agent.review.task.ReviewTaskPublishException;
+
+public class MessagePublishException extends ReviewTaskPublishException {
 
     public MessagePublishException(String message) {
         super(message);

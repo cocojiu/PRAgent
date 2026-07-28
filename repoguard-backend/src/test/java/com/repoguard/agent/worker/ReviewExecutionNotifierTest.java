@@ -5,7 +5,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.time.LocalDateTime;

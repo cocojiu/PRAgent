@@ -6,6 +6,9 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.task.ReviewTaskDirectPublishFailurePolicy;
+import com.repoguard.agent.review.task.ReviewTaskPublishException;
+import com.repoguard.agent.review.task.ReviewTaskPublishFailureStore;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
@@ -14,7 +17,7 @@ import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ReviewTaskPublishOutboxStore {
+public class ReviewTaskPublishOutboxStore implements ReviewTaskPublishFailureStore {
 
     private final ReviewTaskMapper reviewTaskMapper;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
@@ -178,9 +181,10 @@ public class ReviewTaskPublishOutboxStore {
         return true;
     }
 
+    @Override
     public boolean markDirectPublishFailed(
         ReviewTask task,
-        MessagePublishException ex,
+        ReviewTaskPublishException ex,
         LocalDateTime failedAt,
         ReviewTaskDirectPublishFailurePolicy policy
     ) {
@@ -275,10 +279,12 @@ public class ReviewTaskPublishOutboxStore {
         return true;
     }
 
+    @Override
     public void markCurrentTimelinesDone(Long taskId) {
         reviewTimelineAppender.completeCurrentTimelines(taskId);
     }
 
+    @Override
     public void appendTimeline(Long taskId, String label, LocalDateTime eventTime, ReviewTimelineStatus status) {
         reviewTimelineAppender.append(taskId, truncate(label), eventTime, status.code());
     }

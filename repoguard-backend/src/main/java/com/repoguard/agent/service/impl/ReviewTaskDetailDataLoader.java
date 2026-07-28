@@ -13,6 +13,7 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.review.FindingFeedbackStatus;
+import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -49,7 +50,9 @@ public class ReviewTaskDetailDataLoader {
         PageResponse<ReviewFindingDto> findings = loadFindingsPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE, null, null, null);
         PageResponse<MissingTestDto> missingTests = loadMissingTestsPage(taskId, 1, DETAIL_INITIAL_PAGE_SIZE);
         List<ReviewTimelineItem> timeline = loadTimelineItems(taskId, DETAIL_INITIAL_TIMELINE_LIMIT);
-        FindingSeverityCountsDto findingSeverityCounts = reviewFindingMapper.selectFindingSeverityCounts(taskId);
+        FindingSeverityCountsDto findingSeverityCounts = ReviewFindingProjectionAssembler.toDto(
+            reviewFindingMapper.selectFindingSeverityCounts(taskId)
+        );
 
         return new ReviewTaskDetailData(
             changedFiles.items(),
@@ -64,7 +67,9 @@ public class ReviewTaskDetailDataLoader {
     }
 
     public ReviewTaskDetailData loadSummary(Long taskId) {
-        FindingSeverityCountsDto findingSeverityCounts = reviewFindingMapper.selectFindingSeverityCounts(taskId);
+        FindingSeverityCountsDto findingSeverityCounts = ReviewFindingProjectionAssembler.toDto(
+            reviewFindingMapper.selectFindingSeverityCounts(taskId)
+        );
         return new ReviewTaskDetailData(
             List.of(),
             List.of(),

@@ -1,6 +1,6 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;

@@ -1,6 +1,6 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewRuleProvider;
+import com.repoguard.agent.review.ReviewRuleProvider;
 import java.util.List;
 
 final class ReviewRuleTestFixtures {

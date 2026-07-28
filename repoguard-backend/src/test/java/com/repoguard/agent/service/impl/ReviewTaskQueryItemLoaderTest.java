@@ -10,6 +10,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
+import com.repoguard.agent.review.task.ReviewFailureSummaryResolver;
+import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
