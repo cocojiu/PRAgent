@@ -22,7 +22,6 @@ class ReviewExecutionTaskTerminalWriterTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTaskStateMachine stateMachine = new ReviewTaskStateMachine();
     private final ReviewExecutionTaskTerminalWriter writer = new ReviewExecutionTaskTerminalWriter(
-        reviewTaskMapper,
         new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
         new ReviewTaskCompletionApplier(
             stateMachine,
@@ -50,7 +49,22 @@ class ReviewExecutionTaskTerminalWriterTest {
         assertThat(task.getStatus()).isEqualTo("COMPLETED");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        verify(reviewTaskMapper).updateById(task);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor =
+            org.mockito.ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSet()).contains(
+            "status",
+            "risk_level",
+            "llm_status",
+            "llm_provider",
+            "human_review_status",
+            "finished_at",
+            "duration_seconds",
+            "review_claimed_at",
+            "review_claimed_by"
+        );
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
@@ -86,7 +100,8 @@ class ReviewExecutionTaskTerminalWriterTest {
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -227,6 +228,7 @@ class ReviewServiceImplTest {
 
     @BeforeEach
     void stubGithubCommentBatchPersistence() {
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         org.mockito.Mockito.doAnswer(invocation -> {
             GithubCommentPublicationBatch batch = invocation.getArgument(0);
             batch.setId(99L);
@@ -237,7 +239,7 @@ class ReviewServiceImplTest {
 
     private HumanReviewCommandService humanReviewCommandService() {
         return new HumanReviewCommandService(
-            reviewTaskMapper,
+            transitionStore(),
             timelineAppender(),
             reviewTaskStateMachine,
             cacheEvictionService
@@ -246,7 +248,7 @@ class ReviewServiceImplTest {
 
     private ReviewTaskRetryService reviewTaskRetryService(ReviewTaskAfterCommitPublisher afterCommitPublisher) {
         return new ReviewTaskRetryService(
-            reviewTaskMapper,
+            transitionStore(),
             timelineAppender(),
             reviewTaskStateMachine,
             afterCommitPublisher,
@@ -285,6 +287,10 @@ class ReviewServiceImplTest {
 
     private ReviewTimelineAppender timelineAppender() {
         return new ReviewTimelineAppender(reviewTimelineMapper);
+    }
+
+    private ReviewTaskTransitionStore transitionStore() {
+        return new ReviewTaskTransitionStore(reviewTaskMapper, reviewTaskStateMachine);
     }
 
     @Test
@@ -512,7 +518,8 @@ class ReviewServiceImplTest {
         assertThat(task.getHumanReviewStatus()).isEqualTo("CHANGES_REQUESTED");
         assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
         assertThat(task.getHumanReviewBy()).isEqualTo("review-lead");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(task);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
     }
 
@@ -1076,7 +1083,9 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
 
         ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
+        verify(reviewTaskMapper).insertManualReviewOrReuse(taskCaptor.capture());
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(1);
         assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
@@ -1165,12 +1174,12 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("QUEUED");
-        assertThat(taskCaptor.getValue().getLlmStatus()).isEqualTo("PENDING");
-        assertThat(taskCaptor.getValue().getRiskLevel()).isEqualTo("INFO");
-        assertThat(taskCaptor.getValue().getMqRetries()).isEqualTo(3);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
+        assertThat(task.getRiskLevel()).isEqualTo("INFO");
+        assertThat(task.getMqRetries()).isEqualTo(3);
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -1204,11 +1213,11 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("publish_failed");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getAllValues().getLast().getStatus()).isEqualTo("PUBLISH_FAILED");
-        assertThat(taskCaptor.getAllValues().getLast().getPublishAttempts()).isEqualTo(1);
-        assertThat(taskCaptor.getAllValues().getLast().getLastPublishError()).contains("unroutable");
+        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getLastPublishError()).contains("unroutable");
     }
 
     @Test

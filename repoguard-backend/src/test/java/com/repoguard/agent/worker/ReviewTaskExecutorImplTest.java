@@ -103,7 +103,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getPublishClaimedAt()).isNull();
         assertThat(task.getPublishClaimedBy()).isNull();
         verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, never()).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));
         verify(reviewFindingMapper).insert(any(ReviewFinding.class));
         verify(reviewTimelineMapper, org.mockito.Mockito.times(4)).insert(any(ReviewTimeline.class));
@@ -135,7 +135,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
         assertThat(task.getHumanReviewRequired()).isTrue();
         assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
@@ -207,7 +208,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getLlmDurationMs()).isEqualTo(1234);
         assertThat(task.getLlmParseStatus()).isEqualTo("parsed");
         assertThat(task.getLlmPromptSummary()).contains("files=1");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
@@ -337,7 +339,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getRiskLevel()).isEqualTo("HIGH");
         verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, never()).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getAllValues().get(1).getLabel()).contains("github unavailable");
@@ -429,7 +431,6 @@ class ReviewTaskExecutorImplTest {
         );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
-            reviewTaskMapper,
             claimService,
             completionApplier,
             clock

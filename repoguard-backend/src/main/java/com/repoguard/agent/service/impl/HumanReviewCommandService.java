@@ -6,7 +6,6 @@ import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.HumanReviewResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
@@ -24,26 +23,26 @@ public class HumanReviewCommandService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTaskTransitionStore transitionStore;
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final CacheEvictionService cacheEvictionService;
 
     @Autowired
     public HumanReviewCommandService(
-        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskTransitionStore transitionStore,
         ReviewTimelineAppender reviewTimelineAppender,
         ReviewTaskStateMachine reviewTaskStateMachine,
         CacheEvictionService cacheEvictionService
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
     }
 
     public HumanReviewResponse submit(Long id, HumanReviewRequest request, String operator) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
+        ReviewTask task = transitionStore.findById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
@@ -56,12 +55,14 @@ public class HumanReviewCommandService {
         LocalDateTime reviewedAt = LocalDateTime.now();
         String note = cleanHumanReviewNote(request.note());
         String humanReviewStatus = humanReviewStatusForAction(action);
-        task.setStatus(taskStatusForHumanReview(humanReviewStatus));
-        task.setHumanReviewStatus(humanReviewStatus);
-        task.setHumanReviewNote(note);
-        task.setHumanReviewBy(cleanOperator(operator));
-        task.setHumanReviewedAt(reviewedAt);
-        reviewTaskMapper.updateById(task);
+        transitionStore.completeHumanReview(
+            task,
+            taskStatusForHumanReview(humanReviewStatus),
+            humanReviewStatus,
+            note,
+            cleanOperator(operator),
+            reviewedAt
+        );
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
             humanReviewTimelineLabel(humanReviewStatus, note),

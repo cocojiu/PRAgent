@@ -6,9 +6,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,9 +18,14 @@ import org.mockito.ArgumentCaptor;
 class ReviewTaskRecoveryStoreTest {
 
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
+    private final ReviewTaskClaimService claimService = org.mockito.Mockito.mock(ReviewTaskClaimService.class);
+    private final ReviewTaskPublishOutboxStore outboxStore =
+        org.mockito.Mockito.mock(ReviewTaskPublishOutboxStore.class);
     private final ReviewTaskRecoveryStore store = new ReviewTaskRecoveryStore(
         reviewTaskMapper,
-        new ReviewTaskStateMachine()
+        new ReviewTaskStateMachine(),
+        claimService,
+        outboxStore
     );
 
     @Test
@@ -48,39 +53,25 @@ class ReviewTaskRecoveryStoreTest {
         ReviewTask task = stuckTask();
         LocalDateTime recoveredAt = LocalDateTime.parse("2026-07-05T00:40:00");
         LocalDateTime expiredBefore = recoveredAt.minusMinutes(30);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, "expired"))
+            .thenReturn(true);
 
         boolean requeued = store.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "expired");
 
         assertThat(requeued).isTrue();
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
-        verify(reviewTaskMapper).update(wrapperCaptor.capture());
-        assertThat(wrapperCaptor.getValue().getSqlSegment())
-            .contains("review_claimed_at")
-            .contains("review_claimed_by");
-        assertThat(wrapperCaptor.getValue().getSqlSet())
-            .contains("llm_status")
-            .contains("next_publish_retry_at");
-        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
-            .contains("REQUEUE_PENDING", "PENDING", "expired");
-        assertThat(task.getStatus()).isEqualTo("REQUEUE_PENDING");
-        assertThat(task.getReviewClaimedAt()).isNull();
-        assertThat(task.getReviewClaimedBy()).isNull();
+        verify(claimService).markRequeuePendingIfClaimOwned(task, expiredBefore, "expired");
     }
 
     @Test
     void marksQueuedForRecoveryPublishFromRequeuePending() {
         ReviewTask task = stuckTask();
         task.setStatus("REQUEUE_PENDING");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(outboxStore.markQueuedForRecoveryPublish(task, 1)).thenReturn(true);
 
         boolean queued = store.markQueuedForRecoveryPublish(task, LocalDateTime.parse("2026-07-05T00:40:00"), 1);
 
         assertThat(queued).isTrue();
-        assertThat(task.getStatus()).isEqualTo("QUEUED");
-        assertThat(task.getPublishAttempts()).isEqualTo(1);
-        assertThat(task.getLastPublishError()).isNull();
+        verify(outboxStore).markQueuedForRecoveryPublish(task, 1);
     }
 
     @Test
@@ -88,7 +79,8 @@ class ReviewTaskRecoveryStoreTest {
         ReviewTask task = stuckTask();
         task.setStatus("QUEUED");
         LocalDateTime nextRetryAt = LocalDateTime.parse("2026-07-05T00:41:00");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(outboxStore.markRecoveryPublishFailed(task, nextRetryAt, "publisher confirm timed out"))
+            .thenReturn(true);
 
         boolean failed = store.markRecoveryPublishFailed(
             task,
@@ -98,20 +90,20 @@ class ReviewTaskRecoveryStoreTest {
         );
 
         assertThat(failed).isTrue();
-        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
-        assertThat(task.getNextPublishRetryAt()).isEqualTo(nextRetryAt);
-        assertThat(task.getLastPublishError()).isEqualTo("publisher confirm timed out");
+        verify(outboxStore).markRecoveryPublishFailed(task, nextRetryAt, "publisher confirm timed out");
     }
 
     @Test
     void returnsFalseWhenClaimFenceLost() {
         ReviewTask task = stuckTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        LocalDateTime expiredBefore = LocalDateTime.parse("2026-07-05T00:10:00");
+        when(claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, "expired"))
+            .thenReturn(false);
 
         boolean requeued = store.markRequeuePendingIfClaimOwned(
             task,
             LocalDateTime.parse("2026-07-05T00:40:00"),
-            LocalDateTime.parse("2026-07-05T00:10:00"),
+            expiredBefore,
             "expired"
         );
 

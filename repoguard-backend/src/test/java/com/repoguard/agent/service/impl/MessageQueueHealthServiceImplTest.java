@@ -9,7 +9,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.config.RabbitMqIntegrationProvider;
 import com.repoguard.agent.config.RabbitMqIntegrationSettings;
@@ -38,6 +40,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.AfterEach;
 import org.mockito.ArgumentCaptor;
@@ -77,6 +80,11 @@ class MessageQueueHealthServiceImplTest {
     private final MessageQueueMetricAssembler metricAssembler = new MessageQueueMetricAssembler(properties, metrics);
     private final MessageQueueHealthServiceImpl service = createService(new RecordingTransactionManager());
 
+    @BeforeEach
+    void allowReviewTaskCasUpdates() {
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+    }
+
     @AfterEach
     void shutdownRabbitHealthExecutor() {
         rabbitHealthExecutor.shutdownNow();
@@ -112,7 +120,7 @@ class MessageQueueHealthServiceImplTest {
     @Test
     void requeueServiceRejectsMissingStateMachine() {
         assertThatThrownBy(() -> new ReviewTaskRequeueService(
-            reviewTaskMapper,
+            org.mockito.Mockito.mock(ReviewTaskTransitionStore.class),
             properties,
             reviewTaskPublisher,
             null,
@@ -127,7 +135,7 @@ class MessageQueueHealthServiceImplTest {
     @Test
     void requeueServiceRejectsMissingOutboxStore() {
         assertThatThrownBy(() -> new ReviewTaskRequeueService(
-            reviewTaskMapper,
+            org.mockito.Mockito.mock(ReviewTaskTransitionStore.class),
             properties,
             reviewTaskPublisher,
             null,
@@ -142,7 +150,7 @@ class MessageQueueHealthServiceImplTest {
     @Test
     void requeueServiceRejectsMissingTransactionManager() {
         assertThatThrownBy(() -> new ReviewTaskRequeueService(
-            reviewTaskMapper,
+            org.mockito.Mockito.mock(ReviewTaskTransitionStore.class),
             properties,
             reviewTaskPublisher,
             null,
@@ -282,7 +290,8 @@ class MessageQueueHealthServiceImplTest {
         assertThat(task.getPublishAttempts()).isZero();
         assertThat(task.getNextPublishRetryAt()).isNull();
         assertThat(task.getLastPublishError()).isNull();
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(task);
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
         verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
@@ -353,6 +362,31 @@ class MessageQueueHealthServiceImplTest {
         assertThatThrownBy(() -> service.requeueTask(42L))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Claimed message tasks cannot be requeued");
+        verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
+    }
+
+    @Test
+    void requeueConflictDoesNotPublishOrAppendTimeline() {
+        ReviewTask task = task(
+            42L,
+            "PUBLISH_FAILED",
+            1,
+            null,
+            null,
+            "broker unavailable",
+            LocalDateTime.of(2026, 6, 11, 9, 0)
+        );
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        assertThatThrownBy(() -> service.requeueTask(42L))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT))
+            .hasMessage(ReviewTaskTransitionStore.STATE_CHANGED_MESSAGE);
+
+        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
         verify(systemSettingLogMapper).insert(any(SystemSettingLog.class));
     }
 
@@ -428,7 +462,7 @@ class MessageQueueHealthServiceImplTest {
             reviewTaskStateMachine
         );
         ReviewTaskRequeueService requeueService = new ReviewTaskRequeueService(
-            reviewTaskMapper,
+            new ReviewTaskTransitionStore(reviewTaskMapper, reviewTaskStateMachine),
             properties,
             reviewTaskPublisher,
             transactionManager,

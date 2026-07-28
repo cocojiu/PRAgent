@@ -170,7 +170,6 @@ class ReviewExecutionRequiredDependenciesTest {
 
         assertThatThrownBy(() -> new ReviewExecutionFailureHandler(
             new ReviewExecutionTaskTerminalWriter(
-                reviewTaskMapper,
                 new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
                 completionApplier,
                 new ReviewExecutionClock()
@@ -233,7 +232,6 @@ class ReviewExecutionRequiredDependenciesTest {
             batchInserter()
         );
         ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
-            reviewTaskMapper,
             new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
             completionApplier,
             new ReviewExecutionClock()

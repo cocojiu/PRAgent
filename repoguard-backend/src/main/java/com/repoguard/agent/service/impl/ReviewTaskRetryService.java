@@ -5,12 +5,9 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.review.HumanReviewStatus;
-import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
@@ -22,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ReviewTaskRetryService {
 
-    private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTaskTransitionStore transitionStore;
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher;
@@ -30,13 +27,13 @@ public class ReviewTaskRetryService {
 
     @Autowired
     public ReviewTaskRetryService(
-        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskTransitionStore transitionStore,
         ReviewTimelineAppender reviewTimelineAppender,
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
         CacheEvictionService cacheEvictionService
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
@@ -44,7 +41,7 @@ public class ReviewTaskRetryService {
     }
 
     public ReviewRetryResponse retry(Long id) {
-        ReviewTask task = reviewTaskMapper.selectById(id);
+        ReviewTask task = transitionStore.findById(id);
         if (task == null) {
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + id);
         }
@@ -52,8 +49,7 @@ public class ReviewTaskRetryService {
 
         LocalDateTime queuedAt = LocalDateTime.now();
         int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
-        resetTaskForRetry(task, retryCount);
-        reviewTaskMapper.updateById(task);
+        transitionStore.retryFailedTask(task, retryCount);
         evictDashboardReviewActivity();
 
         reviewTimelineAppender.completeCurrentAndAppend(
@@ -91,32 +87,6 @@ public class ReviewTaskRetryService {
                 retryCount
             );
         }
-    }
-
-    private void resetTaskForRetry(ReviewTask task, int retryCount) {
-        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-        task.setRiskLevel("INFO");
-        task.setMqRetries(retryCount);
-        task.setPublishAttempts(0);
-        task.setNextPublishRetryAt(null);
-        task.setLastPublishError(null);
-        task.setLlmStatus(LlmStatus.PENDING.code());
-        clearLlmQuality(task);
-        task.setHumanReviewRequired(false);
-        task.setHumanReviewStatus(HumanReviewStatus.NOT_REQUIRED.code());
-        task.setHumanReviewNote(null);
-        task.setHumanReviewBy(null);
-        task.setHumanReviewedAt(null);
-        task.setDurationSeconds(0);
-    }
-
-    private void clearLlmQuality(ReviewTask task) {
-        task.setLlmProvider(null);
-        task.setLlmModel(null);
-        task.setLlmDurationMs(null);
-        task.setLlmParseStatus(null);
-        task.setLlmFallbackReason(null);
-        task.setLlmPromptSummary(null);
     }
 
     private void evictDashboardReviewActivity() {

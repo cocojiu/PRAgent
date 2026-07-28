@@ -7,11 +7,23 @@ import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthRefreshRequest;
+import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.service.impl.ReviewTaskTransitionStore;
+import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.LoggerFactory;
@@ -135,6 +147,154 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
+    @Test
+    void reviewTaskTransitionsUseRealMysqlCasAndExplicitNullWrites() throws Exception {
+        try (ConfigurableApplicationContext context = start("api")) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            ReviewTaskMapper reviewTaskMapper = context.getBean(ReviewTaskMapper.class);
+            ReviewTaskTransitionStore transitionStore = context.getBean(ReviewTaskTransitionStore.class);
+            ReviewTaskClaimService claimService = context.getBean(ReviewTaskClaimService.class);
+            String organization = "transition-" + Long.toUnsignedString(System.nanoTime());
+
+            try {
+                Long retryTaskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9101,
+                    "FAILED",
+                    true,
+                    "REJECTED"
+                );
+                populateRetryResidue(jdbcTemplate, retryTaskId);
+                ReviewTask retryFirst = reviewTaskMapper.selectById(retryTaskId);
+                ReviewTask retrySecond = reviewTaskMapper.selectById(retryTaskId);
+
+                assertThat(runConcurrently(
+                    () -> transitionStore.retryFailedTask(retryFirst, 3),
+                    () -> transitionStore.retryFailedTask(retrySecond, 3)
+                )).isOne();
+                assertRetryStateWasCleared(jdbcTemplate, retryTaskId);
+
+                Long humanTaskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9102,
+                    "PENDING_HUMAN_REVIEW",
+                    true,
+                    "PENDING"
+                );
+                ReviewTask humanFirst = reviewTaskMapper.selectById(humanTaskId);
+                ReviewTask humanSecond = reviewTaskMapper.selectById(humanTaskId);
+                LocalDateTime reviewedAt = LocalDateTime.now();
+
+                assertThat(runConcurrently(
+                    () -> transitionStore.completeHumanReview(
+                        humanFirst,
+                        "APPROVED",
+                        "APPROVED",
+                        "approved",
+                        "reviewer-a",
+                        reviewedAt
+                    ),
+                    () -> transitionStore.completeHumanReview(
+                        humanSecond,
+                        "REJECTED",
+                        "REJECTED",
+                        "rejected",
+                        "reviewer-b",
+                        reviewedAt
+                    )
+                )).isOne();
+                Map<String, Object> humanRow = jdbcTemplate.queryForMap(
+                    "select status, human_review_status from review_task where id = ?",
+                    humanTaskId
+                );
+                assertThat(humanRow.get("human_review_status")).isIn("APPROVED", "REJECTED");
+                assertThat(humanRow.get("status")).isEqualTo(humanRow.get("human_review_status"));
+
+                Long requeueTaskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9103,
+                    "PUBLISH_FAILED",
+                    false,
+                    "NOT_REQUIRED"
+                );
+                jdbcTemplate.update(
+                    "update review_task set last_publish_error = 'old publish error' where id = ?",
+                    requeueTaskId
+                );
+                ReviewTask requeueFirst = reviewTaskMapper.selectById(requeueTaskId);
+                ReviewTask requeueSecond = reviewTaskMapper.selectById(requeueTaskId);
+
+                assertThat(runConcurrently(
+                    () -> transitionStore.requeueForPublish(requeueFirst),
+                    () -> transitionStore.requeueForPublish(requeueSecond)
+                )).isOne();
+                Map<String, Object> requeueRow = jdbcTemplate.queryForMap(
+                    "select status, last_publish_error from review_task where id = ?",
+                    requeueTaskId
+                );
+                assertThat(requeueRow.get("status")).isEqualTo("QUEUED");
+                assertThat(requeueRow.get("last_publish_error")).isNull();
+
+                Long terminalTaskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9104,
+                    "REVIEWING",
+                    false,
+                    "NOT_REQUIRED"
+                );
+                LocalDateTime terminalStartedAt = LocalDateTime.now().minusMinutes(1);
+                jdbcTemplate.update("""
+                    update review_task
+                    set started_at = ?, review_claimed_at = ?, review_claimed_by = 'claim-terminal'
+                    where id = ?
+                    """, terminalStartedAt, terminalStartedAt, terminalTaskId);
+                ReviewTask terminalTask = reviewTaskMapper.selectById(terminalTaskId);
+                ReviewTask staleTerminalTask = reviewTaskMapper.selectById(terminalTaskId);
+                terminalTask.setStatus("COMPLETED");
+                terminalTask.setRiskLevel("LOW");
+                terminalTask.setLlmStatus("COMPLETED");
+                terminalTask.setLlmProvider("openai");
+                terminalTask.setLlmModel("gpt-terminal");
+                terminalTask.setLlmPromptTokens(50);
+                terminalTask.setLlmCompletionTokens(10);
+                terminalTask.setLlmTotalTokens(60);
+                terminalTask.setLlmEstimatedCost(new BigDecimal("0.012345"));
+                terminalTask.setFinishedAt(LocalDateTime.now());
+                terminalTask.setDurationSeconds(60);
+
+                assertThat(claimService.writeTerminalStateIfClaimOwned(
+                    terminalTask,
+                    "claim-terminal"
+                )).isTrue();
+                assertThat(claimService.writeTerminalStateIfClaimOwned(
+                    staleTerminalTask,
+                    "claim-terminal"
+                )).isFalse();
+                Map<String, Object> terminalRow = jdbcTemplate.queryForMap("""
+                    select status, risk_level, llm_status, llm_provider, llm_model,
+                           llm_prompt_tokens, llm_estimated_cost,
+                           finished_at, duration_seconds, review_claimed_at, review_claimed_by
+                    from review_task
+                    where id = ?
+                    """, terminalTaskId);
+                assertThat(terminalRow)
+                    .containsEntry("status", "COMPLETED")
+                    .containsEntry("risk_level", "LOW")
+                    .containsEntry("llm_status", "COMPLETED")
+                    .containsEntry("llm_provider", "openai")
+                    .containsEntry("llm_model", "gpt-terminal");
+                assertThat(terminalRow.get("review_claimed_at")).isNull();
+                assertThat(terminalRow.get("review_claimed_by")).isNull();
+            } finally {
+                jdbcTemplate.update("delete from review_task where organization = ?", organization);
+            }
+        }
+    }
+
     private ConfigurableApplicationContext start(String runtimeRole) {
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)
@@ -151,6 +311,170 @@ class ProductionRuntimeContextIntegrationTest {
             );
     }
 
+    private Long insertReviewTask(
+        JdbcTemplate jdbcTemplate,
+        String organization,
+        int prNumber,
+        String status,
+        boolean humanReviewRequired,
+        String humanReviewStatus
+    ) {
+        jdbcTemplate.update("""
+            insert into review_task (
+                pr_number, title, repository, organization, commit_sha, branch_name,
+                status, risk_level, mq_retries, publish_attempts, llm_status, pr_url,
+                source, trigger_source, human_review_required, human_review_status,
+                created_at, duration_seconds
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            prNumber,
+            "Transition integration task " + prNumber,
+            "transition-tests",
+            organization,
+            "0123456789abcdef0123456789abcdef01234567",
+            "integration",
+            status,
+            "HIGH",
+            2,
+            4,
+            "FAILED",
+            "https://example.invalid/pull/" + prNumber,
+            "MANUAL_INPUT",
+            "MANUAL_INPUT",
+            humanReviewRequired,
+            humanReviewStatus,
+            LocalDateTime.now(),
+            120
+        );
+        return jdbcTemplate.queryForObject(
+            "select id from review_task where organization = ? and pr_number = ?",
+            Long.class,
+            organization,
+            prNumber
+        );
+    }
+
+    private void populateRetryResidue(JdbcTemplate jdbcTemplate, Long taskId) {
+        LocalDateTime residueAt = LocalDateTime.now().minusMinutes(5);
+        jdbcTemplate.update("""
+            update review_task
+            set next_publish_retry_at = ?,
+                last_publish_error = 'old publish error',
+                publish_claimed_at = ?,
+                publish_claimed_by = 'old-publisher',
+                review_claimed_at = ?,
+                review_claimed_by = 'old-reviewer',
+                llm_provider = 'openai',
+                llm_model = 'gpt-old',
+                llm_duration_ms = 1234,
+                llm_parse_status = 'parsed',
+                llm_fallback_reason = 'old fallback',
+                llm_prompt_summary = 'old prompt',
+                llm_prompt_tokens = 100,
+                llm_completion_tokens = 20,
+                llm_total_tokens = 120,
+                llm_estimated_cost = 1.234567,
+                human_review_note = 'old decision',
+                human_review_by = 'old-reviewer',
+                human_reviewed_at = ?,
+                started_at = ?,
+                finished_at = ?
+            where id = ?
+            """,
+            residueAt.plusMinutes(1),
+            residueAt,
+            residueAt,
+            residueAt,
+            residueAt.minusMinutes(2),
+            residueAt.plusMinutes(2),
+            taskId
+        );
+    }
+
+    private void assertRetryStateWasCleared(JdbcTemplate jdbcTemplate, Long taskId) {
+        Map<String, Object> row = jdbcTemplate.queryForMap("""
+            select status, risk_level, mq_retries, publish_attempts,
+                   next_publish_retry_at, last_publish_error,
+                   publish_claimed_at, publish_claimed_by,
+                   review_claimed_at, review_claimed_by,
+                   llm_status, llm_provider, llm_model, llm_duration_ms,
+                   llm_parse_status, llm_fallback_reason, llm_prompt_summary,
+                   llm_prompt_tokens, llm_completion_tokens, llm_total_tokens,
+                   llm_estimated_cost, human_review_required, human_review_status,
+                   human_review_note, human_review_by, human_reviewed_at,
+                   started_at, finished_at, duration_seconds
+            from review_task
+            where id = ?
+            """, taskId);
+
+        assertThat(row.get("status")).isEqualTo("QUEUED");
+        assertThat(row.get("risk_level")).isEqualTo("INFO");
+        assertThat(((Number) row.get("mq_retries")).intValue()).isEqualTo(3);
+        assertThat(((Number) row.get("publish_attempts")).intValue()).isZero();
+        assertThat(row.get("llm_status")).isEqualTo("PENDING");
+        assertThat(String.valueOf(row.get("human_review_required")).toLowerCase()).isIn("0", "false");
+        assertThat(row.get("human_review_status")).isEqualTo("NOT_REQUIRED");
+        assertThat(((Number) row.get("duration_seconds")).intValue()).isZero();
+        assertThat(row).extractingByKeys(
+            "next_publish_retry_at",
+            "last_publish_error",
+            "publish_claimed_at",
+            "publish_claimed_by",
+            "review_claimed_at",
+            "review_claimed_by",
+            "llm_provider",
+            "llm_model",
+            "llm_duration_ms",
+            "llm_parse_status",
+            "llm_fallback_reason",
+            "llm_prompt_summary",
+            "llm_prompt_tokens",
+            "llm_completion_tokens",
+            "llm_total_tokens",
+            "llm_estimated_cost",
+            "human_review_note",
+            "human_review_by",
+            "human_reviewed_at",
+            "started_at",
+            "finished_at"
+        ).containsOnlyNulls();
+    }
+
+    private int runConcurrently(TransitionAction first, TransitionAction second) throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            List<Future<Boolean>> results = List.of(first, second).stream()
+                .map(action -> executor.submit(() -> {
+                    ready.countDown();
+                    if (!start.await(5, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Timed out waiting to start transition race");
+                    }
+                    try {
+                        action.run();
+                        return true;
+                    } catch (BusinessException ex) {
+                        assertThat(ex.getErrorCode()).isEqualTo(com.repoguard.agent.common.ErrorCode.CONFLICT);
+                        assertThat(ex).hasMessage(ReviewTaskTransitionStore.STATE_CHANGED_MESSAGE);
+                        return false;
+                    }
+                }))
+                .toList();
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            int successes = 0;
+            for (Future<Boolean> result : results) {
+                if (result.get(10, TimeUnit.SECONDS)) {
+                    successes++;
+                }
+            }
+            return successes;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private void assertProductionInfrastructure(ConfigurableApplicationContext context) {
         WebServerApplicationContext webContext = (WebServerApplicationContext) context;
         assertThat(webContext.getWebServer().getPort()).isPositive();
@@ -161,5 +485,10 @@ class ProductionRuntimeContextIntegrationTest {
         Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
         assertThat(rootLogger.getAppender("CONSOLE")).isNotNull();
         assertThat(rootLogger.getAppender("ROLLING_FILE")).isNull();
+    }
+
+    @FunctionalInterface
+    private interface TransitionAction {
+        void run();
     }
 }

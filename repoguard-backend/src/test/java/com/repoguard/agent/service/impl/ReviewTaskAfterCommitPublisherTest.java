@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -78,6 +79,7 @@ class ReviewTaskAfterCommitPublisherTest {
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(3);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         ReviewTaskAfterCommitPublisher publisher = new ReviewTaskAfterCommitPublisher(
             reviewTaskPublisher,
             outboxStore(),
@@ -97,9 +99,9 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThat(accepted).isTrue();
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
-        ReviewTask failedTask = taskCaptor.getValue();
+        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        ReviewTask failedTask = task;
         assertThat(failedTask.getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(failedTask.getLlmStatus()).isEqualTo("PENDING");
         assertThat(failedTask.getPublishAttempts()).isEqualTo(1);

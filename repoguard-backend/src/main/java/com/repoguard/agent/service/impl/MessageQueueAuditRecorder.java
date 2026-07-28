@@ -4,6 +4,8 @@ import com.repoguard.agent.entity.SystemSettingLog;
 import com.repoguard.agent.mapper.SystemSettingLogMapper;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Component
 class MessageQueueAuditRecorder {
@@ -14,7 +16,8 @@ class MessageQueueAuditRecorder {
         this.systemSettingLogMapper = systemSettingLogMapper;
     }
 
-    void recordRequeue(Long taskId, String status, String detail) {
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordRequeue(Long taskId, String status, String detail) {
         SystemSettingLog log = new SystemSettingLog();
         log.setOperator("admin-api-key");
         log.setAction(truncate("MQ requeue task #" + taskId + ": " + detail));

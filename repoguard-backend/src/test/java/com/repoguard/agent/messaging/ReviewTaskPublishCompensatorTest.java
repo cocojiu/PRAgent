@@ -111,6 +111,60 @@ class ReviewTaskPublishCompensatorTest {
     }
 
     @Test
+    void directPublishFailureUsesQueuedCasAndExplicitlyClearsLlmTelemetry() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(0);
+        task.setLlmProvider("openai");
+        task.setLlmModel("gpt-old");
+        task.setLlmDurationMs(1200);
+        task.setLlmParseStatus("parsed");
+        task.setLlmPromptTokens(100);
+        task.setLlmCompletionTokens(20);
+        task.setLlmTotalTokens(120);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+
+        boolean marked = outboxStore.markDirectPublishFailed(
+            task,
+            new MessagePublishException("publisher confirm timed out"),
+            LocalDateTime.parse("2026-07-28T10:00:00"),
+            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
+        );
+
+        assertThat(marked).isTrue();
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getLlmProvider()).isNull();
+        assertThat(task.getLlmPromptTokens()).isNull();
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment())
+            .contains("status", "publish_attempts", "publish_claimed_at", "IS NULL");
+        assertThat(wrapperCaptor.getValue().getSqlSet())
+            .contains("llm_provider", "llm_prompt_tokens", "llm_estimated_cost");
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+    }
+
+    @Test
+    void directPublishFailureDoesNotOverwriteTaskOrTimelineAfterCasLoss() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(0);
+        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+
+        boolean marked = outboxStore.markDirectPublishFailed(
+            task,
+            new MessagePublishException("publisher confirm timed out"),
+            LocalDateTime.parse("2026-07-28T10:00:00"),
+            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
+        );
+
+        assertThat(marked).isFalse();
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
+    }
+
+    @Test
     void compensatorRejectsMissingOutboxStore() {
         assertThatThrownBy(() -> new ReviewTaskPublishCompensator(
             reviewTaskPublisher,

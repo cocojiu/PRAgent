@@ -25,6 +25,7 @@ export class RequestError extends Error {
 
 const requestErrorMessages: Readonly<Record<string, string>> = {
   BAD_REQUEST: commonUserMessages.badRequest,
+  CONFLICT: commonUserMessages.conflict,
   FORBIDDEN: commonUserMessages.forbidden,
   INTERNAL_ERROR: commonUserMessages.internalError,
   INVALID_API_RESPONSE: commonUserMessages.invalidResponse,

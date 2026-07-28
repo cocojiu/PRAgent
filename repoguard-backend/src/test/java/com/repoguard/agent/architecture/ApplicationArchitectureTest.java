@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -43,6 +45,13 @@ class ApplicationArchitectureTest {
     private static final String USER_INTERNAL_PACKAGE = USER_PACKAGE + ".internal";
     private static final String WEB_PACKAGE = BASE_PACKAGE + ".web";
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
+    private static final Pattern REVIEW_TASK_MAPPER_VARIABLE =
+        Pattern.compile("\\bReviewTaskMapper\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\b");
+    private static final Set<String> REVIEW_TASK_UPDATE_STORES = Set.of(
+        "com/repoguard/agent/messaging/ReviewTaskPublishOutboxStore.java",
+        "com/repoguard/agent/service/impl/ReviewTaskTransitionStore.java",
+        "com/repoguard/agent/worker/ReviewTaskClaimService.java"
+    );
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
@@ -100,6 +109,39 @@ class ApplicationArchitectureTest {
         assertThat(violations)
             .as("Controllers must call application services instead of persistence types")
             .isEmpty();
+    }
+
+    @Test
+    void reviewTaskStateWritesStayInAdjudicatedStoresAndNeverUseUpdateById() {
+        List<String> violations = new ArrayList<>();
+        Set<String> storesWithWrites = new TreeSet<>();
+        for (SourceUnit source : SOURCES) {
+            Matcher variableMatcher = REVIEW_TASK_MAPPER_VARIABLE.matcher(source.sourceText());
+            while (variableMatcher.find()) {
+                String variableName = variableMatcher.group(1);
+                Pattern updateCall = Pattern.compile(
+                    "\\b" + Pattern.quote(variableName) + "\\s*\\.\\s*(updateById|update)\\s*\\("
+                );
+                Matcher updateMatcher = updateCall.matcher(source.sourceText());
+                while (updateMatcher.find()) {
+                    String method = updateMatcher.group(1);
+                    if ("updateById".equals(method)) {
+                        violations.add(source.path() + " -> " + variableName + ".updateById");
+                    } else if (!REVIEW_TASK_UPDATE_STORES.contains(source.path())) {
+                        violations.add(source.path() + " -> " + variableName + ".update");
+                    } else {
+                        storesWithWrites.add(source.path());
+                    }
+                }
+            }
+        }
+
+        assertThat(violations)
+            .as("ReviewTask updates must use conditional wrappers inside the adjudicated stores")
+            .isEmpty();
+        assertThat(storesWithWrites)
+            .as("The ReviewTask update allowlist is a ratchet and must not contain stale entries")
+            .containsExactlyInAnyOrderElementsOf(REVIEW_TASK_UPDATE_STORES);
     }
 
     @Test
@@ -441,7 +483,8 @@ class ApplicationArchitectureTest {
                 sources.add(new SourceUnit(
                     MAIN_SOURCE_ROOT.relativize(sourcePath).toString().replace('\\', '/'),
                     packageName,
-                    Set.copyOf(dependencies)
+                    Set.copyOf(dependencies),
+                    Files.readString(sourcePath, StandardCharsets.UTF_8)
                 ));
             }
             List<Diagnostic<? extends JavaFileObject>> errors = diagnostics.getDiagnostics().stream()
@@ -456,5 +499,10 @@ class ApplicationArchitectureTest {
         }
     }
 
-    private record SourceUnit(String path, String packageName, Set<String> dependencies) {}
+    private record SourceUnit(
+        String path,
+        String packageName,
+        Set<String> dependencies,
+        String sourceText
+    ) {}
 }

@@ -178,7 +178,7 @@ public class ReviewTaskPublishOutboxStore {
         return true;
     }
 
-    public void markDirectPublishFailed(
+    public boolean markDirectPublishFailed(
         ReviewTask task,
         MessagePublishException ex,
         LocalDateTime failedAt,
@@ -186,21 +186,93 @@ public class ReviewTaskPublishOutboxStore {
     ) {
         Objects.requireNonNull(policy, "policy");
         String error = truncate(errorMessage(ex));
+        int nextAttempt = safeAttempts(task) + 1;
+        LocalDateTime nextRetryAt = failedAt.plusNanos(policy.normalizedRetryDelayMs() * 1_000_000);
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId())
+            .eq("status", reviewTaskStateMachine.statusWhenQueued())
+            .eq("publish_attempts", safeAttempts(task))
+            .isNull("publish_claimed_at")
+            .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
+            .set("llm_status", LlmStatus.PENDING.code())
+            .set("publish_attempts", nextAttempt)
+            .set("next_publish_retry_at", nextRetryAt)
+            .set("last_publish_error", error)
+            .set("publish_claimed_at", null)
+            .set("publish_claimed_by", null);
+        if (policy.clearLlmQuality()) {
+            clearLlmQuality(update);
+        }
+        if (reviewTaskMapper.update(update) <= 0) {
+            return false;
+        }
         task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
         task.setLlmStatus(LlmStatus.PENDING.code());
         if (policy.clearLlmQuality()) {
             clearLlmQuality(task);
         }
-        task.setPublishAttempts(safeAttempts(task) + 1);
-        task.setNextPublishRetryAt(failedAt.plusNanos(policy.normalizedRetryDelayMs() * 1_000_000));
+        task.setPublishAttempts(nextAttempt);
+        task.setNextPublishRetryAt(nextRetryAt);
         task.setLastPublishError(error);
         task.setPublishClaimedAt(null);
         task.setPublishClaimedBy(null);
-        reviewTaskMapper.updateById(task);
         if (policy.closeCurrentTimeline()) {
             markCurrentTimelinesDone(task.getId());
         }
         appendTimeline(task.getId(), policy.timelinePrefix() + error, failedAt, ReviewTimelineStatus.FAILED);
+        return true;
+    }
+
+    public boolean markQueuedForRecoveryPublish(ReviewTask task, int nextAttempt) {
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", reviewTaskStateMachine.statusWhenRequeuePending())
+                .set("status", reviewTaskStateMachine.statusWhenQueued())
+                .set("llm_status", LlmStatus.PENDING.code())
+                .set("publish_attempts", nextAttempt)
+                .set("next_publish_retry_at", null)
+                .set("last_publish_error", null)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
+        );
+        if (updated <= 0) {
+            return false;
+        }
+        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
+        task.setLlmStatus(LlmStatus.PENDING.code());
+        task.setPublishAttempts(nextAttempt);
+        task.setNextPublishRetryAt(null);
+        task.setLastPublishError(null);
+        task.setPublishClaimedAt(null);
+        task.setPublishClaimedBy(null);
+        return true;
+    }
+
+    public boolean markRecoveryPublishFailed(
+        ReviewTask task,
+        LocalDateTime nextRetryAt,
+        String error
+    ) {
+        int updated = reviewTaskMapper.update(
+            new UpdateWrapper<ReviewTask>()
+                .eq("id", task.getId())
+                .eq("status", reviewTaskStateMachine.statusWhenQueued())
+                .set("status", reviewTaskStateMachine.statusWhenPublishFailed())
+                .set("next_publish_retry_at", nextRetryAt)
+                .set("last_publish_error", error)
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
+        );
+        if (updated <= 0) {
+            return false;
+        }
+        task.setStatus(reviewTaskStateMachine.statusWhenPublishFailed());
+        task.setNextPublishRetryAt(nextRetryAt);
+        task.setLastPublishError(error);
+        task.setPublishClaimedAt(null);
+        task.setPublishClaimedBy(null);
+        return true;
     }
 
     public void markCurrentTimelinesDone(Long taskId) {
@@ -218,6 +290,24 @@ public class ReviewTaskPublishOutboxStore {
         task.setLlmParseStatus(null);
         task.setLlmFallbackReason(null);
         task.setLlmPromptSummary(null);
+        task.setLlmPromptTokens(null);
+        task.setLlmCompletionTokens(null);
+        task.setLlmTotalTokens(null);
+        task.setLlmEstimatedCost(null);
+    }
+
+    private void clearLlmQuality(UpdateWrapper<ReviewTask> update) {
+        update
+            .set("llm_provider", null)
+            .set("llm_model", null)
+            .set("llm_duration_ms", null)
+            .set("llm_parse_status", null)
+            .set("llm_fallback_reason", null)
+            .set("llm_prompt_summary", null)
+            .set("llm_prompt_tokens", null)
+            .set("llm_completion_tokens", null)
+            .set("llm_total_tokens", null)
+            .set("llm_estimated_cost", null);
     }
 
     private int safeAttempts(ReviewTask task) {

@@ -5,7 +5,6 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.MessageQueueRequeueResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
 import com.repoguard.agent.messaging.ReviewTaskDirectPublishFailurePolicy;
@@ -13,7 +12,6 @@ import com.repoguard.agent.messaging.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.messaging.ReviewTaskPublisher;
 import com.repoguard.agent.observability.LogContext;
-import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
 import java.time.LocalDateTime;
@@ -25,7 +23,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @Component
 class ReviewTaskRequeueService {
 
-    private final ReviewTaskMapper reviewTaskMapper;
+    private final ReviewTaskTransitionStore transitionStore;
     private final RabbitReviewQueueProperties properties;
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final ReviewTaskStateMachine reviewTaskStateMachine;
@@ -34,7 +32,7 @@ class ReviewTaskRequeueService {
     private final TransactionTemplate transactionTemplate;
 
     ReviewTaskRequeueService(
-        ReviewTaskMapper reviewTaskMapper,
+        ReviewTaskTransitionStore transitionStore,
         RabbitReviewQueueProperties properties,
         ReviewTaskPublisher reviewTaskPublisher,
         PlatformTransactionManager transactionManager,
@@ -42,7 +40,7 @@ class ReviewTaskRequeueService {
         MessageQueueAuditRecorder auditRecorder,
         ReviewTaskPublishOutboxStore outboxStore
     ) {
-        this.reviewTaskMapper = reviewTaskMapper;
+        this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
         this.properties = properties;
         this.reviewTaskPublisher = reviewTaskPublisher;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
@@ -62,7 +60,7 @@ class ReviewTaskRequeueService {
             return new MessageQueueRequeueResponse(context.taskId(), "queued", "Message task requeued", context.publishAttempts());
         } catch (MessagePublishException ex) {
             executeInTransaction(() -> {
-                ReviewTask failedTask = reviewTaskMapper.selectById(context.taskId());
+                ReviewTask failedTask = transitionStore.findById(context.taskId());
                 if (failedTask != null) {
                     markPublishFailed(failedTask, ex, context.queuedAt());
                 }
@@ -79,7 +77,7 @@ class ReviewTaskRequeueService {
     }
 
     private RequeuePublishContext prepareRequeue(Long taskId) {
-        ReviewTask task = reviewTaskMapper.selectById(taskId);
+        ReviewTask task = transitionStore.findById(taskId);
         if (task == null) {
             auditRecorder.recordRequeue(taskId, "FAILED", "not found");
             throw new BusinessException(ErrorCode.TASK_NOT_FOUND, "Review task not found: " + taskId);
@@ -96,14 +94,12 @@ class ReviewTaskRequeueService {
         }
 
         LocalDateTime queuedAt = LocalDateTime.now();
-        task.setStatus(reviewTaskStateMachine.statusWhenQueued());
-        task.setLlmStatus(LlmStatus.PENDING.code());
-        task.setPublishAttempts(0);
-        task.setNextPublishRetryAt(null);
-        task.setLastPublishError(null);
-        task.setPublishClaimedAt(null);
-        task.setPublishClaimedBy(null);
-        reviewTaskMapper.updateById(task);
+        try {
+            transitionStore.requeueForPublish(task);
+        } catch (BusinessException ex) {
+            auditRecorder.recordRequeue(taskId, "FAILED", "state changed");
+            throw ex;
+        }
         outboxStore.markCurrentTimelinesDone(task.getId());
         outboxStore.appendTimeline(task.getId(), "Message manually requeued", queuedAt, ReviewTimelineStatus.CURRENT);
 

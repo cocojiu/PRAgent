@@ -7,6 +7,7 @@ describe("user-facing error messages", () => {
     ["PAYLOAD_TOO_LARGE", "提交内容过大，请精简后重试"],
     ["TOO_MANY_REQUESTS", "请求过于频繁，请稍后重试"],
     ["TASK_NOT_FOUND", "审查任务不存在或已被删除"],
+    ["CONFLICT", "状态已变化，请刷新"],
     ["INTERNAL_ERROR", "服务暂时不可用，请稍后重试"],
     ["INVALID_API_RESPONSE", "服务返回的数据格式异常，请稍后重试"]
   ])("maps backend code %s to stable copy", (code, expected) => {
