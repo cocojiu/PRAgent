@@ -62,7 +62,7 @@ jobs:
       - name: Generate ephemeral validation secrets
         shell: bash
         run: |
-          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           echo "SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"

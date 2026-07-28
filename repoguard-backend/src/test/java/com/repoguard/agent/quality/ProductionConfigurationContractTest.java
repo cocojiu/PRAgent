@@ -296,7 +296,7 @@ class ProductionConfigurationContractTest {
         for (String workflow : List.of(prQuality, release)) {
             assertThat(workflow)
                 .contains("Generate ephemeral validation secrets")
-                .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)")
+                .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)")
                 .contains("SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)")
                 .contains("SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)")
                 .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)")
