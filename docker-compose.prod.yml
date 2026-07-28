@@ -41,6 +41,16 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/repoguard}
     volumes:
       - repoguard_rabbitmq_data:/var/lib/rabbitmq
+      # conf.d fragment; pins consumer_timeout between the pipeline budget and the
+      # recovery staleness threshold instead of inheriting the 30 min default.
+      - type: bind
+        source: ./config/rabbitmq/rabbitmq.conf
+        target: /etc/rabbitmq/conf.d/20-repoguard.conf
+        read_only: true
+        bind:
+          # Short bind syntax creates a directory when the source is missing.
+          # A missing broker policy must instead fail before RabbitMQ is touched.
+          create_host_path: false
     healthcheck:
       # Backend Actuator performs the deeper AMQP health check.
       test: ["CMD", "bash", "-ec", "exec 3<>/dev/tcp/127.0.0.1/5672"]
@@ -126,6 +136,7 @@ services:
       REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY: ${REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY:-repoguard.notification.dead}
       REPOGUARD_REVIEW_WORKER_CONCURRENCY: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:-1}
       REPOGUARD_REVIEW_PIPELINE_BUDGET_MS: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:-600000}
+      REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS: ${REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS:-1800000}
       REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:-64}
       REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:-3}
       REPOGUARD_ASYNC_LLM_CHUNK_THREADS: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:-3}
@@ -155,10 +166,19 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      # Direct `docker compose up` must also serialize startup: API/Flyway first,
+      # then the non-owner Worker and its schema guard.
+      backend:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
       JAVA_TOOL_OPTIONS: ${WORKER_JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=70 -XX:+UseSerialGC}
+      # The API container owns the Flyway chain. Both roles share one image and
+      # one database, so leaving migrations on here would race two processes for
+      # the Flyway lock and make schema ownership depend on startup order.
+      # SchemaVersionGuard refuses to boot this role against a stale schema.
+      SPRING_FLYWAY_ENABLED: "false"
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${APP_MYSQL_DATABASE:-${MYSQL_DATABASE:-repoguard}}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
@@ -217,6 +237,7 @@ services:
       REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY: ${REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY:-repoguard.notification.dead}
       REPOGUARD_REVIEW_WORKER_CONCURRENCY: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:-1}
       REPOGUARD_REVIEW_PIPELINE_BUDGET_MS: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:-600000}
+      REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS: ${REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS:-1800000}
       REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:-64}
       REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:-3}
       REPOGUARD_ASYNC_LLM_CHUNK_THREADS: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:-3}
@@ -266,7 +287,12 @@ services:
       - "${HTTP_PORT_BIND:-80}:80"
       - "${HTTPS_PORT_BIND:-443}:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - type: bind
+        source: ./Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
       - repoguard_caddy_data:/data
       - repoguard_caddy_config:/config
     mem_limit: ${CADDY_MEM_LIMIT:-128m}

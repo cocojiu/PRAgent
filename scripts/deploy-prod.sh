@@ -9,6 +9,8 @@ COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
 DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
+DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
+DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -88,6 +90,101 @@ export COMPOSE_PROFILES
 
 compose() {
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
+
+validate_required_bind_sources() {
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  required_bind_sources="
+Caddyfile
+config/rabbitmq/rabbitmq.conf
+"
+
+  for relative_path in $required_bind_sources; do
+    source_path="${compose_directory}/${relative_path}"
+    if [ ! -f "$source_path" ] || [ ! -r "$source_path" ] || [ ! -s "$source_path" ]; then
+      echo "Missing, unreadable, or empty required bind source: $source_path" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+  done
+
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "Missing required deployment command: sha256sum" >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
+
+  # Resolve the complete model while deployment is still side-effect free.
+  compose config >/dev/null
+}
+
+validate_review_timeout_layering() {
+  compose_environment="$(compose config --environment)"
+  pipeline_budget_ms="$(printf '%s\n' "$compose_environment" \
+    | sed -n 's/^REPOGUARD_REVIEW_PIPELINE_BUDGET_MS=//p' | tail -n 1)"
+  recovery_timeout_ms="$(printf '%s\n' "$compose_environment" \
+    | sed -n 's/^REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS=//p' | tail -n 1)"
+  pipeline_budget_ms="${pipeline_budget_ms:-600000}"
+  recovery_timeout_ms="${recovery_timeout_ms:-1800000}"
+
+  rabbitmq_config="$(dirname "$COMPOSE_FILE")/config/rabbitmq/rabbitmq.conf"
+  consumer_timeout_ms="$(sed -n \
+    's/^[[:space:]]*consumer_timeout[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' \
+    "$rabbitmq_config" | tail -n 1)"
+
+  for numeric_value in "$pipeline_budget_ms" "$consumer_timeout_ms" "$recovery_timeout_ms"; do
+    case "$numeric_value" in
+      *[!0-9]*|"")
+        echo "Review timeout values must be positive integer milliseconds." >&2
+        return 1
+        ;;
+    esac
+    if [ "$numeric_value" -le 0 ]; then
+      echo "Review timeout values must be positive integer milliseconds." >&2
+      return 1
+    fi
+  done
+
+  if [ "$pipeline_budget_ms" -ge "$consumer_timeout_ms" ] \
+    || [ "$consumer_timeout_ms" -ge "$recovery_timeout_ms" ]; then
+    echo "Invalid review timeout layering." >&2
+    echo "  pipeline budget:             $pipeline_budget_ms ms" >&2
+    echo "  RabbitMQ consumer_timeout:   $consumer_timeout_ms ms" >&2
+    echo "  recovery staleness timeout:  $recovery_timeout_ms ms" >&2
+    echo "Required: pipeline budget < consumer_timeout < recovery timeout." >&2
+    return 1
+  fi
+}
+
+rabbitmq_config_digest() {
+  current_config="$(dirname "$COMPOSE_FILE")/config/rabbitmq/rabbitmq.conf"
+  sha256sum "$current_config" | awk '{print $1}'
+}
+
+rabbitmq_config_requires_restart() {
+  current_digest="$(rabbitmq_config_digest)"
+  applied_digest=""
+  if [ -f "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256" ]; then
+    applied_digest="$(sed -n '1p' "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256")"
+  fi
+  if [ -n "$applied_digest" ] && [ "$current_digest" = "$applied_digest" ]; then
+    return 1
+  fi
+  # Missing state also forces a restart. This covers first deployment, manual
+  # deployment, and a prior upload that failed before the broker was recreated.
+  return 0
+}
+
+record_rabbitmq_config_digest() {
+  mkdir -p "$DEPLOY_STATE_DIR"
+  digest_file="$DEPLOY_STATE_DIR/rabbitmq.conf.sha256"
+  digest_tmp="${digest_file}.tmp.$$"
+  rabbitmq_config_digest > "$digest_tmp"
+  mv "$digest_tmp" "$digest_file"
+}
+
+invalidate_rabbitmq_config_digest() {
+  rm -f "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256"
 }
 
 print_backend_logs() {
@@ -353,15 +450,67 @@ stop_inactive_split_worker() {
   fi
 }
 
+restore_deployment_assets() {
+  if [ -z "$DEPLOY_ASSET_BACKUP_DIR" ]; then
+    echo "No deployment asset backup was supplied; keeping the uploaded assets." >&2
+    return 0
+  fi
+  if [ ! -d "$DEPLOY_ASSET_BACKUP_DIR" ]; then
+    echo "Deployment asset backup is unavailable: $DEPLOY_ASSET_BACKUP_DIR" >&2
+    return 0
+  fi
+
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  restored_assets=false
+  for relative_path in config/rabbitmq/rabbitmq.conf Caddyfile; do
+    backup_path="${DEPLOY_ASSET_BACKUP_DIR}/${relative_path}"
+    target_path="${compose_directory}/${relative_path}"
+    if [ -f "$backup_path" ]; then
+      mkdir -p "$(dirname "$target_path")"
+      cp -p "$backup_path" "$target_path"
+      restored_assets=true
+    fi
+  done
+  if [ -f "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" ]; then
+    cp -p "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
+    restored_assets=true
+  fi
+
+  if [ "$restored_assets" = "true" ]; then
+    echo "Previous deployment assets restored from $DEPLOY_ASSET_BACKUP_DIR." >&2
+  else
+    echo "No previous deployment assets existed; keeping the uploaded assets." >&2
+  fi
+}
+
 rollback_deployment() {
   status="$1"
   trap - 0
-  if [ "$status" -eq 0 ] || [ "${rollback_needed:-false}" != "true" ] || [ -z "${previous_backend_image:-}" ]; then
+  if [ "$status" -eq 0 ] || [ "${rollback_needed:-false}" != "true" ]; then
     exit "$status"
   fi
 
   set +e
-  echo "Deployment failed; restoring the previous application images..." >&2
+  echo "Deployment failed; restoring the previous deployment assets and services..." >&2
+  restore_deployment_assets
+  compose up -d --no-deps mysql
+  # Bind-file contents are not part of Compose's service hash. A forced broker
+  # recreation is required to reload the restored consumer_timeout.
+  compose up -d --no-deps --force-recreate rabbitmq
+  wait_service_health mysql 45
+  if wait_service_health rabbitmq 45; then
+    record_rabbitmq_config_digest
+  else
+    invalidate_rabbitmq_config_digest
+    echo "RabbitMQ rollback is unhealthy; the next deployment will force another recreation." >&2
+  fi
+
+  if [ -z "${previous_backend_image:-}" ]; then
+    compose ps >&2
+    echo "No previous backend image was running; infrastructure rollback attempt finished." >&2
+    exit "$status"
+  fi
+
   BACKEND_IMAGE="$previous_backend_image"
   export BACKEND_IMAGE
   if has_compose_service backend-worker; then
@@ -450,9 +599,10 @@ echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
+validate_required_bind_sources
 validate_split_runtime_mode
 validate_production_data_routing
-stop_inactive_split_worker
+validate_review_timeout_layering
 deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
   deploy_services="mysql rabbitmq backend backend-worker frontend caddy"
@@ -462,6 +612,13 @@ preflight_release_images
 
 previous_backend_image="$(running_service_image_id backend)"
 previous_frontend_image="$(running_service_image_id frontend)"
+rabbitmq_config_changed=false
+if rabbitmq_config_requires_restart; then
+  rabbitmq_config_changed=true
+fi
+rollback_needed=true
+
+stop_inactive_split_worker
 
 if [ -z "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
@@ -473,11 +630,15 @@ if [ -z "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   fi
 fi
 
-compose up -d --no-deps mysql rabbitmq
+compose up -d --no-deps mysql
+if [ "$rabbitmq_config_changed" = "true" ]; then
+  echo "RabbitMQ configuration changed; recreating the broker to load it."
+  compose up -d --no-deps --force-recreate rabbitmq
+else
+  compose up -d --no-deps rabbitmq
+fi
 wait_service_health mysql 45
 wait_service_health rabbitmq 45
-
-rollback_needed=true
 
 if has_compose_service backend-worker; then
   worker_container_id="$(compose ps -q backend-worker 2>/dev/null || true)"
@@ -499,6 +660,7 @@ compose up -d --no-deps frontend
 compose up -d --no-deps caddy
 compose ps
 verify_deployment 15 30
+record_rabbitmq_config_digest
 
 rollback_needed=false
 echo "RepoGuard deployment is healthy: $HEALTH_URL"

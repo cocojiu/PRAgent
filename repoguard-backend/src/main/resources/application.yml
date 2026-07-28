@@ -64,6 +64,11 @@ repoguard:
       budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:600000}
       max-total-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:64}
       max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:3}
+  schema:
+    # Roles that do not own Flyway migrations refuse to start below this version.
+    # Keep in sync with the highest version under db/migration; the production
+    # readiness check enforces the match.
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:56}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}

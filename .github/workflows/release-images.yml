@@ -59,6 +59,17 @@ jobs:
         shell: pwsh
         run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
 
+      - name: Validate production Compose models
+        shell: bash
+        run: |
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+          REPOGUARD_RUNTIME_ROLE=api \
+          REPOGUARD_DEPLOYMENT_MODE=split \
+          docker compose --profile worker-split \
+            --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+
       - name: Set up Java
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
         with:
@@ -259,8 +270,27 @@ jobs:
           test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
           test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
+          test -s config/rabbitmq/rabbitmq.conf || { echo "Missing RabbitMQ deployment config"; exit 1; }
+          asset_backup_dir="${DEPLOY_PATH}/.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/performance/remote'"
+            "set -eu
+             mkdir -p '${DEPLOY_PATH}/scripts' \
+                      '${DEPLOY_PATH}/performance/remote' \
+                      '${DEPLOY_PATH}/config/rabbitmq' \
+                      '${asset_backup_dir}/config/rabbitmq'
+             if [ -f '${DEPLOY_PATH}/docker-compose.prod.yml' ]; then
+               cp -p '${DEPLOY_PATH}/docker-compose.prod.yml' '${asset_backup_dir}/docker-compose.prod.yml'
+             fi
+             if [ -f '${DEPLOY_PATH}/Caddyfile' ]; then
+               cp -p '${DEPLOY_PATH}/Caddyfile' '${asset_backup_dir}/Caddyfile'
+             fi
+             if [ -f '${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf' ]; then
+               cp -p '${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf' \
+                     '${asset_backup_dir}/config/rabbitmq/rabbitmq.conf'
+             fi"
+          echo "DEPLOY_ASSET_BACKUP_DIR=.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          # Upload bind sources before the compose file that references them.
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" config/rabbitmq/rabbitmq.conf "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
@@ -324,4 +354,5 @@ jobs:
              REPOGUARD_FRONTEND_SERVER_NAME='${REPOGUARD_FRONTEND_SERVER_NAME}' \
              APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
              HEALTH_URL='${health_url}' \
+             DEPLOY_ASSET_BACKUP_DIR='${DEPLOY_ASSET_BACKUP_DIR}' \
              sh scripts/deploy-prod.sh"
