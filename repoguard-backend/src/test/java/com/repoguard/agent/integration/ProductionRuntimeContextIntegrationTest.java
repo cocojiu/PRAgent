@@ -9,6 +9,8 @@ import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.notification.NotificationEventPublishCompensator;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.service.impl.ReviewTaskTransitionStore;
@@ -17,12 +19,15 @@ import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -32,7 +37,12 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class ProductionRuntimeContextIntegrationTest {
@@ -319,20 +329,179 @@ class ProductionRuntimeContextIntegrationTest {
         }
     }
 
-    private ConfigurableApplicationContext start(String runtimeRole) {
+    @Test
+    void terminalStateAndNotificationOutboxCommitOrRollBackAtomically() throws Exception {
+        RabbitTopology topology = RabbitTopology.unique("atomic");
+        try (ConfigurableApplicationContext context = start("api", topology.arguments())) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            ReviewTaskMapper reviewTaskMapper = context.getBean(ReviewTaskMapper.class);
+            ReviewTaskClaimService claimService = context.getBean(ReviewTaskClaimService.class);
+            NotificationDispatchService notificationDispatchService =
+                context.getBean(NotificationDispatchService.class);
+            TransactionTemplate transactionTemplate = new TransactionTemplate(
+                context.getBean(PlatformTransactionManager.class)
+            );
+            RabbitTemplate rabbitTemplate = context.getBean(RabbitTemplate.class);
+            String organization = "outbox-atomic-" + Long.toUnsignedString(System.nanoTime());
+            Long taskId = null;
+
+            try {
+                taskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9201,
+                    "REVIEWING",
+                    false,
+                    "NOT_REQUIRED"
+                );
+                claimReviewTask(jdbcTemplate, taskId, "atomic-claim");
+                Long rolledBackTaskId = taskId;
+
+                assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+                    ReviewTask task = completedTask(reviewTaskMapper.selectById(rolledBackTaskId));
+                    assertThat(claimService.writeTerminalStateIfClaimOwned(task, "atomic-claim")).isTrue();
+                    notificationDispatchService.reviewFinished(task, 0);
+                    throw new IllegalStateException("force rollback");
+                }))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("force rollback");
+
+                assertThat(jdbcTemplate.queryForObject(
+                    "select status from review_task where id = ?",
+                    String.class,
+                    taskId
+                )).isEqualTo("REVIEWING");
+                assertThat(notificationEventCount(jdbcTemplate, taskId)).isZero();
+
+                Long committedTaskId = taskId;
+                transactionTemplate.executeWithoutResult(status -> {
+                    ReviewTask task = completedTask(reviewTaskMapper.selectById(committedTaskId));
+                    assertThat(claimService.writeTerminalStateIfClaimOwned(task, "atomic-claim")).isTrue();
+                    notificationDispatchService.reviewFinished(task, 0);
+                });
+
+                assertThat(jdbcTemplate.queryForObject(
+                    "select status from review_task where id = ?",
+                    String.class,
+                    taskId
+                )).isEqualTo("COMPLETED");
+                assertThat(notificationEventCount(jdbcTemplate, taskId)).isOne();
+                Long eventId = jdbcTemplate.queryForObject(
+                    "select id from notification_event where task_id = ?",
+                    Long.class,
+                    taskId
+                );
+                awaitExecutorIdle(context, "notificationPublishWorkerExecutor");
+                String publishStatus = jdbcTemplate.queryForObject(
+                    "select status from notification_event where id = ?",
+                    String.class,
+                    eventId
+                );
+                assertThat(publishStatus).isIn(
+                    "PENDING",
+                    "PUBLISHING",
+                    "PUBLISHED",
+                    "PUBLISH_FAILED"
+                );
+                if ("PUBLISHED".equals(publishStatus)) {
+                    assertThat(rabbitTemplate.receive(topology.queue(), 5000)).isNotNull();
+                }
+            } finally {
+                if (taskId != null) {
+                    jdbcTemplate.update(
+                        "delete from notification_delivery_log where event_id in "
+                            + "(select id from notification_event where task_id = ?)",
+                        taskId
+                    );
+                    jdbcTemplate.update("delete from notification_event where task_id = ?", taskId);
+                }
+                jdbcTemplate.update("delete from review_task where organization = ?", organization);
+                deleteRabbitTopology(context, topology);
+            }
+        }
+    }
+
+    @Test
+    void notificationOutboxRecoversAfterRealRabbitRoutingFailure() throws Exception {
+        RabbitTopology topology = RabbitTopology.unique("recovery");
+        try (ConfigurableApplicationContext context = start("worker", topology.arguments())) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            RabbitAdmin rabbitAdmin = context.getBean(RabbitAdmin.class);
+            RabbitTemplate rabbitTemplate = context.getBean(RabbitTemplate.class);
+            NotificationEventPublishCompensator compensator =
+                context.getBean(NotificationEventPublishCompensator.class);
+            String eventKey = "INTEGRATION_RABBIT_RECOVERY:" + Long.toUnsignedString(System.nanoTime());
+            Long eventId = null;
+
+            try {
+                assertThat(rabbitAdmin.deleteExchange(topology.exchange())).isTrue();
+                LocalDateTime now = LocalDateTime.now();
+                jdbcTemplate.update("""
+                    insert into notification_event (
+                        event_key, event_type, task_id, batch_id, payload, status,
+                        retry_count, next_retry_at, last_error, created_at, updated_at
+                    ) values (?, 'REVIEW_FAILED', ?, null, ?, 'PENDING', 0, ?, null, ?, ?)
+                    """,
+                    eventKey,
+                    990000001L,
+                    "{\"eventType\":\"REVIEW_FAILED\",\"taskId\":990000001}",
+                    now.minusSeconds(1),
+                    now,
+                    now
+                );
+                eventId = jdbcTemplate.queryForObject(
+                    "select id from notification_event where event_key = ?",
+                    Long.class,
+                    eventKey
+                );
+
+                compensator.compensate();
+                awaitNotificationStatus(jdbcTemplate, eventId, "PUBLISH_FAILED");
+
+                rabbitAdmin.declareExchange(
+                    context.getBean("notificationExchange", DirectExchange.class)
+                );
+                rabbitAdmin.declareBinding(
+                    context.getBean("notificationBinding", Binding.class)
+                );
+                jdbcTemplate.update(
+                    "update notification_event set next_retry_at = ? where id = ?",
+                    LocalDateTime.now().minusSeconds(1),
+                    eventId
+                );
+
+                compensator.compensate();
+                awaitNotificationStatus(jdbcTemplate, eventId, "PUBLISHED");
+                assertThat(rabbitTemplate.receive(topology.queue(), 5000)).isNotNull();
+            } finally {
+                if (eventId != null) {
+                    jdbcTemplate.update(
+                        "delete from notification_delivery_log where event_id = ?",
+                        eventId
+                    );
+                    jdbcTemplate.update("delete from notification_event where id = ?", eventId);
+                }
+                deleteRabbitTopology(context, topology);
+            }
+        }
+    }
+
+    private ConfigurableApplicationContext start(String runtimeRole, String... additionalArguments) {
+        List<String> arguments = new ArrayList<>(List.of(
+            "--app.runtime.role=" + runtimeRole,
+            "--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1),
+            "--app.github.webhook.enabled=false",
+            "--app.security.admin-api-key.enabled=false",
+            "--app.cors.allowed-origins[0]=https://integration.local",
+            "--server.port=0",
+            "--spring.main.banner-mode=off",
+            "--spring.task.scheduling.enabled=false"
+        ));
+        arguments.addAll(Arrays.asList(additionalArguments));
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)
             .profiles("prod")
-            .run(
-                "--app.runtime.role=" + runtimeRole,
-                "--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1),
-                "--app.github.webhook.enabled=false",
-                "--app.security.admin-api-key.enabled=false",
-                "--app.cors.allowed-origins[0]=https://integration.local",
-                "--server.port=0",
-                "--spring.main.banner-mode=off",
-                "--spring.task.scheduling.enabled=false"
-            );
+            .run(arguments.toArray(String[]::new));
     }
 
     private Long insertReviewTask(
@@ -464,6 +633,83 @@ class ProductionRuntimeContextIntegrationTest {
         ).containsOnlyNulls();
     }
 
+    private void claimReviewTask(JdbcTemplate jdbcTemplate, Long taskId, String claimId) {
+        LocalDateTime claimedAt = LocalDateTime.now().minusMinutes(1);
+        jdbcTemplate.update("""
+            update review_task
+            set started_at = ?, review_claimed_at = ?, review_claimed_by = ?
+            where id = ?
+            """, claimedAt, claimedAt, claimId, taskId);
+    }
+
+    private ReviewTask completedTask(ReviewTask task) {
+        task.setStatus("COMPLETED");
+        task.setRiskLevel("LOW");
+        task.setLlmStatus("COMPLETED");
+        task.setLlmProvider("integration");
+        task.setLlmModel("integration-model");
+        task.setFinishedAt(LocalDateTime.now());
+        task.setDurationSeconds(60);
+        return task;
+    }
+
+    private int notificationEventCount(JdbcTemplate jdbcTemplate, Long taskId) {
+        return jdbcTemplate.queryForObject(
+            "select count(*) from notification_event where task_id = ?",
+            Integer.class,
+            taskId
+        );
+    }
+
+    private void awaitNotificationStatus(
+        JdbcTemplate jdbcTemplate,
+        Long eventId,
+        String expectedStatus
+    ) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        String actual = null;
+        while (System.nanoTime() < deadline) {
+            actual = jdbcTemplate.queryForObject(
+                "select status from notification_event where id = ?",
+                String.class,
+                eventId
+            );
+            if (expectedStatus.equals(actual)) {
+                return;
+            }
+            Thread.sleep(50);
+        }
+        assertThat(actual).isEqualTo(expectedStatus);
+    }
+
+    private void awaitExecutorIdle(
+        ConfigurableApplicationContext context,
+        String beanName
+    ) throws InterruptedException {
+        ThreadPoolExecutor executor = context.getBean(beanName, ThreadPoolExecutor.class);
+        Thread.sleep(100);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            if (executor.getActiveCount() == 0 && executor.getQueue().isEmpty()) {
+                return;
+            }
+            Thread.sleep(25);
+        }
+        assertThat(executor.getActiveCount()).isZero();
+        assertThat(executor.getQueue()).isEmpty();
+    }
+
+    private void deleteRabbitTopology(
+        ConfigurableApplicationContext context,
+        RabbitTopology topology
+    ) {
+        RabbitAdmin rabbitAdmin = context.getBean(RabbitAdmin.class);
+        rabbitAdmin.deleteQueue(topology.queue());
+        rabbitAdmin.deleteQueue(topology.deadLetterQueue());
+        rabbitAdmin.deleteExchange(topology.exchange());
+        rabbitAdmin.deleteExchange(topology.deadLetterExchange());
+    }
+
     private int runConcurrently(TransitionAction first, TransitionAction second) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
@@ -514,5 +760,39 @@ class ProductionRuntimeContextIntegrationTest {
     @FunctionalInterface
     private interface TransitionAction {
         void run();
+    }
+
+    private record RabbitTopology(
+        String exchange,
+        String queue,
+        String routingKey,
+        String deadLetterExchange,
+        String deadLetterQueue,
+        String deadLetterRoutingKey
+    ) {
+
+        static RabbitTopology unique(String purpose) {
+            String suffix = purpose + "." + Long.toUnsignedString(System.nanoTime());
+            return new RabbitTopology(
+                "repoguard.it.notification.exchange." + suffix,
+                "repoguard.it.notification.queue." + suffix,
+                "repoguard.it.notification.created." + suffix,
+                "repoguard.it.notification.dlx." + suffix,
+                "repoguard.it.notification.dlq." + suffix,
+                "repoguard.it.notification.dead." + suffix
+            );
+        }
+
+        String[] arguments() {
+            return new String[] {
+                "--app.rabbit.notification.exchange=" + exchange,
+                "--app.rabbit.notification.queue=" + queue,
+                "--app.rabbit.notification.routing-key=" + routingKey,
+                "--app.rabbit.notification.dead-letter-exchange=" + deadLetterExchange,
+                "--app.rabbit.notification.dead-letter-queue=" + deadLetterQueue,
+                "--app.rabbit.notification.dead-letter-routing-key=" + deadLetterRoutingKey,
+                "--spring.rabbitmq.listener.simple.auto-startup=false"
+            };
+        }
     }
 }

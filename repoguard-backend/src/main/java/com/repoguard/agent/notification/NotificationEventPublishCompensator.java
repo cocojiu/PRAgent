@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
+import com.repoguard.agent.concurrency.RecoveryWorkDispatcher;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationOutcome;
@@ -8,7 +9,6 @@ import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
-import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,40 +21,38 @@ public class NotificationEventPublishCompensator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventPublishCompensator.class);
 
-    private final NotificationOutboxEventStore outboxEventStore;
     private final NotificationPublishCompensationQuery compensationQuery;
     private final NotificationEventPublishCoordinator publishCoordinator;
     private final RabbitPublishCompensationMetricsRecorder metricsRecorder;
-    private final String instanceId;
+    private final RecoveryWorkDispatcher recoveryWorkDispatcher;
 
     @Autowired
     public NotificationEventPublishCompensator(
-        NotificationOutboxEventStore outboxEventStore,
+        NotificationPublishCompensationQuery compensationQuery,
+        NotificationEventPublishCoordinator publishCoordinator,
+        RabbitPublishCompensationMetricsRecorder metricsRecorder,
+        RecoveryWorkDispatcher recoveryWorkDispatcher
+    ) {
+        this.compensationQuery = Objects.requireNonNull(compensationQuery, "compensationQuery");
+        this.publishCoordinator = Objects.requireNonNull(publishCoordinator, "publishCoordinator");
+        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
+        this.recoveryWorkDispatcher = Objects.requireNonNull(
+            recoveryWorkDispatcher,
+            "recoveryWorkDispatcher"
+        );
+    }
+
+    NotificationEventPublishCompensator(
         NotificationPublishCompensationQuery compensationQuery,
         NotificationEventPublishCoordinator publishCoordinator,
         RabbitPublishCompensationMetricsRecorder metricsRecorder
     ) {
         this(
-            outboxEventStore,
             compensationQuery,
             publishCoordinator,
             metricsRecorder,
-            "repoguard-notification-" + UUID.randomUUID()
+            new RecoveryWorkDispatcher(Runnable::run)
         );
-    }
-
-    NotificationEventPublishCompensator(
-        NotificationOutboxEventStore outboxEventStore,
-        NotificationPublishCompensationQuery compensationQuery,
-        NotificationEventPublishCoordinator publishCoordinator,
-        RabbitPublishCompensationMetricsRecorder metricsRecorder,
-        String instanceId
-    ) {
-        this.outboxEventStore = Objects.requireNonNull(outboxEventStore, "outboxEventStore");
-        this.compensationQuery = Objects.requireNonNull(compensationQuery, "compensationQuery");
-        this.publishCoordinator = Objects.requireNonNull(publishCoordinator, "publishCoordinator");
-        this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
-        this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.notification.publish-compensation-interval-ms:60000}")
@@ -62,13 +60,21 @@ public class NotificationEventPublishCompensator {
         LocalDateTime now = LocalDateTime.now();
         List<NotificationEvent> events = compensationQuery.loadDueEvents(now);
         for (NotificationEvent event : events) {
-            compensate(event);
+            if (!recoveryWorkDispatcher.submit(
+                "notification_publish_compensation",
+                () -> compensate(event)
+            )) {
+                LOGGER.warn(
+                    "Notification publish compensation deferred eventId={} operation=notification_publish_compensation result=executor_rejected",
+                    event.getId()
+                );
+            }
         }
     }
 
     void compensate(NotificationEvent event) {
-        LocalDateTime claimedAt = LocalDateTime.now();
-        if (!outboxEventStore.claimForPublish(event, compensationQuery.claim(claimedAt, instanceId))) {
+        NotificationPublishResult result = publishCoordinator.publish(event);
+        if (!result.attempted()) {
             LOGGER.info(
                 "Notification publish compensation skipped eventId={} eventKey={} operation=notification_publish_compensation result=claim_failed status={} retryCount={} maxAttempts={}",
                 event.getId(),
@@ -79,7 +85,6 @@ public class NotificationEventPublishCompensator {
             );
             return;
         }
-        NotificationPublishResult result = publishCoordinator.publish(event);
         if (result.success()) {
             metricsRecorder.record(RabbitPublishCompensationOutcome.succeeded(RabbitPublishFailurePhase.NOTIFICATION));
             LOGGER.info(

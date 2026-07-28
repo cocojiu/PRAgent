@@ -169,6 +169,25 @@ class RabbitReviewTaskPublisherTest {
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
     }
 
+    @Test
+    void publishOnceLeavesRetrySchedulingToDatabaseCompensation() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+        ReviewTaskMessage message = message();
+        doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
+            .when(rabbitTemplate)
+            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+
+        assertThatThrownBy(() -> publisher(rabbitTemplate, properties()).publishOnce(message))
+            .isInstanceOf(MessagePublishException.class)
+            .hasMessageContaining("publish attempt failed");
+        verify(rabbitTemplate).convertAndSend(
+            eq("test.review.exchange"),
+            eq("test.review.created"),
+            eq(message),
+            any(CorrelationData.class)
+        );
+    }
+
     private RabbitReviewQueueProperties properties() {
         RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
         properties.setExchange("test.review.exchange");

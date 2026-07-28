@@ -36,4 +36,16 @@ public record RabbitPublishSpec(
     public long normalizedConfirmTimeoutMs() {
         return Math.max(1, confirmTimeoutMs);
     }
+
+    public RabbitPublishSpec singleAttempt() {
+        return new RabbitPublishSpec(
+            exchange,
+            routingKey,
+            1,
+            0,
+            1.0,
+            confirmTimeoutMs,
+            correlationIdPrefix
+        );
+    }
 }

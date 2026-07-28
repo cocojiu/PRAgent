@@ -153,7 +153,7 @@ class ReviewExecutionWorkflow {
         return stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
             ReviewExecutionResultWriter.WriteResult writeResult =
                 resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId);
-            notifier.reviewFinishedAfterCommit(task, writeResult.findingCount());
+            notifier.reviewFinished(task, writeResult.findingCount());
             return writeResult;
         }));
     }
@@ -162,7 +162,7 @@ class ReviewExecutionWorkflow {
         Boolean failed = stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
             boolean applied = failureHandler.applyFailure(task, startedAt, claimId, ex);
             if (applied) {
-                notifier.reviewFailedAfterCommit(task);
+                notifier.reviewFailed(task);
             }
             return applied;
         }));

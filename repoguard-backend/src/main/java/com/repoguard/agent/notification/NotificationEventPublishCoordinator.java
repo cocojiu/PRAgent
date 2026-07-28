@@ -4,7 +4,13 @@ import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -12,24 +18,62 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Component
 class NotificationEventPublishCoordinator {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventPublishCoordinator.class);
+
     private final NotificationEventPublisher eventPublisher;
     private final RabbitNotificationQueueProperties properties;
     private final NotificationPublishFailurePolicy publishFailurePolicy;
     private final NotificationPublishEventStateUpdater publishEventStateUpdater;
     private final RabbitPublishFailureClassifier failureClassifier;
+    private final NotificationOutboxEventStore outboxEventStore;
+    private final NotificationPublishCompensationQuery compensationQuery;
+    private final NotificationPublishExecutor publishExecutor;
+    private final String instanceId;
+
+    @Autowired
+    NotificationEventPublishCoordinator(
+        NotificationEventPublisher eventPublisher,
+        RabbitNotificationQueueProperties properties,
+        NotificationPublishFailurePolicy publishFailurePolicy,
+        NotificationPublishEventStateUpdater publishEventStateUpdater,
+        RabbitPublishFailureClassifier failureClassifier,
+        NotificationOutboxEventStore outboxEventStore,
+        NotificationPublishCompensationQuery compensationQuery,
+        NotificationPublishExecutor publishExecutor
+    ) {
+        this(
+            eventPublisher,
+            properties,
+            publishFailurePolicy,
+            publishEventStateUpdater,
+            failureClassifier,
+            outboxEventStore,
+            compensationQuery,
+            publishExecutor,
+            "repoguard-notification-publish-" + UUID.randomUUID()
+        );
+    }
 
     NotificationEventPublishCoordinator(
         NotificationEventPublisher eventPublisher,
         RabbitNotificationQueueProperties properties,
         NotificationPublishFailurePolicy publishFailurePolicy,
         NotificationPublishEventStateUpdater publishEventStateUpdater,
-        RabbitPublishFailureClassifier failureClassifier
+        RabbitPublishFailureClassifier failureClassifier,
+        NotificationOutboxEventStore outboxEventStore,
+        NotificationPublishCompensationQuery compensationQuery,
+        NotificationPublishExecutor publishExecutor,
+        String instanceId
     ) {
         this.eventPublisher = Objects.requireNonNull(eventPublisher, "eventPublisher");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.publishFailurePolicy = Objects.requireNonNull(publishFailurePolicy, "publishFailurePolicy");
         this.publishEventStateUpdater = Objects.requireNonNull(publishEventStateUpdater, "publishEventStateUpdater");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
+        this.outboxEventStore = Objects.requireNonNull(outboxEventStore, "outboxEventStore");
+        this.compensationQuery = Objects.requireNonNull(compensationQuery, "compensationQuery");
+        this.publishExecutor = Objects.requireNonNull(publishExecutor, "publishExecutor");
+        this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     }
 
     void publishAfterCommit(NotificationEvent event) {
@@ -37,22 +81,49 @@ class NotificationEventPublishCoordinator {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    publish(event);
+                    submit(event);
                 }
             });
             return;
         }
-        publish(event);
+        submit(event);
     }
 
     NotificationPublishResult publish(NotificationEvent event) {
+        LocalDateTime claimedAt = LocalDateTime.now();
+        if (!outboxEventStore.claimForPublish(
+            event,
+            compensationQuery.claim(claimedAt, instanceId)
+        )) {
+            LOGGER.info(
+                "Notification outbox publish skipped eventId={} eventKey={} operation=notification_publish result=claim_failed status={} retryCount={} nextRetryAt={}",
+                event.getId(),
+                event.getEventKey(),
+                event.getStatus(),
+                event.getRetryCount(),
+                event.getNextRetryAt()
+            );
+            return NotificationPublishResult.skipped();
+        }
         try {
-            eventPublisher.publish(toMessage(event));
+            eventPublisher.publishOnce(toMessage(event));
             publishEventStateUpdater.markPublished(event);
             return NotificationPublishResult.published();
         } catch (RuntimeException ex) {
             markPublishFailed(event, ex);
             return NotificationPublishResult.failed(failureReason(ex));
+        }
+    }
+
+    private void submit(NotificationEvent event) {
+        try {
+            publishExecutor.execute(() -> publish(event));
+        } catch (RejectedExecutionException ex) {
+            LOGGER.warn(
+                "Notification outbox dispatch rejected eventId={} eventKey={} operation=notification_publish_dispatch result=executor_rejected",
+                event == null ? null : event.getId(),
+                event == null ? null : event.getEventKey()
+            );
         }
     }
 

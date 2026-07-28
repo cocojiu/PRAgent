@@ -1,6 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
+import com.repoguard.agent.concurrency.RecoveryWorkDispatcher;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.MessagePublishFailureSanitizer;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -33,7 +35,9 @@ public class ReviewTaskRecoveryCompensator {
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final RabbitPublishFailureMetricsRecorder metricsRecorder;
     private final RabbitPublishFailureClassifier failureClassifier;
+    private final RecoveryWorkDispatcher recoveryWorkDispatcher;
 
+    @Autowired
     public ReviewTaskRecoveryCompensator(
         ReviewTaskRecoveryStore recoveryStore,
         ReviewTaskRecoveryTimelineRecorder timelineRecorder,
@@ -42,7 +46,8 @@ public class ReviewTaskRecoveryCompensator {
         ReviewTaskRecoveryPolicy recoveryPolicy,
         ReviewTaskPublisher reviewTaskPublisher,
         RabbitPublishFailureMetricsRecorder metricsRecorder,
-        RabbitPublishFailureClassifier failureClassifier
+        RabbitPublishFailureClassifier failureClassifier,
+        RecoveryWorkDispatcher recoveryWorkDispatcher
     ) {
         this.recoveryStore = Objects.requireNonNull(recoveryStore, "recoveryStore");
         this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
@@ -52,6 +57,33 @@ public class ReviewTaskRecoveryCompensator {
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.metricsRecorder = Objects.requireNonNull(metricsRecorder, "metricsRecorder");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
+        this.recoveryWorkDispatcher = Objects.requireNonNull(
+            recoveryWorkDispatcher,
+            "recoveryWorkDispatcher"
+        );
+    }
+
+    ReviewTaskRecoveryCompensator(
+        ReviewTaskRecoveryStore recoveryStore,
+        ReviewTaskRecoveryTimelineRecorder timelineRecorder,
+        ReviewExecutionClock clock,
+        ReviewLogContextFormatter logContextFormatter,
+        ReviewTaskRecoveryPolicy recoveryPolicy,
+        ReviewTaskPublisher reviewTaskPublisher,
+        RabbitPublishFailureMetricsRecorder metricsRecorder,
+        RabbitPublishFailureClassifier failureClassifier
+    ) {
+        this(
+            recoveryStore,
+            timelineRecorder,
+            clock,
+            logContextFormatter,
+            recoveryPolicy,
+            reviewTaskPublisher,
+            metricsRecorder,
+            failureClassifier,
+            new RecoveryWorkDispatcher(Runnable::run)
+        );
     }
 
     @Scheduled(fixedDelayString = "${app.rabbit.review.review-recovery-interval-ms:60000}")
@@ -60,7 +92,15 @@ public class ReviewTaskRecoveryCompensator {
         LocalDateTime expiredBefore = recoveryPolicy.expiredBefore(now);
         List<ReviewTask> tasks = recoveryStore.findExpiredReviewingTasks(expiredBefore, recoveryPolicy.batchSize());
         for (ReviewTask task : tasks) {
-            recover(task, now, expiredBefore);
+            if (!recoveryWorkDispatcher.submit(
+                "review_execution_recovery",
+                () -> recover(task, now, expiredBefore)
+            )) {
+                LOGGER.warn(
+                    "Review task recovery deferred taskId={} operation=review_recovery result=executor_rejected",
+                    task.getId()
+                );
+            }
         }
     }
 
@@ -91,7 +131,7 @@ public class ReviewTaskRecoveryCompensator {
                 return;
             }
             try {
-                reviewTaskPublisher.publish(toMessage(task, recoveredAt));
+                reviewTaskPublisher.publishOnce(toMessage(task, recoveredAt));
             } catch (MessagePublishException ex) {
                 String error = truncate(MessagePublishFailureSanitizer.sanitize(ex));
                 LocalDateTime nextRetryAt = recoveredAt.plusNanos(recoveryPolicy.publishRetryDelayMs() * 1_000_000);

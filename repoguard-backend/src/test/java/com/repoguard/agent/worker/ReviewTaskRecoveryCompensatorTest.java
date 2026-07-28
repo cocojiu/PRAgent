@@ -92,7 +92,7 @@ class ReviewTaskRecoveryCompensatorTest {
         ordered.verify(recoveryStore).markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, "Review execution lease expired");
         ordered.verify(timelineRecorder).requeuePending(task, recoveredAt);
         ordered.verify(recoveryStore).markQueuedForRecoveryPublish(task, recoveredAt, 1);
-        ordered.verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        ordered.verify(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         ordered.verify(timelineRecorder).recoveryQueued(task, recoveredAt);
         assertLogContextCleared();
     }
@@ -108,7 +108,7 @@ class ReviewTaskRecoveryCompensatorTest {
             .thenReturn(true);
         doThrow(new MessagePublishException("publisher confirm timed out password=raw-password"))
             .when(reviewTaskPublisher)
-            .publish(any(ReviewTaskMessage.class));
+            .publishOnce(any(ReviewTaskMessage.class));
         when(recoveryStore.markRecoveryPublishFailed(
             any(ReviewTask.class),
             any(LocalDateTime.class),
@@ -141,7 +141,7 @@ class ReviewTaskRecoveryCompensatorTest {
 
         compensator.recover(task, recoveredAt, expiredBefore);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         verify(timelineRecorder, never()).requeuePending(any(ReviewTask.class), any(LocalDateTime.class));
         verify(timelineRecorder, never()).recoveryQueued(any(ReviewTask.class), any(LocalDateTime.class));
         assertLogContextCleared();

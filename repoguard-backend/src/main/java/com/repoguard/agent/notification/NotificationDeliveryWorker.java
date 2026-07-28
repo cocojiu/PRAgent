@@ -52,35 +52,74 @@ public class NotificationDeliveryWorker {
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
+        LOGGER.info(
+            "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
+            message.eventId(),
+            logContextFormatter.safePart(message.eventKey()),
+            logContextFormatter.safePart(message.eventType()),
+            message.taskId(),
+            message.batchId(),
+            deliveryTag
+        );
         try {
-            LOGGER.info(
-                "Rabbit notification message received eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=received deliveryTag={}",
-                message.eventId(),
-                logContextFormatter.safePart(message.eventKey()),
-                logContextFormatter.safePart(message.eventType()),
-                message.taskId(),
-                message.batchId(),
-                deliveryTag
-            );
             deliver(message.eventId());
-            channel.basicAck(deliveryTag, false);
-            metricsRecorder.recordConsumed(startedAt, "success");
-            LOGGER.info(
-                "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
-                message.eventId(),
-                logContextFormatter.safePart(message.eventKey()),
-                logContextFormatter.safePart(message.eventType()),
-                message.taskId(),
-                message.batchId(),
-                metricsRecorder.elapsedMillis(startedAt),
-                deliveryTag
-            );
         } catch (RuntimeException ex) {
-            channel.basicReject(deliveryTag, false);
-            String failureCategory = failureClassifier.failureCategory(ex);
-            metricsRecorder.recordConsumed(startedAt, "rejected", failureCategory);
-            LOGGER.warn(
-                "Rabbit notification message rejected eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
+            rejectRuntimeFailure(message, channel, deliveryTag, startedAt, ex);
+            return;
+        } catch (Error error) {
+            rejectFatalFailure(message, channel, deliveryTag, startedAt, error);
+            throw error;
+        }
+        channel.basicAck(deliveryTag, false);
+        metricsRecorder.recordConsumed(startedAt, "success");
+        LOGGER.info(
+            "Rabbit notification message consumed eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=success durationMs={} deliveryTag={}",
+            message.eventId(),
+            logContextFormatter.safePart(message.eventKey()),
+            logContextFormatter.safePart(message.eventType()),
+            message.taskId(),
+            message.batchId(),
+            metricsRecorder.elapsedMillis(startedAt),
+            deliveryTag
+        );
+    }
+
+    private void rejectRuntimeFailure(
+        NotificationEventMessage message,
+        Channel channel,
+        long deliveryTag,
+        long startedAt,
+        RuntimeException ex
+    ) throws IOException {
+        channel.basicReject(deliveryTag, false);
+        String failureCategory = failureClassifier.failureCategory(ex);
+        metricsRecorder.recordConsumed(startedAt, "rejected", failureCategory);
+        LOGGER.warn(
+            "Rabbit notification message rejected eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory={}",
+            message.eventId(),
+            logContextFormatter.safePart(message.eventKey()),
+            logContextFormatter.safePart(message.eventType()),
+            message.taskId(),
+            message.batchId(),
+            metricsRecorder.elapsedMillis(startedAt),
+            deliveryTag,
+            ex.getClass().getName(),
+            failureCategory
+        );
+    }
+
+    private void rejectFatalFailure(
+        NotificationEventMessage message,
+        Channel channel,
+        long deliveryTag,
+        long startedAt,
+        Error error
+    ) throws IOException {
+        channel.basicReject(deliveryTag, false);
+        try {
+            metricsRecorder.recordConsumed(startedAt, "rejected", "notification_delivery_error");
+            LOGGER.error(
+                "Rabbit notification message rejected after fatal delivery error eventId={} eventKey={} eventType={} taskId={} batchId={} operation=rabbit_consume result=rejected requeue=false durationMs={} deliveryTag={} exceptionType={} failureCategory=notification_delivery_error",
                 message.eventId(),
                 logContextFormatter.safePart(message.eventKey()),
                 logContextFormatter.safePart(message.eventType()),
@@ -88,9 +127,10 @@ public class NotificationDeliveryWorker {
                 message.batchId(),
                 metricsRecorder.elapsedMillis(startedAt),
                 deliveryTag,
-                ex.getClass().getName(),
-                failureCategory
+                error.getClass().getName()
             );
+        } catch (Throwable telemetryFailure) {
+            error.addSuppressed(telemetryFailure);
         }
     }
 

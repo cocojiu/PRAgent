@@ -187,6 +187,25 @@ class RabbitNotificationEventPublisherTest {
             .convertAndSend(eq("test.notification.exchange"), eq("test.notification.created"), eq(message), any(CorrelationData.class));
     }
 
+    @Test
+    void publishOnceLeavesRetrySchedulingToOutbox() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+        NotificationEventMessage message = message();
+        doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
+            .when(rabbitTemplate)
+            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+
+        assertThatThrownBy(() -> publisher(rabbitTemplate, properties()).publishOnce(message))
+            .isInstanceOf(MessagePublishException.class)
+            .hasMessageContaining("publish attempt failed");
+        verify(rabbitTemplate).convertAndSend(
+            eq("test.notification.exchange"),
+            eq("test.notification.created"),
+            eq(message),
+            any(CorrelationData.class)
+        );
+    }
+
     private RabbitNotificationQueueProperties properties() {
         RabbitNotificationQueueProperties properties = new RabbitNotificationQueueProperties();
         properties.setExchange("test.notification.exchange");

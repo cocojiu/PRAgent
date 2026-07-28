@@ -46,7 +46,11 @@ class NotificationEventPublishCompensatorTest {
             compensationPolicy
         ),
         new NotificationPublishEventStateUpdater(eventMapper),
-        new RabbitPublishFailureClassifier()
+        new RabbitPublishFailureClassifier(),
+        outboxEventStore,
+        compensationQuery,
+        new NotificationPublishExecutor(Runnable::run),
+        "test-node"
     );
 
     @Test
@@ -57,7 +61,7 @@ class NotificationEventPublishCompensatorTest {
 
         compensator().compensate();
 
-        verify(eventPublisher).publish(any(NotificationEventMessage.class));
+        verify(eventPublisher).publishOnce(any(NotificationEventMessage.class));
         verify(eventMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
         verify(metrics).rabbitPublishCompensationSucceeded("notification");
     }
@@ -70,7 +74,7 @@ class NotificationEventPublishCompensatorTest {
 
         compensator().compensate();
 
-        verify(eventPublisher, never()).publish(any(NotificationEventMessage.class));
+        verify(eventPublisher, never()).publishOnce(any(NotificationEventMessage.class));
         verify(metrics, never()).rabbitPublishCompensationSucceeded("notification");
         verify(metrics, never()).rabbitPublishCompensationFailed(any(), any());
     }
@@ -82,7 +86,7 @@ class NotificationEventPublishCompensatorTest {
         when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(eventPublisher)
-            .publish(any(NotificationEventMessage.class));
+            .publishOnce(any(NotificationEventMessage.class));
 
         compensator().compensate();
 
@@ -91,11 +95,9 @@ class NotificationEventPublishCompensatorTest {
 
     private NotificationEventPublishCompensator compensator() {
         return new NotificationEventPublishCompensator(
-            outboxEventStore,
             compensationQuery,
             publishCoordinator,
-            metricsRecorder,
-            "test-node"
+            metricsRecorder
         );
     }
 

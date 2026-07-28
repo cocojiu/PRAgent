@@ -30,6 +30,12 @@ class ProductionConfigurationContractTest {
         "REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS",
         "REPOGUARD_ASYNC_LLM_CHUNK_THREADS",
         "REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY",
+        "REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS",
+        "REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY",
+        "REPOGUARD_ASYNC_RECOVERY_THREADS",
+        "REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY",
+        "REPOGUARD_SCHEDULER_POOL_SIZE",
+        "REPOGUARD_SCHEDULER_SHUTDOWN_WAIT",
         "REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS",
         "REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS"
     );
@@ -284,6 +290,45 @@ class ProductionConfigurationContractTest {
                     .endsWith("=");
             }
         }
+    }
+
+    @Test
+    void schedulerAndNetworkRecoveryWorkHaveIndependentBoundedCapacity() throws IOException {
+        Path root = findRepositoryRoot();
+        String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
+        String notificationCompensator = read(root.resolve(
+            "repoguard-backend/src/main/java/com/repoguard/agent/notification/"
+                + "NotificationEventPublishCompensator.java"
+        ));
+        String reviewPublishCompensator = read(root.resolve(
+            "repoguard-backend/src/main/java/com/repoguard/agent/messaging/"
+                + "ReviewTaskPublishCompensator.java"
+        ));
+        String reviewRecoveryCompensator = read(root.resolve(
+            "repoguard-backend/src/main/java/com/repoguard/agent/worker/"
+                + "ReviewTaskRecoveryCompensator.java"
+        ));
+        String notificationCoordinator = read(root.resolve(
+            "repoguard-backend/src/main/java/com/repoguard/agent/notification/"
+                + "NotificationEventPublishCoordinator.java"
+        ));
+
+        assertThat(application)
+            .contains("size: ${REPOGUARD_SCHEDULER_POOL_SIZE:4}")
+            .contains("notification-publish-threads: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS:2}")
+            .contains("recovery-threads: ${REPOGUARD_ASYNC_RECOVERY_THREADS:3}");
+        for (String source : List.of(
+            notificationCompensator,
+            reviewPublishCompensator,
+            reviewRecoveryCompensator
+        )) {
+            assertThat(source)
+                .contains("RecoveryWorkDispatcher")
+                .contains("recoveryWorkDispatcher.submit(");
+        }
+        assertThat(reviewPublishCompensator).contains("reviewTaskPublisher.publishOnce(");
+        assertThat(reviewRecoveryCompensator).contains("reviewTaskPublisher.publishOnce(");
+        assertThat(notificationCoordinator).contains("eventPublisher.publishOnce(");
     }
 
     private Set<String> repoguardKeys(Map<String, Object> environment) {

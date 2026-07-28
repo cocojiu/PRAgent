@@ -11,6 +11,10 @@ public class AsyncExecutorProperties {
     private int githubCommentQueueCapacity = 100;
     private int reviewPublishThreads = 2;
     private int reviewPublishQueueCapacity = 100;
+    private int notificationPublishThreads = 2;
+    private int notificationPublishQueueCapacity = 100;
+    private int recoveryThreads = 3;
+    private int recoveryQueueCapacity = 100;
     private int dashboardThreads = 1;
     private int dashboardQueueCapacity = 16;
     private int rabbitHealthThreads = 1;
@@ -29,6 +33,14 @@ public class AsyncExecutorProperties {
     public void setReviewPublishThreads(int value) { reviewPublishThreads = value; }
     public int getReviewPublishQueueCapacity() { return reviewPublishQueueCapacity; }
     public void setReviewPublishQueueCapacity(int value) { reviewPublishQueueCapacity = value; }
+    public int getNotificationPublishThreads() { return notificationPublishThreads; }
+    public void setNotificationPublishThreads(int value) { notificationPublishThreads = value; }
+    public int getNotificationPublishQueueCapacity() { return notificationPublishQueueCapacity; }
+    public void setNotificationPublishQueueCapacity(int value) { notificationPublishQueueCapacity = value; }
+    public int getRecoveryThreads() { return recoveryThreads; }
+    public void setRecoveryThreads(int value) { recoveryThreads = value; }
+    public int getRecoveryQueueCapacity() { return recoveryQueueCapacity; }
+    public void setRecoveryQueueCapacity(int value) { recoveryQueueCapacity = value; }
     public int getDashboardThreads() { return dashboardThreads; }
     public void setDashboardThreads(int value) { dashboardThreads = value; }
     public int getDashboardQueueCapacity() { return dashboardQueueCapacity; }

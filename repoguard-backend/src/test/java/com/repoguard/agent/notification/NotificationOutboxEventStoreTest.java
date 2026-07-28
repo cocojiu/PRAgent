@@ -114,6 +114,7 @@ class NotificationOutboxEventStoreTest {
         assertThat(claimed).isTrue();
         assertThat(event.getPublishClaimedAt()).isEqualTo(claimedAt);
         assertThat(event.getPublishClaimedBy()).isEqualTo("node-a");
+        assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.PUBLISHING.code());
         assertThat(event.getUpdatedAt()).isEqualTo(claimedAt);
     }
 

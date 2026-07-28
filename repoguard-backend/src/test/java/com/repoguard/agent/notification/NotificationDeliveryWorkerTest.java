@@ -1,7 +1,11 @@
 package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -65,6 +69,41 @@ class NotificationDeliveryWorkerTest {
                 org.mockito.Mockito.eq("rejected"),
                 org.mockito.Mockito.eq("notification_delivery_failed")
             );
+    }
+
+    @Test
+    void handleRejectsFatalErrorExactlyOnceAndRethrowsIt() throws Exception {
+        Channel channel = org.mockito.Mockito.mock(Channel.class);
+        NotificationEventMessage message = message();
+        NotificationDeliveryWorkerMetricsRecorder recorder =
+            org.mockito.Mockito.mock(NotificationDeliveryWorkerMetricsRecorder.class);
+        AssertionError failure = new AssertionError("fatal");
+        when(recorder.startedAt()).thenReturn(300L);
+        when(recorder.elapsedMillis(300L)).thenReturn(9L);
+        when(eventMapper.selectById(11L)).thenThrow(failure);
+
+        assertThatThrownBy(() -> worker(recorder).handle(message, channel, 101L)).isSameAs(failure);
+        verify(channel).basicReject(101L, false);
+        verify(channel, never()).basicAck(101L, false);
+        verify(recorder).recordConsumed(300L, "rejected", "notification_delivery_error");
+    }
+
+    @Test
+    void telemetryFailureAfterAckDoesNotRejectAcknowledgedMessage() throws Exception {
+        Channel channel = org.mockito.Mockito.mock(Channel.class);
+        NotificationEventMessage message = message();
+        NotificationDeliveryWorkerMetricsRecorder recorder =
+            org.mockito.Mockito.mock(NotificationDeliveryWorkerMetricsRecorder.class);
+        when(recorder.startedAt()).thenReturn(400L);
+        doThrow(new IllegalStateException("metrics unavailable"))
+            .when(recorder)
+            .recordConsumed(400L, "success");
+
+        assertThatThrownBy(() -> worker(recorder).handle(message, channel, 102L))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("metrics unavailable");
+        verify(channel).basicAck(102L, false);
+        verify(channel, never()).basicReject(102L, false);
     }
 
     @Test
@@ -193,6 +232,12 @@ class NotificationDeliveryWorkerTest {
     }
 
     private NotificationDeliveryWorker worker() {
+        return worker(metricsRecorder);
+    }
+
+    private NotificationDeliveryWorker worker(
+        NotificationDeliveryWorkerMetricsRecorder workerMetricsRecorder
+    ) {
         NotificationChannelAdapterRegistry registry =
             new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
         NotificationDeliveryEventStateUpdater eventStateUpdater =
@@ -207,7 +252,7 @@ class NotificationDeliveryWorkerTest {
             new NotificationEventPayloadParser(new ObjectMapper()),
             bindingBatchDeliveryService(registry),
             deliveryCompletionService(),
-            metricsRecorder,
+            workerMetricsRecorder,
             new NotificationDeliveryFailureClassifier(),
             new NotificationDeliveryLogContextFormatter()
         );

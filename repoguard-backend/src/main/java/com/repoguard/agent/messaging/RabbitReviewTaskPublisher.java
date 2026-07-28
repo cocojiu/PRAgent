@@ -33,9 +33,18 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
 
     @Override
     public void publish(ReviewTaskMessage message) {
+        publish(message, spec(message));
+    }
+
+    @Override
+    public void publishOnce(ReviewTaskMessage message) {
+        publish(message, spec(message).singleAttempt());
+    }
+
+    private void publish(ReviewTaskMessage message, RabbitPublishSpec publishSpec) {
         try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
             try {
-                RabbitPublishResult result = reliablePublisher.publish(message, spec(message));
+                RabbitPublishResult result = reliablePublisher.publish(message, publishSpec);
                 LOGGER.info(
                     "Rabbit review message published taskId={} repository={}/{} prNumber={} operation=rabbit_publish result=success attempt={} exchange={} routingKey={}",
                     message.taskId(),
@@ -54,7 +63,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
                     safePart(message.organization()),
                     safePart(message.repository()),
                     message.prNumber(),
-                    Math.max(1, properties.getPublishMaxAttempts()),
+                    publishSpec.normalizedMaxAttempts(),
                     failureReason
                 );
                 metricsRecorder.recordFailed(RabbitPublishFailurePhase.PUBLISH, failureReason);

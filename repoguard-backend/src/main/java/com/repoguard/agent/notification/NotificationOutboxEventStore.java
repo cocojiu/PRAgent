@@ -92,6 +92,7 @@ class NotificationOutboxEventStore {
                 ))
                 .set("publish_claimed_at", claim.claimedAt())
                 .set("publish_claimed_by", claim.instanceId())
+                .set("status", NotificationEventStatus.PUBLISHING.code())
                 .set("updated_at", claim.claimedAt())
         );
         if (updated <= 0) {
@@ -99,6 +100,7 @@ class NotificationOutboxEventStore {
         }
         event.setPublishClaimedAt(claim.claimedAt());
         event.setPublishClaimedBy(claim.instanceId());
+        event.setStatus(NotificationEventStatus.PUBLISHING.code());
         event.setUpdatedAt(claim.claimedAt());
         return true;
     }
@@ -106,6 +108,7 @@ class NotificationOutboxEventStore {
     private List<String> publishRecoveryStatuses() {
         return List.of(
             NotificationEventStatus.PENDING.code(),
+            NotificationEventStatus.PUBLISHING.code(),
             NotificationEventStatus.PUBLISH_FAILED.code(),
             NotificationEventStatus.DELIVERY_FAILED.code()
         );

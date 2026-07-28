@@ -21,7 +21,7 @@ class NotificationDeliveryEventStateUpdaterTest {
     private final NotificationDeliveryEventStateUpdater updater = new NotificationDeliveryEventStateUpdater(eventMapper, clock);
 
     @Test
-    void claimForDeliveryUsesPublishedStatusAndStoresOwnership() {
+    void claimForDeliveryAcceptsPublishingOrPublishedAndTakesOwnership() {
         when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
         NotificationDeliveryClaim claim = new NotificationDeliveryClaim(
             LocalDateTime.of(2026, 6, 18, 10, 30),
@@ -32,8 +32,17 @@ class NotificationDeliveryEventStateUpdaterTest {
 
         UpdateWrapper<NotificationEvent> wrapper = capturedUpdate();
         assertThat(wrapper.getSqlSegment()).contains("status", "delivery_claimed_at", "IS NULL");
-        assertThat(wrapper.getSqlSet()).contains("status", "delivery_claimed_at", "delivery_claimed_by", "updated_at");
+        assertThat(wrapper.getSqlSet()).contains(
+            "status",
+            "publish_claimed_at",
+            "publish_claimed_by",
+            "delivery_claimed_at",
+            "delivery_claimed_by",
+            "updated_at"
+        );
         assertThat(wrapper.getParamNameValuePairs())
+            .containsValue(NotificationEventStatus.PUBLISHING.code())
+            .containsValue(NotificationEventStatus.PUBLISHED.code())
             .containsValue(NotificationEventStatus.DELIVERING.code())
             .containsValue("worker-1")
             .containsValue(LocalDateTime.of(2026, 6, 18, 10, 30));
@@ -88,7 +97,9 @@ class NotificationDeliveryEventStateUpdaterTest {
     private NotificationEvent event() {
         NotificationEvent event = new NotificationEvent();
         event.setId(11L);
-        event.setStatus(NotificationEventStatus.PUBLISHED.code());
+        event.setStatus(NotificationEventStatus.PUBLISHING.code());
+        event.setPublishClaimedAt(LocalDateTime.of(2026, 6, 18, 10, 24));
+        event.setPublishClaimedBy("publisher-1");
         event.setDeliveryClaimedAt(LocalDateTime.of(2026, 6, 18, 10, 25));
         event.setDeliveryClaimedBy("worker-1");
         return event;

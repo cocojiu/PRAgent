@@ -39,6 +39,8 @@ class NotificationDeliveryClaimServiceTest {
 
         assertThat(result).containsSame(event);
         assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.DELIVERING.code());
+        assertThat(event.getPublishClaimedAt()).isNull();
+        assertThat(event.getPublishClaimedBy()).isNull();
         assertThat(event.getDeliveryClaimedAt()).isEqualTo(LocalDateTime.of(2026, 7, 15, 9, 0));
         assertThat(event.getDeliveryClaimedBy()).isEqualTo("worker-a");
     }
@@ -61,7 +63,9 @@ class NotificationDeliveryClaimServiceTest {
     private NotificationEvent event() {
         NotificationEvent event = new NotificationEvent();
         event.setId(11L);
-        event.setStatus(NotificationEventStatus.PUBLISHED.code());
+        event.setStatus(NotificationEventStatus.PUBLISHING.code());
+        event.setPublishClaimedAt(LocalDateTime.of(2026, 7, 15, 8, 59));
+        event.setPublishClaimedBy("publisher-a");
         return event;
     }
 }

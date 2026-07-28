@@ -28,6 +28,14 @@ class NotificationDeliverableEventQueryTest {
     }
 
     @Test
+    void returnsPublishingEventSoFastConsumerCannotLoseMessage() {
+        NotificationEvent event = event("PUBLISHING");
+        when(eventMapper.selectById(11L)).thenReturn(event);
+
+        assertThat(query.load(11L)).containsSame(event);
+    }
+
+    @Test
     void skipsUnknownStatusEvent() {
         NotificationEvent event = event("CUSTOM_STATUS");
         when(eventMapper.selectById(11L)).thenReturn(event);

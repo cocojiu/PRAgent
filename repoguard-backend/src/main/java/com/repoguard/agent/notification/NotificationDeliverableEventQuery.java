@@ -20,7 +20,8 @@ class NotificationDeliverableEventQuery {
             return Optional.empty();
         }
         NotificationEventStatus eventStatus = NotificationEventStatus.from(event.getStatus());
-        if (NotificationEventStatus.PUBLISHED != eventStatus) {
+        if (NotificationEventStatus.PUBLISHING != eventStatus
+            && NotificationEventStatus.PUBLISHED != eventStatus) {
             return Optional.empty();
         }
         return Optional.of(event);

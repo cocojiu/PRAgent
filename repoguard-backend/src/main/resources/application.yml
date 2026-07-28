@@ -8,6 +8,14 @@ server:
 spring:
   application:
     name: repoguard-backend
+  task:
+    scheduling:
+      pool:
+        size: ${REPOGUARD_SCHEDULER_POOL_SIZE:4}
+      thread-name-prefix: repoguard-scheduler-
+      shutdown:
+        await-termination: true
+        await-termination-period: ${REPOGUARD_SCHEDULER_SHUTDOWN_WAIT:10s}
   jackson:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
@@ -74,6 +82,10 @@ repoguard:
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
     review-publish-threads: ${REPOGUARD_ASYNC_REVIEW_PUBLISH_THREADS:2}
     review-publish-queue-capacity: ${REPOGUARD_ASYNC_REVIEW_PUBLISH_QUEUE_CAPACITY:100}
+    notification-publish-threads: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS:2}
+    notification-publish-queue-capacity: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY:100}
+    recovery-threads: ${REPOGUARD_ASYNC_RECOVERY_THREADS:3}
+    recovery-queue-capacity: ${REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY:100}
     dashboard-threads: ${REPOGUARD_ASYNC_DASHBOARD_THREADS:1}
     dashboard-queue-capacity: ${REPOGUARD_ASYNC_DASHBOARD_QUEUE_CAPACITY:16}
     rabbit-health-threads: ${REPOGUARD_ASYNC_RABBIT_HEALTH_THREADS:1}

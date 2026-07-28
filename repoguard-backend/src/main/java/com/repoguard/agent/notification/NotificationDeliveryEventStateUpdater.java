@@ -28,9 +28,15 @@ class NotificationDeliveryEventStateUpdater {
         int updated = eventMapper.update(
             new UpdateWrapper<NotificationEvent>()
                 .eq("id", event.getId())
-                .eq("status", NotificationEventStatus.PUBLISHED.code())
+                .in(
+                    "status",
+                    NotificationEventStatus.PUBLISHING.code(),
+                    NotificationEventStatus.PUBLISHED.code()
+                )
                 .isNull("delivery_claimed_at")
                 .set("status", NotificationEventStatus.DELIVERING.code())
+                .set("publish_claimed_at", null)
+                .set("publish_claimed_by", null)
                 .set("delivery_claimed_at", claim.claimedAt())
                 .set("delivery_claimed_by", claim.claimedBy())
                 .set("updated_at", claim.claimedAt())

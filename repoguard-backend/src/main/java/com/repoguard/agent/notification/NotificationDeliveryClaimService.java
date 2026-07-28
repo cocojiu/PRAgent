@@ -53,6 +53,8 @@ class NotificationDeliveryClaimService {
             return Optional.empty();
         }
         event.setStatus(NotificationEventStatus.DELIVERING.code());
+        event.setPublishClaimedAt(null);
+        event.setPublishClaimedBy(null);
         event.setDeliveryClaimedAt(claim.claimedAt());
         event.setDeliveryClaimedBy(claim.claimedBy());
         event.setUpdatedAt(claim.claimedAt());

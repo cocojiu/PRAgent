@@ -269,7 +269,7 @@ class ReviewTaskPublishCompensatorTest {
         doAnswer(invocation -> {
             events.add("publish");
             return null;
-        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        }).when(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
 
         compensator.compensate(task);
@@ -303,7 +303,7 @@ class ReviewTaskPublishCompensatorTest {
         doAnswer(invocation -> {
             events.add("publish");
             throw new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token");
-        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        }).when(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
 
@@ -335,7 +335,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
     }
@@ -347,7 +347,7 @@ class ReviewTaskPublishCompensatorTest {
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 0);
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(reviewTaskPublisher)
-            .publish(any(ReviewTaskMessage.class));
+            .publishOnce(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
 
@@ -385,7 +385,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
         assertThat(task.getPublishAttempts()).isEqualTo(2);
     }
@@ -402,7 +402,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getPublishClaimedAt()).isNull();
@@ -421,7 +421,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getPublishAttempts()).isEqualTo(3);
         assertThat(task.getStatus()).isEqualTo("QUEUED");
     }
@@ -435,7 +435,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         @SuppressWarnings("unchecked")
         ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(reviewTaskMapper).update(wrapperCaptor.capture());

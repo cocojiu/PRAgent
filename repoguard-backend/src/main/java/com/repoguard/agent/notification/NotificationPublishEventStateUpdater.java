@@ -15,35 +15,55 @@ class NotificationPublishEventStateUpdater {
         this.eventMapper = eventMapper;
     }
 
-    void markPublished(NotificationEvent event) {
-        eventMapper.update(
-            new UpdateWrapper<NotificationEvent>()
-                .eq("id", event.getId())
-                .ne("status", NotificationEventStatus.DELIVERED.code())
+    boolean markPublished(NotificationEvent event) {
+        int updated = eventMapper.update(
+            ownedPublish(event)
                 .set("status", NotificationEventStatus.PUBLISHED.code())
+                .set("next_retry_at", null)
                 .set("last_error", null)
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
-                .set("delivery_claimed_at", null)
-                .set("delivery_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
+        if (updated != 1) {
+            return false;
+        }
+        event.setStatus(NotificationEventStatus.PUBLISHED.code());
+        event.setNextRetryAt(null);
+        event.setLastError(null);
+        event.setPublishClaimedAt(null);
+        event.setPublishClaimedBy(null);
+        return true;
     }
 
-    void markPublishFailed(NotificationEvent event, NotificationPublishFailureDecision decision) {
-        eventMapper.update(
-            new UpdateWrapper<NotificationEvent>()
-                .eq("id", event.getId())
-                .ne("status", NotificationEventStatus.DELIVERED.code())
+    boolean markPublishFailed(NotificationEvent event, NotificationPublishFailureDecision decision) {
+        int updated = eventMapper.update(
+            ownedPublish(event)
                 .set("status", decision.status())
                 .set("retry_count", decision.retryCount())
                 .set("next_retry_at", decision.nextRetryAt())
                 .set("last_error", decision.lastError())
                 .set("publish_claimed_at", null)
                 .set("publish_claimed_by", null)
-                .set("delivery_claimed_at", null)
-                .set("delivery_claimed_by", null)
                 .set("updated_at", LocalDateTime.now())
         );
+        if (updated != 1) {
+            return false;
+        }
+        event.setStatus(decision.status());
+        event.setRetryCount(decision.retryCount());
+        event.setNextRetryAt(decision.nextRetryAt());
+        event.setLastError(decision.lastError());
+        event.setPublishClaimedAt(null);
+        event.setPublishClaimedBy(null);
+        return true;
+    }
+
+    private UpdateWrapper<NotificationEvent> ownedPublish(NotificationEvent event) {
+        return new UpdateWrapper<NotificationEvent>()
+            .eq("id", event.getId())
+            .eq("status", NotificationEventStatus.PUBLISHING.code())
+            .eq("publish_claimed_at", event.getPublishClaimedAt())
+            .eq("publish_claimed_by", event.getPublishClaimedBy());
     }
 }
