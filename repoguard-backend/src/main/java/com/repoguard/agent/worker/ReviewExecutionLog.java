@@ -72,13 +72,15 @@ class ReviewExecutionLog {
 
     void diffFetched(ReviewTask task, GithubPullRequestDiff diff, ReviewExecutionDiffStats diffStats) {
         LOGGER.info(
-            "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
+            "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={} diffTruncated={} truncationReasons={}",
             task.getId(),
             logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             diffStats.fileCount(diff),
             diffStats.totalAdditions(diff),
-            diffStats.totalDeletions(diff)
+            diffStats.totalDeletions(diff),
+            diff.truncated(),
+            diff.truncation().reasons()
         );
     }
 

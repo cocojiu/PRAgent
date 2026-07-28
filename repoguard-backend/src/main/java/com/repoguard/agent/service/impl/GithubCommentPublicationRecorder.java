@@ -27,6 +27,7 @@ import org.springframework.util.StringUtils;
 public class GithubCommentPublicationRecorder {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int HISTORY_BATCH_SIZE = 500;
 
     private final GithubCommentPublicationMapper githubCommentPublicationMapper;
     private final GithubCommentPublicationBatchMapper githubCommentPublicationBatchMapper;
@@ -209,22 +210,13 @@ public class GithubCommentPublicationRecorder {
         if (updated <= 0) {
             return;
         }
-        for (GithubCommentPublishItem item : response.items()) {
-            GithubCommentPublicationBatchItem historyItem = new GithubCommentPublicationBatchItem();
-            historyItem.setBatchId(batchId);
-            historyItem.setTaskId(response.taskId());
-            historyItem.setFindingId(item.findingId());
-            historyItem.setFilePath(item.file());
-            historyItem.setLineNumber(item.line());
-            historyItem.setTargetType(item.targetType());
-            historyItem.setStatus(item.status());
-            historyItem.setSuccess(item.success());
-            historyItem.setGithubCommentId(item.githubCommentId());
-            historyItem.setGithubUrl(item.url());
-            historyItem.setMessage(item.message());
-            historyItem.setPublishedAt(parseDateTimeOrNull(item.publishedAt()));
-            historyItem.setCreatedAt(now);
-            githubCommentPublicationBatchItemMapper.insert(historyItem);
+        List<GithubCommentPublicationBatchItem> historyItems = response.items().stream()
+            .map(item -> historyItem(batchId, response.taskId(), item, now))
+            .toList();
+        for (int from = 0; from < historyItems.size(); from += HISTORY_BATCH_SIZE) {
+            githubCommentPublicationBatchItemMapper.insertBatch(
+                historyItems.subList(from, Math.min(from + HISTORY_BATCH_SIZE, historyItems.size()))
+            );
         }
     }
 
@@ -285,6 +277,29 @@ public class GithubCommentPublicationRecorder {
         } catch (DateTimeParseException exception) {
             return null;
         }
+    }
+
+    private GithubCommentPublicationBatchItem historyItem(
+        Long batchId,
+        Long taskId,
+        GithubCommentPublishItem item,
+        LocalDateTime createdAt
+    ) {
+        GithubCommentPublicationBatchItem historyItem = new GithubCommentPublicationBatchItem();
+        historyItem.setBatchId(batchId);
+        historyItem.setTaskId(taskId);
+        historyItem.setFindingId(item.findingId());
+        historyItem.setFilePath(item.file());
+        historyItem.setLineNumber(item.line());
+        historyItem.setTargetType(item.targetType());
+        historyItem.setStatus(item.status());
+        historyItem.setSuccess(item.success());
+        historyItem.setGithubCommentId(item.githubCommentId());
+        historyItem.setGithubUrl(item.url());
+        historyItem.setMessage(item.message());
+        historyItem.setPublishedAt(parseDateTimeOrNull(item.publishedAt()));
+        historyItem.setCreatedAt(createdAt);
+        return historyItem;
     }
 
     private int safe(Integer value) {

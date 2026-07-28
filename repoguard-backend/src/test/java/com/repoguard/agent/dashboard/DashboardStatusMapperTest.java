@@ -44,7 +44,8 @@ class DashboardStatusMapperTest {
     void mapsRabbitMqHealthFromChannelState() {
         assertThat(mapper.rabbitMqHealth(true)).isEqualTo("正常");
         assertThat(mapper.rabbitMqHealth(false)).isEqualTo("异常");
-        assertThat(mapper.rabbitMqHealth(null)).isEqualTo("异常");
+        assertThat(mapper.rabbitMqHealth((Boolean) null)).isEqualTo("未知");
+        assertThat(mapper.rabbitMqHealth("UNKNOWN")).isEqualTo("未知");
     }
 
     private GithubIntegrationSettings githubSettings(String status, String token) {

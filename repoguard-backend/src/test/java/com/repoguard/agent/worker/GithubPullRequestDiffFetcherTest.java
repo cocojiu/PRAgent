@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubChangedFile;
+import com.repoguard.agent.github.GithubDiffTruncation;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
@@ -45,6 +46,30 @@ class GithubPullRequestDiffFetcherTest {
         assertThat(fetched).isSameAs(diff);
         verify(githubPullRequestClient).fetchPullRequestDiff(task);
         verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(5), "success");
+    }
+
+    @Test
+    void fetchRecordsTruncatedMetricWhenDiffHitAHardBudget() {
+        ReviewTask task = task();
+        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            null,
+            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "patch")),
+            new GithubDiffTruncation(
+                List.of(GithubDiffTruncation.Reason.MAX_TOTAL_BYTES),
+                2,
+                1,
+                1024
+            )
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+        clock.setTimes("2026-07-04T22:40:00", "2026-07-04T22:40:05");
+
+        assertThat(fetcher.fetch(task)).isSameAs(diff);
+
+        verify(metricsRecorder).recordGithubDiffFetch(Duration.ofSeconds(5), "truncated");
     }
 
     @Test

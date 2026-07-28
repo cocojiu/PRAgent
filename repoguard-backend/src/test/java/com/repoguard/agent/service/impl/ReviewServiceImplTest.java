@@ -405,7 +405,11 @@ class ReviewServiceImplTest {
         assertThat(result.items()).isEmpty();
         verify(githubCommentPublicationMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublication.class));
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
+        assertThat(historyCaptor.getValue()).hasSize(3);
     }
 
     @Test
@@ -432,11 +436,12 @@ class ReviewServiceImplTest {
         var result = service.publishGithubComments(521L);
 
         assertThat(result.status()).isEqualTo("queued");
-        ArgumentCaptor<GithubCommentPublicationBatchItem> itemCaptor =
-            ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
-        verify(githubCommentPublicationBatchItemMapper).insert(itemCaptor.capture());
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(itemCaptor.capture());
         var historyItem = new GithubCommentPublicationHistoryAssembler(githubWritebackFailureClassifier)
-            .assembleItem(itemCaptor.getValue());
+            .assembleItem(itemCaptor.getValue().getFirst());
         assertThat(historyItem.failureCategory()).isEqualTo("github_permission_denied");
         assertThat(historyItem.failureReason()).isEqualTo("GitHub Token 权限不足");
         assertThat(historyItem.failureSuggestion()).contains("评论权限");
@@ -595,8 +600,11 @@ class ReviewServiceImplTest {
         assertThat(result.succeededCount()).isZero();
         assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).isEmpty();
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2))
-            .insert(any(GithubCommentPublicationBatchItem.class));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
+        assertThat(historyCaptor.getValue()).hasSize(2);
     }
 
     @Test

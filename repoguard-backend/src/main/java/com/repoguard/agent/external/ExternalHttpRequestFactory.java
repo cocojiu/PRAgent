@@ -1,26 +1,37 @@
 package com.repoguard.agent.external;
 
 import java.time.Duration;
-import java.io.IOException;
-import java.net.HttpURLConnection;
+import java.net.http.HttpClient;
+import java.util.Map;
 import java.util.Objects;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 
 public final class ExternalHttpRequestFactory {
 
     private static final int MIN_TIMEOUT_SECONDS = 1;
+    private static final Map<Duration, HttpClient> SHARED_CLIENTS = new ConcurrentHashMap<>();
 
     private ExternalHttpRequestFactory() {
     }
 
-    public static SimpleClientHttpRequestFactory simple(Duration connectTimeout, Duration readTimeout) {
-        SimpleClientHttpRequestFactory requestFactory = new NoRedirectRequestFactory();
-        requestFactory.setConnectTimeout(requirePositive(connectTimeout, "connectTimeout"));
-        requestFactory.setReadTimeout(requirePositive(readTimeout, "readTimeout"));
+    public static ClientHttpRequestFactory simple(Duration connectTimeout, Duration readTimeout) {
+        Duration effectiveConnectTimeout = requirePositive(connectTimeout, "connectTimeout");
+        Duration effectiveReadTimeout = requirePositive(readTimeout, "readTimeout");
+        HttpClient httpClient = SHARED_CLIENTS.computeIfAbsent(
+            effectiveConnectTimeout,
+            timeout -> HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build()
+        );
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(effectiveReadTimeout);
         return requestFactory;
     }
 
-    public static SimpleClientHttpRequestFactory sameTimeoutSeconds(Integer timeoutSeconds, int defaultTimeoutSeconds) {
+    public static ClientHttpRequestFactory sameTimeoutSeconds(Integer timeoutSeconds, int defaultTimeoutSeconds) {
         Duration timeout = Duration.ofSeconds(normalizedTimeoutSeconds(timeoutSeconds, defaultTimeoutSeconds));
         return simple(timeout, timeout);
     }
@@ -35,14 +46,5 @@ public final class ExternalHttpRequestFactory {
             throw new IllegalArgumentException(name + " must be positive");
         }
         return value;
-    }
-
-    private static final class NoRedirectRequestFactory extends SimpleClientHttpRequestFactory {
-
-        @Override
-        protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
-            super.prepareConnection(connection, httpMethod);
-            connection.setInstanceFollowRedirects(false);
-        }
     }
 }

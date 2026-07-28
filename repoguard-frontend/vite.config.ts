@@ -18,6 +18,13 @@ const bundleBudgets = {
   overviewRouteRequests: 16
 } as const;
 
+const apiProxy = {
+  "/api": {
+    target: "http://localhost:8081",
+    changeOrigin: true
+  }
+};
+
 type ViteChunkMetadata = {
   importedCss?: Set<string>;
 };
@@ -193,12 +200,10 @@ export default defineConfig({
     bundleBudgetPlugin()
   ],
   server: {
-    proxy: {
-      "/api": {
-        target: "http://localhost:8081",
-        changeOrigin: true
-      }
-    }
+    proxy: apiProxy
+  },
+  preview: {
+    proxy: apiProxy
   },
   resolve: {
     alias: {

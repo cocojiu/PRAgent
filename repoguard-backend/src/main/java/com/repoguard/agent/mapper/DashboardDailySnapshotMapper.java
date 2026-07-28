@@ -68,8 +68,8 @@ public interface DashboardDailySnapshotMapper {
             sum(case when risk_bucket_norm = 'LOW' then 1 else 0 end) as low_risk_count,
             sum(case when risk_bucket_norm = 'INFO' then 1 else 0 end) as info_risk_count,
             sum(case when status_norm = 'FAILED' then 1 else 0 end) as failed_count,
-            sum(coalesce(duration_seconds, 0)) as duration_seconds_sum,
-            count(*) as duration_sample_count
+            sum(case when finished_at is not null then duration_seconds else 0 end) as duration_seconds_sum,
+            sum(case when finished_at is not null then 1 else 0 end) as duration_sample_count
         from review_task
         where created_at >= #{startDate}
         group by created_date
@@ -149,7 +149,7 @@ public interface DashboardDailySnapshotMapper {
                 repository_label as repository_label,
                 count(*) as task_count,
                 sum(coalesce(llm_duration_ms, 0)) as duration_ms_sum,
-                count(*) as duration_sample_count,
+                sum(case when llm_duration_ms is not null then 1 else 0 end) as duration_sample_count,
                 sum(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens else 0 end) as token_sum,
                 sum(case when llm_total_tokens is not null and llm_total_tokens > 0 then 1 else 0 end) as token_sample_count,
                 sum(coalesce(llm_estimated_cost, 0)) as cost_sum,
@@ -203,7 +203,7 @@ public interface DashboardDailySnapshotMapper {
             coalesce(sum(task_count), 0) as total,
             coalesce(sum(high_risk_count), 0) as highRisk,
             coalesce(sum(failed_count), 0) as failed,
-            coalesce(sum(duration_seconds_sum) / nullif(sum(duration_sample_count), 0), 0) as averageDurationSeconds
+            sum(duration_seconds_sum) / nullif(sum(duration_sample_count), 0) as averageDurationSeconds
         from dashboard_review_daily_stat
         where stat_date >= #{startDate}
         """)

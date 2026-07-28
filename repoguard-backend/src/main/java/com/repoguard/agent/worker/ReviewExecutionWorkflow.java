@@ -86,6 +86,7 @@ class ReviewExecutionWorkflow {
                 ensureDiffMatchesTask(task, diff);
                 executionLog.diffFetched(task, diff, diffStats);
                 ReviewResult reviewResult = stageTimer.record("review", () -> pullRequestReviewer.review(task, diff));
+                reviewResult = applyDiffBudgetOutcome(diff, reviewResult);
                 ReviewExecutionResultWriter.WriteResult writeResult = completeReview(
                     task,
                     diff,
@@ -114,6 +115,19 @@ class ReviewExecutionWorkflow {
 
     private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         return diffFetcher.fetch(task);
+    }
+
+    private ReviewResult applyDiffBudgetOutcome(GithubPullRequestDiff diff, ReviewResult reviewResult) {
+        if (!diff.truncated()) {
+            return reviewResult;
+        }
+        return reviewResult.withIncompleteInput(
+            diff.truncation().summary(),
+            "diffTruncated=true; diffTruncationReasons=" + diff.truncation().reasons().stream()
+                .map(reason -> reason.code())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("unknown")
+        );
     }
 
     private void ensureDiffMatchesTask(ReviewTask task, GithubPullRequestDiff diff) {

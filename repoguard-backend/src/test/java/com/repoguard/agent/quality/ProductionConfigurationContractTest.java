@@ -28,6 +28,11 @@ class ProductionConfigurationContractTest {
         "REPOGUARD_ADMIN_API_KEY_MIN_LENGTH",
         "REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP",
         "REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS",
+        "REPOGUARD_GITHUB_DIFF_MAX_PAGES",
+        "REPOGUARD_GITHUB_DIFF_MAX_FILES",
+        "REPOGUARD_GITHUB_DIFF_MAX_TOTAL_BYTES",
+        "REPOGUARD_GITHUB_DIFF_MAX_PATCH_BYTES",
+        "REPOGUARD_GITHUB_DIFF_TOTAL_TIMEOUT_MS",
         "REPOGUARD_REVIEW_PIPELINE_BUDGET_MS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS",
@@ -206,6 +211,15 @@ class ProductionConfigurationContractTest {
 
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         assertThat(environment(smoke, "backend").get("SPRING_DATASOURCE_URL").toString())
+            .contains("rewriteBatchedStatements=true");
+        Map<String, Object> ip = yaml(root.resolve("docker-compose.ip.yml"));
+        assertThat(environment(ip, "backend").get("SPRING_DATASOURCE_URL").toString())
+            .contains("rewriteBatchedStatements=true");
+        assertThat(read(root.resolve("repoguard-backend/src/main/resources/application-dev.yml")))
+            .contains("rewriteBatchedStatements=true");
+        assertThat(read(root.resolve("repoguard-backend/src/main/resources/application-test.yml")))
+            .contains("rewriteBatchedStatements=true");
+        assertThat(read(root.resolve(".github/workflows/pr-quality.yml")))
             .contains("rewriteBatchedStatements=true");
     }
 

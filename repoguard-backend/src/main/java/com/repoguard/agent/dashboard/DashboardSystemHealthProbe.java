@@ -38,9 +38,9 @@ public class DashboardSystemHealthProbe {
 
     private String rabbitMqHealthStatus() {
         try {
-            return statusMapper.rabbitMqHealth("CONNECTED".equals(rabbitRuntimeHealthProbe.connectionStatus()));
+            return statusMapper.rabbitMqHealth(rabbitRuntimeHealthProbe.connectionStatus());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 
@@ -48,7 +48,7 @@ public class DashboardSystemHealthProbe {
         try {
             return statusMapper.githubHealth(githubIntegrationProvider.getSettings());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 
@@ -56,7 +56,7 @@ public class DashboardSystemHealthProbe {
         try {
             return statusMapper.llmHealth(reviewPolicyProvider.getSettings());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 }

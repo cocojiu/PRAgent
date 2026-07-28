@@ -32,7 +32,7 @@ public interface DashboardMapper {
             sum(case
                 when status_norm = 'FAILED'
                 then 1 else 0 end) as failed,
-            avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
+            avg(case when finished_at is not null then duration_seconds end) as averageDurationSeconds
         from review_task
         where created_at >= #{startDate}
         """)
@@ -124,7 +124,7 @@ public interface DashboardMapper {
             select
                 llm_model_label as modelLabel,
                 count(*) as taskCount,
-                avg(coalesce(llm_duration_ms, 0)) as averageDurationMs,
+                avg(llm_duration_ms) as averageDurationMs,
                 avg(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens end) as averageTokens,
                 avg(llm_estimated_cost) as averageCost,
                 sum(case

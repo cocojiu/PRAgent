@@ -20,7 +20,7 @@ class ReviewTaskMapperSqlContractTest {
             .contains("count(*) as total")
             .contains("sum(case when risk_level_norm in ('high', 'critical') then 1 else 0 end) as highrisk")
             .contains("sum(case when status_norm = 'failed' then 1 else 0 end) as failed")
-            .contains("avg(coalesce(duration_seconds, 0)) as averagedurationseconds")
+            .contains("avg(case when finished_at is not null then duration_seconds end) as averagedurationseconds")
             .contains("${ew.customsqlsegment}")
             .doesNotContain("order by")
             .doesNotContain("where created_at");

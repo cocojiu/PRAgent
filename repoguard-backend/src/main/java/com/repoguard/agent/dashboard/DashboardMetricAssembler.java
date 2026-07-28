@@ -23,7 +23,7 @@ public class DashboardMetricAssembler {
         long total = stat == null ? 0L : safeCount(stat.getTotal());
         long highRisk = stat == null ? 0L : safeCount(stat.getHighRisk());
         long failed = stat == null ? 0L : safeCount(stat.getFailed());
-        int averageDurationSeconds = stat == null ? 0 : safeAverageDuration(stat.getAverageDurationSeconds());
+        Integer averageDurationSeconds = stat == null ? null : safeAverageDuration(stat.getAverageDurationSeconds());
 
         DashboardOverviewDisplayMapper.MetricDisplay totalReviews = overviewDisplayMapper.totalReviewsMetric();
         DashboardOverviewDisplayMapper.MetricDisplay highRiskPullRequests = overviewDisplayMapper.highRiskPullRequestsMetric();
@@ -53,11 +53,14 @@ public class DashboardMetricAssembler {
         return value == null ? 0L : value;
     }
 
-    private int safeAverageDuration(BigDecimal value) {
-        return value == null ? 0 : value.setScale(0, RoundingMode.HALF_UP).intValue();
+    private Integer safeAverageDuration(BigDecimal value) {
+        return value == null ? null : value.setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
-    private String formatDuration(int durationSeconds) {
+    private String formatDuration(Integer durationSeconds) {
+        if (durationSeconds == null) {
+            return "—";
+        }
         int minutes = durationSeconds / 60;
         int seconds = durationSeconds % 60;
         return minutes + "\u5206" + seconds + "\u79d2";

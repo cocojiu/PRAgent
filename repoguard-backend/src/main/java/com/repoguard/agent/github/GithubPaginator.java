@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.function.BiPredicate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -77,13 +78,50 @@ public class GithubPaginator {
         Class<T[]> responseType,
         ExternalCallResilience resilience
     ) {
-        ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
         List<T> items = new ArrayList<>();
+        PageTraversal traversal = traversePages(
+            operation,
+            pageUrlBuilder,
+            settings,
+            responseType,
+            resilience,
+            maxPages,
+            (pageItems, sourceHasMore) -> {
+                items.addAll(pageItems);
+                return true;
+            }
+        );
+        if (traversal.pageLimitReached()) {
+            throw new IllegalStateException(
+                "GitHub pagination limit reached operation=" + operation
+                    + " pages=" + maxPages
+                    + " pageSize=" + PAGE_SIZE
+            );
+        }
+        return items;
+    }
+
+    <T> PageTraversal traversePages(
+        String operation,
+        java.util.function.IntFunction<String> pageUrlBuilder,
+        GithubIntegrationSettings settings,
+        Class<T[]> responseType,
+        ExternalCallResilience resilience,
+        int requestedMaxPages,
+        BiPredicate<List<T>, Boolean> pageHandler
+    ) {
+        ExternalCallResilience effectiveResilience = Objects.requireNonNull(resilience, "resilience");
+        Objects.requireNonNull(pageHandler, "pageHandler");
+        if (requestedMaxPages < 1) {
+            throw new IllegalArgumentException("requestedMaxPages must be positive");
+        }
+        int effectiveMaxPages = Math.min(maxPages, requestedMaxPages);
         String nextUrl = pageUrlBuilder.apply(1);
         String initialOrigin = endpointPolicy == null
             ? nextUrl
             : endpointPolicy.validate(OutboundEndpointType.GITHUB, nextUrl).toString();
-        for (int page = 1; page <= maxPages; page++) {
+        int pagesFetched = 0;
+        for (int page = 1; page <= effectiveMaxPages; page++) {
             String url = nextUrl;
             if (endpointPolicy != null) {
                 endpointPolicy.validate(OutboundEndpointType.GITHUB, url);
@@ -97,29 +135,35 @@ public class GithubPaginator {
                 .exchange((request, clientResponse) -> readPage(clientResponse, responseType, operation)));
             T[] pageItems = response.getBody();
             if (pageItems == null || pageItems.length == 0) {
-                break;
+                return new PageTraversal(pagesFetched, false, false);
             }
-            items.addAll(Arrays.asList(pageItems));
+            pagesFetched++;
             NextPageLink nextPageLink = nextPageLink(response.getHeaders());
+            boolean sourceHasMore;
+            String followingUrl = null;
             if (nextPageLink.headerPresent()) {
-                if (!StringUtils.hasText(nextPageLink.url())) {
-                    break;
+                sourceHasMore = StringUtils.hasText(nextPageLink.url());
+                if (sourceHasMore) {
+                    followingUrl = nextPageLink.url();
                 }
-                nextUrl = nextPageLink.url();
-            } else if (pageItems.length < PAGE_SIZE) {
-                break;
             } else {
-                nextUrl = pageUrlBuilder.apply(page + 1);
+                sourceHasMore = pageItems.length >= PAGE_SIZE;
+                if (sourceHasMore) {
+                    followingUrl = pageUrlBuilder.apply(page + 1);
+                }
             }
-            if (page == maxPages) {
-                throw new IllegalStateException(
-                    "GitHub pagination limit reached operation=" + operation
-                        + " pages=" + maxPages
-                        + " pageSize=" + PAGE_SIZE
-                );
+            if (!pageHandler.test(Arrays.asList(pageItems), sourceHasMore)) {
+                return new PageTraversal(pagesFetched, false, true);
             }
+            if (!sourceHasMore) {
+                return new PageTraversal(pagesFetched, false, false);
+            }
+            if (page == effectiveMaxPages) {
+                return new PageTraversal(pagesFetched, true, false);
+            }
+            nextUrl = followingUrl;
         }
-        return items;
+        return new PageTraversal(pagesFetched, false, false);
     }
 
     private <T> ResponseEntity<T[]> readPage(
@@ -190,6 +234,9 @@ public class GithubPaginator {
         private static NextPageLink missing() {
             return new NextPageLink(false, null);
         }
+    }
+
+    record PageTraversal(int pagesFetched, boolean pageLimitReached, boolean consumerStopped) {
     }
 
 }

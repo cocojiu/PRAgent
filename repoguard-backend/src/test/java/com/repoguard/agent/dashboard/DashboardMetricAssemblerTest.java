@@ -31,11 +31,11 @@ class DashboardMetricAssemblerTest {
     }
 
     @Test
-    void nullStatProducesZeroMetricCards() {
+    void nullStatKeepsCountsButMarksAverageDurationUnknown() {
         List<DashboardMetricDto> metrics = assembler.assemble(null);
 
         assertThat(metrics).extracting(DashboardMetricDto::value)
-            .containsExactly("0", "0", "0", "0\u52060\u79d2");
+            .containsExactly("0", "0", "0", "—");
         assertThat(metrics).extracting(DashboardMetricDto::trend)
             .containsExactly("0.0%", "0.0%", "0.0%", "0.0%");
     }

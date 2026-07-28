@@ -164,7 +164,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 resilience
             );
             ensureExpectedHead(expectedHeadSha, headBeforeFetch);
-            List<GithubChangedFile> changedFiles = changedFileReader.fetchChangedFiles(
+            GithubChangedFileFetch changedFileFetch = changedFileReader.fetchChangedFiles(
                 settings,
                 baseUrl,
                 owner,
@@ -186,7 +186,8 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 repository,
                 task.getPrNumber(),
                 expectedHeadSha,
-                changedFiles
+                changedFileFetch.files(),
+                changedFileFetch.truncation()
             );
         });
     }

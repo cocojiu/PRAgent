@@ -60,13 +60,13 @@ public class RabbitRuntimeHealthProbe {
             return cache(Boolean.TRUE.equals(open) ? "CONNECTED" : "DISCONNECTED", false);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return cache("DISCONNECTED", true);
+            return cache("UNKNOWN", true);
         } catch (ExecutionException | RuntimeException | TimeoutException ex) {
             CompletableFuture<Boolean> probe = inFlightProbe;
             if (probe != null) {
                 probe.cancel(true);
             }
-            return cache("DISCONNECTED", true);
+            return cache("UNKNOWN", true);
         }
     }
 

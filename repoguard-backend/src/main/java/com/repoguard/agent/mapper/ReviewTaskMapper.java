@@ -64,7 +64,7 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
             sum(case
                 when status_norm = 'FAILED'
                 then 1 else 0 end) as failed,
-            avg(coalesce(duration_seconds, 0)) as averageDurationSeconds
+            avg(case when finished_at is not null then duration_seconds end) as averageDurationSeconds
         from review_task
         ${ew.customSqlSegment}
         """)

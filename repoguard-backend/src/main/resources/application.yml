@@ -234,6 +234,12 @@ app:
       mysql-allowed-ports: ${REPOGUARD_OUTBOUND_MYSQL_ALLOWED_PORTS:3306}
       rabbit-mq-allowed-ports: ${REPOGUARD_OUTBOUND_RABBITMQ_ALLOWED_PORTS:5671,5672}
   github:
+    diff-budget:
+      max-pages: ${REPOGUARD_GITHUB_DIFF_MAX_PAGES:10}
+      max-files: ${REPOGUARD_GITHUB_DIFF_MAX_FILES:1000}
+      max-total-bytes: ${REPOGUARD_GITHUB_DIFF_MAX_TOTAL_BYTES:33554432}
+      max-patch-bytes: ${REPOGUARD_GITHUB_DIFF_MAX_PATCH_BYTES:524288}
+      total-timeout-ms: ${REPOGUARD_GITHUB_DIFF_TOTAL_TIMEOUT_MS:90000}
     comment-publish:
       recovery-interval-ms: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_INTERVAL_MS:60000}
       recovery-batch-size: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_BATCH_SIZE:20}

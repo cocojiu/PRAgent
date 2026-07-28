@@ -32,7 +32,7 @@ class DashboardMapperSqlContractTest {
             .contains("count(*) as total")
             .contains("risk_level_norm in ('high', 'critical')")
             .contains("status_norm = 'failed'")
-            .contains("avg(coalesce(duration_seconds, 0)) as averagedurationseconds");
+            .contains("avg(case when finished_at is not null then duration_seconds end) as averagedurationseconds");
         assertNoRuntimeDashboardNormalization(sql);
     }
 
@@ -118,6 +118,9 @@ class DashboardMapperSqlContractTest {
             .contains("feedback_status_norm")
             .contains("order by task_stats.taskcount desc")
             .contains("limit 6");
+        assertThat(byModelSql)
+            .contains("avg(llm_duration_ms) as averagedurationms")
+            .doesNotContain("avg(coalesce(llm_duration_ms, 0))");
         assertThat(byRepositorySql)
             .contains("from review_task")
             .contains("llm_status_norm <> ''")

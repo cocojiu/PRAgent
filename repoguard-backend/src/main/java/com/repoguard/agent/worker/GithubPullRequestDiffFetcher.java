@@ -46,14 +46,19 @@ class GithubPullRequestDiffFetcher {
             );
             GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
             Duration duration = Duration.between(startedAt, clock.now());
-            metricsRecorder.recordGithubDiffFetch(duration, "success");
+            String result = diff.truncated() ? "truncated" : "success";
+            metricsRecorder.recordGithubDiffFetch(duration, result);
             LOGGER.info(
-                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
+                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result={} durationMs={} files={} pages={} retainedBytes={} truncationReasons={}",
                 task.getId(),
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
+                result,
                 duration.toMillis(),
-                diff.files() == null ? 0 : diff.files().size()
+                diff.files().size(),
+                diff.truncation().pagesFetched(),
+                diff.truncation().retainedBytes(),
+                diff.truncation().reasons()
             );
             return diff;
         } catch (RuntimeException ex) {

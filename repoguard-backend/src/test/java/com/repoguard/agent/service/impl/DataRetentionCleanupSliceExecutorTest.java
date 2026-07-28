@@ -13,6 +13,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 class DataRetentionCleanupSliceExecutorTest {
 
@@ -71,5 +73,15 @@ class DataRetentionCleanupSliceExecutorTest {
         assertThatThrownBy(() -> new DataRetentionCleanupSliceExecutor(archiveWriter, null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("deleteExecutor");
+    }
+
+    @Test
+    void eachCleanupSliceKeepsRequiresNewTransactionContract() throws Exception {
+        Transactional transactional = DataRetentionCleanupSliceExecutor.class
+            .getMethod("archiveAndDelete", long.class, String.class, List.class)
+            .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+        assertThat(transactional.propagation()).isEqualTo(Propagation.REQUIRES_NEW);
     }
 }

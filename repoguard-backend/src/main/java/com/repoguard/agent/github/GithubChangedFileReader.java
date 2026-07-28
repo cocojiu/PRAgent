@@ -1,8 +1,9 @@
 package com.repoguard.agent.github;
 
+import com.repoguard.agent.config.GithubDiffBudgetProperties;
 import com.repoguard.agent.config.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
-import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -10,12 +11,22 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class GithubChangedFileReader {
 
     private final GithubPaginator paginator;
+    private final GithubDiffBudgetProperties budgetProperties;
 
-    public GithubChangedFileReader(GithubPaginator paginator) {
+    @Autowired
+    public GithubChangedFileReader(
+        GithubPaginator paginator,
+        GithubDiffBudgetProperties budgetProperties
+    ) {
         this.paginator = paginator;
+        this.budgetProperties = budgetProperties;
     }
 
-    public List<GithubChangedFile> fetchChangedFiles(
+    GithubChangedFileReader(GithubPaginator paginator) {
+        this(paginator, new GithubDiffBudgetProperties());
+    }
+
+    public GithubChangedFileFetch fetchChangedFiles(
         GithubIntegrationSettings settings,
         String baseUrl,
         String owner,
@@ -23,7 +34,9 @@ public class GithubChangedFileReader {
         Integer pullNumber,
         ExternalCallResilience resilience
     ) {
-        return paginator.fetchPages(
+        GithubChangedFileBudgetAccumulator accumulator =
+            new GithubChangedFileBudgetAccumulator(budgetProperties);
+        GithubPaginator.PageTraversal traversal = paginator.traversePages(
             "fetch_pull_request_diff",
             page -> UriComponentsBuilder
                 .fromUriString(baseUrl)
@@ -34,7 +47,10 @@ public class GithubChangedFileReader {
                 .toString(),
             settings,
             GithubChangedFile[].class,
-            resilience
+            resilience,
+            budgetProperties.getMaxPages(),
+            accumulator::acceptPage
         );
+        return accumulator.finish(traversal);
     }
 }

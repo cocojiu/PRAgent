@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 
 public record ReviewResult(
     String riskLevel,
@@ -103,10 +104,63 @@ public record ReviewResult(
         );
     }
 
+    public ReviewResult withIncompleteInput(String reason, String promptMarker) {
+        String adjustedRisk = riskRank(riskLevel) < riskRank("MEDIUM") ? "MEDIUM" : riskLevel;
+        String adjustedParseStatus = LlmStatus.from(llmStatus) == LlmStatus.FALLBACK
+            ? LlmParseStatus.FALLBACK.code()
+            : LlmParseStatus.PARTIAL_FALLBACK.code();
+        return new ReviewResult(
+            adjustedRisk,
+            llmStatus,
+            appendLimited(statusDetail, reason, 512),
+            findings,
+            llmProvider,
+            llmModel,
+            llmDurationMs,
+            adjustedParseStatus,
+            appendLimited(llmPromptSummary, promptMarker, 1024),
+            llmPromptTokens,
+            llmCompletionTokens,
+            llmTotalTokens,
+            llmEstimatedCost
+        );
+    }
+
     private static String normalizeLlmParseStatus(String llmParseStatus) {
         if (llmParseStatus == null || llmParseStatus.isBlank()) {
             return null;
         }
         return LlmParseStatus.from(llmParseStatus).code();
+    }
+
+    private static String appendLimited(String current, String additional, int maxLength) {
+        String left = current == null || current.isBlank() ? null : current.trim();
+        String right = additional == null || additional.isBlank() ? null : additional.trim();
+        String combined;
+        if (left == null) {
+            combined = right;
+        } else if (right == null) {
+            combined = left;
+        } else {
+            combined = left + "; " + right;
+        }
+        if (combined == null || combined.length() <= maxLength) {
+            return combined;
+        }
+        return combined.substring(0, maxLength);
+    }
+
+    private static int riskRank(String value) {
+        if (value == null) {
+            return 0;
+        }
+        return switch (value.trim().toUpperCase(Locale.ROOT)) {
+            case "CRITICAL" -> 5;
+            case "HIGH" -> 4;
+            case "MEDIUM" -> 3;
+            case "LOW" -> 2;
+            case "INFO" -> 1;
+            default -> 0;
+        };
     }
 }

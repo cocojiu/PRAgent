@@ -122,7 +122,11 @@ class GithubCommentPublishServiceImplTest {
         verify(publicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
         verify(batchMapper).insert(any(GithubCommentPublicationBatch.class));
         verify(batchMapper, org.mockito.Mockito.times(2)).update(any());
-        verify(batchItemMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublicationBatchItem.class));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(batchItemMapper).insertBatch(historyCaptor.capture());
+        assertThat(historyCaptor.getValue()).hasSize(2);
         verify(metricsRecorder).recordItems(2, 0, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(false));
         ArgumentCaptor<GithubCommentPublishResponse> notificationResponseCaptor =
@@ -156,10 +160,14 @@ class GithubCommentPublishServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
         publishExecutor.runPending();
 
-        var itemCaptor = org.mockito.ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
-        verify(batchItemMapper).insert(itemCaptor.capture());
-        assertThat(itemCaptor.getValue().getStatus()).isEqualTo("failed");
-        assertThat(itemCaptor.getValue().getMessage()).contains("403 Resource not accessible");
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(batchItemMapper).insertBatch(itemCaptor.capture());
+        assertThat(itemCaptor.getValue()).singleElement().satisfies(item -> {
+            assertThat(item.getStatus()).isEqualTo("failed");
+            assertThat(item.getMessage()).contains("403 Resource not accessible");
+        });
         verify(metricsRecorder).recordItems(0, 1, 1);
         verify(metricsRecorder).recordDuration(any(LocalDateTime.class), org.mockito.Mockito.eq(true));
     }

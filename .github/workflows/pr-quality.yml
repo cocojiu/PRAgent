@@ -158,7 +158,7 @@ jobs:
           --health-retries=12
     env:
       REPOGUARD_RUN_INTEGRATION_TESTS: 'true'
-      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: repoguard
       SPRING_DATASOURCE_PASSWORD: integration-db
       SPRING_RABBITMQ_HOST: 127.0.0.1

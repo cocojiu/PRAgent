@@ -78,7 +78,7 @@ class DashboardLlmQualityStatsAssemblerTest {
         assertThat(assembler.assembleByModel(null)).isEmpty();
         assertThat(assembler.assembleByRepository(null)).isEmpty();
         assertThat(assembler.assembleByModel(List.of(modelStat)).get(0))
-            .isEqualTo(new LlmQualityByModelDto(null, 0L, "0 ms", "0", "$0.000000", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"));
+            .isEqualTo(new LlmQualityByModelDto(null, 0L, "\u2014", "0", "$0.000000", "0.0%", "0.0%", "0.0%", "0.0%", "0.0%"));
         assertThat(assembler.assembleByRepository(List.of(repositoryStat)).get(0))
             .isEqualTo(new LlmQualityByRepositoryDto(null, 0L, "0.0%", "0.0%", "0.0%", "0.0%"));
     }

@@ -88,7 +88,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 )
                 then 1 else 0 end
             ) as commentableFindings
-        from review_finding finding
+        from review_finding finding force index (idx_review_finding_task_category_id)
         where finding.task_id = #{taskId}
           and finding.category = 'FINDING'
         """)
@@ -96,7 +96,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding
+        from review_finding finding force index (idx_review_finding_task_category_id)
         where finding.task_id = #{taskId}
           and finding.category = 'FINDING'
         order by finding.id asc
@@ -110,7 +110,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding
+        from review_finding finding force index (idx_review_finding_task_category_id)
         where finding.task_id = #{taskId}
           and finding.category = 'FINDING'
           and not exists (
@@ -134,7 +134,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
 
     @Select("""
         select *
-        from review_finding finding
+        from review_finding finding force index (idx_review_finding_task_category_id)
         where finding.task_id = #{taskId}
           and finding.category = 'FINDING'
           and finding.id > #{afterFindingId}

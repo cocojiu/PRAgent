@@ -33,6 +33,7 @@ class MapperBatchInserterTest {
         inOrder.verify(sqlSession).flushStatements();
         inOrder.verify(changedFileMapper).insert(any(ChangedFile.class));
         inOrder.verify(sqlSession).flushStatements();
+        inOrder.verify(sqlSession).commit();
         inOrder.verify(sqlSession).close();
         verify(sqlSession, org.mockito.Mockito.times(2)).flushStatements();
         verify(changedFileMapper, org.mockito.Mockito.times(501)).insert(any(ChangedFile.class));
@@ -47,6 +48,7 @@ class MapperBatchInserterTest {
 
         verify(changedFileMapper, org.mockito.Mockito.times(500)).insert(any(ChangedFile.class));
         verify(sqlSession, org.mockito.Mockito.times(1)).flushStatements();
+        verify(sqlSession).commit();
         verify(sqlSession).close();
     }
 

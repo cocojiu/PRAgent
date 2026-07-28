@@ -62,7 +62,8 @@ class PullRequestDiffChunkFactory {
             source.repository(),
             source.prNumber(),
             source.headSha(),
-            files
+            files,
+            source.truncation()
         );
     }
 

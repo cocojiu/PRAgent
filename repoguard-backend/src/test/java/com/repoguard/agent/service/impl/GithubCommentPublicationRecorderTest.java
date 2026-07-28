@@ -152,10 +152,12 @@ class GithubCommentPublicationRecorderTest {
         assertThat(insertedBatchCaptor.getValue().getStatus()).isEqualTo("queued");
         verify(batchMapper).update(any());
 
-        ArgumentCaptor<GithubCommentPublicationBatchItem> itemCaptor = ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
-        verify(batchItemMapper, Mockito.times(2)).insert(itemCaptor.capture());
-        assertThat(itemCaptor.getAllValues()).allMatch(item -> item.getBatchId().equals(99L));
-        assertThat(itemCaptor.getAllValues().getFirst().getPublishedAt()).isEqualTo(LocalDateTime.of(2026, 6, 18, 11, 0));
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
+            ArgumentCaptor.forClass(List.class);
+        verify(batchItemMapper).insertBatch(itemCaptor.capture());
+        assertThat(itemCaptor.getValue()).hasSize(2).allMatch(item -> item.getBatchId().equals(99L));
+        assertThat(itemCaptor.getValue().getFirst().getPublishedAt()).isEqualTo(LocalDateTime.of(2026, 6, 18, 11, 0));
     }
 
     @Test

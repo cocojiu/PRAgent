@@ -13,9 +13,23 @@ public class DashboardStatusMapper {
     static final String HEALTH_ABNORMAL = "异常";
     static final String HEALTH_NOT_CONFIGURED = "未接入";
     static final String HEALTH_DISABLED = "已禁用";
+    static final String HEALTH_UNKNOWN = "未知";
 
     public String rabbitMqHealth(Boolean open) {
+        if (open == null) {
+            return HEALTH_UNKNOWN;
+        }
         return Boolean.TRUE.equals(open) ? HEALTH_NORMAL : HEALTH_ABNORMAL;
+    }
+
+    public String rabbitMqHealth(String runtimeStatus) {
+        if ("CONNECTED".equals(runtimeStatus)) {
+            return HEALTH_NORMAL;
+        }
+        if ("DISCONNECTED".equals(runtimeStatus)) {
+            return HEALTH_ABNORMAL;
+        }
+        return HEALTH_UNKNOWN;
     }
 
     public String githubHealth(GithubIntegrationSettings settings) {

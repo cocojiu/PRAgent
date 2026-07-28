@@ -256,7 +256,7 @@ class MessageQueueHealthServiceImplTest {
     }
 
     @Test
-    void healthReturnsDisconnectedWhenRuntimeProbeTimesOut() {
+    void healthReturnsUnknownWhenRuntimeProbeTimesOut() {
         properties.setHealthCheckTimeoutMs(50);
         when(rabbitMqIntegrationProvider.getSettings()).thenReturn(rabbitSettings());
         when(reviewTaskMapper.selectMessageQueueHealthSummary(any())).thenReturn(summary(0L, 0L, 0L, 0L, 0L, 0L));
@@ -270,7 +270,7 @@ class MessageQueueHealthServiceImplTest {
         MessageQueueHealthResponse health = service.getHealth();
         long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
 
-        assertThat(health.activeConfig().runtimeConnectionStatus()).isEqualTo("DISCONNECTED");
+        assertThat(health.activeConfig().runtimeConnectionStatus()).isEqualTo("UNKNOWN");
         assertThat(elapsedMs).isLessThan(450);
     }
 

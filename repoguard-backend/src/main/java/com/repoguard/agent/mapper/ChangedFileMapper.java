@@ -21,11 +21,11 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file
+        from changed_file file force index (idx_changed_file_task)
         where file.task_id = #{taskId}
           and exists (
               select 1
-              from review_finding finding
+              from review_finding finding force index (idx_review_finding_task_category_file)
               where finding.task_id = file.task_id
                 and finding.category = 'FINDING'
                 and finding.file_path = file.file_path
@@ -38,11 +38,11 @@ public interface ChangedFileMapper extends BaseMapper<ChangedFile> {
     @Select("""
         <script>
         select file.*
-        from changed_file file
+        from changed_file file force index (idx_changed_file_task)
         where file.task_id = #{taskId}
           and not exists (
               select 1
-              from review_finding finding
+              from review_finding finding force index (idx_review_finding_task_category_file)
               where finding.task_id = file.task_id
                 and finding.category = 'FINDING'
                 and finding.file_path = file.file_path

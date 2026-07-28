@@ -18,6 +18,12 @@ class MapperBatchInserter {
         this.sqlSessionFactory = sqlSessionFactory;
     }
 
+    /**
+     * Uses a MyBatis BATCH executor and explicitly completes its session after
+     * every statement has been flushed. With SpringManagedTransactionFactory
+     * the commit participates in the surrounding transaction; outside one it
+     * prevents a successfully flushed batch from being discarded on close.
+     */
     <T> void insertAll(Class<? extends BaseMapper<T>> mapperClass, List<T> entities) {
         if (entities.isEmpty()) {
             return;
@@ -36,6 +42,7 @@ class MapperBatchInserter {
             if (pending > 0) {
                 session.flushStatements();
             }
+            session.commit();
         }
     }
 }
