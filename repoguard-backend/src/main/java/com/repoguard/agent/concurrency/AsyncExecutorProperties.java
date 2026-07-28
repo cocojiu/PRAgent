@@ -15,7 +15,7 @@ public class AsyncExecutorProperties {
     private int dashboardQueueCapacity = 16;
     private int rabbitHealthThreads = 1;
     private int rabbitHealthQueueCapacity = 4;
-    private int llmChunkThreads = 4;
+    private int llmChunkThreads = 3;
     private int llmChunkQueueCapacity = 100;
     private int shutdownWaitSeconds = 10;
     private long rabbitHealthCacheMillis = 5_000;

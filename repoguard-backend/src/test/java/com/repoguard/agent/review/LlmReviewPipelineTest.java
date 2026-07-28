@@ -18,7 +18,11 @@ import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -55,7 +59,8 @@ class LlmReviewPipelineTest {
             null,
             fallbackReasonClassifier,
             diffChunker,
-            llmChunkExecutor
+            llmChunkExecutor,
+            properties()
         ));
         assertMissing("fallbackReasonClassifier", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, null, diffChunker));
         assertMissing("diffChunker", () -> pipeline(ruleBasedReviewer, promptBuilder, reviewMerger, qualityScorer, costEstimator, reviewResultParser, fallbackReasonClassifier, null));
@@ -69,6 +74,20 @@ class LlmReviewPipelineTest {
             metrics,
             fallbackReasonClassifier,
             diffChunker,
+            null,
+            properties()
+        ));
+        assertMissing("budgetProperties", () -> new LlmReviewPipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            metrics,
+            fallbackReasonClassifier,
+            diffChunker,
+            llmChunkExecutor,
             null
         ));
     }
@@ -147,6 +166,50 @@ class LlmReviewPipelineTest {
             .isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    void singleChunkUsesPipelineDeadlineAndInterruptsUnfinishedCall() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            ReviewPipelineBudgetProperties properties = properties();
+            properties.setBudgetMs(100);
+            LlmReviewPipeline budgetedPipeline = new LlmReviewPipeline(
+                ruleBasedReviewer,
+                promptBuilder,
+                reviewMerger,
+                qualityScorer,
+                costEstimator,
+                reviewResultParser,
+                metrics,
+                fallbackReasonClassifier,
+                diffChunker,
+                executor,
+                properties
+            );
+            GithubPullRequestDiff diff = diff();
+            CountDownLatch neverRelease = new CountDownLatch(1);
+            CountDownLatch interrupted = new CountDownLatch(1);
+            when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
+            LlmReviewCaller caller = (settings, task, callDiff) -> {
+                try {
+                    neverRelease.await();
+                } catch (InterruptedException ex) {
+                    interrupted.countDown();
+                    Thread.currentThread().interrupt();
+                }
+                return new LlmCallResult("{}", 0, 0, 0);
+            };
+
+            ReviewResult result = budgetedPipeline.execute(context(diff, caller));
+
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(result.llmStatus()).isEqualTo("FALLBACK");
+            assertThat(result.statusDetail()).contains("category=budget_exhausted");
+            verify(metrics).llmFallback(LlmChunkReviewAggregator.BUDGET_EXHAUSTED_CATEGORY);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     private void assertMissing(String dependencyName, ThrowingCallable callable) {
         assertThatThrownBy(callable)
             .isInstanceOf(NullPointerException.class)
@@ -173,8 +236,13 @@ class LlmReviewPipelineTest {
             metrics,
             fallbackReasonClassifier,
             diffChunker,
-            llmChunkExecutor
+            llmChunkExecutor,
+            properties()
         );
+    }
+
+    private ReviewPipelineBudgetProperties properties() {
+        return new ReviewPipelineBudgetProperties();
     }
 
     private ReviewPipelineContext context(GithubPullRequestDiff diff, LlmReviewCaller caller) {

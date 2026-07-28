@@ -7,7 +7,13 @@ import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +35,8 @@ class LlmReviewPipeline {
     private final LlmFallbackReasonClassifier fallbackReasonClassifier;
     private final LlmReviewResultParser reviewResultParser;
     private final RepoGuardMetrics metrics;
+    private final Duration pipelineBudget;
+    private final Executor llmChunkExecutor;
 
     @Autowired
     LlmReviewPipeline(
@@ -41,8 +49,14 @@ class LlmReviewPipeline {
         RepoGuardMetrics metrics,
         LlmFallbackReasonClassifier fallbackReasonClassifier,
         PullRequestDiffChunker diffChunker,
-        @Qualifier(LlmChunkReviewExecutorConfig.LLM_CHUNK_REVIEW_EXECUTOR) Executor llmChunkExecutor
+        @Qualifier(LlmChunkReviewExecutorConfig.LLM_CHUNK_REVIEW_EXECUTOR) Executor llmChunkExecutor,
+        ReviewPipelineBudgetProperties budgetProperties
     ) {
+        ReviewPipelineBudgetProperties pipelineProperties = Objects.requireNonNull(
+            budgetProperties,
+            "budgetProperties"
+        );
+        this.pipelineBudget = Duration.ofMillis(pipelineProperties.getBudgetMs());
         this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
         this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         this.reviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
@@ -51,6 +65,7 @@ class LlmReviewPipeline {
         this.fallbackReasonClassifier = Objects.requireNonNull(fallbackReasonClassifier, "fallbackReasonClassifier");
         this.reviewResultParser = Objects.requireNonNull(reviewResultParser, "reviewResultParser");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.llmChunkExecutor = Objects.requireNonNull(llmChunkExecutor, "llmChunkExecutor");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
             this.ruleBasedReviewer,
             this.promptBuilder,
@@ -58,7 +73,9 @@ class LlmReviewPipeline {
             this.qualityScorer,
             this.costEstimator,
             metrics,
-            Objects.requireNonNull(llmChunkExecutor, "llmChunkExecutor")
+            this.llmChunkExecutor,
+            pipelineProperties.getMaxTotalChunks(),
+            pipelineProperties.getMaxInFlightChunks()
         );
         this.stages = List.of(
             new LlmReadinessStage(),
@@ -112,9 +129,10 @@ class LlmReviewPipeline {
         private ReviewResult reviewWithOptionalChunks(ReviewPipelineContext context) {
             ReviewPolicySettings settings = context.settings();
             GithubPullRequestDiff diff = context.diff();
+            ReviewBudget budget = ReviewBudget.startingAt(context.startedAtNanos(), pipelineBudget);
             List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, settings);
             if (chunks.size() == 1) {
-                LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), diff);
+                LlmCallResult callResult = callSingleChunk(context, settings, diff, budget);
                 ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), diff);
                 return ReviewResult.completed(
                     parsed.riskLevel(),
@@ -131,8 +149,71 @@ class LlmReviewPipeline {
                 );
             }
 
-            return chunkReviewAggregator.aggregate(context, diff, chunks, reviewResultParser);
+            return chunkReviewAggregator.aggregate(
+                context,
+                diff,
+                chunks,
+                reviewResultParser,
+                budget
+            );
         }
+    }
+
+    private LlmCallResult callSingleChunk(
+        ReviewPipelineContext context,
+        ReviewPolicySettings settings,
+        GithubPullRequestDiff diff,
+        ReviewBudget budget
+    ) {
+        if (budget.exhausted()) {
+            throw pipelineUnavailable(
+                LlmChunkReviewAggregator.BUDGET_EXHAUSTED_CATEGORY,
+                "pipeline budget exhausted before the LLM call started",
+                null
+            );
+        }
+        FutureTask<LlmCallResult> call = new FutureTask<>(
+            () -> context.llmReviewCaller().callLlm(settings, context.task(), diff)
+        );
+        try {
+            llmChunkExecutor.execute(call);
+        } catch (RejectedExecutionException ex) {
+            throw pipelineUnavailable(
+                LlmChunkReviewAggregator.EXECUTOR_REJECTED_CATEGORY,
+                "LLM executor rejected the single chunk",
+                ex
+            );
+        }
+
+        long remainingNanos = budget.remainingNanos();
+        if (remainingNanos <= 0) {
+            call.cancel(true);
+            throw pipelineUnavailable(
+                LlmChunkReviewAggregator.BUDGET_EXHAUSTED_CATEGORY,
+                "pipeline budget exhausted while the LLM call was queued",
+                null
+            );
+        }
+        try {
+            return call.get(remainingNanos, TimeUnit.NANOSECONDS);
+        } catch (TimeoutException ex) {
+            call.cancel(true);
+            throw pipelineUnavailable(
+                LlmChunkReviewAggregator.BUDGET_EXHAUSTED_CATEGORY,
+                "pipeline budget exhausted while waiting for the LLM call",
+                ex
+            );
+        } catch (ExecutionException ex) {
+            throw ex.getCause() instanceof RuntimeException cause ? cause : new CompletionException(ex.getCause());
+        } catch (InterruptedException ex) {
+            call.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new CompletionException(ex);
+        }
+    }
+
+    private ExternalCallException pipelineUnavailable(String category, String detail, Throwable cause) {
+        return new ExternalCallException("LLM", category, true, null, detail, cause);
     }
 
     private class RuleMergeStage implements ReviewPipelineStage {

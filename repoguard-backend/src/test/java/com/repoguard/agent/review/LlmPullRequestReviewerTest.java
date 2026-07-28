@@ -544,7 +544,8 @@ class LlmPullRequestReviewerTest {
             metrics,
             new LlmFallbackReasonClassifier(),
             diffChunker,
-            Runnable::run
+            Runnable::run,
+            new ReviewPipelineBudgetProperties()
         );
     }
 

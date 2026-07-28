@@ -55,6 +55,15 @@ management:
         enabled: true
 
 repoguard:
+  review:
+    pipeline:
+      # Total wall-clock budget for one LLM review. Layering (each backstops the
+      # previous): this < RabbitMQ consumer_timeout < app.rabbit.review
+      # .review-execution-timeout-ms. ReviewTimeoutLayeringValidator enforces the
+      # two application-side bounds at startup.
+      budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:600000}
+      max-total-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:64}
+      max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:3}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
@@ -64,6 +73,8 @@ repoguard:
     dashboard-queue-capacity: ${REPOGUARD_ASYNC_DASHBOARD_QUEUE_CAPACITY:16}
     rabbit-health-threads: ${REPOGUARD_ASYNC_RABBIT_HEALTH_THREADS:1}
     rabbit-health-queue-capacity: ${REPOGUARD_ASYNC_RABBIT_HEALTH_QUEUE_CAPACITY:4}
+    llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:3}
+    llm-chunk-queue-capacity: ${REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY:100}
     shutdown-wait-seconds: ${REPOGUARD_ASYNC_SHUTDOWN_WAIT_SECONDS:10}
     rabbit-health-cache-millis: ${REPOGUARD_ASYNC_RABBIT_HEALTH_CACHE_MILLIS:5000}
     rabbit-health-failure-backoff-millis: ${REPOGUARD_ASYNC_RABBIT_HEALTH_FAILURE_BACKOFF_MILLIS:10000}
@@ -245,7 +256,7 @@ app:
         rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
         rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}
         bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:4}
-        bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:0}
+        bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:250}
   rabbit:
     review:
       exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v2}

@@ -37,7 +37,7 @@ public class ExternalCallResilienceProperties {
         private int rateLimitRefreshMillis = 1000;
         private int rateLimitTimeoutMillis = 0;
         private int bulkheadMaxConcurrentCalls = 4;
-        private int bulkheadMaxWaitMillis = 0;
+        private int bulkheadMaxWaitMillis = 250;
 
         public int getCircuitBreakerFailureRateThreshold() {
             return circuitBreakerFailureRateThreshold;

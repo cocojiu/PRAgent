@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,13 +22,18 @@ import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -51,7 +57,9 @@ class LlmChunkReviewAggregatorTest {
         new LlmReviewQualityScorer(),
         new LlmReviewCostEstimator(),
         metrics,
-        chunkExecutor
+        chunkExecutor,
+        64,
+        3
     );
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final LlmReviewResultParser parser = new LlmReviewResultParser(
@@ -76,7 +84,9 @@ class LlmChunkReviewAggregatorTest {
             new LlmReviewQualityScorer(),
             new LlmReviewCostEstimator(),
             null,
-            chunkExecutor
+            chunkExecutor,
+            64,
+            3
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("metrics");
@@ -91,7 +101,9 @@ class LlmChunkReviewAggregatorTest {
             new LlmReviewQualityScorer(),
             new LlmReviewCostEstimator(),
             metrics,
-            null
+            null,
+            64,
+            3
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("chunkExecutor");
@@ -135,7 +147,7 @@ class LlmChunkReviewAggregatorTest {
             ))
         ));
 
-        ReviewResult result = aggregator.aggregate(context, fullDiff, chunks, parser);
+        ReviewResult result = aggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
         assertThat(result.riskLevel()).isEqualTo("HIGH");
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
@@ -162,7 +174,9 @@ class LlmChunkReviewAggregatorTest {
                 new LlmReviewQualityScorer(),
                 new LlmReviewCostEstimator(),
                 metrics,
-                boundedExecutor
+                boundedExecutor,
+                64,
+                2
             );
             GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
             List<PullRequestDiffChunk> chunks = List.of(
@@ -198,13 +212,262 @@ class LlmChunkReviewAggregatorTest {
                 caller
             );
 
-            ReviewResult result = boundedAggregator.aggregate(context, fullDiff, chunks, parser);
+            ReviewResult result = boundedAggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
             assertThat(maxActive.get()).isEqualTo(2);
             assertThat(result.llmParseStatus()).isNull();
             assertThat(result.findings())
                 .extracting(ReviewFindingResult::filePath)
                 .containsExactly("src/A.java", "src/B.java", "src/C.java", "src/D.java");
+        } finally {
+            boundedExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void submitsOnlyOneSlidingWindowBeforeWaitingForCompletion() throws Exception {
+        Queue<Runnable> submitted = new ConcurrentLinkedQueue<>();
+        CountDownLatch initialWindowSubmitted = new CountDownLatch(2);
+        Executor holdingExecutor = command -> {
+            submitted.add(command);
+            initialWindowSubmitted.countDown();
+        };
+        LlmChunkReviewAggregator windowedAggregator = new LlmChunkReviewAggregator(
+            ruleBasedReviewer,
+            new LlmReviewPromptBuilder(),
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            metrics,
+            holdingExecutor,
+            64,
+            2
+        );
+        GithubPullRequestDiff fullDiff = diff(
+            "src/A.java",
+            "src/B.java",
+            "src/C.java",
+            "src/D.java",
+            "src/E.java"
+        );
+        List<PullRequestDiffChunk> chunks = List.of(
+            chunk(1, 5, "src/A.java"),
+            chunk(2, 5, "src/B.java"),
+            chunk(3, 5, "src/C.java"),
+            chunk(4, 5, "src/D.java"),
+            chunk(5, 5, "src/E.java")
+        );
+        AtomicInteger llmCalls = new AtomicInteger();
+        ReviewPipelineContext context = new ReviewPipelineContext(
+            new ReviewTask(),
+            fullDiff,
+            settings(),
+            "promptSummary",
+            System.nanoTime(),
+            (ignoredSettings, ignoredTask, ignoredDiff) -> {
+                llmCalls.incrementAndGet();
+                return new LlmCallResult(llmJson("unused"), 100, 25, 125);
+            }
+        );
+        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+            .thenReturn(ReviewResult.completed("LOW", List.of()));
+
+        CompletableFuture<ReviewResult> result = CompletableFuture.supplyAsync(
+            () -> windowedAggregator.aggregate(
+                context,
+                fullDiff,
+                chunks,
+                parser,
+                ReviewBudget.startingAt(System.nanoTime(), Duration.ofMillis(150))
+            )
+        );
+
+        assertThat(initialWindowSubmitted.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(submitted).hasSize(2);
+        assertThat(result.get(2, TimeUnit.SECONDS).llmParseStatus())
+            .isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+        assertThat(llmCalls.get()).isZero();
+        assertThat(submitted).hasSize(2);
+    }
+
+    @Test
+    void capsLlmCallsAndFallsBackChunksBeyondConfiguredTotal() {
+        LlmChunkReviewAggregator cappedAggregator = new LlmChunkReviewAggregator(
+            ruleBasedReviewer,
+            new LlmReviewPromptBuilder(),
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            metrics,
+            Runnable::run,
+            2,
+            1
+        );
+        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
+        List<PullRequestDiffChunk> chunks = List.of(
+            chunk(1, 4, "src/A.java"),
+            chunk(2, 4, "src/B.java"),
+            chunk(3, 4, "src/C.java"),
+            chunk(4, 4, "src/D.java")
+        );
+        AtomicInteger llmCalls = new AtomicInteger();
+        ReviewPipelineContext context = new ReviewPipelineContext(
+            new ReviewTask(),
+            fullDiff,
+            settings(),
+            "promptSummary",
+            System.nanoTime(),
+            (ignoredSettings, ignoredTask, chunkDiff) -> {
+                llmCalls.incrementAndGet();
+                String path = chunkDiff.files().getFirst().filename();
+                return new LlmCallResult(llmJson(path), 100, 25, 125);
+            }
+        );
+        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+            .thenReturn(ReviewResult.completed("LOW", List.of()));
+
+        ReviewResult result = cappedAggregator.aggregate(context, fullDiff, chunks, parser, budget());
+
+        assertThat(llmCalls.get()).isEqualTo(2);
+        assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+        assertThat(result.findings())
+            .extracting(ReviewFindingResult::filePath)
+            .containsExactly("src/A.java", "src/B.java");
+        verify(metrics, times(2)).llmFallback(LlmChunkReviewAggregator.CHUNK_LIMIT_EXCEEDED_CATEGORY);
+    }
+
+    @Test
+    void executorRejectionFallsBackRejectedChunksWithoutDiscardingCompletedWork() {
+        AtomicInteger submissions = new AtomicInteger();
+        Executor rejectingExecutor = command -> {
+            if (submissions.incrementAndGet() == 1) {
+                command.run();
+                return;
+            }
+            throw new RejectedExecutionException("saturated");
+        };
+        LlmChunkReviewAggregator rejectingAggregator = new LlmChunkReviewAggregator(
+            ruleBasedReviewer,
+            new LlmReviewPromptBuilder(),
+            new LlmRuleReviewMerger(new RiskLevelRanker()),
+            new LlmReviewQualityScorer(),
+            new LlmReviewCostEstimator(),
+            metrics,
+            rejectingExecutor,
+            64,
+            2
+        );
+        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
+        List<PullRequestDiffChunk> chunks = List.of(
+            chunk(1, 3, "src/A.java"),
+            chunk(2, 3, "src/B.java"),
+            chunk(3, 3, "src/C.java")
+        );
+        ReviewPipelineContext context = new ReviewPipelineContext(
+            new ReviewTask(),
+            fullDiff,
+            settings(),
+            "promptSummary",
+            System.nanoTime(),
+            (ignoredSettings, ignoredTask, chunkDiff) -> new LlmCallResult(
+                llmJson(chunkDiff.files().getFirst().filename()),
+                100,
+                25,
+                125
+            )
+        );
+        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+            .thenReturn(ReviewResult.completed("LOW", List.of()));
+
+        ReviewResult result = rejectingAggregator.aggregate(context, fullDiff, chunks, parser, budget());
+
+        assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+        assertThat(result.findings())
+            .extracting(ReviewFindingResult::filePath)
+            .containsExactly("src/A.java");
+        assertThat(result.llmPromptTokens()).isEqualTo(100);
+        verify(metrics, times(2)).llmFallback(LlmChunkReviewAggregator.EXECUTOR_REJECTED_CATEGORY);
+    }
+
+    @Test
+    void budgetExpiryKeepsCompletedChunksAndInterruptsUnfinishedCall() throws Exception {
+        ThreadPoolExecutor boundedExecutor = new BoundedExecutorFactory(
+            new SimpleMeterRegistry(),
+            new AsyncExecutorProperties()
+        ).create("llm-chunk-budget-test", 2, 4);
+        try {
+            LlmChunkReviewAggregator budgetedAggregator = new LlmChunkReviewAggregator(
+                ruleBasedReviewer,
+                new LlmReviewPromptBuilder(),
+                new LlmRuleReviewMerger(new RiskLevelRanker()),
+                new LlmReviewQualityScorer(),
+                new LlmReviewCostEstimator(),
+                metrics,
+                boundedExecutor,
+                64,
+                2
+            );
+            GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
+            List<PullRequestDiffChunk> chunks = List.of(
+                chunk(1, 2, "src/A.java"),
+                chunk(2, 2, "src/B.java")
+            );
+            CountDownLatch neverRelease = new CountDownLatch(1);
+            CountDownLatch interrupted = new CountDownLatch(1);
+            LlmReviewCaller caller = (ignoredSettings, ignoredTask, chunkDiff) -> {
+                String path = chunkDiff.files().getFirst().filename();
+                if (path.endsWith("A.java")) {
+                    try {
+                        neverRelease.await();
+                    } catch (InterruptedException ex) {
+                        interrupted.countDown();
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                return new LlmCallResult(llmJson(path), 100, 25, 125);
+            };
+            ReviewPipelineContext context = new ReviewPipelineContext(
+                new ReviewTask(),
+                fullDiff,
+                settings(),
+                "promptSummary",
+                System.nanoTime(),
+                caller
+            );
+            when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenAnswer(invocation -> {
+                GithubPullRequestDiff fallbackDiff = invocation.getArgument(0);
+                String path = fallbackDiff.files().getFirst().filename();
+                return ReviewResult.completed(
+                    "MEDIUM",
+                    List.of(new ReviewFindingResult(
+                        "MEDIUM",
+                        "RULE",
+                        "RG-BUDGET",
+                        path,
+                        1,
+                        "Budget fallback",
+                        "Review the unfinished chunk"
+                    ))
+                );
+            });
+
+            ReviewResult result = budgetedAggregator.aggregate(
+                context,
+                fullDiff,
+                chunks,
+                parser,
+                ReviewBudget.startingAt(System.nanoTime(), Duration.ofMillis(150))
+            );
+
+            assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+            assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+            assertThat(result.findings())
+                .extracting(ReviewFindingResult::source)
+                .containsExactly("RULE", "LLM");
+            assertThat(result.findings())
+                .extracting(ReviewFindingResult::filePath)
+                .containsExactly("src/A.java", "src/B.java");
+            assertThat(result.llmPromptTokens()).isEqualTo(100);
         } finally {
             boundedExecutor.shutdownNow();
         }
@@ -238,7 +501,7 @@ class LlmChunkReviewAggregatorTest {
         );
         MDC.put(LogContext.TRACE_ID, "trace-chunk");
         try {
-            aggregator.aggregate(context, fullDiff, chunks, parser);
+            aggregator.aggregate(context, fullDiff, chunks, parser, budget());
         } finally {
             MDC.remove(LogContext.TRACE_ID);
         }
@@ -278,7 +541,7 @@ class LlmChunkReviewAggregatorTest {
             when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
                 .thenReturn(ReviewResult.completed("INFO", List.of()));
 
-            aggregator.aggregate(context, fullDiff, chunks, parser);
+            aggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
             assertThat(appender.list).hasSize(1);
             ILoggingEvent event = appender.list.getFirst();
@@ -354,5 +617,9 @@ class LlmChunkReviewAggregatorTest {
             BigDecimal.ONE,
             BigDecimal.valueOf(4)
         );
+    }
+
+    private ReviewBudget budget() {
+        return ReviewBudget.startingAt(System.nanoTime(), Duration.ofSeconds(5));
     }
 }

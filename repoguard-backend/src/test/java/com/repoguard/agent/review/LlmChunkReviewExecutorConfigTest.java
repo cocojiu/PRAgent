@@ -28,7 +28,7 @@ class LlmChunkReviewExecutorConfigTest {
             );
 
             assertThat(executor).isNotNull();
-            assertThat(executor.getMaximumPoolSize()).isEqualTo(4);
+            assertThat(executor.getMaximumPoolSize()).isEqualTo(3);
         }
     }
 }
