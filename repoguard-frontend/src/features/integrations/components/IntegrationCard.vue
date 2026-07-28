@@ -57,16 +57,33 @@
           <strong>{{ diagnostic.value }}</strong>
         </div>
       </div>
-      <el-button type="primary" plain :loading="testing" @click="$emit('test-connection', item.id)">
-        <RadioTower :size="17" />
-        测试连接
-      </el-button>
+      <div class="integration-actions">
+        <el-button
+          type="primary"
+          :disabled="!canManage"
+          :loading="saving"
+          @click="$emit('save-config', item.id)"
+        >
+          <Save :size="17" />
+          保存本项
+        </el-button>
+        <el-button
+          type="primary"
+          plain
+          :disabled="!canManage"
+          :loading="testing"
+          @click="$emit('test-connection', item.id)"
+        >
+          <RadioTower :size="17" />
+          测试连接
+        </el-button>
+      </div>
     </aside>
   </article>
 </template>
 
 <script setup lang="ts">
-import { ChevronDown, CircleCheck, Copy, Eye, RadioTower, TriangleAlert } from "@lucide/vue";
+import { ChevronDown, CircleCheck, Copy, Eye, RadioTower, Save, TriangleAlert } from "@lucide/vue";
 import type { Component } from "vue";
 import type { IntegrationConfig } from "@/types";
 
@@ -75,10 +92,13 @@ const props = defineProps<{
   icon: Component;
   formState: Record<string, string>;
   visibleSecrets: Record<string, boolean>;
+  canManage?: boolean;
+  saving?: boolean;
   testing?: boolean;
 }>();
 
 defineEmits<{
+  (event: "save-config", id: string): void;
   (event: "test-connection", id: string): void;
 }>();
 

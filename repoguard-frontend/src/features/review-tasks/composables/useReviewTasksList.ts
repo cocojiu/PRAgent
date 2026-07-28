@@ -39,10 +39,18 @@ export const useReviewTasksList = () => {
 
   const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
     const summary = taskSummary.value;
-    const total = summary?.total ?? 0;
-    const highRiskCount = summary?.highRisk ?? 0;
-    const failedCount = summary?.failed ?? 0;
-    const avgSeconds = summary?.averageDurationSeconds ?? 0;
+    if (!summary) {
+      return [
+        { label: "任务总数", value: "—", note: "数据暂不可用", noteClass: "trend", color: "blue" },
+        { label: "高风险 PR", value: "—", note: "数据暂不可用", noteClass: "trend danger", color: "red" },
+        { label: "失败任务", value: "—", note: "数据暂不可用", noteClass: "trend danger", color: "orange" },
+        { label: "平均耗时", value: "—", note: "数据暂不可用", noteClass: "trend", color: "green" }
+      ];
+    }
+    const total = summary.total;
+    const highRiskCount = summary.highRisk;
+    const failedCount = summary.failed;
+    const avgSeconds = summary.averageDurationSeconds;
 
     return [
       { label: "任务总数", value: String(total), note: "当前筛选结果", noteClass: "trend", color: "blue" },
@@ -117,9 +125,7 @@ export const useReviewTasksList = () => {
       }
       taskSummary.value = summary;
     } catch {
-      if (requestSeq === summaryRequestSeq) {
-        taskSummary.value = null;
-      }
+      // Keep the last successful summary. An unavailable value must never be presented as a real zero.
     }
   };
 

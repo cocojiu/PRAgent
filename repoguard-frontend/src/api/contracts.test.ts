@@ -92,14 +92,19 @@ describe("apiRequest", () => {
   });
 
   it("forwards cancellation signals through the typed API contract", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okResponse({}));
+    let fetchSignal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      fetchSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    });
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
 
-    await apiRequest("fetchMessageQueueHealth", undefined, { signal: controller.signal });
+    const pending = apiRequest("fetchMessageQueueHealth", undefined, { signal: controller.signal });
+    controller.abort();
 
-    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(init.signal).toBe(controller.signal);
+    await expect(pending).rejects.toMatchObject({ code: "REQUEST_ABORTED" });
+    expect(fetchSignal?.aborted).toBe(true);
   });
 
   it("serializes request bodies from the typed operation contract", async () => {

@@ -20,6 +20,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Generate ephemeral validation secrets
+        shell: bash
+        run: |
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Validate Compose configuration matrix
         shell: bash
         run: |
@@ -36,12 +45,7 @@ jobs:
           SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
           SMOKE_MYSQL_PASSWORD=validation-db \
           SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
-          REPOGUARD_SECURITY_ENCRYPTION_KEY=Validation-Encryption-Key-2026 \
           REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
-          REPOGUARD_SECURITY_ENCRYPTION_SALT=validation-salt-2026 \
-          SMOKE_AUTH_TOKEN_SECRET=Validation-Auth-Token-2026 \
-          SMOKE_ADMIN_API_KEY=Validation-Admin-Key-2026 \
-          REPOGUARD_GITHUB_WEBHOOK_SECRET=Validation-Webhook-Secret-2026 \
             docker compose -f docker-compose.smoke.yml config --quiet
           docker compose --env-file .env.prod.example \
             -f docker-compose.prod.yml \
@@ -162,11 +166,7 @@ jobs:
       SPRING_RABBITMQ_USERNAME: guest
       SPRING_RABBITMQ_PASSWORD: guest
       SPRING_RABBITMQ_VIRTUAL_HOST: /
-      REPOGUARD_SECURITY_ENCRYPTION_KEY: Integration-Key-2026!abc123XYZ-secure
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: integration-001
-      REPOGUARD_SECURITY_ENCRYPTION_SALT: Integration-Salt-2026!abc123XYZ
-      REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
-      REPOGUARD_ADMIN_API_KEY: Integration-Admin-Key-2026!abc123XYZ
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
@@ -174,6 +174,13 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Generate ephemeral integration secrets
+        shell: bash
+        run: |
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
         run: mvn -B -Dtest=ProductionRuntimeContextIntegrationTest test

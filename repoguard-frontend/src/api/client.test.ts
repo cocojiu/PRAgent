@@ -20,6 +20,7 @@ const apiResponse = (data: unknown, status = 200, traceId?: string, errorId?: st
 
 describe("auth token client", () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     clearAuthToken();
     clearCsrfCookie();
@@ -153,6 +154,43 @@ describe("auth token client", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(original));
 
     await expect(request("/api/v1/protected")).rejects.toBe(original);
+  });
+
+  it("enforces one total timeout and aborts the underlying fetch", async () => {
+    vi.useFakeTimers();
+    let requestSignal: AbortSignal | undefined;
+    vi.stubGlobal("fetch", vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      requestSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => {});
+    }));
+
+    const pending = request("/api/v1/slow", undefined, { timeoutMs: 25 });
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: "RequestError",
+      status: 0,
+      code: "REQUEST_TIMEOUT"
+    });
+    await vi.advanceTimersByTimeAsync(25);
+
+    await assertion;
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it("distinguishes caller cancellation from a timeout", async () => {
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const pending = request("/api/v1/cancelled", undefined, {
+      signal: controller.signal,
+      timeoutMs: 5_000
+    });
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({
+      name: "RequestError",
+      status: 0,
+      code: "REQUEST_ABORTED"
+    });
   });
 });
 

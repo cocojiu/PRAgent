@@ -2,6 +2,9 @@ package com.repoguard.agent.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.authentication.AuthenticatedPrincipal;
@@ -54,8 +57,9 @@ class AdminApiKeyFilterTest {
 
         filter.doFilter(request, response, new MockFilterChain());
 
-        assertThat(response.getStatus()).isEqualTo(403);
-        assertThat(response.getContentAsString()).contains("\"code\":\"FORBIDDEN\"");
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+        assertThat(response.getContentAsString()).contains("invalid or missing");
     }
 
     @Test
@@ -271,6 +275,44 @@ class AdminApiKeyFilterTest {
         assertThatThrownBy(() -> properties.validateForProfiles(new String[] {"staging"}))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("admin-api-key.key");
+    }
+
+    @Test
+    void productionProfileRejectsShortOrPlaceholderAdminKeys() {
+        AdminApiKeyProperties shortKey = properties("short-admin-key");
+        AdminApiKeyProperties placeholder = properties("change-me-admin-api-key-with-more-than-32-characters");
+
+        assertThatThrownBy(() -> shortKey.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("at least 32");
+        assertThatThrownBy(() -> placeholder.validateForProfiles(new String[] {"prod"}))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("non-placeholder");
+    }
+
+    @Test
+    void failedAttemptLimitIsFailClosedAndAuditedWithoutCredentialDetails()
+        throws ServletException, IOException {
+        AdminApiKeyAttemptLimiter attemptLimiter = mock(AdminApiKeyAttemptLimiter.class);
+        AdminApiKeyFailureAuditRecorder auditRecorder = mock(AdminApiKeyFailureAuditRecorder.class);
+        when(attemptLimiter.recordFailureAllowed(org.mockito.ArgumentMatchers.any())).thenReturn(false);
+        AdminApiKeyFilter filter = new AdminApiKeyFilter(
+            properties("secret-admin-key"),
+            authTokenService,
+            objectMapper,
+            attemptLimiter,
+            auditRecorder
+        );
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/users");
+        request.addHeader("X-RepoGuard-Admin-Key", "credential-that-must-not-be-audited");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(429);
+        assertThat(response.getContentAsString()).contains("\"code\":\"TOO_MANY_REQUESTS\"");
+        assertThat(response.getContentAsString()).doesNotContain("credential-that-must-not-be-audited");
+        verify(auditRecorder).record(request, "ADMIN_API_KEY_RATE_LIMITED");
     }
 
     private AdminApiKeyFilter filter(String key) {

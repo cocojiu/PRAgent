@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.Predicate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.cors.CorsUtils;
@@ -24,15 +26,45 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
     private final AdminApiKeyProperties properties;
     private final AuthTokenService authTokenService;
     private final ObjectMapper objectMapper;
+    private final Predicate<HttpServletRequest> failedAttemptAllowed;
+    private final BiConsumer<HttpServletRequest, String> failureAudit;
 
-    public AdminApiKeyFilter(
+    AdminApiKeyFilter(
         AdminApiKeyProperties properties,
         AuthTokenService authTokenService,
         ObjectMapper objectMapper
     ) {
+        this(properties, authTokenService, objectMapper, ignored -> true, (ignored, category) -> {});
+    }
+
+    public AdminApiKeyFilter(
+        AdminApiKeyProperties properties,
+        AuthTokenService authTokenService,
+        ObjectMapper objectMapper,
+        AdminApiKeyAttemptLimiter attemptLimiter,
+        AdminApiKeyFailureAuditRecorder failureAuditRecorder
+    ) {
+        this(
+            properties,
+            authTokenService,
+            objectMapper,
+            attemptLimiter::recordFailureAllowed,
+            failureAuditRecorder::record
+        );
+    }
+
+    private AdminApiKeyFilter(
+        AdminApiKeyProperties properties,
+        AuthTokenService authTokenService,
+        ObjectMapper objectMapper,
+        Predicate<HttpServletRequest> failedAttemptAllowed,
+        BiConsumer<HttpServletRequest, String> failureAudit
+    ) {
         this.properties = properties;
         this.authTokenService = authTokenService;
         this.objectMapper = objectMapper;
+        this.failedAttemptAllowed = failedAttemptAllowed;
+        this.failureAudit = failureAudit;
     }
 
     @Override
@@ -52,11 +84,11 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
 
         String actualKey = request.getHeader(properties.getHeaderName());
         if (actualKey == null || actualKey.isBlank()) {
-            writeError(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED, "Admin API key is required");
+            rejectInvalidCredential(request, response, "ADMIN_API_KEY_MISSING");
             return;
         }
         if (!secureEquals(properties.getKey(), actualKey)) {
-            writeError(response, HttpStatus.FORBIDDEN, ErrorCode.FORBIDDEN, "Admin API key is invalid");
+            rejectInvalidCredential(request, response, "ADMIN_API_KEY_INVALID");
             return;
         }
         request.setAttribute(
@@ -64,6 +96,30 @@ public class AdminApiKeyFilter extends OncePerRequestFilter {
             new AuthenticatedPrincipal(0L, "admin-api-key", "ADMIN", Long.MAX_VALUE)
         );
         filterChain.doFilter(request, response);
+    }
+
+    private void rejectInvalidCredential(
+        HttpServletRequest request,
+        HttpServletResponse response,
+        String failureCategory
+    ) throws IOException {
+        if (!failedAttemptAllowed.test(request)) {
+            failureAudit.accept(request, "ADMIN_API_KEY_RATE_LIMITED");
+            writeError(
+                response,
+                HttpStatus.TOO_MANY_REQUESTS,
+                ErrorCode.TOO_MANY_REQUESTS,
+                "Too many Admin API key authentication attempts"
+            );
+            return;
+        }
+        failureAudit.accept(request, failureCategory);
+        writeError(
+            response,
+            HttpStatus.UNAUTHORIZED,
+            ErrorCode.UNAUTHORIZED,
+            "Admin API key is invalid or missing"
+        );
     }
 
     private boolean hasVerifiedBearerToken(HttpServletRequest request) {

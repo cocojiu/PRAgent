@@ -2,10 +2,11 @@ import { createRouter, createWebHistory } from "vue-router";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import RepoGuardLayout from "@/layouts/RepoGuardLayout.vue";
 import OverviewPage from "@/pages/OverviewPage.vue";
-import { hasAuthToken } from "@/api/client";
+import { clearAuthToken, hasAuthToken } from "@/api/client";
+import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { routeNames } from "@/router/names";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
-import { canManage, currentUser, loadCurrentUser } from "@/stores/authState";
+import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import { getErrorMessage, RequestError } from "@/utils/errors";
 import {
   beginRoutePerformanceTiming,
@@ -196,13 +197,21 @@ router.beforeEach(async (to) => {
         await loadCurrentUser();
       } catch (error) {
         if (error instanceof RequestError && error.status === 401) {
-          return;
+          clearAuthToken();
+          resetCurrentUser();
+          return {
+            name: routeNames.login,
+            query: { redirect: to.fullPath }
+          };
         }
         ElMessage.error(getErrorMessage(error, "权限信息加载失败，请稍后重试"));
         return { name: routeNames.overview };
       }
     }
-    if (!canManage.value) {
+    if (!canAccessRouteMeta(to.meta, {
+      authenticated: hasAuthToken(),
+      managementAllowed: canManage.value
+    })) {
       return { name: routeNames.overview };
     }
   }

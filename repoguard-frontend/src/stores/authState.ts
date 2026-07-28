@@ -5,22 +5,39 @@ import type { CurrentUser } from "@/api/auth";
 export const currentUser = ref<CurrentUser>();
 export const canManage = computed(() => currentUser.value?.role === "ADMIN");
 
-let pendingLoad: Promise<CurrentUser> | undefined;
+type PendingCurrentUserLoad = {
+  controller: AbortController;
+  epoch: number;
+  promise: Promise<CurrentUser>;
+};
+
+let authEpoch = 0;
+let pendingLoad: PendingCurrentUserLoad | undefined;
 
 export const loadCurrentUser = () => {
-  if (!pendingLoad) {
-    pendingLoad = getCurrentUser()
+  if (!pendingLoad || pendingLoad.epoch !== authEpoch) {
+    const epoch = authEpoch;
+    const controller = new AbortController();
+    const promise = getCurrentUser({ signal: controller.signal })
       .then((user) => {
-        currentUser.value = user;
+        if (authEpoch === epoch && !controller.signal.aborted) {
+          currentUser.value = user;
+        }
         return user;
       })
       .finally(() => {
-        pendingLoad = undefined;
+        if (pendingLoad?.promise === promise) {
+          pendingLoad = undefined;
+        }
       });
+    pendingLoad = { controller, epoch, promise };
   }
-  return pendingLoad;
+  return pendingLoad.promise;
 };
 
 export const resetCurrentUser = () => {
+  authEpoch++;
+  pendingLoad?.controller.abort();
+  pendingLoad = undefined;
   currentUser.value = undefined;
 };

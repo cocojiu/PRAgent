@@ -118,7 +118,7 @@ describe("useReviewTasksList", () => {
     expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(1);
   });
 
-  it("refreshes the summary with the list and falls back to zeroed metrics on failure", async () => {
+  it("refreshes the summary with the list and retains the last successful values on failure", async () => {
     reviewApi.fetchReviews.mockResolvedValue({
       items: [reviewTask],
       total: 26
@@ -142,8 +142,21 @@ describe("useReviewTasksList", () => {
     await flushAsync();
 
     expect(reviewApi.fetchReviewListSummary).toHaveBeenCalledTimes(2);
-    expect(list.taskSummaryMetrics.value[0].value).toBe("0");
-    expect(list.taskSummaryMetrics.value[3].value).toBe("0 分 0 秒");
+    expect(list.taskSummaryMetrics.value[0].value).toBe("26");
+    expect(list.taskSummaryMetrics.value[3].value).toBe("1 分 5 秒");
+  });
+
+  it("shows an unknown state instead of misleading zeroes when no summary has loaded", async () => {
+    reviewApi.fetchReviews.mockResolvedValue({ items: [], total: 0 });
+    reviewApi.fetchReviewListSummary.mockRejectedValue(new Error("summary unavailable"));
+    reviewApi.fetchReviewRepositories.mockResolvedValue([]);
+
+    const list = useReviewTasksList();
+    list.initializeReviewTasksList();
+    await flushAsync();
+
+    expect(list.taskSummaryMetrics.value.map(metric => metric.value)).toEqual(["—", "—", "—", "—"]);
+    expect(list.taskSummaryMetrics.value.every(metric => metric.note === "数据暂不可用")).toBe(true);
   });
 
   it("uses the previous page tail as cursor when loading the next page", async () => {

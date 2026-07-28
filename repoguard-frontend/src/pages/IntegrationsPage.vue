@@ -4,10 +4,6 @@
       <div>
         <h1>集成配置</h1>
       </div>
-      <el-button type="primary" size="large" :disabled="!canManage" :loading="saving" @click="saveConfig">
-        <Save :size="17" />
-        保存配置
-      </el-button>
     </div>
 
     <el-alert
@@ -39,7 +35,10 @@
         :icon="serviceIcons[item.id] ?? Hexagon"
         :form-state="formState[item.id]"
         :visible-secrets="visibleSecrets"
+        :can-manage="canManage"
+        :saving="savingId === item.id"
         :testing="testingConnections[item.id]"
+        @save-config="saveConfig"
         @test-connection="testConnection"
       />
     </section>
@@ -50,7 +49,7 @@
 <script setup lang="ts">
 import "@/features/integrations/integrations.css";
 import { onMounted, reactive } from "vue";
-import { Hexagon, Save } from "@lucide/vue";
+import { Hexagon } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
 import {
   fetchGithubIntegrationConfig,
@@ -120,7 +119,7 @@ const { testConnection } = useIntegrationConnectionTest({
   testingConnections
 });
 
-const { loadErrorMessage, loading, saving, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
+const { loadErrorMessage, loading, savingId, reviewPolicyConfig, loadConfig, saveConfig } = useIntegrationConfigPersistence({
   applyGithubConfig,
   applyReviewPolicyConfig,
   applyServiceConfig,

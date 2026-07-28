@@ -55,6 +55,34 @@ describe("auth state", () => {
     expect(authApi.getCurrentUser).toHaveBeenCalledTimes(2);
     expect(currentUser.value).toEqual(adminUser);
   });
+
+  it("aborts and ignores a stale admin response after the authentication epoch changes", async () => {
+    const staleAdmin = deferred<CurrentUser>();
+    const currentViewer = deferred<CurrentUser>();
+    const viewerUser: CurrentUser = {
+      ...adminUser,
+      id: 2,
+      username: "viewer",
+      email: "viewer@example.com",
+      role: "VIEWER"
+    };
+    authApi.getCurrentUser
+      .mockReturnValueOnce(staleAdmin.promise)
+      .mockReturnValueOnce(currentViewer.promise);
+
+    const staleLoad = loadCurrentUser();
+    const staleSignal = authApi.getCurrentUser.mock.calls[0][0].signal as AbortSignal;
+    resetCurrentUser();
+    const currentLoad = loadCurrentUser();
+    currentViewer.resolve(viewerUser);
+    await expect(currentLoad).resolves.toEqual(viewerUser);
+    staleAdmin.resolve(adminUser);
+    await expect(staleLoad).resolves.toEqual(adminUser);
+
+    expect(staleSignal.aborted).toBe(true);
+    expect(authApi.getCurrentUser).toHaveBeenCalledTimes(2);
+    expect(currentUser.value).toEqual(viewerUser);
+  });
 });
 
 const deferred = <T>() => {

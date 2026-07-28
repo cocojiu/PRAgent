@@ -13,6 +13,7 @@ import {
   integrationConfigLabels,
   integrationConfigMessages
 } from "@/utils/userMessages";
+import type { IntegrationId } from "../integrationDefaults";
 
 type IntegrationConfigRequestActions = {
   fetchGithubIntegrationConfig: () => Promise<GithubIntegrationConfig>;
@@ -41,6 +42,16 @@ type UseIntegrationConfigPersistenceOptions = {
   requests: IntegrationConfigRequestActions;
 };
 
+const integrationLabelById: Record<IntegrationId, string> = {
+  github: integrationConfigLabels[0],
+  mysql: integrationConfigLabels[1],
+  rabbitmq: integrationConfigLabels[2],
+  "spring-ai": integrationConfigLabels[3]
+};
+
+const isIntegrationId = (id: string): id is IntegrationId =>
+  ["github", "mysql", "rabbitmq", "spring-ai"].includes(id);
+
 export const useIntegrationConfigPersistence = ({
   applyGithubConfig,
   applyReviewPolicyConfig,
@@ -51,27 +62,11 @@ export const useIntegrationConfigPersistence = ({
 }: UseIntegrationConfigPersistenceOptions) => {
   const loading = ref(false);
   const loadErrorMessage = ref("");
-  const saving = ref(false);
+  const savingId = ref<IntegrationId>();
   const githubConfig = ref<GithubIntegrationConfig>();
   const mysqlConfig = ref<ServiceIntegrationConfig>();
   const rabbitMqConfig = ref<ServiceIntegrationConfig>();
   const reviewPolicyConfig = ref<ReviewPolicyConfig>();
-
-  const applyLoadedConfigs = (
-    github: GithubIntegrationConfig,
-    mysql: ServiceIntegrationConfig,
-    rabbitMq: ServiceIntegrationConfig,
-    reviewPolicy: ReviewPolicyConfig
-  ) => {
-    githubConfig.value = github;
-    mysqlConfig.value = mysql;
-    rabbitMqConfig.value = rabbitMq;
-    reviewPolicyConfig.value = reviewPolicy;
-    applyGithubConfig(github);
-    applyServiceConfig("mysql", mysql);
-    applyServiceConfig("rabbitmq", rabbitMq);
-    applyReviewPolicyConfig(reviewPolicy);
-  };
 
   const loadConfigResults = async () => {
     const results = await Promise.allSettled([
@@ -123,48 +118,34 @@ export const useIntegrationConfigPersistence = ({
     }
   };
 
-  const saveConfig = async () => {
-    if (!canManage.value || saving.value) {
+  const saveConfig = async (id: string) => {
+    if (!canManage.value || savingId.value || !isIntegrationId(id)) {
       return;
     }
-    saving.value = true;
+    savingId.value = id;
     try {
-      const results = await Promise.allSettled([
-        requests.updateGithubIntegrationConfig(payloads.githubPayload()),
-        requests.updateMysqlIntegrationConfig(payloads.mysqlPayload()),
-        requests.updateRabbitMqIntegrationConfig(payloads.rabbitMqPayload()),
-        requests.updateReviewPolicyConfig(payloads.springAiPayload())
-      ] as const);
-      const succeeded = results
-        .map((result, index) => (result.status === "fulfilled" ? integrationConfigLabels[index] : undefined))
-        .filter((label): label is (typeof integrationConfigLabels)[number] => Boolean(label));
-      const failed = results
-        .map((result, index) =>
-          result.status === "rejected"
-            ? `${integrationConfigLabels[index]}（${getErrorMessage(result.reason)}）`
-            : undefined
-        )
-        .filter((label): label is string => Boolean(label));
-
-      if (
-        results[0].status === "fulfilled"
-        && results[1].status === "fulfilled"
-        && results[2].status === "fulfilled"
-        && results[3].status === "fulfilled"
-      ) {
-        applyLoadedConfigs(results[0].value, results[1].value, results[2].value, results[3].value);
-        loadErrorMessage.value = "";
-        ElMessage.success(integrationConfigMessages.saveSucceeded(succeeded));
-        return;
+      if (id === "github") {
+        const config = await requests.updateGithubIntegrationConfig(payloads.githubPayload());
+        githubConfig.value = config;
+        applyGithubConfig(config);
+      } else if (id === "mysql") {
+        const config = await requests.updateMysqlIntegrationConfig(payloads.mysqlPayload());
+        mysqlConfig.value = config;
+        applyServiceConfig("mysql", config);
+      } else if (id === "rabbitmq") {
+        const config = await requests.updateRabbitMqIntegrationConfig(payloads.rabbitMqPayload());
+        rabbitMqConfig.value = config;
+        applyServiceConfig("rabbitmq", config);
+      } else {
+        const config = await requests.updateReviewPolicyConfig(payloads.springAiPayload());
+        reviewPolicyConfig.value = config;
+        applyReviewPolicyConfig(config);
       }
-
-      const syncFailed = await loadConfigResults();
-      loadErrorMessage.value = syncFailed.length > 0
-        ? integrationConfigMessages.loadFailed(syncFailed)
-        : "";
-      ElMessage.error(integrationConfigMessages.savePartiallyFailed({ failed, succeeded, syncFailed }));
+      ElMessage.success(`${integrationLabelById[id]} 配置保存成功`);
+    } catch (error) {
+      ElMessage.error(`${integrationLabelById[id]} 配置保存失败：${getErrorMessage(error)}`);
     } finally {
-      saving.value = false;
+      savingId.value = undefined;
     }
   };
 
@@ -175,7 +156,7 @@ export const useIntegrationConfigPersistence = ({
     mysqlConfig,
     rabbitMqConfig,
     reviewPolicyConfig,
-    saving,
+    savingId,
     loadConfig,
     saveConfig
   };

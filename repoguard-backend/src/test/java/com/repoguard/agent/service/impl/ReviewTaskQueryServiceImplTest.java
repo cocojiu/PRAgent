@@ -270,7 +270,26 @@ class ReviewTaskQueryServiceImplTest {
         org.assertj.core.api.Assertions.assertThat(cacheable.key()).isEqualTo("#query.listSummaryCacheKey()");
         org.assertj.core.api.Assertions.assertThat(
             new ReviewQuery(1, 1, " org/repo ", "failed", null, null, null, null).listSummaryCacheKey()
-        ).isEqualTo("org/repo|failed||||");
+        ).isEqualTo(new ReviewQuery.ReviewListSummaryCacheKey(
+            "org/repo",
+            "FAILED",
+            null,
+            null,
+            null,
+            null
+        ));
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, "a|b", "c", null, null, null, null).listSummaryCacheKey()
+        ).isNotEqualTo(
+            new ReviewQuery(1, 1, "a", "b|c", null, null, null, null).listSummaryCacheKey()
+        );
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, " org/repo ", " failed ", null, null, null, " keyword ")
+                .listSummaryCacheKey()
+        ).isEqualTo(
+            new ReviewQuery(1, 1, "org/repo", "FAILED", " ", null, null, "keyword")
+                .listSummaryCacheKey()
+        );
     }
 
     @Test

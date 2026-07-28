@@ -59,6 +59,16 @@ jobs:
         shell: pwsh
         run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
 
+      - name: Generate ephemeral validation secrets
+        shell: bash
+        run: |
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
       - name: Validate production Compose models
         shell: bash
         run: |
@@ -74,12 +84,7 @@ jobs:
           SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
           SMOKE_MYSQL_PASSWORD=validation-db \
           SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
-          REPOGUARD_SECURITY_ENCRYPTION_KEY=Validation-Encryption-Key-2026 \
           REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
-          REPOGUARD_SECURITY_ENCRYPTION_SALT=validation-salt-2026 \
-          SMOKE_AUTH_TOKEN_SECRET=Validation-Auth-Token-2026 \
-          SMOKE_ADMIN_API_KEY=Validation-Admin-Key-2026 \
-          REPOGUARD_GITHUB_WEBHOOK_SECRET=Validation-Webhook-Secret-2026 \
             docker compose -f docker-compose.smoke.yml config --quiet
           docker compose --env-file .env.prod.example \
             -f docker-compose.prod.yml \

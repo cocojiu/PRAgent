@@ -8,10 +8,13 @@ export const commonUserMessages = {
   invalidResponse: "服务返回的数据格式异常，请稍后重试",
   networkError: "网络连接异常，请检查后重试",
   payloadTooLarge: "提交内容过大，请精简后重试",
+  requestAborted: "请求已取消",
   requestFailed: "请求失败",
+  requestTimeout: "请求超时，请稍后重试",
   sessionExpired: "登录状态已失效，请重新登录",
   taskNotFound: "审查任务不存在或已被删除",
-  tooManyRequests: "请求过于频繁，请稍后重试"
+  tooManyRequests: "请求过于频繁，请稍后重试",
+  unexpectedError: "页面发生异常，请刷新后重试"
 } as const;
 
 export const integrationConfigLabels = ["GitHub", "MySQL", "RabbitMQ", "审查策略"] as const;

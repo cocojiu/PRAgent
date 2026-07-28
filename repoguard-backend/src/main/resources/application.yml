@@ -217,6 +217,9 @@ app:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
       header-name: ${REPOGUARD_ADMIN_API_KEY_HEADER:X-RepoGuard-Admin-Key}
+      min-key-length: ${REPOGUARD_ADMIN_API_KEY_MIN_LENGTH:32}
+      failed-requests-per-minute-per-ip: ${REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP:30}
+      max-tracked-clients: ${REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS:10000}
     trusted-proxy:
       networks: ${REPOGUARD_TRUSTED_PROXY_NETWORKS:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     outbound:

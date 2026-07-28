@@ -1,5 +1,8 @@
 package com.repoguard.agent.dto;
 
+import java.util.Locale;
+import org.springframework.util.StringUtils;
+
 /**
  * Controller 校验后的评审列表查询参数。
  */
@@ -56,19 +59,33 @@ public record ReviewQuery(
         );
     }
 
-    public String listSummaryCacheKey() {
-        return String.join(
-            "|",
-            keyPart(repository),
-            keyPart(status),
-            keyPart(riskLevel),
-            keyPart(source),
-            keyPart(triggerSource),
-            keyPart(keyword)
+    public ReviewListSummaryCacheKey listSummaryCacheKey() {
+        return new ReviewListSummaryCacheKey(
+            trimToNull(repository),
+            upperTrimToNull(status),
+            upperTrimToNull(riskLevel),
+            upperTrimToNull(source),
+            upperTrimToNull(triggerSource),
+            trimToNull(keyword)
         );
     }
 
-    private static String keyPart(String value) {
-        return value == null ? "" : value.trim();
+    private static String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private static String upperTrimToNull(String value) {
+        String normalized = trimToNull(value);
+        return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
+    }
+
+    public record ReviewListSummaryCacheKey(
+        String repository,
+        String status,
+        String riskLevel,
+        String source,
+        String triggerSource,
+        String keyword
+    ) {
     }
 }

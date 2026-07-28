@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearAuthToken, saveAuthToken } from "@/api/client";
+import { clearAuthToken, hasAuthToken, saveAuthToken } from "@/api/client";
 import { resetCurrentUser } from "@/stores/authState";
 import { routeNames } from "@/router/names";
 import { router } from "@/router";
@@ -98,7 +98,7 @@ describe("application route smoke", () => {
     expect(messages.error).toHaveBeenCalledWith("权限信息加载失败，请稍后重试");
   });
 
-  it("lets 401 failures pass through the guard for the api layer to handle", async () => {
+  it("clears the local session and redirects to login after a management 401", async () => {
     saveAuthToken("access-token", false);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       if (String(input).includes("/api/v1/auth/refresh")) {
@@ -109,7 +109,9 @@ describe("application route smoke", () => {
 
     const route = await navigate("/repoguard/users");
 
-    expect(route.name).toBe(routeNames.users);
+    expect(route.name).toBe(routeNames.login);
+    expect(route.query.redirect).toBe("/repoguard/users");
+    expect(hasAuthToken()).toBe(false);
     expect(messages.error).not.toHaveBeenCalled();
   });
 });

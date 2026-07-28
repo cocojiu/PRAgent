@@ -4,6 +4,7 @@ import "element-plus/es/components/message/style/css.mjs";
 import "element-plus/es/components/message-box/style/css.mjs";
 import "./styles/main.css";
 import App from "./App.vue";
+import { installGlobalErrorHandlers } from "./observability/globalErrorHandlers";
 import { startFrontendPerformanceObservation } from "./observability/frontendPerformance";
 import {
   disableFrontendPerformanceDiagnostics,
@@ -34,4 +35,5 @@ if (isControlledPerformanceProfile(requestedPerformanceProfile)) {
 
 const app = createApp(App);
 
+installGlobalErrorHandlers(app);
 app.use(createPinia()).use(router).mount("#app");

@@ -1,4 +1,5 @@
 import { requestWithMeta } from "@/api/client";
+import type { ClientRequestInit } from "@/api/client";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
 import type { AuthResponse, CurrentUser, LoginRequest, PasswordChangeRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
@@ -80,6 +81,7 @@ type QueryParams = Record<string, string | number | undefined>;
 export type ApiRequestOptions = {
   signal?: AbortSignal;
   keepalive?: boolean;
+  timeoutMs?: number;
 };
 
 type ApiOperation<Input, Response> = {
@@ -629,7 +631,11 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
     ApiContract[Operation]["input"],
     ApiContract[Operation]["response"]
   >;
-  const options: RequestInit = { signal: requestOptions.signal, keepalive: requestOptions.keepalive };
+  const options: ClientRequestInit = {
+    signal: requestOptions.signal,
+    keepalive: requestOptions.keepalive,
+    timeoutMs: requestOptions.timeoutMs
+  };
   const method = endpoint.method ?? "GET";
   const path = endpoint.path(input);
   const observationPath = stableObservationPath(path);

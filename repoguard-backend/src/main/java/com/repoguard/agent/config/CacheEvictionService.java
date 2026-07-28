@@ -59,43 +59,60 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity() {
-        refreshDashboardSnapshotsAfterCommit(
+        afterCommitOrNow(this::evictDashboardReviewActivityNow);
+    }
+
+    private void evictDashboardReviewActivityNow() {
+        submitDashboardRefresh(
             REVIEW_ACTIVITY_REFRESH_KEY,
-            DashboardDailySnapshotService::refreshCurrentWindows
+            () -> refreshDashboardSnapshots(DashboardDailySnapshotService::refreshCurrentWindows)
         );
-        evictDashboardOverviewCompatibility();
+        clear(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        evictDashboardOverviewCompatibilityNow();
         evictDashboardSummary();
         evictDashboardReviewTrend();
         evictDashboardRiskDistribution();
-        evictDashboardRules();
+        evictDashboardRulesNow();
         evictDashboardHighRiskReviews();
         evictDashboardLlmQuality();
     }
 
     public void evictDashboardFeedbackQuality() {
-        refreshDashboardSnapshotsAfterCommit(
+        afterCommitOrNow(this::evictDashboardFeedbackQualityNow);
+    }
+
+    private void evictDashboardFeedbackQualityNow() {
+        submitDashboardRefresh(
             FEEDBACK_QUALITY_REFRESH_KEY,
-            DashboardDailySnapshotService::refreshCurrentLlmQualityWindow
+            () -> refreshDashboardSnapshots(DashboardDailySnapshotService::refreshCurrentLlmQualityWindow)
         );
         evictDashboardLlmQuality();
     }
 
     public void evictDashboardRules() {
+        afterCommitOrNow(this::evictDashboardRulesNow);
+    }
+
+    private void evictDashboardRulesNow() {
         clear(CacheNames.DASHBOARD_RULES);
         evictSnapshot(CacheNames.DASHBOARD_RULES + ":rules");
     }
 
     public void evictDashboardOverviewCompatibility() {
+        afterCommitOrNow(this::evictDashboardOverviewCompatibilityNow);
+    }
+
+    private void evictDashboardOverviewCompatibilityNow() {
         clear(CacheNames.DASHBOARD_OVERVIEW);
         evictSnapshotsByPrefix(CacheNames.DASHBOARD_OVERVIEW + ":");
     }
 
     public void evictGithubOpenPullRequests() {
-        clear(CacheNames.GITHUB_OPEN_PULL_REQUESTS);
+        afterCommitOrNow(() -> clear(CacheNames.GITHUB_OPEN_PULL_REQUESTS));
     }
 
     public void evictReviewRules() {
-        clear(CacheNames.REVIEW_RULES);
+        afterCommitOrNow(() -> clear(CacheNames.REVIEW_RULES));
     }
 
     private void clear(String cacheName) {
@@ -144,22 +161,17 @@ public class CacheEvictionService {
         }
     }
 
-    private void refreshDashboardSnapshotsAfterCommit(
-        String refreshKey,
-        java.util.function.Consumer<DashboardDailySnapshotService> refresher
-    ) {
-        Runnable refresh = () -> refreshDashboardSnapshots(refresher);
-        Runnable submit = () -> submitDashboardRefresh(refreshKey, refresh);
+    private void afterCommitOrNow(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    submit.run();
+                    action.run();
                 }
             });
             return;
         }
-        submit.run();
+        action.run();
     }
 
     private void submitDashboardRefresh(String refreshKey, Runnable refresh) {

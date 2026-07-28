@@ -25,6 +25,9 @@ class ProductionConfigurationContractTest {
     private static final List<String> SHARED_CAPACITY_AND_SECURITY_KEYS = List.of(
         "REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS",
         "REPOGUARD_TRUSTED_PROXY_NETWORKS",
+        "REPOGUARD_ADMIN_API_KEY_MIN_LENGTH",
+        "REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP",
+        "REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS",
         "REPOGUARD_REVIEW_PIPELINE_BUDGET_MS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS",
         "REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS",
@@ -268,6 +271,46 @@ class ProductionConfigurationContractTest {
             .contains("validate /etc/alloy/config.alloy")
             .contains("validate /etc/alloy")
             .contains("alloy/metrics.alloy");
+    }
+
+    @Test
+    void ciGeneratesRuntimeSecretsInsteadOfEmbeddingReusableCredentials() throws IOException {
+        Path root = findRepositoryRoot();
+        String prQuality = read(root.resolve(".github/workflows/pr-quality.yml"));
+        String release = read(root.resolve(".github/workflows/release-images.yml"));
+
+        for (String workflow : List.of(prQuality, release)) {
+            assertThat(workflow)
+                .contains("Generate ephemeral validation secrets")
+                .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY=$(openssl rand -hex 32)")
+                .contains("SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)")
+                .contains("SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)")
+                .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)")
+                .doesNotContain("Validation-Encryption-Key-2026")
+                .doesNotContain("Validation-Auth-Token-2026")
+                .doesNotContain("Validation-Admin-Key-2026")
+                .doesNotContain("Validation-Webhook-Secret-2026");
+        }
+        assertThat(prQuality)
+            .contains("Generate ephemeral integration secrets")
+            .contains("REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)")
+            .doesNotContain("Integration-Key-2026!abc123XYZ-secure")
+            .doesNotContain("Integration-Auth-Token-2026!abc123XYZ")
+            .doesNotContain("Integration-Admin-Key-2026!abc123XYZ");
+    }
+
+    @Test
+    void developmentInfrastructurePortsAreOnlyPublishedOnLoopback() throws IOException {
+        Path root = findRepositoryRoot();
+        Map<String, Object> development = yaml(root.resolve("repoguard-backend/docker-compose.yml"));
+
+        assertThat(stringList(service(development, "mysql").get("ports")))
+            .containsExactly("127.0.0.1:3306:3306");
+        assertThat(stringList(service(development, "rabbitmq").get("ports")))
+            .containsExactly(
+                "127.0.0.1:5672:5672",
+                "127.0.0.1:15672:15672"
+            );
     }
 
     @Test
