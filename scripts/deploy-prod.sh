@@ -12,6 +12,7 @@ LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
 DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
 DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
+PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -33,6 +34,14 @@ if [ -z "${FRONTEND_IMAGE:-}" ]; then
   echo "Missing FRONTEND_IMAGE environment variable." >&2
   exit 1
 fi
+
+case "$PREFLIGHT_ONLY" in
+  true|false) ;;
+  *)
+    echo "PREFLIGHT_ONLY must be true or false." >&2
+    exit 1
+    ;;
+esac
 
 read_env_value() {
   key="$1"
@@ -100,6 +109,90 @@ compose() {
   done
   COMPOSE_FILE="$compose_file_list" COMPOSE_PATH_SEPARATOR=: \
     docker compose --env-file "$ENV_FILE" "$@"
+}
+
+validate_secret_files() {
+  for required_command in od stat tail; do
+    if ! command -v "$required_command" >/dev/null 2>&1; then
+      echo "Missing required secret preflight command: $required_command" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+  done
+
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  compose_environment="$(compose config --environment)"
+  secret_file_keys="
+MYSQL_ROOT_PASSWORD_FILE
+MYSQL_PASSWORD_FILE
+REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE
+REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE
+REPOGUARD_AUTH_TOKEN_SECRET_FILE
+REPOGUARD_ADMIN_API_KEY_FILE
+REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE
+"
+
+  for key in $secret_file_keys; do
+    configured_path="$(printf '%s\n' "$compose_environment" \
+      | sed -n "s/^${key}=//p" | tail -n 1)"
+    if [ -z "$configured_path" ]; then
+      echo "Missing required secret file setting: $key" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+
+    case "$configured_path" in
+      /*) secret_path="$configured_path" ;;
+      *) secret_path="${compose_directory}/${configured_path}" ;;
+    esac
+
+    if [ -L "$secret_path" ] || [ ! -f "$secret_path" ] \
+      || [ ! -r "$secret_path" ] || [ ! -s "$secret_path" ]; then
+      echo "$key must reference a readable, non-empty regular file, not a symlink: $secret_path" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+
+    file_mode="$(stat -c '%a' "$secret_path")"
+    case "$file_mode" in
+      400|600) ;;
+      *)
+        echo "$key must use mode 0400 or 0600; found $file_mode on $secret_path" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+
+    directory_mode="$(stat -c '%a' "$(dirname "$secret_path")")"
+    case "$directory_mode" in
+      500|700) ;;
+      *)
+        echo "Secret directory must use mode 0500 or 0700; found $directory_mode for $(dirname "$secret_path")" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+
+    last_byte="$(tail -c 1 "$secret_path" | od -An -t u1 | tr -d ' \n')"
+    case "$last_byte" in
+      10|13)
+        echo "$key contains a trailing newline; rewrite it with printf '%s': $secret_path" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+  done
+}
+
+validate_edge_observability_isolation() {
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  edge_config="${compose_directory}/Caddyfile"
+  if grep -Eiq 'grafana|loki|alloy|repoguard_observability' "$edge_config"; then
+    echo "Production edge configuration must not route to observability services: $edge_config" >&2
+    echo "Use the loopback Grafana port through an SSH tunnel." >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
 }
 
 validate_required_bind_sources() {
@@ -630,9 +723,15 @@ echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
 validate_required_bind_sources
+validate_secret_files
+validate_edge_observability_isolation
 validate_split_runtime_mode
 validate_production_data_routing
 validate_review_timeout_layering
+if [ "$PREFLIGHT_ONLY" = "true" ]; then
+  echo "Production deployment preflight passed; no image was pulled and no service was changed."
+  exit 0
+fi
 deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
   deploy_services="mysql rabbitmq backend backend-worker frontend caddy"

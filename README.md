@@ -133,16 +133,18 @@ npm run dev
 - `SPRING_RABBITMQ_PORT`
 - `SPRING_RABBITMQ_USERNAME`
 - `SPRING_RABBITMQ_PASSWORD`
-- `REPOGUARD_SECURITY_ENCRYPTION_KEY`
+- `MYSQL_ROOT_PASSWORD_FILE`
+- `MYSQL_PASSWORD_FILE`
+- `REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE`
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`
-- `REPOGUARD_SECURITY_ENCRYPTION_SALT`
+- `REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE`
 - `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS`
-- `REPOGUARD_AUTH_TOKEN_SECRET`
+- `REPOGUARD_AUTH_TOKEN_SECRET_FILE`
 - `REPOGUARD_AUTH_TOKEN_SECRET_ID`
 - `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS`
 - `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID`
-- `REPOGUARD_ADMIN_API_KEY`
-- `REPOGUARD_GITHUB_WEBHOOK_SECRET`
+- `REPOGUARD_ADMIN_API_KEY_FILE`
+- `REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES`
 - `REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES`
 - `REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE`
@@ -205,6 +207,89 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 5. 运行 workflow。
 
 填写 `deploy_existing_tag` 时，workflow 会跳过镜像构建，直接部署 ACR 中已有的 `backend-<tag>` 和 `frontend-<tag>` 镜像。部署脚本会校验实际运行容器镜像与目标镜像一致，并在健康检查失败时输出后端最近日志。
+
+## 生产运维 Runbook
+
+### 部署前检查与密钥文件迁移
+
+生产 Compose 使用服务器本地文件提供 MySQL 密码和 5 个应用密钥；RabbitMQ 口令暂时保留在 `.env`。密钥目录必须为 `0700`，文件必须为 `0400` 或 `0600`、非空、非符号链接，且末尾不能带 CR/LF。部署脚本在拉取镜像或停止容器前检查这些条件，并拒绝包含 Grafana/Loki/Alloy 上游的边缘配置。
+
+从旧版明文 `.env` 迁移时，不要生成新值；必须把当前正在使用的原值逐字节写入对应文件，否则已有数据库、Token 和加密业务配置会失效：
+
+```bash
+cd /opt/repoguard
+umask 077
+install -d -m 700 secrets
+printf '%s' '<原 MYSQL_ROOT_PASSWORD>' > secrets/mysql.root-password
+printf '%s' '<原 MYSQL_PASSWORD>' > secrets/spring.datasource.password
+printf '%s' '<原 REPOGUARD_SECURITY_ENCRYPTION_KEY>' > secrets/repoguard.security.encryption-key
+printf '%s' '<原 REPOGUARD_SECURITY_ENCRYPTION_SALT>' > secrets/repoguard.security.encryption-salt
+printf '%s' '<原 REPOGUARD_AUTH_TOKEN_SECRET>' > secrets/repoguard.auth.token-secret
+printf '%s' '<原 REPOGUARD_ADMIN_API_KEY>' > secrets/app.security.admin-api-key.key
+printf '%s' '<原 REPOGUARD_GITHUB_WEBHOOK_SECRET>' > secrets/app.github.webhook.secret
+chmod 600 secrets/*
+```
+
+随后把 `.env` 中上述明文键替换为以下文件路径键；确认新容器健康、登录/Webhook/集成配置解密和一次备份恢复均正常后，再删除服务器上的受限迁移副本：
+
+```dotenv
+MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password
+MYSQL_PASSWORD_FILE=./secrets/spring.datasource.password
+REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE=./secrets/repoguard.security.encryption-key
+REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE=./secrets/repoguard.security.encryption-salt
+REPOGUARD_AUTH_TOKEN_SECRET_FILE=./secrets/repoguard.auth.token-secret
+REPOGUARD_ADMIN_API_KEY_FILE=./secrets/app.security.admin-api-key.key
+REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret
+```
+
+每次发布前执行：
+
+```bash
+cd /opt/repoguard
+sh -n scripts/deploy-prod.sh
+docker compose --env-file .env -f docker-compose.prod.yml config --quiet
+BACKEND_IMAGE='<目标后端镜像>' FRONTEND_IMAGE='<目标前端镜像>' \
+  ENV_FILE=.env PREFLIGHT_ONLY=true sh scripts/deploy-prod.sh
+```
+
+再通过 `Release Images` 执行发布。不要使用 `source .env`，不要把密钥放入命令参数、shell 历史、容器环境或 Git；部署工作流不会上传、备份或覆盖服务器的 `secrets/`。
+
+### 发布失败与回滚
+
+- 部署预检失败时尚未修改运行服务，先按首条错误修复文件、权限、角色或 Compose 配置后重试。
+- 预检后的发布失败会触发 `scripts/deploy-prod.sh` 自动回滚：先恢复上一版 Compose/Caddy/RabbitMQ 配置，再恢复上一版后端、Worker 和前端镜像，并重新校验健康与发布标识。
+- 自动回滚仍不健康时，保留现场，执行 `docker compose --env-file .env -f docker-compose.prod.yml ps` 和 `logs --tail=200 backend backend-worker`；不要执行 `down -v` 或清理 MySQL/RabbitMQ 卷。
+- 需要人工回滚时，在 `Release Images` workflow 选择 `main`，填写已验证的 `deploy_existing_tag` 并启用部署。回滚不恢复或轮换密钥文件；密钥变更必须作为独立变更处理。
+
+### 密钥轮换与明文配置迁移
+
+- Token 密钥轮换：把当前文件值和当前 ID 临时配置为 `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS` / `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID`，用临时文件加 `mv` 原子替换 `repoguard.auth.token-secret`，更新活动 ID并强制重建 API/Worker；至少等待一个 access-token TTL 后清空 previous 对。previous 值在轮换窗口内仍属于 `.env` 残余风险，窗口结束必须删除。
+- 主加密密钥轮换：先完成数据库备份和恢复验证，在维护窗口调用 `/api/v1/config/secrets/re-encryption` 做 `execute=false` 预演；失败数为 0 后使用 `confirmText=RE-ENCRYPT` 执行，立即原子替换密钥文件、更新 key ID并重建后端。新实例验证所有集成配置可解密前保留旧密钥的离线副本。
+- 历史明文业务密钥迁移：仅在维护窗口临时设置 `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS=true`，通过同一重加密接口完成预演与执行；确认扫描结果无明文、无失败后立刻恢复为 `false` 并重建后端。
+
+### MySQL 恢复
+
+- 日常使用 `Production MySQL Backup` workflow；只有加密、SHA-256 校验、隔离恢复和逐表检查全部成功的备份才可作为恢复点。
+- 恢复前记录目标镜像 tag、备份文件和校验文件 SHA-256，停止业务写入；先在 `--network none` 的临时 MySQL 容器和临时卷中恢复验证，禁止直接把未验证 SQL 导入生产卷。
+- 生产恢复必须在独立维护窗口执行，保留原卷只读快照或可回切副本；恢复后校验表集合、精确行数、`CHECK TABLE`、Flyway 版本和外部 `/actuator/health`，最后再恢复流量。
+
+### RabbitMQ 堆积与出箱补偿
+
+- 先查看管理台“消息队列”或 `GET /api/v1/message-queue/health`，区分 `publish_failed`、`requeue_pending`、执行超时和 DLQ；同时检查 RabbitMQ/Worker 健康、磁盘和消费者数。
+- 先修复根因，再通过受管理端点 `POST /api/v1/message-queue/tasks/{taskId}/requeue` 逐项重入队。不得直接清空队列、批量修改任务状态或重复投递仍在领取租约内的任务。
+- 评审发布由 `next_publish_retry_at` 和补偿器自动重试；通知发布查看通知事件页，修复通道后使用 `POST /api/v1/notification-events/{id}/retry`。若补偿量持续上升，保留数据库出箱行并检查 `review_publish_compensation` / `notification_publish_compensation` 日志，不要绕过状态机直发 RabbitMQ。
+
+### Grafana 访问与 Worker 扩容边界
+
+Grafana 只绑定服务器 `127.0.0.1:3000`，应用 Nginx/Caddy 不提供 `/grafana` 公网路径。使用 SSH 隧道访问：
+
+```bash
+ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
+```
+
+本机打开 `http://127.0.0.1:3000`。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
+
+API 仍固定 `REPOGUARD_API_INSTANCE_COUNT=1`。吞吐不足时先观测数据库连接、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整 `REPOGUARD_REVIEW_WORKER_CONCURRENCY`；需要进程隔离时启用 `worker-split`。当前 Compose 的固定 `container_name` 只支持一个 Worker 服务，不得直接使用 `--scale`；多 Worker 实例要先移除固定名称、验证日志采集规则和容量预算，且不能横向扩展 API。
 
 ## 生产数据库备份
 
@@ -288,7 +373,7 @@ RepoGuard / RepoGuard Review Observability
 - 不提交本地日志、临时脚本、真实密钥、真实 token、真实连接信息。
 - 生产准出完整门禁可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1`，覆盖空白、Flyway migration、敏感信息扫描、后端关键测试集合、前端质量门禁和前端生产构建。
 - 轻量仓库治理可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests`，用于只检查 tracked 文件治理、Flyway migration、demo data guard 和敏感信息扫描；旧参数 `-IncludeFrontendBuild` 仍兼容并等价于完整模式。
-- 准出门禁分层、失败处理和执行矩阵详见 [生产准出检查自动化说明](./docs/release/16-生产准出检查自动化说明.md)。
+- 准出门禁、失败处理、回滚与恢复步骤统一维护在本文“生产运维 Runbook”。
 
 ## 优化进度
 

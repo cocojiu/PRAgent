@@ -111,21 +111,36 @@ class ProductionDeploymentContractTest {
         String script = read(repositoryRoot().resolve("scripts/deploy-prod.sh"));
 
         int bindPreflight = script.lastIndexOf("\nvalidate_required_bind_sources\n");
+        int secretPreflight = script.lastIndexOf("\nvalidate_secret_files\n");
+        int edgePreflight = script.lastIndexOf("\nvalidate_edge_observability_isolation\n");
         int timeoutPreflight = script.lastIndexOf("\nvalidate_review_timeout_layering\n");
         int rabbitRestartDecision = script.lastIndexOf("\nif rabbitmq_config_requires_restart; then\n");
         int stopWorker = script.lastIndexOf("\nstop_inactive_split_worker\n");
         int infrastructureMutation = script.lastIndexOf("\ncompose up -d --no-deps mysql\n");
         int rollbackArmed = script.lastIndexOf("\nrollback_needed=true\n");
+        int preflightOnlyExit = script.indexOf("if [ \"$PREFLIGHT_ONLY\" = \"true\" ]; then");
+        int imagePull = script.indexOf("\ncompose pull $deploy_services\n");
 
         assertThat(bindPreflight).isNotNegative().isLessThan(stopWorker);
+        assertThat(secretPreflight).isNotNegative().isLessThan(stopWorker);
+        assertThat(edgePreflight).isNotNegative().isLessThan(stopWorker);
         assertThat(timeoutPreflight).isNotNegative().isLessThan(stopWorker);
         assertThat(rabbitRestartDecision).isNotNegative().isLessThan(stopWorker);
         assertThat(rollbackArmed).isNotNegative().isLessThan(stopWorker);
         assertThat(stopWorker).isLessThan(infrastructureMutation);
+        assertThat(preflightOnlyExit).isNotNegative().isLessThan(imagePull);
         assertThat(script)
             .contains("compose up -d --no-deps --force-recreate rabbitmq")
             .contains("$DEPLOY_STATE_DIR/rabbitmq.conf.sha256")
-            .contains("record_rabbitmq_config_digest");
+            .contains("record_rabbitmq_config_digest")
+            .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE")
+            .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE")
+            .contains("400|600")
+            .contains("500|700")
+            .contains("tail -c 1")
+            .contains("contains a trailing newline")
+            .contains("Production edge configuration must not route to observability services")
+            .contains("Production deployment preflight passed; no image was pulled and no service was changed.");
 
         int rollbackStart = script.indexOf("rollback_deployment() {");
         int rollbackEnd = script.indexOf("\nrollback_needed=false", rollbackStart);
@@ -133,6 +148,17 @@ class ProductionDeploymentContractTest {
         assertThat(rollback.indexOf("restore_deployment_assets"))
             .isNotNegative()
             .isLessThan(rollback.indexOf("compose up -d --no-deps --force-recreate rabbitmq"));
+    }
+
+    @Test
+    void mysqlBackupConsumesTheRootPasswordFileWithoutPuttingTheSecretInArguments() throws IOException {
+        String script = read(repositoryRoot().resolve("scripts/backup-prod-mysql.sh"));
+
+        assertThat(script)
+            .contains("MYSQL_ROOT_PASSWORD_FILE")
+            .contains("mysql_root_password=\"$(cat \"$MYSQL_ROOT_PASSWORD_FILE\")\"")
+            .contains("MYSQL_PWD=\"$mysql_root_password\"")
+            .doesNotContain("MYSQL_PWD=\"$MYSQL_ROOT_PASSWORD\"");
     }
 
     private int rabbitConsumerTimeout() throws IOException {

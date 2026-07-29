@@ -54,6 +54,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Scan pushed Git range for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
       - name: Repository governance guard
         shell: pwsh
@@ -62,12 +72,35 @@ jobs:
       - name: Generate ephemeral validation secrets
         shell: bash
         run: |
-          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          set -euo pipefail
+          secret_dir="${RUNNER_TEMP}/repoguard-compose-secrets"
+          install -d -m 700 "${secret_dir}"
+          write_secret() {
+            setting="$1"
+            filename="$2"
+            value="$3"
+            path="${secret_dir}/${filename}"
+            printf '%s' "${value}" > "${path}"
+            chmod 600 "${path}"
+            echo "${setting}=${path}" >> "$GITHUB_ENV"
+          }
+          encryption_key="CI!1-$(openssl rand -hex 32)"
+          encryption_salt="$(openssl rand -hex 32)"
+          auth_token_secret="$(openssl rand -hex 32)"
+          admin_api_key="$(openssl rand -hex 32)"
+          webhook_secret="$(openssl rand -hex 32)"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=${encryption_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=${encryption_salt}" >> "$GITHUB_ENV"
+          echo "SMOKE_AUTH_TOKEN_SECRET=${auth_token_secret}" >> "$GITHUB_ENV"
+          echo "SMOKE_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=${webhook_secret}" >> "$GITHUB_ENV"
+          write_secret MYSQL_ROOT_PASSWORD_FILE mysql.root-password "$(openssl rand -hex 32)"
+          write_secret MYSQL_PASSWORD_FILE spring.datasource.password "$(openssl rand -hex 32)"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE repoguard.security.encryption-key "${encryption_key}"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE repoguard.security.encryption-salt "${encryption_salt}"
+          write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret "${auth_token_secret}"
+          write_secret REPOGUARD_ADMIN_API_KEY_FILE app.security.admin-api-key.key "${admin_api_key}"
+          write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret "${webhook_secret}"
 
       - name: Validate production Compose models
         shell: bash
@@ -105,6 +138,15 @@ jobs:
               -f config/observability/docker-compose.production.yml \
               -f config/observability/docker-compose.metrics.yml \
               config --quiet
+
+      - name: Exercise production deployment preflight
+        shell: bash
+        run: >-
+          BACKEND_IMAGE=repoguard/backend:validation
+          FRONTEND_IMAGE=repoguard/frontend:validation
+          ENV_FILE=.env.prod.example
+          PREFLIGHT_ONLY=true
+          sh scripts/deploy-prod.sh
 
       - name: Set up Java
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0

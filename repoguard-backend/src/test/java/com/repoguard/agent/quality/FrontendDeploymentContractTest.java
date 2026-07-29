@@ -36,15 +36,12 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
-    void nginxResolvesGrafanaUpstreamLazilySoFrontendStartsWithoutGrafana() throws IOException {
+    void nginxDoesNotExposeObservabilityServices() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         String nginx = read(repositoryRoot.resolve("repoguard-frontend/nginx.ip.conf"));
 
         assertThat(nginx)
-            .contains("resolver 127.0.0.11 valid=10s;")
-            .contains("set $grafana_upstream http://grafana:3000;")
-            .contains("proxy_pass $grafana_upstream;")
-            .doesNotContain("proxy_pass http://grafana:3000;");
+            .doesNotContain("/grafana", "http://grafana:3000", "http://loki", "http://alloy");
     }
 
     @Test
@@ -139,17 +136,18 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
-    void grafanaBridgeOverlayKeepsObservabilityNetworkOutOfProductionCompose() throws IOException {
+    void grafanaIsLoopbackOnlyAndHasNoApplicationBridge() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
-        Map<String, Object> bridge = yaml(repositoryRoot.resolve("docker-compose.grafana-bridge.yml"));
-        Map<String, Object> frontend = map(map(bridge.get("services")).get("frontend"));
-        Map<String, Object> observabilityNetwork = map(map(bridge.get("networks")).get("observability"));
+        Map<String, Object> observability = yaml(repositoryRoot.resolve("docker-compose.observability.yml"));
+        Map<String, Object> grafana = map(map(observability.get("services")).get("grafana"));
+        Map<String, Object> grafanaEnvironment = map(grafana.get("environment"));
         Map<String, Object> prodCompose = yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
 
-        assertThat(stringList(frontend.get("networks"))).containsExactly("default", "observability");
-        assertThat(observabilityNetwork)
-            .containsEntry("name", "repoguard_observability")
-            .containsEntry("external", true);
+        assertThat(Files.exists(repositoryRoot.resolve("docker-compose.grafana-bridge.yml"))).isFalse();
+        assertThat(stringList(grafana.get("ports"))).containsExactly("127.0.0.1:3000:3000");
+        assertThat(grafanaEnvironment)
+            .containsEntry("GF_SERVER_ROOT_URL", "http://localhost:3000/")
+            .containsEntry("GF_SERVER_SERVE_FROM_SUB_PATH", "false");
         assertThat(prodCompose).doesNotContainKey("networks");
     }
 

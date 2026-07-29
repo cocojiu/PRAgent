@@ -9,9 +9,8 @@
 # Then start the application stack with both files:
 #   docker compose --env-file .env -f docker-compose.prod.yml -f docker-compose.metrics-bridge.yml up -d
 #
-# Combine with the Grafana bridge when the frontend must also reach Grafana:
-#   docker compose --env-file .env -f docker-compose.prod.yml \
-#     -f docker-compose.grafana-bridge.yml -f docker-compose.metrics-bridge.yml up -d
+# Grafana remains loopback-only and is accessed through an SSH tunnel; this
+# overlay connects only backend metrics scraping to the observability network.
 #
 # Do not fold this into docker-compose.prod.yml: the external network would make
 # `up` fail on servers where the observability stack has not been started.

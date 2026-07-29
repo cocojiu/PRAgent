@@ -11,6 +11,7 @@ target/
 .vscode/
 *.log
 logs/
+secrets/
 performance/
 .deploy/
 .deploy-runtime/

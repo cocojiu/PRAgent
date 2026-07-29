@@ -150,6 +150,13 @@ class ProductionConfigurationContractTest {
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
         Map<String, Object> backendEnvironment = environment(production, "backend");
         Map<String, Object> workerEnvironment = environment(production, "backend-worker");
+        Set<String> serviceSpecificKeys = Set.of(
+            "JAVA_TOOL_OPTIONS",
+            "SPRING_FLYWAY_ENABLED",
+            "REPOGUARD_RUNTIME_ROLE",
+            "REPOGUARD_API_INSTANCE_COUNT",
+            "REPOGUARD_AUTH_REGISTRATION_ENABLED"
+        );
 
         assertThat(backendEnvironment).containsKeys(SHARED_CAPACITY_AND_SECURITY_KEYS.toArray(String[]::new));
         for (String key : SHARED_CAPACITY_AND_SECURITY_KEYS) {
@@ -157,6 +164,21 @@ class ProductionConfigurationContractTest {
                 .as("Worker mapping for %s", key)
                 .isEqualTo(backendEnvironment.get(key));
         }
+        assertThat(workerEnvironment.keySet()).containsAll(backendEnvironment.keySet());
+        for (String key : backendEnvironment.keySet()) {
+            if (!serviceSpecificKeys.contains(key)) {
+                assertThat(workerEnvironment.get(key))
+                    .as("final merged Worker mapping for %s", key)
+                    .isEqualTo(backendEnvironment.get(key));
+            }
+        }
+        assertThat(service(production, "backend").get("secrets"))
+            .isEqualTo(service(production, "backend-worker").get("secrets"));
+        assertThat(read(root.resolve("docker-compose.prod.yml")))
+            .contains("x-backend-environment: &backend-environment")
+            .contains("x-backend-secrets: &backend-secrets")
+            .contains("<<: *backend-environment")
+            .contains("secrets: *backend-secrets");
 
         String application = read(
             root.resolve("repoguard-backend/src/main/resources/application.yml")
@@ -176,38 +198,66 @@ class ProductionConfigurationContractTest {
     }
 
     @Test
-    void jdbcBatchingAndCoreSecretFailFastArePartOfProductionModels() throws IOException {
+    void jdbcBatchingAndFileBackedSecretsArePartOfProductionModels() throws IOException {
         Path root = findRepositoryRoot();
         Map<String, Object> production = yaml(root.resolve("docker-compose.prod.yml"));
         Map<String, Object> backendEnvironment = environment(production, "backend");
         Map<String, Object> workerEnvironment = environment(production, "backend-worker");
+        List<String> fileBackedEnvironmentKeys = List.of(
+            "SPRING_DATASOURCE_PASSWORD",
+            "REPOGUARD_SECURITY_ENCRYPTION_KEY",
+            "REPOGUARD_SECURITY_ENCRYPTION_SALT",
+            "REPOGUARD_AUTH_TOKEN_SECRET",
+            "REPOGUARD_ADMIN_API_KEY",
+            "REPOGUARD_GITHUB_WEBHOOK_SECRET"
+        );
 
         for (Map<String, Object> environment : List.of(backendEnvironment, workerEnvironment)) {
             assertThat(environment.get("SPRING_DATASOURCE_URL").toString())
                 .startsWith("${SPRING_DATASOURCE_URL:-jdbc:mysql://")
                 .contains("rewriteBatchedStatements=true");
-            assertThat(environment.get("SPRING_DATASOURCE_PASSWORD").toString()).contains(":?");
             assertThat(environment.get("SPRING_RABBITMQ_PASSWORD").toString()).contains(":?");
-            for (String key : List.of(
-                "REPOGUARD_SECURITY_ENCRYPTION_KEY",
-                "REPOGUARD_SECURITY_ENCRYPTION_KEY_ID",
-                "REPOGUARD_SECURITY_ENCRYPTION_SALT",
-                "REPOGUARD_AUTH_TOKEN_SECRET",
-                "REPOGUARD_ADMIN_API_KEY",
-                "REPOGUARD_GITHUB_WEBHOOK_SECRET"
-            )) {
-                assertThat(environment.get(key).toString())
-                    .as("fail-fast mapping for %s", key)
-                    .contains(":?");
-            }
+            assertThat(environment).doesNotContainKeys(fileBackedEnvironmentKeys.toArray(String[]::new));
+            assertThat(environment.get("REPOGUARD_SECURITY_ENCRYPTION_KEY_ID").toString()).contains(":?");
         }
 
-        assertThat(environment(production, "mysql").get("MYSQL_ROOT_PASSWORD").toString())
-            .contains(":?");
-        assertThat(environment(production, "mysql").get("MYSQL_PASSWORD").toString())
-            .contains(":?");
+        assertThat(environment(production, "mysql"))
+            .containsEntry("MYSQL_ROOT_PASSWORD_FILE", "/run/secrets/mysql.root-password")
+            .containsEntry("MYSQL_PASSWORD_FILE", "/run/secrets/spring.datasource.password")
+            .doesNotContainKeys("MYSQL_ROOT_PASSWORD", "MYSQL_PASSWORD");
         assertThat(environment(production, "rabbitmq").get("RABBITMQ_DEFAULT_PASS").toString())
             .contains(":?");
+
+        Map<String, Object> secrets = map(production.get("secrets"));
+        assertThat(secrets.keySet()).containsExactlyInAnyOrder(
+            "mysql_root_password",
+            "mysql_password",
+            "security_encryption_key",
+            "security_encryption_salt",
+            "auth_token_secret",
+            "admin_api_key",
+            "github_webhook_secret"
+        );
+        assertThat(secrets)
+            .allSatisfy((name, value) -> assertThat(map(value).get("file").toString())
+                .as("fail-fast file setting for %s", name)
+                .contains(":?"));
+        assertThat(service(production, "backend").get("secrets").toString())
+            .contains(
+                "spring.datasource.password",
+                "repoguard.security.encryption-key",
+                "repoguard.security.encryption-salt",
+                "repoguard.auth.token-secret",
+                "app.security.admin-api-key.key",
+                "app.github.webhook.secret"
+            );
+        assertThat(read(root.resolve("repoguard-backend/src/main/resources/application-prod.yml")))
+            .contains("import: optional:configtree:/run/secrets/");
+        assertThat(read(root.resolve(".env.prod.example")))
+            .contains("MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password")
+            .contains("REPOGUARD_AUTH_TOKEN_SECRET_FILE=./secrets/repoguard.auth.token-secret")
+            .doesNotContain("\nMYSQL_ROOT_PASSWORD=", "\nMYSQL_PASSWORD=")
+            .doesNotContain("\nREPOGUARD_ADMIN_API_KEY=", "\nREPOGUARD_GITHUB_WEBHOOK_SECRET=");
 
         Map<String, Object> smoke = yaml(root.resolve("docker-compose.smoke.yml"));
         assertThat(environment(smoke, "backend").get("SPRING_DATASOURCE_URL").toString())
@@ -296,10 +346,15 @@ class ProductionConfigurationContractTest {
         for (String workflow : List.of(prQuality, release)) {
             assertThat(workflow)
                 .contains("Generate ephemeral validation secrets")
-                .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)")
-                .contains("SMOKE_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)")
-                .contains("SMOKE_ADMIN_API_KEY=$(openssl rand -hex 32)")
-                .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET=$(openssl rand -hex 32)")
+                .contains("Exercise production deployment preflight")
+                .contains("PREFLIGHT_ONLY=true")
+                .contains("encryption_key=\"CI!1-$(openssl rand -hex 32)\"")
+                .contains("install -d -m 700 \"${secret_dir}\"")
+                .contains("printf '%s' \"${value}\" > \"${path}\"")
+                .contains("chmod 600 \"${path}\"")
+                .contains("write_secret MYSQL_ROOT_PASSWORD_FILE mysql.root-password")
+                .contains("write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret")
+                .contains("write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret")
                 .doesNotContain("Validation-Encryption-Key-2026")
                 .doesNotContain("Validation-Auth-Token-2026")
                 .doesNotContain("Validation-Admin-Key-2026")
@@ -311,6 +366,50 @@ class ProductionConfigurationContractTest {
             .doesNotContain("Integration-Key-2026!abc123XYZ-secure")
             .doesNotContain("Integration-Auth-Token-2026!abc123XYZ")
             .doesNotContain("Integration-Admin-Key-2026!abc123XYZ");
+    }
+
+    @Test
+    void gitleaksPinsPrPushAndFullHistoryScanningWithFingerprintOnlyExceptions() throws IOException {
+        Path root = findRepositoryRoot();
+        String action = "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e";
+        String prQuality = read(root.resolve(".github/workflows/pr-quality.yml"));
+        String release = read(root.resolve(".github/workflows/release-images.yml"));
+        String history = read(root.resolve(".github/workflows/secret-history-scan.yml"));
+
+        for (String workflow : List.of(prQuality, release, history)) {
+            assertThat(workflow)
+                .contains(action)
+                .contains("fetch-depth: 0")
+                .contains("GITLEAKS_VERSION: 8.30.1")
+                .contains("GITLEAKS_ENABLE_UPLOAD_ARTIFACT: \"false\"");
+        }
+        assertThat(history).contains("schedule:", "workflow_dispatch:");
+
+        List<String> ignoredFingerprints = read(root.resolve(".gitleaksignore"))
+            .lines()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+            .toList();
+        assertThat(ignoredFingerprints).containsExactly(
+            "adb052dff215ba677c2e3496269facd5dfbd3127:.github/workflows/pr-quality.yml:generic-api-key:39",
+            "adb052dff215ba677c2e3496269facd5dfbd3127:.github/workflows/release-images.yml:generic-api-key:77",
+            "e884d8c4a5c760a415837a7ddb2927f0f33ebe59:repoguard-backend/src/test/java/com/repoguard/agent/external/ExternalHttpFailureDetailTest.java:generic-api-key:31"
+        );
+    }
+
+    @Test
+    void serverBootstrapUsesSecureRandomnessAndCreatesFileBackedSecrets() throws IOException {
+        String bootstrap = read(findRepositoryRoot().resolve("scripts/bootstrap-docker-server.sh"));
+
+        assertThat(bootstrap)
+            .contains("openssl rand -base64 48")
+            .contains("/dev/urandom")
+            .contains("printf '%s' \"$value\" > \"$target\"")
+            .contains("chmod 600 \"$target\"")
+            .contains("MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password")
+            .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE=./secrets/repoguard.security.encryption-key")
+            .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret")
+            .doesNotContain("date +%s%N");
     }
 
     @Test

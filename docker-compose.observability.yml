@@ -129,13 +129,13 @@ services:
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_UNIFIED_STORAGE_MIGRATION_CACHE_SIZE_KB: "65536"
       GF_UNIFIED_STORAGE_MIGRATION_PARQUET_BUFFER: "true"
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000/}
-      GF_SERVER_SERVE_FROM_SUB_PATH: ${GRAFANA_SERVE_FROM_SUB_PATH:-false}
+      GF_SERVER_ROOT_URL: http://localhost:3000/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
     volumes:
       - repoguard_grafana_data:/var/lib/grafana
       - ./config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
-      - "${GRAFANA_PORT_BIND:-127.0.0.1:3000}:3000"
+      - "127.0.0.1:3000:3000"
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
     mem_limit: 384m
