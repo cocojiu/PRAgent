@@ -1,15 +1,10 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.rabbitmq.client.Channel;
 import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationBindingBatchDeliveryService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryClaimService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureClassifier;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryLogContextFormatter;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerMetricsRecorder;
+import com.repoguard.agent.notification.NotificationEventMessage;
+import com.repoguard.agent.notification.NotificationMessage;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.Optional;
@@ -24,7 +19,8 @@ import org.springframework.stereotype.Component;
 @WorkerRuntimeEnabled
 public class NotificationDeliveryWorker {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryWorker.class);
+    private static final Logger LOGGER =
+        LoggerFactory.getLogger("com.repoguard.agent.notification.NotificationDeliveryWorker");
 
     private final NotificationDeliveryClaimService deliveryClaimService;
     private final NotificationEventPayloadParser payloadParser;

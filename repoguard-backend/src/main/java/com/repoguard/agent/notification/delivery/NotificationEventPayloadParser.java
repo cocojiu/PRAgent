@@ -1,8 +1,9 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.NotificationMessage;
 import org.springframework.stereotype.Component;
 
 @Component

@@ -2,9 +2,12 @@ package com.repoguard.agent.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.notification.NotificationEventMessage;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.core.Queue;
 
 class RabbitMqConfigTest {
@@ -57,6 +60,19 @@ class RabbitMqConfigTest {
         assertThat(binding.getExchange()).isEqualTo("test.review.dlx");
         assertThat(binding.getRoutingKey()).isEqualTo("test.review.dead");
         assertThat(binding.getDestination()).isEqualTo("test.review.dlq");
+    }
+
+    @Test
+    void notificationEventMessageKeepsStableRabbitTypeId() {
+        Message message = config.jsonMessageConverter().toMessage(
+            new NotificationEventMessage(11L, "notification-11", "REVIEW_COMPLETED", 42L, 7L),
+            new MessageProperties()
+        );
+
+        assertThat(NotificationEventMessage.class.getName())
+            .isEqualTo("com.repoguard.agent.notification.NotificationEventMessage");
+        assertThat(message.getMessageProperties().getHeaders())
+            .containsEntry("__TypeId__", NotificationEventMessage.class.getName());
     }
 
     private RabbitReviewQueueProperties properties() {

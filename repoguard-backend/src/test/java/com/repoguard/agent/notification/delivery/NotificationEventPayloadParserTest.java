@@ -1,10 +1,12 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.NotificationEventType;
+import com.repoguard.agent.notification.NotificationMessage;
 import org.junit.jupiter.api.Test;
 
 class NotificationEventPayloadParserTest {

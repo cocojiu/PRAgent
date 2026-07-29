@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 35;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 33;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -200,6 +200,26 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationDeliveryLogContextFormatter.java",
                 "com/repoguard/agent/notification/NotificationDeliveryWorkerClock.java",
                 "com/repoguard/agent/notification/NotificationDeliveryWorkerMetricsRecorder.java"
+            );
+    }
+
+    @Test
+    void notificationRabbitConsumerLivesInDeliveryBoundaryAndWireContractStaysStable() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorker.java",
+                "com/repoguard/agent/notification/delivery/NotificationEventPayloadParser.java",
+                "com/repoguard/agent/notification/NotificationEventMessage.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryWorker.java",
+                "com/repoguard/agent/notification/NotificationEventPayloadParser.java",
+                "com/repoguard/agent/notification/delivery/NotificationEventMessage.java",
+                "com/repoguard/agent/messaging/NotificationEventMessage.java"
             );
     }
 

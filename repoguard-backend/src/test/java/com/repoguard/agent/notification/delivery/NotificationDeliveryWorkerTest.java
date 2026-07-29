@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -19,26 +19,20 @@ import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
+import com.repoguard.agent.notification.NotificationChannelAdapter;
+import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
+import com.repoguard.agent.notification.NotificationEventMessage;
+import com.repoguard.agent.notification.NotificationEventType;
+import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.notification.NotificationTextLimiter;
 import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
-import com.repoguard.agent.notification.delivery.NotificationBindingBatchDeliveryService;
-import com.repoguard.agent.notification.delivery.NotificationBindingDeliveryService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryClaimService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionService;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryEventStateUpdater;
 import com.repoguard.agent.notification.query.NotificationCandidateBindingQuery;
 import com.repoguard.agent.notification.query.NotificationDeliverableEventQuery;
 import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureClassifier;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryLogFactory;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailurePolicy;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryLogContextFormatter;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerClock;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerMetricsRecorder;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
-import java.util.List;
 import java.time.Clock;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -125,7 +119,6 @@ class NotificationDeliveryWorkerTest {
 
     @Test
     void deliversSameEventToMultipleRepositoryBindingsIndependently() throws Exception {
-        when(adapter.provider()).thenReturn("DINGTALK");
         NotificationDeliveryWorker worker = worker();
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.success("request-1", "ok"));
         NotificationEvent event = event();
@@ -144,7 +137,6 @@ class NotificationDeliveryWorkerTest {
 
     @Test
     void failedDeliveryMarksEventDeliveryFailedAndStoresFailedLog() throws Exception {
-        when(adapter.provider()).thenReturn("DINGTALK");
         NotificationDeliveryWorker worker = worker();
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.failed("request-1", "timeout"));
         NotificationEvent event = event();
@@ -169,7 +161,6 @@ class NotificationDeliveryWorkerTest {
 
     @Test
     void skipsBindingWhenSuccessfulDeliveryAlreadyExists() throws Exception {
-        when(adapter.provider()).thenReturn("DINGTALK");
         NotificationDeliveryWorker worker = worker();
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
@@ -256,7 +247,8 @@ class NotificationDeliveryWorkerTest {
         NotificationDeliveryWorkerMetricsRecorder workerMetricsRecorder
     ) {
         NotificationChannelAdapterRegistry registry =
-            new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
+            org.mockito.Mockito.mock(NotificationChannelAdapterRegistry.class);
+        when(registry.get("DINGTALK")).thenReturn(adapter);
         NotificationDeliveryEventStateUpdater eventStateUpdater =
             new NotificationDeliveryEventStateUpdater(eventMapper);
         return new NotificationDeliveryWorker(
