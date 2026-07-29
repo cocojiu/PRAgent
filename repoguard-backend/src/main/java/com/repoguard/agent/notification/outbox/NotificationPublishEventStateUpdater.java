@@ -1,21 +1,22 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationPublishEventStateUpdater {
+public class NotificationPublishEventStateUpdater {
 
     private final NotificationEventMapper eventMapper;
 
-    NotificationPublishEventStateUpdater(NotificationEventMapper eventMapper) {
+    public NotificationPublishEventStateUpdater(NotificationEventMapper eventMapper) {
         this.eventMapper = eventMapper;
     }
 
-    boolean markPublished(NotificationEvent event) {
+    public boolean markPublished(NotificationEvent event) {
         int updated = eventMapper.update(
             ownedPublish(event)
                 .set("status", NotificationEventStatus.PUBLISHED.code())
@@ -36,7 +37,7 @@ class NotificationPublishEventStateUpdater {
         return true;
     }
 
-    boolean markPublishFailed(NotificationEvent event, NotificationPublishFailureDecision decision) {
+    public boolean markPublishFailed(NotificationEvent event, NotificationPublishFailureDecision decision) {
         int updated = eventMapper.update(
             ownedPublish(event)
                 .set("status", decision.status())

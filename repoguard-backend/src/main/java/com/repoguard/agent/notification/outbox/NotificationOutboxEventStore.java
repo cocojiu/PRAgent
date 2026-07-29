@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -7,7 +7,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
 import com.repoguard.agent.messaging.RabbitPublishClaimConditions;
-import com.repoguard.agent.notification.outbox.NotificationEventPayload;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -15,15 +15,15 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationOutboxEventStore {
+public class NotificationOutboxEventStore {
 
     private final NotificationEventMapper eventMapper;
 
-    NotificationOutboxEventStore(NotificationEventMapper eventMapper) {
+    public NotificationOutboxEventStore(NotificationEventMapper eventMapper) {
         this.eventMapper = Objects.requireNonNull(eventMapper, "eventMapper");
     }
 
-    NotificationEvent createPendingEvent(
+    public NotificationEvent createPendingEvent(
         String eventType,
         ReviewTask task,
         Long batchId,
@@ -52,7 +52,7 @@ class NotificationOutboxEventStore {
         }
     }
 
-    NotificationEvent loadById(Long eventId) {
+    public NotificationEvent loadById(Long eventId) {
         return eventMapper.selectById(eventId);
     }
 
@@ -76,7 +76,7 @@ class NotificationOutboxEventStore {
         );
     }
 
-    boolean claimForPublish(
+    public boolean claimForPublish(
         NotificationEvent event,
         RabbitPublishClaim claim
     ) {

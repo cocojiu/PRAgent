@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -10,7 +10,8 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
-import com.repoguard.agent.notification.outbox.NotificationEventPayload;
+import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.notification.NotificationEventType;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;

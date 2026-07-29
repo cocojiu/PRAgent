@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
@@ -11,12 +11,12 @@ import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationPublishCompensationQuery {
+public class NotificationPublishCompensationQuery {
 
     private final NotificationOutboxEventStore outboxEventStore;
     private final RabbitPublishCompensationSettings compensationSettings;
 
-    NotificationPublishCompensationQuery(
+    public NotificationPublishCompensationQuery(
         NotificationOutboxEventStore outboxEventStore,
         RabbitNotificationQueueProperties properties,
         RabbitPublishCompensationSettingsFactory settingsFactory
@@ -25,7 +25,7 @@ class NotificationPublishCompensationQuery {
         this.compensationSettings = Objects.requireNonNull(settingsFactory, "settingsFactory").create(properties);
     }
 
-    List<NotificationEvent> loadDueEvents(LocalDateTime now) {
+    public List<NotificationEvent> loadDueEvents(LocalDateTime now) {
         return outboxEventStore.loadDuePublishEvents(
             now,
             expiredBefore(now),
@@ -38,11 +38,11 @@ class NotificationPublishCompensationQuery {
         return compensationSettings.expiredBefore(now);
     }
 
-    RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
+    public RabbitPublishClaim claim(LocalDateTime claimedAt, String instanceId) {
         return compensationSettings.claim(claimedAt, instanceId);
     }
 
-    int maxAttempts() {
+    public int maxAttempts() {
         return compensationSettings.maxAttempts();
     }
 

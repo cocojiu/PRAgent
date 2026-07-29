@@ -6,6 +6,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationOutcome;
 import com.repoguard.agent.messaging.RabbitPublishFailurePhase;
+import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;

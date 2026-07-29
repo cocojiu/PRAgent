@@ -1,8 +1,8 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import java.time.LocalDateTime;
 
-record NotificationPublishFailureDecision(
+public record NotificationPublishFailureDecision(
     String status,
     int retryCount,
     LocalDateTime nextRetryAt,
