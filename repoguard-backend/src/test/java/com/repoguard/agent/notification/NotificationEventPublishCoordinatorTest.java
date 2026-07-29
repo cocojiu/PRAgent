@@ -15,6 +15,7 @@ import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import com.repoguard.agent.messaging.RabbitPublishCompensationSettingsFactory;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.util.List;
 import java.util.concurrent.RejectedExecutionException;
 import org.junit.jupiter.api.AfterEach;

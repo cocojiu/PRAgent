@@ -1,20 +1,18 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionDecision;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryCompletionDecider {
+public class NotificationDeliveryCompletionDecider {
 
     private final NotificationDeliveryFailurePolicy deliveryFailurePolicy;
 
-    NotificationDeliveryCompletionDecider(NotificationDeliveryFailurePolicy deliveryFailurePolicy) {
+    public NotificationDeliveryCompletionDecider(NotificationDeliveryFailurePolicy deliveryFailurePolicy) {
         this.deliveryFailurePolicy = deliveryFailurePolicy;
     }
 
-    NotificationDeliveryCompletionDecision decide(
+    public NotificationDeliveryCompletionDecision decide(
         NotificationEvent event,
         NotificationDeliveryResultSummary resultSummary
     ) {

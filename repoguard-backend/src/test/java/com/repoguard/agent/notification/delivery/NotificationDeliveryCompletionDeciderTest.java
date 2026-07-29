@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
@@ -6,10 +6,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionDecision;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
+import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.notification.NotificationEventType;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 

@@ -14,6 +14,7 @@ import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
 import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
 import com.repoguard.agent.notification.delivery.NotificationSendResult;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

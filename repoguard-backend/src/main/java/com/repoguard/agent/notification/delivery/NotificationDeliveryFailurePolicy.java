@@ -1,13 +1,14 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryFailurePolicy {
+public class NotificationDeliveryFailurePolicy {
 
     private static final int MAX_ATTEMPTS = 5;
     private static final String FAILURE_MESSAGE = "One or more notification bindings failed";
@@ -15,11 +16,11 @@ class NotificationDeliveryFailurePolicy {
     private final NotificationRetrySchedule retrySchedule;
 
     @Autowired
-    NotificationDeliveryFailurePolicy(NotificationRetrySchedule retrySchedule) {
+    public NotificationDeliveryFailurePolicy(NotificationRetrySchedule retrySchedule) {
         this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
     }
 
-    NotificationDeliveryFailureDecision decide(NotificationEvent event) {
+    public NotificationDeliveryFailureDecision decide(NotificationEvent event) {
         int nextRetryCount = retrySchedule.nextRetryCount(event.getRetryCount());
         boolean dead = nextRetryCount >= MAX_ATTEMPTS;
         return new NotificationDeliveryFailureDecision(

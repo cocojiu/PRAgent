@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

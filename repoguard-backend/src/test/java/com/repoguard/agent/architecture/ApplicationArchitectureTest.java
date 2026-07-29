@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 45;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 42;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -225,6 +225,25 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationDeliveryResultSummary.java",
                 "com/repoguard/agent/notification/NotificationDeliveryStatus.java",
                 "com/repoguard/agent/notification/NotificationSendResult.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryDecisionPolicyAndRetryScheduleLiveInDedicatedBoundaries() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionDecider.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailurePolicy.java",
+                "com/repoguard/agent/notification/retry/NotificationRetrySchedule.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionDecider.java",
+                "com/repoguard/agent/notification/NotificationDeliveryFailurePolicy.java",
+                "com/repoguard/agent/notification/NotificationRetrySchedule.java"
             );
     }
 

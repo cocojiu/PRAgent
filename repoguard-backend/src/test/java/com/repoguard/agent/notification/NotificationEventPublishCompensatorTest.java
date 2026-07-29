@@ -15,6 +15,7 @@ import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationSettingsFactory;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.LocalDateTime;
 import java.util.List;

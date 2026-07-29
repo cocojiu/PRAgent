@@ -5,6 +5,7 @@ import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
 import com.repoguard.agent.notification.delivery.NotificationSendResult;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;

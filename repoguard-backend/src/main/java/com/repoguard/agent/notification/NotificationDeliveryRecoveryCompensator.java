@@ -6,6 +6,7 @@ import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailurePolicy;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;

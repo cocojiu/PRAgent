@@ -2,6 +2,8 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionDecision;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionDecider;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailurePolicy;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

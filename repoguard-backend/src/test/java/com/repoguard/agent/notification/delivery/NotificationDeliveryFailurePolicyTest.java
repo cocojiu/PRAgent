@@ -1,9 +1,10 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

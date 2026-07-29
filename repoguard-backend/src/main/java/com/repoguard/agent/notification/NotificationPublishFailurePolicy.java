@@ -3,6 +3,7 @@ package com.repoguard.agent.notification;
 import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
+import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
