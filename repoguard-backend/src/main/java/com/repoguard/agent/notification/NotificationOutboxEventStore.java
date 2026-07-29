@@ -7,6 +7,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
 import com.repoguard.agent.messaging.RabbitPublishClaimConditions;
+import com.repoguard.agent.notification.outbox.NotificationEventPayload;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;

@@ -1,16 +1,17 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.notification.NotificationMessage;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationEventPayloadBuilder {
+public class NotificationEventPayloadBuilder {
 
     private final NotificationEventKeyFactory eventKeyFactory;
     private final NotificationMessageJsonSerializer messageJsonSerializer;
 
-    NotificationEventPayloadBuilder(
+    public NotificationEventPayloadBuilder(
         NotificationEventKeyFactory eventKeyFactory,
         NotificationMessageJsonSerializer messageJsonSerializer
     ) {
@@ -18,7 +19,7 @@ class NotificationEventPayloadBuilder {
         this.messageJsonSerializer = Objects.requireNonNull(messageJsonSerializer, "messageJsonSerializer");
     }
 
-    NotificationEventPayload build(
+    public NotificationEventPayload build(
         String eventType,
         ReviewTask task,
         Long batchId,

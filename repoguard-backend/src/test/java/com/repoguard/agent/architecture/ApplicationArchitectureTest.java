@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 58;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 54;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -217,6 +217,27 @@ class ApplicationArchitectureTest {
             .doesNotContain(
                 "com/repoguard/agent/notification/NotificationBindingMatcher.java",
                 "com/repoguard/agent/notification/NotificationBindingStatus.java"
+            );
+    }
+
+    @Test
+    void notificationPayloadConstructionLivesInOutboxBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/outbox/NotificationEventKeyFactory.java",
+                "com/repoguard/agent/notification/outbox/NotificationEventPayload.java",
+                "com/repoguard/agent/notification/outbox/NotificationEventPayloadBuilder.java",
+                "com/repoguard/agent/notification/outbox/NotificationMessageJsonSerializer.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationEventKeyFactory.java",
+                "com/repoguard/agent/notification/NotificationEventPayload.java",
+                "com/repoguard/agent/notification/NotificationEventPayloadBuilder.java",
+                "com/repoguard/agent/notification/NotificationMessageJsonSerializer.java"
             );
     }
 

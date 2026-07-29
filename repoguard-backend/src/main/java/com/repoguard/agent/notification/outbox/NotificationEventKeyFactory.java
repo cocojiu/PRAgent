@@ -1,11 +1,11 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationEventKeyFactory {
+public class NotificationEventKeyFactory {
 
-    String create(String eventType, Long taskId, Long batchId) {
+    public String create(String eventType, Long taskId, Long batchId) {
         return batchId == null ? eventType + ":" + taskId : eventType + ":" + taskId + ":" + batchId;
     }
 }

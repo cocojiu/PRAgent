@@ -10,6 +10,7 @@ import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitPublishClaim;
+import com.repoguard.agent.notification.outbox.NotificationEventPayload;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;

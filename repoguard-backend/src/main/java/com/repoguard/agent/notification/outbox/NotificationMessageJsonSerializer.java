@@ -1,21 +1,22 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.outbox;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.messaging.MessagePublishException;
+import com.repoguard.agent.notification.NotificationMessage;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationMessageJsonSerializer {
+public class NotificationMessageJsonSerializer {
 
     private final ObjectMapper objectMapper;
 
-    NotificationMessageJsonSerializer(ObjectMapper objectMapper) {
+    public NotificationMessageJsonSerializer(ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
     }
 
-    String serialize(NotificationMessage message) {
+    public String serialize(NotificationMessage message) {
         try {
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException ex) {
