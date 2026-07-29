@@ -3,7 +3,7 @@ package com.repoguard.agent.notification.delivery;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
-import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
+import com.repoguard.agent.notification.channel.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.notification.NotificationMessage;
 import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
 import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;

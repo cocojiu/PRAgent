@@ -93,7 +93,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerMetricsRecorder"),
             Class.forName("com.repoguard.agent.notification.outbox.NotificationEventKeyFactory"),
             Class.forName("com.repoguard.agent.notification.outbox.NotificationMessageJsonSerializer"),
-            Class.forName("com.repoguard.agent.notification.NotificationProviderKeyNormalizer"),
+            Class.forName("com.repoguard.agent.notification.channel.NotificationProviderKeyNormalizer"),
             Class.forName("com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery"),
             Class.forName("com.repoguard.agent.notification.publish.NotificationPublishFailurePolicy"),
             Class.forName("com.repoguard.agent.notification.retry.NotificationRetrySchedule"),

@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.channel;
 
 import java.util.Locale;
 import org.springframework.stereotype.Component;

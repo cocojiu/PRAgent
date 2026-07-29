@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 11;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 8;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -418,6 +418,25 @@ class ApplicationArchitectureTest {
             .doesNotContainAnyElementsOf(webhookTypes.stream()
                 .map(name -> "com/repoguard/agent/notification/" + name)
                 .toList());
+    }
+
+    @Test
+    void notificationChannelContractsLiveInChannelBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/channel/NotificationChannelAdapter.java",
+                "com/repoguard/agent/notification/channel/NotificationChannelAdapterRegistry.java",
+                "com/repoguard/agent/notification/channel/NotificationProviderKeyNormalizer.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationChannelAdapter.java",
+                "com/repoguard/agent/notification/NotificationChannelAdapterRegistry.java",
+                "com/repoguard/agent/notification/NotificationProviderKeyNormalizer.java"
+            );
     }
 
     @Test
