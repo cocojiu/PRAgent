@@ -1,21 +1,20 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.NotificationMessage;
 import com.repoguard.agent.notification.query.NotificationCandidateBindingQuery;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationBindingBatchDeliveryService {
+public class NotificationBindingBatchDeliveryService {
 
     private final NotificationCandidateBindingQuery candidateBindingQuery;
     private final NotificationBindingDeliveryService bindingDeliveryService;
 
-    NotificationBindingBatchDeliveryService(
+    public NotificationBindingBatchDeliveryService(
         NotificationCandidateBindingQuery candidateBindingQuery,
         NotificationBindingDeliveryService bindingDeliveryService
     ) {
@@ -23,7 +22,7 @@ class NotificationBindingBatchDeliveryService {
         this.bindingDeliveryService = bindingDeliveryService;
     }
 
-    NotificationDeliveryResultSummary deliver(NotificationEvent event, NotificationMessage message) {
+    public NotificationDeliveryResultSummary deliver(NotificationEvent event, NotificationMessage message) {
         List<NotificationChannelBinding> bindings = candidateBindingQuery.load(message);
         NotificationDeliveryResultSummary resultSummary = NotificationDeliveryResultSummary.empty();
         for (NotificationChannelBinding binding : bindings) {

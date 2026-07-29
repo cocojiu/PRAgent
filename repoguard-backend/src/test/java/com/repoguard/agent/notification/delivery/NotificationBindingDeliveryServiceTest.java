@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,12 +10,14 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
+import com.repoguard.agent.notification.NotificationChannelAdapter;
+import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
+import com.repoguard.agent.notification.NotificationEventType;
+import com.repoguard.agent.notification.NotificationMessage;
+import com.repoguard.agent.notification.NotificationTextLimiter;
 import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
-import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
-import java.util.List;
+import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -26,9 +28,11 @@ class NotificationBindingDeliveryServiceTest {
         org.mockito.Mockito.mock(NotificationDeliveryLogMapper.class);
     private final NotificationChannelAdapter adapter =
         org.mockito.Mockito.mock(NotificationChannelAdapter.class);
+    private final NotificationChannelAdapterRegistry adapterRegistry =
+        org.mockito.Mockito.mock(NotificationChannelAdapterRegistry.class);
     private final NotificationBindingDeliveryService service = new NotificationBindingDeliveryService(
         deliveryLogMapper,
-        registry(),
+        adapterRegistry,
         new NotificationDeliveryLogFactory(new NotificationTextLimiter(), new NotificationRetrySchedule()),
         new NotificationBindingMatcher(),
         new NotificationSuccessfulDeliveryQuery(deliveryLogMapper)
@@ -37,6 +41,7 @@ class NotificationBindingDeliveryServiceTest {
     @Test
     void sendsSupportedBindingAndStoresDeliveryLog() {
         when(deliveryLogMapper.selectCount(any())).thenReturn(0L);
+        when(adapterRegistry.get("DINGTALK")).thenReturn(adapter);
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.success("request-1", "ok"));
 
         Optional<NotificationSendResult> result = service.deliver(event(), message(), binding());
@@ -70,11 +75,6 @@ class NotificationBindingDeliveryServiceTest {
         assertThat(result).isEmpty();
         verify(adapter, never()).send(any(), any());
         verify(deliveryLogMapper, never()).insert(any(NotificationDeliveryLog.class));
-    }
-
-    private NotificationChannelAdapterRegistry registry() {
-        when(adapter.provider()).thenReturn("DINGTALK");
-        return new NotificationChannelAdapterRegistry(List.of(adapter), new NotificationProviderKeyNormalizer());
     }
 
     private NotificationEvent event() {

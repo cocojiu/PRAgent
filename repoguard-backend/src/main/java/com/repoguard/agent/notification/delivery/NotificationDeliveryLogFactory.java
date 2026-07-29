@@ -1,10 +1,9 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
+import com.repoguard.agent.notification.NotificationTextLimiter;
 import com.repoguard.agent.notification.retry.NotificationRetrySchedule;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -13,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryLogFactory {
+public class NotificationDeliveryLogFactory {
 
     private static final int MAX_FAILURE_REASON_LENGTH = 1024;
 
@@ -22,11 +21,14 @@ class NotificationDeliveryLogFactory {
     private final NotificationRetrySchedule retrySchedule;
 
     @Autowired
-    NotificationDeliveryLogFactory(NotificationTextLimiter textLimiter, NotificationRetrySchedule retrySchedule) {
+    public NotificationDeliveryLogFactory(
+        NotificationTextLimiter textLimiter,
+        NotificationRetrySchedule retrySchedule
+    ) {
         this(Clock.systemDefaultZone(), textLimiter, retrySchedule);
     }
 
-    NotificationDeliveryLogFactory(
+    public NotificationDeliveryLogFactory(
         Clock clock,
         NotificationTextLimiter textLimiter,
         NotificationRetrySchedule retrySchedule
@@ -36,7 +38,7 @@ class NotificationDeliveryLogFactory {
         this.retrySchedule = Objects.requireNonNull(retrySchedule, "retrySchedule");
     }
 
-    NotificationDeliveryLog create(
+    public NotificationDeliveryLog create(
         NotificationEvent event,
         NotificationChannelBinding binding,
         NotificationSendResult result

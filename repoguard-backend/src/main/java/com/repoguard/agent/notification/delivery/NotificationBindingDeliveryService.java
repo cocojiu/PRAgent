@@ -1,16 +1,17 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
+import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
+import com.repoguard.agent.notification.NotificationMessage;
 import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
 import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationBindingDeliveryService {
+public class NotificationBindingDeliveryService {
 
     private final NotificationDeliveryLogMapper deliveryLogMapper;
     private final NotificationChannelAdapterRegistry adapterRegistry;
@@ -18,7 +19,7 @@ class NotificationBindingDeliveryService {
     private final NotificationBindingMatcher bindingMatcher;
     private final NotificationSuccessfulDeliveryQuery successfulDeliveryQuery;
 
-    NotificationBindingDeliveryService(
+    public NotificationBindingDeliveryService(
         NotificationDeliveryLogMapper deliveryLogMapper,
         NotificationChannelAdapterRegistry adapterRegistry,
         NotificationDeliveryLogFactory deliveryLogFactory,
@@ -32,7 +33,7 @@ class NotificationBindingDeliveryService {
         this.successfulDeliveryQuery = successfulDeliveryQuery;
     }
 
-    Optional<NotificationSendResult> deliver(
+    public Optional<NotificationSendResult> deliver(
         NotificationEvent event,
         NotificationMessage message,
         NotificationChannelBinding binding
