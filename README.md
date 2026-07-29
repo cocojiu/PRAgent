@@ -49,12 +49,30 @@ RepoGuard Agent 是面向 GitHub Pull Request 的代码审查辅助系统，包�
 
 ## 环境要求
 
-- JDK：25
-- Maven：3.9.9+（低于 4.0.0）
+- JDK：25（Maven Enforcer 会拒绝其他主版本）
+- Maven：3.9.9+（低于 4.0.0）；无需全局安装，仓库内 Wrapper 固定使用 3.9.16
 - Node.js：建议使用 Node 22，最低要求 `>=20.19.0`
 - Docker / Docker Compose：用于启动 MySQL、RabbitMQ 和本地观测组件
 
 仓库根目录提供 `.nvmrc`，前端开发建议使用该版本。
+
+后端构建统一通过 Maven Wrapper 进入。安装并切换到 JDK 25 后，可先校验本机构建工具链：
+
+```powershell
+cd repoguard-backend
+java -version
+.\mvnw.cmd -version
+.\mvnw.cmd validate
+```
+
+macOS / Linux 使用对应入口：
+
+```bash
+cd repoguard-backend
+java -version
+./mvnw -version
+./mvnw validate
+```
 
 ## 快速启动
 
@@ -69,7 +87,7 @@ docker compose up -d
 
 ```bash
 cd repoguard-backend
-mvn spring-boot:run -Dspring-boot.run.profiles=dev,local
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev,local
 ```
 
 默认后端地址：
@@ -100,14 +118,14 @@ http://localhost:5173
 
 ```bash
 cd repoguard-backend
-mvn test
+./mvnw test
 ```
 
 后端打包：
 
 ```bash
 cd repoguard-backend
-mvn -DskipTests package
+./mvnw -DskipTests package
 ```
 
 前端构建：
@@ -343,7 +361,7 @@ http://localhost:3000
 ```powershell
 cd repoguard-backend
 $env:REPOGUARD_LOG_PATH = "../logs/backend"
-mvn spring-boot:run
+.\mvnw.cmd spring-boot:run
 ```
 
 Grafana 的 Explore 页面选择 `Loki` 数据源后，可以用这些查询：
@@ -377,6 +395,7 @@ RepoGuard / RepoGuard Review Observability
 
 ## 优化进度
 
+- 2026-07-30 05:26:13（Asia/Shanghai）：完成演进方案工具链收口。新增仅脚本模式 Maven Wrapper，固定 Maven 3.9.16，分发地址使用 Maven Central 官方地址并锁定 SHA-256；`mvnw` 以 LF 和可执行位提交，Windows 保留 `mvnw.cmd`，GitHub Actions 的后端全量与生产上下文测试统一改由 Wrapper 进入，避免依赖 Runner 偶然安装的 Maven 版本。JaCoCo `prepare-agent` 改写独立 `jacoco.agent.argLine`，Surefire 通过 late replacement 同时装载 JaCoCo 与 Mockito 5.23.0 显式 agent，消除 JDK 对 Mockito/Byte Buddy 动态自附加的告警且不丢覆盖率；构建契约同步锁定 JDK 25、Wrapper 地址/校验和、CI 命令和 agent 组合。隔离 Maven 用户目录冷启动确认下载并运行 Maven 3.9.16；定向 78 项通过且 Mockito 动态 agent 告警为 0；本机 JDK 26 按 Java 25 目标编译并仅跳过精确 JDK 25 Enforcer 后，新 Wrapper 执行后端干净全量 `clean verify` 共 1986 项测试通过（0 失败、0 错误、6 跳过，766 个类覆盖率门禁通过），前端 typecheck、Lint、35 个测试文件共 136 项测试、生产构建、bundle budget 和完整 production-readiness 门禁通过。Gitleaks 暂存差异及 977 个提交全历史扫描通过。代码提交 `02de8ed9` 推送后，[Release Images](https://github.com/cocojiu/PRAgent/actions/runs/30491960176)、[Pull Request Quality](https://github.com/cocojiu/PRAgent/actions/runs/30491963856)、[Production Observability Image Security](https://github.com/cocojiu/PRAgent/actions/runs/30491965617)、两次 Repository Governance 与 Auto Create Pull Request 共 6 个 GitHub Actions 运行全部成功。下一阶段复核剩余演进项和前端 ECharts 异步包余量，只有超过预算或真实性能数据证明存在收益时再拆分，避免无效请求碎片化。
 - 2026-07-30 05:05:51（Asia/Shanghai）：完成演进方案架构降债批次 C 循环依赖最终收口。重新以 `ApplicationArchitectureTest` 使用的同一生产源码 AST 依赖图审计领域顶层包，确认先前退役 `external -> observability`、`observability -> worker`、`review -> github` 三条反向边后，原 `REVIEWED_CYCLIC_DEPENDENCY_BASELINE` 中保留的 17 条历史边已全部不再构成循环，当前依赖图实际为 DAG；因此删除整组循环白名单，将原“只禁止超出已审查基线的新环”收紧为 `domainPackageGraphRemainsAcyclic` 的零容忍断言，今后任一领域顶层包之间形成可回达路径都会直接失败。`retiredCycleEdgesRemainAbsent` 继续单独禁止三条已退役直接边回流；`worker -> review`、`github -> review` 等单向编排/适配关系仍允许存在，不把合理依赖误判为循环。架构定向 42 项通过；本机 JDK 26 按 Java 25 目标编译并仅跳过精确 JDK 25 Enforcer 后，后端干净全量 `mvn clean verify` 共 1986 项测试通过（0 失败、0 错误、6 跳过，766 个类覆盖率门禁通过），前端 typecheck、Lint、35 个测试文件共 136 项测试、生产构建、bundle budget 和完整 production-readiness 门禁通过。Gitleaks 暂存差异及 975 个提交全历史扫描通过。代码提交 `4862ea77` 推送后，[Release Images](https://github.com/cocojiu/PRAgent/actions/runs/30490645685)、[Pull Request Quality](https://github.com/cocojiu/PRAgent/actions/runs/30490652682)、[Production Observability Image Security](https://github.com/cocojiu/PRAgent/actions/runs/30490654574)、两次 Repository Governance 与 Auto Create Pull Request 共 6 个 GitHub Actions 运行全部成功。循环依赖审查基线现为 0，下一阶段进入 Maven Wrapper/JDK 25 与 Mockito 显式 agent 工具链收口。
 - 2026-07-30 04:42:38（Asia/Shanghai）：完成演进方案架构降债批次 D 第五项第二阶段。将 509 行的 `DefaultIdentitySessionLifecycle` 收敛为 435 行会话编排门面，提取包内 `IdentitySessionVersionPersistence` 统一三类 session version 轮换持久化与 `AuthAccountCache.invalidateAfterCommit` 调度，提取包内 `IdentityRefreshTokenRevoker` 统一单令牌条件撤销、账户活动令牌批量撤销以及复用/并发重放标记持久化；生产 9 参数构造器、测试兼容 8 参数构造器和 REQUIRED/REQUIRES_NEW 两类事务模板保持原签名与边界，未扩大公共 API。令牌签发、刷新轮换 CAS、过期/账户不可用/代际变化处理、并发请求判定、复用失效、重置、注销、三种账户会话失效模式、审计与指标语义均保持不变；新增会话版本持久化边界回归，证明事务提交前继续读取旧缓存、`afterCommit` 后才失效并重载新代际，现有回滚与无事务行为继续由 `AuthAccountCacheTest` 保护。新增架构守卫要求两个协作者存在、门面显式委派、不得重新内联缓存失效或 `UpdateWrapper<UserRefreshToken>`，并把门面行数棘轮锁定在 440。定向回归 80 项通过；本机 JDK 26 按 Java 25 目标编译并仅跳过精确 JDK 25 Enforcer 后，后端干净全量 `mvn clean verify` 共 1986 项测试通过（0 失败、0 错误、6 跳过，766 个类覆盖率门禁通过），前端 typecheck、Lint、35 个测试文件共 136 项测试、生产构建、bundle budget 和完整 production-readiness 门禁通过。Gitleaks 暂存差异及 973 个提交全历史扫描通过。代码提交 `c018c2e7` 推送后，[Release Images](https://github.com/cocojiu/PRAgent/actions/runs/30489198143)、[Pull Request Quality](https://github.com/cocojiu/PRAgent/actions/runs/30489203301)、[Production Observability Image Security](https://github.com/cocojiu/PRAgent/actions/runs/30489203174)、两次 Repository Governance 与 Auto Create Pull Request 共 6 个 GitHub Actions 运行全部成功。下一阶段盘点当前 17 条循环依赖审查基线，优先选择可通过端口倒置或协作者归位独立移除的最小环；Maven Wrapper/JDK 25 与 Mockito 显式 agent 继续作为独立工具链批次推进。
 - 2026-07-30 04:25:58（Asia/Shanghai）：完成演进方案架构降债批次 D 第五项第一阶段。将约 750 行的 `GithubCommentWriter` 收敛为 414 行门面，提取 `GithubReviewBatchPublisher`、`GithubLineCommentFallbackPublisher`、`GithubSupersededSummaryPublisher` 三个职责协作者，并以 `GithubCommentPublicationGateway` 统一承载评论/review HTTP 协议、响应读取、认证头和 422 判定；生产构造器与测试兼容构造器保持原签名，协作者作为包内实现由门面组装，未扩大公共 API。GitHub Token 与出站地址校验、普通 PR 评论、以任务 `commitSha` 写入单次 review batch、review 评论 ID/URL 匹配、review 422 后逐条回退、无法定位行时降级 PR 评论、每次行写入前 head fence、head 变化时 60,000 字符可追溯 superseded 汇总、失败分类/健康状态/指标记录及结果顺序均保持不变。新增架构守卫要求四个协作者存在、门面显式委派且行数不得回升至 420 以上。定向回归 62 项通过；本机 JDK 26 按 Java 25 目标编译并仅跳过精确 JDK 25 Enforcer 后，后端干净全量 `mvn clean verify` 共 1984 项测试通过（0 失败、0 错误、6 跳过，764 个类覆盖率门禁通过），前端 typecheck、Lint、35 个测试文件共 136 项测试、生产构建、bundle budget 和完整 production-readiness 门禁通过。Gitleaks 暂存差异及 971 个提交全历史扫描通过。代码提交 `6883a2d9` 推送后，[Release Images](https://github.com/cocojiu/PRAgent/actions/runs/30488062956)、[Pull Request Quality](https://github.com/cocojiu/PRAgent/actions/runs/30488065891)、[Production Observability Image Security](https://github.com/cocojiu/PRAgent/actions/runs/30488065943)、两次 Repository Governance 与 Auto Create Pull Request 共 6 个 GitHub Actions 运行全部成功。下一阶段审计并拆分约 510 行的 `DefaultIdentitySessionLifecycle`，优先抽出 session version 持久化与 refresh-token revoke 协作者并复核 afterCommit 语义。
