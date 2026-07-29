@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.external.ExternalFailureSignals;
 import org.springframework.stereotype.Component;
@@ -6,9 +6,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-class NotificationDeliveryFailureClassifier {
+public class NotificationDeliveryFailureClassifier {
 
-    String failureCategory(RuntimeException ex) {
+    public String failureCategory(RuntimeException ex) {
         if (ex instanceof RestClientResponseException responseException) {
             return httpFailureCategory(responseException.getStatusCode().value());
         }

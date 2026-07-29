@@ -1,11 +1,11 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryLogContextFormatter {
+public class NotificationDeliveryLogContextFormatter {
 
-    String safePart(String value) {
+    public String safePart(String value) {
         return value == null || value.isBlank() ? "<unknown>" : value.trim();
     }
 }

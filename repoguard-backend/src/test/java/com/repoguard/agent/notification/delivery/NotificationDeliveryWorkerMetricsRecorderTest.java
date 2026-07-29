@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,7 +78,7 @@ class NotificationDeliveryWorkerMetricsRecorderTest {
         }
 
         @Override
-        long nanoTime() {
+        public long nanoTime() {
             return times[index++];
         }
     }

@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 64;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 60;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -180,6 +180,27 @@ class ApplicationArchitectureTest {
         assertThat(notificationRootSources.size())
             .as("The notification root package baseline may only move down")
             .isLessThanOrEqualTo(NOTIFICATION_ROOT_SOURCE_BASELINE);
+    }
+
+    @Test
+    void notificationDeliveryWorkerSupportLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailureClassifier.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryLogContextFormatter.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorkerClock.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorkerMetricsRecorder.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryFailureClassifier.java",
+                "com/repoguard/agent/notification/NotificationDeliveryLogContextFormatter.java",
+                "com/repoguard/agent/notification/NotificationDeliveryWorkerClock.java",
+                "com/repoguard/agent/notification/NotificationDeliveryWorkerMetricsRecorder.java"
+            );
     }
 
     @Test
