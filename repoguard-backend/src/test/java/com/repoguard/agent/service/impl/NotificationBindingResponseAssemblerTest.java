@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
-import com.repoguard.agent.notification.NotificationBindingStatus;
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;

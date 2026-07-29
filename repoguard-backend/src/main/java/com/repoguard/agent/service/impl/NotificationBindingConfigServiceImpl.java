@@ -10,7 +10,7 @@ import com.repoguard.agent.dto.NotificationBindingRequest;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
-import com.repoguard.agent.notification.NotificationBindingStatus;
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.service.NotificationBindingConnectionTestService;
 import com.repoguard.agent.service.NotificationBindingConfigService;

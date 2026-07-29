@@ -10,6 +10,7 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
+import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
 import com.repoguard.agent.notification.query.NotificationSuccessfulDeliveryQuery;
 import java.util.List;
 import java.util.Optional;

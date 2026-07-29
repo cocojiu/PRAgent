@@ -19,6 +19,7 @@ import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
 import com.repoguard.agent.mapper.NotificationEventMapper;
 import com.repoguard.agent.messaging.RabbitConsumeMetricsRecorderFactory;
+import com.repoguard.agent.notification.binding.NotificationBindingMatcher;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureClassifier;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryLogContextFormatter;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerClock;

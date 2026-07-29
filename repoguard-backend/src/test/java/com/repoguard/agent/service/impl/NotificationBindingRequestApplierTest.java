@@ -7,7 +7,7 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.dto.NotificationBindingRequest;
 import com.repoguard.agent.entity.NotificationChannelBinding;
-import com.repoguard.agent.notification.NotificationBindingStatus;
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.security.SecretCryptoService;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;

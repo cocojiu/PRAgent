@@ -7,7 +7,7 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.OutboundCredentialPolicy;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
-import com.repoguard.agent.notification.NotificationBindingStatus;
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.security.SecretUpdateValue;
 import java.time.LocalDateTime;

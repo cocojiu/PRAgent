@@ -6,7 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
-import com.repoguard.agent.notification.NotificationBindingStatus;
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.notification.NotificationChannelAdapter;
 import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.notification.NotificationSendResult;
