@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 public record NotificationSendResult(
     boolean success,

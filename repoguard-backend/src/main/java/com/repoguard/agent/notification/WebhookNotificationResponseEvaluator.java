@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.external.ExternalHttpFailureDetail;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientResponseException;

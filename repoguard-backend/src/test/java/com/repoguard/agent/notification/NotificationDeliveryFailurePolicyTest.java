@@ -3,6 +3,7 @@ package com.repoguard.agent.notification;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

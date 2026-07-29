@@ -7,6 +7,8 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

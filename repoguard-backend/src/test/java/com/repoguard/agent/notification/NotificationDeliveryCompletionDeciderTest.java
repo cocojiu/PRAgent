@@ -6,6 +6,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryCompletionDecision;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 

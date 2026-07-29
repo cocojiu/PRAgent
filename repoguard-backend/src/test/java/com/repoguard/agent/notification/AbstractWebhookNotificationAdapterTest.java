@@ -7,6 +7,7 @@ import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;

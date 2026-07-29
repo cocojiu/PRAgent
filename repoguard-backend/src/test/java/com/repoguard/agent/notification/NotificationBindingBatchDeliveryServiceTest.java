@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.query.NotificationCandidateBindingQuery;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 
 public interface NotificationChannelAdapter {
 

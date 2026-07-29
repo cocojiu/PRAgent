@@ -5,6 +5,7 @@ import com.repoguard.agent.config.WorkerRuntimeEnabled;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureClassifier;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryLogContextFormatter;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryResultSummary;
 import com.repoguard.agent.notification.delivery.NotificationDeliveryWorkerMetricsRecorder;
 import java.io.IOException;
 import java.util.Objects;

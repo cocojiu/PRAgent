@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.query.NotificationDeliverableEventQuery;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

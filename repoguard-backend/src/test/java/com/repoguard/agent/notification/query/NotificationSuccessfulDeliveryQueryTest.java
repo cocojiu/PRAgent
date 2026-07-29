@@ -8,7 +8,7 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
-import com.repoguard.agent.notification.NotificationDeliveryStatus;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

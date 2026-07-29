@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.notification.query.NotificationDeliverableEventQuery;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;

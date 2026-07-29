@@ -1,8 +1,8 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import java.time.LocalDateTime;
 
-record NotificationDeliveryFailureDecision(
+public record NotificationDeliveryFailureDecision(
     String status,
     int retryCount,
     LocalDateTime nextRetryAt,

@@ -7,8 +7,8 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.notification.NotificationChannelAdapterRegistry;
-import com.repoguard.agent.notification.NotificationSendResult;
 import com.repoguard.agent.service.NotificationBindingConnectionTestService;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Service;
 

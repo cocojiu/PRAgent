@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.ExternalHttpRequestFactory;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Objects;

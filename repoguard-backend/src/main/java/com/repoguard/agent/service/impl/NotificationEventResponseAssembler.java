@@ -5,7 +5,7 @@ import com.repoguard.agent.dto.NotificationDeliverySummaryDto;
 import com.repoguard.agent.dto.NotificationEventDto;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
-import com.repoguard.agent.notification.NotificationDeliveryStatus;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;

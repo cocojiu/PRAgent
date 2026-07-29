@@ -1,6 +1,7 @@
 package com.repoguard.agent.notification;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

@@ -3,6 +3,8 @@ package com.repoguard.agent.notification;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;

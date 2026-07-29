@@ -1,14 +1,14 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-record NotificationDeliveryClaim(
+public record NotificationDeliveryClaim(
     LocalDateTime claimedAt,
     String claimedBy
 ) {
 
-    NotificationDeliveryClaim {
+    public NotificationDeliveryClaim {
         Objects.requireNonNull(claimedAt, "claimedAt");
         Objects.requireNonNull(claimedBy, "claimedBy");
     }

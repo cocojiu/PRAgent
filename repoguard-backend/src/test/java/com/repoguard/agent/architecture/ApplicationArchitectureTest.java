@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 51;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 45;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -200,6 +200,31 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationDeliveryLogContextFormatter.java",
                 "com/repoguard/agent/notification/NotificationDeliveryWorkerClock.java",
                 "com/repoguard/agent/notification/NotificationDeliveryWorkerMetricsRecorder.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryValueModelLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryClaim.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionDecision.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailureDecision.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryResultSummary.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryStatus.java",
+                "com/repoguard/agent/notification/delivery/NotificationSendResult.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryClaim.java",
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionDecision.java",
+                "com/repoguard/agent/notification/NotificationDeliveryFailureDecision.java",
+                "com/repoguard/agent/notification/NotificationDeliveryResultSummary.java",
+                "com/repoguard/agent/notification/NotificationDeliveryStatus.java",
+                "com/repoguard/agent/notification/NotificationSendResult.java"
             );
     }
 

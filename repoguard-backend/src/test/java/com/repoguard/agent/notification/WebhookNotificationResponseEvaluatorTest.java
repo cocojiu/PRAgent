@@ -2,6 +2,7 @@ package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
