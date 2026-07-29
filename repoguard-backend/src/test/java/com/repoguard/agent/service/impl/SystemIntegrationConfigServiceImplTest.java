@@ -89,6 +89,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(config.getLastError()).isNull();
         assertThat(result.token()).isEqualTo("****1234");
         verify(integrationConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
@@ -109,6 +110,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(result.token()).isNull();
         verify(integrationConfigMapper).updateById(config);
         verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
@@ -169,6 +171,7 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(result.token()).isNull();
         assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
         verify(integrationConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 

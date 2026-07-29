@@ -422,14 +422,14 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         update.setSessionVersion(rotated.sessionVersion());
         update.setUpdatedAt(now);
         userAccountMapper.updateById(update);
-        authAccountCache.invalidate(rotated.id());
+        authAccountCache.invalidateAfterCommit(rotated.id());
         return rotated;
     }
 
     private void rotateSessionVersionAndPersist(UserAccount user, LocalDateTime now) {
         rotateSessionVersion(user, now);
         userAccountMapper.updateById(user);
-        authAccountCache.invalidate(user.getId());
+        authAccountCache.invalidateAfterCommit(user.getId());
     }
 
     private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
@@ -442,7 +442,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         if (updated != 1) {
             throw new IllegalStateException("Account session version rotation affected " + updated + " rows");
         }
-        authAccountCache.invalidate(userId);
+        authAccountCache.invalidateAfterCommit(userId);
     }
 
     private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {

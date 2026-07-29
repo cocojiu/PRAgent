@@ -321,7 +321,7 @@ class AuthTokenFilterTest {
         filter.doFilter(firstRequest, firstResponse, new MockFilterChain());
         assertThat(firstResponse.getStatus()).isEqualTo(200);
 
-        authAccountCache.invalidate(1001L);
+        authAccountCache.invalidateAfterCommit(1001L);
 
         MockHttpServletRequest secondRequest = new MockHttpServletRequest("GET", "/api/v1/reviews");
         secondRequest.addHeader("Authorization", "Bearer " + token);

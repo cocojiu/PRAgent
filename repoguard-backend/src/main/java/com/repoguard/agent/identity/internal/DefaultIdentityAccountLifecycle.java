@@ -200,7 +200,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             if (updated != 1) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "Password changed concurrently; sign in again");
             }
-            authAccountCache.invalidate(user.getId());
+            authAccountCache.invalidateAfterCommit(user.getId());
             sessionLifecycle.invalidateAccountSessions(
                 user.getId(),
                 SessionInvalidationMode.REFRESH_TOKENS_ONLY,

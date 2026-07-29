@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -75,7 +74,6 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
         String id = reviewRuleConfigPolicy.normalizeRuleId(request.id());
         if (reviewRuleConfigMapper.selectById(id) != null) {
@@ -88,13 +86,12 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         rule.setCreatedAt(now);
         rule.setUpdatedAt(now);
         reviewRuleConfigMapper.insert(rule);
-        evictDashboardRules();
+        evictRuleCaches();
         return toReviewRuleDto(rule, 0);
     }
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         if (!normalizedId.equals(reviewRuleConfigPolicy.normalizeRuleId(request.id()))) {
@@ -104,23 +101,23 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         applyReviewRuleRequest(rule, normalizedId, request);
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
-        evictDashboardRules();
+        evictRuleCaches();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.REVIEW_RULES, allEntries = true)
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
         ReviewRuleConfig rule = loadReviewRule(reviewRuleConfigPolicy.normalizeRuleId(id));
         rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(status));
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
-        evictDashboardRules();
+        evictRuleCaches();
         return toReviewRuleDto(rule, loadRuleHitCounts().getOrDefault(rule.getId(), 0L));
     }
 
-    private void evictDashboardRules() {
+    private void evictRuleCaches() {
+        cacheEvictionService.evictReviewRules();
         cacheEvictionService.evictDashboardRules();
     }
 

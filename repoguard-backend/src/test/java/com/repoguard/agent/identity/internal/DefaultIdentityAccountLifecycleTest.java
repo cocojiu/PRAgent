@@ -175,7 +175,7 @@ class DefaultIdentityAccountLifecycleTest {
             "Safer456"
         ));
 
-        verify(authAccountCache).invalidate(1001L);
+        verify(authAccountCache).invalidateAfterCommit(1001L);
         verify(sessionLifecycle).invalidateAccountSessions(
             eq(1001L),
             eq(SessionInvalidationMode.REFRESH_TOKENS_ONLY),

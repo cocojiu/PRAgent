@@ -8,6 +8,8 @@ import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
 public class AuthAccountCache {
@@ -29,9 +31,23 @@ public class AuthAccountCache {
         return accounts.get(userId, id -> Optional.ofNullable(userAccountMapper.selectById(id))).orElse(null);
     }
 
-    public void invalidate(Long userId) {
-        if (userId != null) {
-            accounts.invalidate(userId);
+    public void invalidateAfterCommit(Long userId) {
+        if (userId == null) {
+            return;
         }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            invalidateNow(userId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                invalidateNow(userId);
+            }
+        });
+    }
+
+    private void invalidateNow(Long userId) {
+        accounts.invalidate(userId);
     }
 }

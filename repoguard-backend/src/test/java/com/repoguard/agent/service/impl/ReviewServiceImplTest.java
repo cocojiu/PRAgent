@@ -16,6 +16,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.github.GithubIntegrationProvider;
 import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
@@ -305,7 +306,8 @@ class ReviewServiceImplTest {
                 timelineAppender(),
                 reviewTaskStateMachine
             ),
-            directReviewTaskPublishExecutor()
+            directReviewTaskPublishExecutor(),
+            new RabbitReviewQueueProperties()
         );
     }
 

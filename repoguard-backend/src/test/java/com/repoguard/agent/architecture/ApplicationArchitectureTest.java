@@ -49,6 +49,10 @@ class ApplicationArchitectureTest {
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
     private static final Pattern REVIEW_TASK_MAPPER_VARIABLE =
         Pattern.compile("\\bReviewTaskMapper\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\b");
+    private static final Pattern TRANSACTIONAL_CACHE_EVICTION = Pattern.compile(
+        "@Transactional(?:\\([^\\r\\n]*\\))?\\s*@CacheEvict"
+            + "|@CacheEvict(?:\\([^\\r\\n]*\\))?\\s*@Transactional"
+    );
     private static final Set<String> REVIEW_TASK_UPDATE_STORES = Set.of(
         "com/repoguard/agent/messaging/ReviewTaskPublishOutboxStore.java",
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
@@ -149,6 +153,19 @@ class ApplicationArchitectureTest {
         assertThat(implementationSources.size())
             .as("The service.impl migration baseline may only move down")
             .isLessThanOrEqualTo(SERVICE_IMPL_SOURCE_BASELINE);
+    }
+
+    @Test
+    void transactionalWritesUseAfterCommitCacheEviction() {
+        List<String> violations = SOURCES.stream()
+            .filter(source -> TRANSACTIONAL_CACHE_EVICTION.matcher(source.sourceText()).find())
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("Transactional writes must evict caches through an afterCommit boundary, never direct @CacheEvict")
+            .isEmpty();
     }
 
     @Test

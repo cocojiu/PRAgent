@@ -1,5 +1,6 @@
 package com.repoguard.agent.review.task;
 
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -16,28 +17,33 @@ public class ReviewTaskAfterCommitPublisher {
     private final ReviewTaskPublisher reviewTaskPublisher;
     private final ReviewTaskPublishFailureStore publishFailureStore;
     private final Executor reviewPublishExecutor;
+    private final RabbitReviewQueueProperties queueProperties;
 
     @Autowired
     public ReviewTaskAfterCommitPublisher(
         ReviewTaskPublisher reviewTaskPublisher,
         ReviewTaskPublishFailureStore publishFailureStore,
-        ReviewTaskAfterCommitPublisherExecutor reviewPublishExecutor
+        ReviewTaskAfterCommitPublisherExecutor reviewPublishExecutor,
+        RabbitReviewQueueProperties queueProperties
     ) {
         this(
             reviewTaskPublisher,
             publishFailureStore,
-            (Executor) reviewPublishExecutor
+            (Executor) reviewPublishExecutor,
+            queueProperties
         );
     }
 
     ReviewTaskAfterCommitPublisher(
         ReviewTaskPublisher reviewTaskPublisher,
         ReviewTaskPublishFailureStore publishFailureStore,
-        Executor reviewPublishExecutor
+        Executor reviewPublishExecutor,
+        RabbitReviewQueueProperties queueProperties
     ) {
         this.reviewTaskPublisher = Objects.requireNonNull(reviewTaskPublisher, "reviewTaskPublisher");
         this.publishFailureStore = Objects.requireNonNull(publishFailureStore, "outboxStore");
         this.reviewPublishExecutor = Objects.requireNonNull(reviewPublishExecutor, "reviewPublishExecutor");
+        this.queueProperties = Objects.requireNonNull(queueProperties, "queueProperties");
     }
 
     public boolean publishAfterCommit(ReviewTask task, ReviewTaskMessage message, LocalDateTime queuedAt) {
@@ -83,7 +89,7 @@ public class ReviewTaskAfterCommitPublisher {
             task,
             ex,
             failedAt,
-            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
+            ReviewTaskDirectPublishFailurePolicy.directPublish(queueProperties.getPublishCompensationIntervalMs())
         );
     }
 }

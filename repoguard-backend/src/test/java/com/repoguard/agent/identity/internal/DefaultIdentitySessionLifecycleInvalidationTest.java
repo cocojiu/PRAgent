@@ -46,7 +46,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.REFRESH_TOKENS_ONLY, now);
 
         verify(userAccountMapper, never()).rotateSessionVersion(42L, now);
-        verify(authAccountCache, never()).invalidate(42L);
+        verify(authAccountCache, never()).invalidateAfterCommit(42L);
         assertRefreshTokensRevoked();
     }
 
@@ -58,7 +58,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.SESSION_VERSION_ONLY, now);
 
         verify(userAccountMapper).rotateSessionVersion(42L, now);
-        verify(authAccountCache).invalidate(42L);
+        verify(authAccountCache).invalidateAfterCommit(42L);
         verify(userRefreshTokenMapper, never()).update(isNull(), Mockito.<Wrapper<UserRefreshToken>>any());
     }
 
@@ -70,7 +70,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.ALL_SESSIONS, now);
 
         verify(userAccountMapper).rotateSessionVersion(42L, now);
-        verify(authAccountCache).invalidate(42L);
+        verify(authAccountCache).invalidateAfterCommit(42L);
         assertRefreshTokensRevoked();
     }
 
@@ -85,7 +85,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Account session version rotation affected 0 rows");
-        verify(authAccountCache, never()).invalidate(42L);
+        verify(authAccountCache, never()).invalidateAfterCommit(42L);
     }
 
     private void assertRefreshTokensRevoked() {

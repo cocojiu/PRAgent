@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -42,7 +43,8 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
             reviewTaskPublisher,
             null,
-            Runnable::run
+            Runnable::run,
+            properties(17000)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("outboxStore");
@@ -53,7 +55,8 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
             null,
             outboxStore(),
-            Runnable::run
+            Runnable::run,
+            properties(17000)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskPublisher");
@@ -64,10 +67,23 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
             reviewTaskPublisher,
             outboxStore(),
-            null
+            null,
+            properties(17000)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewPublishExecutor");
+    }
+
+    @Test
+    void constructorRejectsMissingQueueProperties() {
+        assertThatThrownBy(() -> new ReviewTaskAfterCommitPublisher(
+            reviewTaskPublisher,
+            outboxStore(),
+            Runnable::run,
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("queueProperties");
     }
 
     @Test
@@ -85,7 +101,8 @@ class ReviewTaskAfterCommitPublisherTest {
                 throw new RejectedExecutionException(
                     "executor shutting down token=raw-token password=raw-password"
                 );
-            }
+            },
+            properties(17000)
         );
 
         TransactionSynchronizationManager.initSynchronization();
@@ -103,7 +120,7 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThat(failedTask.getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(failedTask.getLlmStatus()).isEqualTo("PENDING");
         assertThat(failedTask.getPublishAttempts()).isEqualTo(1);
-        assertThat(failedTask.getNextPublishRetryAt()).isEqualTo(queuedAt.plusSeconds(60));
+        assertThat(failedTask.getNextPublishRetryAt()).isEqualTo(queuedAt.plusSeconds(17));
         assertThat(failedTask.getLastPublishError())
             .contains("Review publish executor rejected task")
             .contains("token=****", "password=****")
@@ -142,6 +159,12 @@ class ReviewTaskAfterCommitPublisherTest {
             new ReviewTimelineAppender(reviewTimelineMapper),
             new ReviewTaskStateMachine()
         );
+    }
+
+    private RabbitReviewQueueProperties properties(long compensationIntervalMs) {
+        RabbitReviewQueueProperties properties = new RabbitReviewQueueProperties();
+        properties.setPublishCompensationIntervalMs(compensationIntervalMs);
+        return properties;
     }
 
     private ReviewTaskMessage message(LocalDateTime queuedAt) {
