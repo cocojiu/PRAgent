@@ -1,8 +1,7 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.binding;
 
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.entity.NotificationChannelBinding;
-import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;

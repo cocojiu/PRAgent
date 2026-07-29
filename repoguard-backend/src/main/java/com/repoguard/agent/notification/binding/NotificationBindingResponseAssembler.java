@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.binding;
 
 import com.repoguard.agent.dto.NotificationBindingDto;
 import com.repoguard.agent.entity.NotificationChannelBinding;

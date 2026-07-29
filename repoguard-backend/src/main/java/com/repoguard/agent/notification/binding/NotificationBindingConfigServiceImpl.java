@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.binding;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -10,7 +10,6 @@ import com.repoguard.agent.dto.NotificationBindingRequest;
 import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
-import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.notification.channel.NotificationChannelAdapterRegistry;
 import com.repoguard.agent.service.NotificationBindingConnectionTestService;
 import com.repoguard.agent.service.NotificationBindingConfigService;

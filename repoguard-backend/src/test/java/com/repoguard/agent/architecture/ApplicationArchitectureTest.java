@@ -60,7 +60,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
     private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 8;
-    private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 27;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
@@ -322,6 +322,28 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationBindingMatcher.java",
                 "com/repoguard/agent/notification/NotificationBindingStatus.java"
             );
+    }
+
+    @Test
+    void notificationBindingManagementLivesInBindingBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> bindingManagementTypes = List.of(
+            "NotificationBindingConfigServiceImpl.java",
+            "NotificationBindingConnectionTestResultApplier.java",
+            "NotificationBindingConnectionTestServiceImpl.java",
+            "NotificationBindingRequestApplier.java",
+            "NotificationBindingResponseAssembler.java"
+        );
+
+        assertThat(sourcePaths)
+            .containsAll(bindingManagementTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/binding/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(bindingManagementTypes.stream()
+                .map(name -> "com/repoguard/agent/service/impl/" + name)
+                .toList());
     }
 
     @Test

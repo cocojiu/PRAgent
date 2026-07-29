@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.binding;
 
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
@@ -7,7 +7,6 @@ import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.OutboundCredentialPolicy;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
-import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.security.SecretUpdateValue;
 import java.time.LocalDateTime;
