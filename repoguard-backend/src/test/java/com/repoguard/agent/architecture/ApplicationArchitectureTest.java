@@ -60,7 +60,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
     private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 8;
-    private static final int SERVICE_IMPL_SOURCE_BASELINE = 23;
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 20;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
@@ -533,6 +533,26 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/service/impl/ManualReviewCreationService.java",
                 "com/repoguard/agent/service/impl/ManualReviewIdempotencyCoordinator.java"
             );
+    }
+
+    @Test
+    void reviewRuleConfigurationLivesInReviewBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> ruleConfigurationTypes = List.of(
+            "ReviewRuleConfigPolicy.java",
+            "ReviewRuleConfigServiceImpl.java",
+            "ReviewRuleMetricAssembler.java"
+        );
+
+        assertThat(sourcePaths)
+            .containsAll(ruleConfigurationTypes.stream()
+                .map(name -> "com/repoguard/agent/review/config/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(ruleConfigurationTypes.stream()
+                .map(name -> "com/repoguard/agent/service/impl/" + name)
+                .toList());
     }
 
     @Test

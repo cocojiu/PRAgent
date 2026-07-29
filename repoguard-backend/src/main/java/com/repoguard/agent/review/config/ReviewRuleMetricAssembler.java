@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.review.config;
 
 import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;

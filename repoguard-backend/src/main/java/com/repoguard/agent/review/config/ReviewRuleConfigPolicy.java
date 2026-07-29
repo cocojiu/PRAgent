@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.review.config;
 
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import java.util.List;
