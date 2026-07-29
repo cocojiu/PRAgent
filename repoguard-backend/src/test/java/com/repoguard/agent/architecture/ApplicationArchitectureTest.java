@@ -58,7 +58,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int SERVICE_IMPL_SOURCE_BASELINE = 36;
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
@@ -150,6 +150,27 @@ class ApplicationArchitectureTest {
         assertThat(implementationSources.size())
             .as("The service.impl migration baseline may only move down")
             .isLessThanOrEqualTo(SERVICE_IMPL_SOURCE_BASELINE);
+    }
+
+    @Test
+    void manualReviewCreationLivesInReviewBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/review/ReviewRepositoryDimensionService.java",
+                "com/repoguard/agent/review/task/ManualReviewCleanupExecutorConfig.java",
+                "com/repoguard/agent/review/task/ManualReviewCreationService.java",
+                "com/repoguard/agent/review/task/ManualReviewIdempotencyCoordinator.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/service/impl/ReviewRepositoryDimensionService.java",
+                "com/repoguard/agent/service/impl/ManualReviewCleanupExecutorConfig.java",
+                "com/repoguard/agent/service/impl/ManualReviewCreationService.java",
+                "com/repoguard/agent/service/impl/ManualReviewIdempotencyCoordinator.java"
+            );
     }
 
     @Test

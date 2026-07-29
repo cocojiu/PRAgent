@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.review;
 
 import com.repoguard.agent.mapper.ReviewRepositoryDimensionMapper;
 import java.time.LocalDateTime;

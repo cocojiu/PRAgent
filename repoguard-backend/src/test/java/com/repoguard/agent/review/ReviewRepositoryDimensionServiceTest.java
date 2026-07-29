@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.review;
 
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;

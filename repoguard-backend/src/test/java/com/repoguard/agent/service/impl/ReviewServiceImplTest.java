@@ -68,10 +68,13 @@ import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.task.HumanReviewCommandService;
+import com.repoguard.agent.review.task.ManualReviewCreationService;
+import com.repoguard.agent.review.task.ManualReviewIdempotencyCoordinator;
 import com.repoguard.agent.review.task.ReviewFailureSummaryResolver;
 import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisher;
 import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
@@ -108,7 +111,6 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
-import org.springframework.transaction.support.TransactionTemplate;
 
 class ReviewServiceImplTest {
 
@@ -291,7 +293,7 @@ class ReviewServiceImplTest {
             metrics,
             cacheEvictionService,
             reviewTaskStateMachine,
-            new TransactionTemplate(manualReviewTransactionManager),
+            manualReviewTransactionManager,
             coordinator,
             afterCommitPublisher,
             repositoryDimensionService

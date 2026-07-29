@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.review.task;
 
 import com.repoguard.agent.entity.ReviewTask;
 import java.util.concurrent.CompletableFuture;
