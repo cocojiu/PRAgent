@@ -74,27 +74,6 @@ class ApplicationArchitectureTest {
         "settings"
     );
 
-    // Existing cyclic edges are reviewed architecture debt. Removing an entry is safe; adding one is not.
-    private static final Set<String> REVIEWED_CYCLIC_DEPENDENCY_BASELINE = Set.of(
-        "github->external",
-        "github->observability",
-        "github->review",
-        "messaging->observability",
-        "messaging->review",
-        "notification->external",
-        "notification->messaging",
-        "observability->external",
-        "observability->messaging",
-        "review->external",
-        "review->observability",
-        "worker->external",
-        "worker->github",
-        "worker->messaging",
-        "worker->notification",
-        "worker->observability",
-        "worker->review"
-    );
-
     private static final List<SourceUnit> SOURCES = loadSourceUnits();
 
     @Test
@@ -928,7 +907,7 @@ class ApplicationArchitectureTest {
     }
 
     @Test
-    void domainPackageCyclesDoNotExceedReviewedBaseline() {
+    void domainPackageGraphRemainsAcyclic() {
         Map<String, Set<String>> dependencies = domainDependencies();
         Set<String> cyclicEdges = new TreeSet<>();
         dependencies.forEach((source, targets) -> targets.stream()
@@ -936,14 +915,11 @@ class ApplicationArchitectureTest {
             .map(target -> source + "->" + target)
             .forEach(cyclicEdges::add));
 
-        Set<String> unexpectedCycles = new TreeSet<>(cyclicEdges);
-        unexpectedCycles.removeAll(REVIEWED_CYCLIC_DEPENDENCY_BASELINE);
-
         assertThat(dependencies.keySet())
             .as("domain package discovery")
             .contains("dashboard", "identity", "notification", "observability", "retention", "review", "worker");
-        assertThat(unexpectedCycles)
-            .as("New cyclic domain dependency edges are forbidden; break the dependency or document a migration first")
+        assertThat(cyclicEdges)
+            .as("Domain package dependencies must remain acyclic")
             .isEmpty();
     }
 
