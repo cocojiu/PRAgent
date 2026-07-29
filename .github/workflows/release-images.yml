@@ -160,7 +160,7 @@ jobs:
 
       - name: Build backend
         working-directory: repoguard-backend
-        run: mvn -B verify
+        run: ./mvnw -B verify
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

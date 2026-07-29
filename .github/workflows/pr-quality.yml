@@ -134,7 +134,7 @@ jobs:
           cache: maven
       - name: Run backend tests
         working-directory: repoguard-backend
-        run: mvn -B verify
+        run: ./mvnw -B verify
       - name: Scan backend libraries for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -229,7 +229,7 @@ jobs:
           echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
-        run: mvn -B -Dtest=ProductionRuntimeContextIntegrationTest test
+        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test
 
   dependency-review:
     name: Dependency review

@@ -86,7 +86,10 @@ class IsolatedRealChainSmokeContractTest {
     @Test
     void documentationAndReleaseBuildStayOnTheEnforcedBackendToolchain() throws IOException {
         String readme = read("README.md");
+        String quality = read(".github/workflows/pr-quality.yml");
         String release = read(".github/workflows/release-images.yml");
+        String wrapper = read("repoguard-backend/.mvn/wrapper/maven-wrapper.properties");
+        String pom = read("repoguard-backend/pom.xml");
 
         assertThat(readme)
             .contains("- Java 25")
@@ -96,8 +99,19 @@ class IsolatedRealChainSmokeContractTest {
             .doesNotContain("JDK：26");
         assertThat(release)
             .contains("java-version: \"25\"")
-            .contains("run: mvn -B verify")
+            .contains("run: ./mvnw -B verify")
             .doesNotContain("run: mvn -B package");
+        assertThat(quality)
+            .contains("run: ./mvnw -B verify")
+            .contains("run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test")
+            .doesNotContain("run: mvn ");
+        assertThat(wrapper)
+            .contains("distributionUrl=https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/3.9.16/apache-maven-3.9.16-bin.zip")
+            .contains("distributionSha256Sum=5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce")
+            .doesNotContain("maven.aliyun.com");
+        assertThat(pom)
+            .contains("<propertyName>jacoco.agent.argLine</propertyName>")
+            .contains("@{jacoco.agent.argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar");
     }
 
     @Test
