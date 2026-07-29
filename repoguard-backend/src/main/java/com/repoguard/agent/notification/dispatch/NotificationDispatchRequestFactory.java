@@ -1,31 +1,32 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.dispatch;
 
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.notification.NotificationEventType;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDispatchRequestFactory {
+public class NotificationDispatchRequestFactory {
 
     private final NotificationCounterNormalizer counterNormalizer;
 
-    NotificationDispatchRequestFactory(NotificationCounterNormalizer counterNormalizer) {
+    public NotificationDispatchRequestFactory(NotificationCounterNormalizer counterNormalizer) {
         this.counterNormalizer = Objects.requireNonNull(counterNormalizer, "counterNormalizer");
     }
 
-    NotificationDispatchRequest reviewFinished(ReviewTask task, int findingCount) {
+    public NotificationDispatchRequest reviewFinished(ReviewTask task, int findingCount) {
         String eventType = Boolean.TRUE.equals(task.getHumanReviewRequired())
             ? NotificationEventType.HUMAN_REVIEW_REQUIRED.code()
             : NotificationEventType.REVIEW_COMPLETED.code();
         return new NotificationDispatchRequest(eventType, null, findingCount, 0, 0, 0);
     }
 
-    NotificationDispatchRequest reviewFailed() {
+    public NotificationDispatchRequest reviewFailed() {
         return new NotificationDispatchRequest(NotificationEventType.REVIEW_FAILED.code(), null, 0, 0, 0, 0);
     }
 
-    NotificationDispatchRequest githubCommentsPublished(GithubCommentPublishResponse response, Long batchId) {
+    public NotificationDispatchRequest githubCommentsPublished(GithubCommentPublishResponse response, Long batchId) {
         return new NotificationDispatchRequest(
             NotificationEventType.GITHUB_COMMENT_PUBLISHED.code(),
             batchId,

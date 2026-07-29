@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.dispatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

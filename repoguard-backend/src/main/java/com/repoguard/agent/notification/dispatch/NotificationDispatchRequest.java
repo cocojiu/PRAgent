@@ -1,6 +1,6 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.dispatch;
 
-record NotificationDispatchRequest(
+public record NotificationDispatchRequest(
     String eventType,
     Long batchId,
     int findingCount,

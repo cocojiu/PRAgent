@@ -1,9 +1,10 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.dispatch;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.notification.NotificationEventType;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
