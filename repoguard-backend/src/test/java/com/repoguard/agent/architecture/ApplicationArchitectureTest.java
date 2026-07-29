@@ -181,6 +181,30 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void identitySessionLifecycleDelegatesPersistenceHotspots() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        SourceUnit lifecycle = SOURCES.stream()
+            .filter(source -> source.path().equals(
+                "com/repoguard/agent/identity/internal/DefaultIdentitySessionLifecycle.java"
+            ))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("DefaultIdentitySessionLifecycle source was not discovered"));
+
+        assertThat(sourcePaths).contains(
+            "com/repoguard/agent/identity/internal/IdentitySessionVersionPersistence.java",
+            "com/repoguard/agent/identity/internal/IdentityRefreshTokenRevoker.java"
+        );
+        assertThat(lifecycle.sourceText())
+            .contains("IdentitySessionVersionPersistence", "IdentityRefreshTokenRevoker")
+            .doesNotContain("authAccountCache.invalidateAfterCommit", "new UpdateWrapper<UserRefreshToken>()");
+        assertThat(lifecycle.sourceText().lines().count())
+            .as("DefaultIdentitySessionLifecycle line-count baseline may only move down")
+            .isLessThanOrEqualTo(440);
+    }
+
+    @Test
     void notificationQueriesLiveInDedicatedBoundaryAndRootPackageCanOnlyShrink() {
         List<String> sourcePaths = SOURCES.stream()
             .map(SourceUnit::path)
