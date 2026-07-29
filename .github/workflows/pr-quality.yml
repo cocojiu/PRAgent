@@ -132,6 +132,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Run backend production readiness slice
+        shell: pwsh
+        run: ./scripts/production-readiness-check.ps1 -Mode quick
       - name: Run backend tests
         working-directory: repoguard-backend
         run: ./mvnw -B verify

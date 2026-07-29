@@ -12,6 +12,10 @@ $Root = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $Root "repoguard-backend"
 $FrontendDir = Join-Path $Root "repoguard-frontend"
 $MigrationDir = Join-Path $BackendDir "src/main/resources/db/migration"
+$MavenWrapper = Join-Path $BackendDir "mvnw"
+if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    $MavenWrapper = Join-Path $BackendDir "mvnw.cmd"
+}
 
 if ($IncludeFrontendBuild) {
     $Mode = "full"
@@ -293,7 +297,7 @@ Invoke-Check "secret and token leakage heuristic scan" {
 if (-not $SkipBackendTests) {
     Invoke-Check "backend production readiness test slice" {
         Invoke-CommandChecked `
-            -FilePath "mvn" `
+            -FilePath $MavenWrapper `
             -Arguments @("-Dtest=ApiContractTest,ControllerAuthorizationContractTest,DashboardControllerTest,ReviewControllerTest,GithubWebhookControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
             -WorkingDirectory $BackendDir
     }

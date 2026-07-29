@@ -90,6 +90,7 @@ class IsolatedRealChainSmokeContractTest {
         String release = read(".github/workflows/release-images.yml");
         String wrapper = read("repoguard-backend/.mvn/wrapper/maven-wrapper.properties");
         String pom = read("repoguard-backend/pom.xml");
+        String readiness = read("scripts/production-readiness-check.ps1");
 
         assertThat(readme)
             .contains("- Java 25")
@@ -102,6 +103,8 @@ class IsolatedRealChainSmokeContractTest {
             .contains("run: ./mvnw -B verify")
             .doesNotContain("run: mvn -B package");
         assertThat(quality)
+            .contains("name: Run backend production readiness slice")
+            .contains("run: ./scripts/production-readiness-check.ps1 -Mode quick")
             .contains("run: ./mvnw -B verify")
             .contains("run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test")
             .doesNotContain("run: mvn ");
@@ -112,6 +115,11 @@ class IsolatedRealChainSmokeContractTest {
         assertThat(pom)
             .contains("<propertyName>jacoco.agent.argLine</propertyName>")
             .contains("@{jacoco.agent.argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar");
+        assertThat(readiness)
+            .contains("$MavenWrapper = Join-Path $BackendDir \"mvnw\"")
+            .contains("$MavenWrapper = Join-Path $BackendDir \"mvnw.cmd\"")
+            .contains("-FilePath $MavenWrapper")
+            .doesNotContain("-FilePath \"mvn\"");
     }
 
     @Test
