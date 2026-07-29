@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 record NotificationPublishResult(boolean attempted, boolean success, String failureReason) {
 

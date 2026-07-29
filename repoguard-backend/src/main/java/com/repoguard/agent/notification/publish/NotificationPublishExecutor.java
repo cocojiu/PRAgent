@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 import java.util.Objects;
 import java.util.concurrent.Executor;

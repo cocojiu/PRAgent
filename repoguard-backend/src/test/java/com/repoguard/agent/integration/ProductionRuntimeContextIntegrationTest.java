@@ -10,7 +10,7 @@ import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.service.NotificationDispatchService;
-import com.repoguard.agent.notification.NotificationEventPublishCompensator;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;

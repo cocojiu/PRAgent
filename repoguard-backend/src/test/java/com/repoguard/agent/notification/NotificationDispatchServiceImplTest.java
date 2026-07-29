@@ -15,6 +15,7 @@ import com.repoguard.agent.notification.outbox.NotificationEventKeyFactory;
 import com.repoguard.agent.notification.outbox.NotificationEventPayloadBuilder;
 import com.repoguard.agent.notification.outbox.NotificationMessageJsonSerializer;
 import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCoordinator;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

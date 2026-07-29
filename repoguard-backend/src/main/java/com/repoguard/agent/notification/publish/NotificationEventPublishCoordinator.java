@@ -1,9 +1,11 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.messaging.MessagePublishException;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.notification.NotificationEventMessage;
+import com.repoguard.agent.notification.NotificationEventPublisher;
 import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
 import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
 import com.repoguard.agent.notification.outbox.NotificationPublishEventStateUpdater;
@@ -20,9 +22,11 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Component
-class NotificationEventPublishCoordinator {
+public class NotificationEventPublishCoordinator {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventPublishCoordinator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        "com.repoguard.agent.notification.NotificationEventPublishCoordinator"
+    );
 
     private final NotificationEventPublisher eventPublisher;
     private final RabbitNotificationQueueProperties properties;
@@ -80,7 +84,7 @@ class NotificationEventPublishCoordinator {
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     }
 
-    void publishAfterCommit(NotificationEvent event) {
+    public void publishAfterCommit(NotificationEvent event) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override

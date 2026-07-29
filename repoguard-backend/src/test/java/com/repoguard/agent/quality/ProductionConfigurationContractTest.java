@@ -453,7 +453,7 @@ class ProductionConfigurationContractTest {
         Path root = findRepositoryRoot();
         String application = read(root.resolve("repoguard-backend/src/main/resources/application.yml"));
         String notificationCompensator = read(root.resolve(
-            "repoguard-backend/src/main/java/com/repoguard/agent/notification/"
+            "repoguard-backend/src/main/java/com/repoguard/agent/notification/publish/"
                 + "NotificationEventPublishCompensator.java"
         ));
         String reviewPublishCompensator = read(root.resolve(
@@ -465,7 +465,7 @@ class ProductionConfigurationContractTest {
                 + "ReviewTaskRecoveryCompensator.java"
         ));
         String notificationCoordinator = read(root.resolve(
-            "repoguard-backend/src/main/java/com/repoguard/agent/notification/"
+            "repoguard-backend/src/main/java/com/repoguard/agent/notification/publish/"
                 + "NotificationEventPublishCoordinator.java"
         ));
 

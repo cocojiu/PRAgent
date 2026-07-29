@@ -14,7 +14,7 @@ import com.repoguard.agent.github.comment.GithubCommentPublishServiceImpl;
 import com.repoguard.agent.messaging.RabbitReviewTaskPublisher;
 import com.repoguard.agent.messaging.ReviewTaskPublishCompensator;
 import com.repoguard.agent.messaging.health.MessageQueueHealthServiceImpl;
-import com.repoguard.agent.notification.NotificationEventPublishCompensator;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
 import com.repoguard.agent.retention.DataRetentionServiceImpl;
 import com.repoguard.agent.review.LlmPullRequestReviewer;
 import com.repoguard.agent.review.RuleBasedPullRequestReviewer;
@@ -95,7 +95,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.notification.outbox.NotificationMessageJsonSerializer"),
             Class.forName("com.repoguard.agent.notification.NotificationProviderKeyNormalizer"),
             Class.forName("com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery"),
-            Class.forName("com.repoguard.agent.notification.NotificationPublishFailurePolicy"),
+            Class.forName("com.repoguard.agent.notification.publish.NotificationPublishFailurePolicy"),
             Class.forName("com.repoguard.agent.notification.retry.NotificationRetrySchedule"),
             Class.forName("com.repoguard.agent.notification.NotificationTextLimiter"),
             Class.forName("com.repoguard.agent.notification.WebhookNotificationContentBuilder"),

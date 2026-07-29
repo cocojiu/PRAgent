@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -15,6 +15,11 @@ import com.repoguard.agent.messaging.RabbitPublishCompensationPolicy;
 import com.repoguard.agent.messaging.RabbitPublishCompensationMetricsRecorder;
 import com.repoguard.agent.messaging.RabbitPublishCompensationSettingsFactory;
 import com.repoguard.agent.messaging.RabbitPublishFailureClassifier;
+import com.repoguard.agent.notification.NotificationEventMessage;
+import com.repoguard.agent.notification.NotificationEventPublisher;
+import com.repoguard.agent.notification.NotificationEventStatus;
+import com.repoguard.agent.notification.NotificationEventType;
+import com.repoguard.agent.notification.NotificationTextLimiter;
 import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
 import com.repoguard.agent.notification.outbox.NotificationPublishCompensationQuery;
 import com.repoguard.agent.notification.outbox.NotificationPublishEventStateUpdater;

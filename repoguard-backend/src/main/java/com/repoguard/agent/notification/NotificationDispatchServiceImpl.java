@@ -9,6 +9,7 @@ import com.repoguard.agent.notification.dispatch.NotificationDispatchRequestFact
 import com.repoguard.agent.notification.outbox.NotificationEventPayload;
 import com.repoguard.agent.notification.outbox.NotificationEventPayloadBuilder;
 import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCoordinator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

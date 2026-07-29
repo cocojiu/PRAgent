@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 import com.repoguard.agent.concurrency.AsyncExecutorProperties;
 import com.repoguard.agent.concurrency.BoundedExecutorFactory;

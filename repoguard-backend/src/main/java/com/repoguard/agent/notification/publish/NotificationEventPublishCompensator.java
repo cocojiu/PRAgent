@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.publish;
 
 import com.repoguard.agent.config.SchedulerRuntimeEnabled;
 import com.repoguard.agent.concurrency.RecoveryWorkDispatcher;
@@ -20,7 +20,9 @@ import org.springframework.stereotype.Component;
 @SchedulerRuntimeEnabled
 public class NotificationEventPublishCompensator {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(NotificationEventPublishCompensator.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        "com.repoguard.agent.notification.NotificationEventPublishCompensator"
+    );
 
     private final NotificationPublishCompensationQuery compensationQuery;
     private final NotificationEventPublishCoordinator publishCoordinator;
