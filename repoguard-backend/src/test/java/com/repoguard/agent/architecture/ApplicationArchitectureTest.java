@@ -41,6 +41,7 @@ class ApplicationArchitectureTest {
     private static final String IDENTITY_PACKAGE = BASE_PACKAGE + ".identity";
     private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
+    private static final String NOTIFICATION_PACKAGE = BASE_PACKAGE + ".notification";
     private static final String SECURITY_PACKAGE = BASE_PACKAGE + ".security";
     private static final String SERVICE_IMPL_PACKAGE = BASE_PACKAGE + ".service.impl";
     private static final String USER_PACKAGE = BASE_PACKAGE + ".user";
@@ -58,6 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 64;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -150,6 +152,34 @@ class ApplicationArchitectureTest {
         assertThat(implementationSources.size())
             .as("The service.impl migration baseline may only move down")
             .isLessThanOrEqualTo(SERVICE_IMPL_SOURCE_BASELINE);
+    }
+
+    @Test
+    void notificationQueriesLiveInDedicatedBoundaryAndRootPackageCanOnlyShrink() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> notificationRootSources = SOURCES.stream()
+            .filter(source -> source.packageName().equals(NOTIFICATION_PACKAGE))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/query/NotificationCandidateBindingQuery.java",
+                "com/repoguard/agent/notification/query/NotificationDeliverableEventQuery.java",
+                "com/repoguard/agent/notification/query/NotificationSuccessfulDeliveryQuery.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationCandidateBindingQuery.java",
+                "com/repoguard/agent/notification/NotificationDeliverableEventQuery.java",
+                "com/repoguard/agent/notification/NotificationSuccessfulDeliveryQuery.java"
+            );
+        assertThat(notificationRootSources).as("notification root source discovery").isNotEmpty();
+        assertThat(notificationRootSources.size())
+            .as("The notification root package baseline may only move down")
+            .isLessThanOrEqualTo(NOTIFICATION_ROOT_SOURCE_BASELINE);
     }
 
     @Test

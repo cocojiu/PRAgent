@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -8,6 +8,8 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
+import com.repoguard.agent.notification.NotificationEventType;
+import com.repoguard.agent.notification.NotificationMessage;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

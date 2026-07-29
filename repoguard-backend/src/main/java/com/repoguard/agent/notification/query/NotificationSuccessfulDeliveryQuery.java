@@ -1,20 +1,21 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.query;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.repoguard.agent.entity.NotificationDeliveryLog;
 import com.repoguard.agent.mapper.NotificationDeliveryLogMapper;
+import com.repoguard.agent.notification.NotificationDeliveryStatus;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationSuccessfulDeliveryQuery {
+public class NotificationSuccessfulDeliveryQuery {
 
     private final NotificationDeliveryLogMapper deliveryLogMapper;
 
-    NotificationSuccessfulDeliveryQuery(NotificationDeliveryLogMapper deliveryLogMapper) {
+    public NotificationSuccessfulDeliveryQuery(NotificationDeliveryLogMapper deliveryLogMapper) {
         this.deliveryLogMapper = deliveryLogMapper;
     }
 
-    boolean exists(Long eventId, Long bindingId) {
+    public boolean exists(Long eventId, Long bindingId) {
         return deliveryLogMapper.selectCount(
             new QueryWrapper<NotificationDeliveryLog>()
                 .eq("event_id", eventId)
