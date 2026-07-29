@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.query;
 
 import com.repoguard.agent.dto.NotificationDeliveryDto;
 import com.repoguard.agent.dto.NotificationDeliverySummaryDto;

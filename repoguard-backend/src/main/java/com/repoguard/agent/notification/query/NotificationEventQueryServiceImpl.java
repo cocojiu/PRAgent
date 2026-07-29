@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.query;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
