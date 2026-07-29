@@ -174,6 +174,24 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void llmChunkCapacityAndSchedulingLiveInDedicatedReviewCollaborator() {
+        SourceUnit aggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewAggregator source was not discovered"));
+        SourceUnit scheduler = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewScheduler.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewScheduler source was not discovered"));
+
+        assertThat(scheduler.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(scheduler.sourceText()).contains("maxTotalChunks", "maxInFlightChunks", "FutureTask<T>");
+        assertThat(aggregator.sourceText())
+            .contains("LlmChunkReviewScheduler")
+            .doesNotContain("FutureTask<", "Deque<PendingChunk");
+    }
+
+    @Test
     void transactionalWritesUseAfterCommitCacheEviction() {
         List<String> violations = SOURCES.stream()
             .filter(source -> TRANSACTIONAL_CACHE_EVICTION.matcher(source.sourceText()).find())
