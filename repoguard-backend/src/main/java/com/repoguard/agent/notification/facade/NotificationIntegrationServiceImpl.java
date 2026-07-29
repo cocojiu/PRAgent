@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.facade;
 
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.NotificationBindingDto;

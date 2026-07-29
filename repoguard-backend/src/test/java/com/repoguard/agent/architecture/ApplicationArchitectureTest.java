@@ -60,7 +60,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
     private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 8;
-    private static final int SERVICE_IMPL_SOURCE_BASELINE = 25;
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 23;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
@@ -196,6 +196,23 @@ class ApplicationArchitectureTest {
             .doesNotContain(
                 "com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java",
                 "com/repoguard/agent/service/impl/NotificationEventResponseAssembler.java"
+            );
+    }
+
+    @Test
+    void notificationUserFacingServicesLiveInDedicatedBoundaries() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/center/NotificationServiceImpl.java",
+                "com/repoguard/agent/notification/facade/NotificationIntegrationServiceImpl.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/service/impl/NotificationServiceImpl.java",
+                "com/repoguard/agent/service/impl/NotificationIntegrationServiceImpl.java"
             );
     }
 

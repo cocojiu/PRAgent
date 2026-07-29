@@ -1,4 +1,4 @@
-package com.repoguard.agent.service.impl;
+package com.repoguard.agent.notification.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
