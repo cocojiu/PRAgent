@@ -155,6 +155,32 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void githubCommentWriterDelegatesHotspotResponsibilities() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        SourceUnit writer = SOURCES.stream()
+            .filter(source -> source.path().equals("com/repoguard/agent/github/GithubCommentWriter.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("GithubCommentWriter source was not discovered"));
+
+        assertThat(sourcePaths).contains(
+            "com/repoguard/agent/github/GithubCommentPublicationGateway.java",
+            "com/repoguard/agent/github/GithubReviewBatchPublisher.java",
+            "com/repoguard/agent/github/GithubLineCommentFallbackPublisher.java",
+            "com/repoguard/agent/github/GithubSupersededSummaryPublisher.java"
+        );
+        assertThat(writer.sourceText()).contains(
+            "GithubReviewBatchPublisher",
+            "GithubLineCommentFallbackPublisher",
+            "GithubSupersededSummaryPublisher"
+        );
+        assertThat(writer.sourceText().lines().count())
+            .as("GithubCommentWriter line-count baseline may only move down")
+            .isLessThanOrEqualTo(420);
+    }
+
+    @Test
     void notificationQueriesLiveInDedicatedBoundaryAndRootPackageCanOnlyShrink() {
         List<String> sourcePaths = SOURCES.stream()
             .map(SourceUnit::path)
