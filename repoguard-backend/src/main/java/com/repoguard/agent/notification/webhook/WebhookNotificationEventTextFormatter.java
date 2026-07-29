@@ -1,5 +1,6 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
+import com.repoguard.agent.notification.NotificationEventType;
 import org.springframework.stereotype.Component;
 
 @Component

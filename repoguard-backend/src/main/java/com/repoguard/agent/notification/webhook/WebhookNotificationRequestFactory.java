@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.OutboundEndpointPolicy;

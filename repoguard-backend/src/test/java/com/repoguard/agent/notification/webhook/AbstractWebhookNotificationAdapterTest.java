@@ -1,13 +1,14 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.NotificationChannelBinding;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.notification.NotificationTextLimiter;
+import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -20,7 +21,6 @@ class AbstractWebhookNotificationAdapterTest {
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final WeComNotificationAdapter adapter = new WeComNotificationAdapter(
         RestClient.builder(),
-        secretCryptoService,
         new WebhookNotificationContentBuilder(
             new WebhookNotificationEventTextFormatter(),
             new WebhookNotificationFieldFormatter()

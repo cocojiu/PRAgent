@@ -1,5 +1,6 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
+import com.repoguard.agent.notification.NotificationMessage;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;

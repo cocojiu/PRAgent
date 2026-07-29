@@ -1,7 +1,8 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
 import com.repoguard.agent.common.SensitiveTextSanitizer;
 import com.repoguard.agent.external.ExternalHttpFailureDetail;
+import com.repoguard.agent.notification.NotificationTextLimiter;
 import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.util.Objects;
 import org.springframework.stereotype.Component;

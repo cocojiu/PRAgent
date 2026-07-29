@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;

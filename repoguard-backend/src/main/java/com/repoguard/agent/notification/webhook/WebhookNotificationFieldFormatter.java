@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.webhook;
 
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;

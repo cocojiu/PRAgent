@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 23;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 11;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -389,6 +389,35 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationPublishFailurePolicy.java",
                 "com/repoguard/agent/notification/NotificationPublishResult.java"
             );
+    }
+
+    @Test
+    void notificationWebhookAdaptersLiveInWebhookBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        List<String> webhookTypes = List.of(
+            "AbstractWebhookNotificationAdapter.java",
+            "DingTalkNotificationAdapter.java",
+            "DingTalkWebhookSigner.java",
+            "WeComNotificationAdapter.java",
+            "WebhookNotificationContent.java",
+            "WebhookNotificationContentBuilder.java",
+            "WebhookNotificationEventTextFormatter.java",
+            "WebhookNotificationFieldFormatter.java",
+            "WebhookNotificationPayloadFactory.java",
+            "WebhookNotificationRequest.java",
+            "WebhookNotificationRequestFactory.java",
+            "WebhookNotificationResponseEvaluator.java"
+        );
+        assertThat(sourcePaths)
+            .containsAll(webhookTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/webhook/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(webhookTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/" + name)
+                .toList());
     }
 
     @Test
