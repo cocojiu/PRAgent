@@ -14,6 +14,7 @@ import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.StandardEnvironment;
 
 class ProductionConfigTreeBindingTest {
 
@@ -21,7 +22,7 @@ class ProductionConfigTreeBindingTest {
     Path secretDirectory;
 
     @Test
-    void configTreeFilenamesOverrideEnvironmentStyleFallbacks() throws IOException {
+    void configTreeFilenamesBindWhenLegacyEnvironmentKeysAreAbsent() throws IOException {
         Map<String, String> secrets = new LinkedHashMap<>();
         secrets.put("spring.datasource.password", "database-file-secret");
         secrets.put("repoguard.security.encryption-key", "encryption-file-secret");
@@ -40,8 +41,14 @@ class ProductionConfigTreeBindingTest {
         String configTree = "configtree:"
             + secretDirectory.toAbsolutePath().toString().replace('\\', '/')
             + "/";
+        StandardEnvironment isolatedEnvironment = new StandardEnvironment();
+        // Production Compose deliberately omits the legacy inline secret keys. Keep
+        // runner-level validation variables from shadowing configtree in this test.
+        isolatedEnvironment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        isolatedEnvironment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(EmptyConfiguration.class)
             .web(WebApplicationType.NONE)
+            .environment(isolatedEnvironment)
             .properties(
                 "spring.profiles.active=test",
                 "spring.config.import=" + configTree,

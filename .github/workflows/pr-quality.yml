@@ -54,6 +54,9 @@ jobs:
           auth_token_secret="$(openssl rand -hex 32)"
           admin_api_key="$(openssl rand -hex 32)"
           webhook_secret="$(openssl rand -hex 32)"
+          for value in "${encryption_key}" "${encryption_salt}" "${auth_token_secret}" "${admin_api_key}" "${webhook_secret}"; do
+            echo "::add-mask::${value}"
+          done
           echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=${encryption_key}" >> "$GITHUB_ENV"
           echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=${encryption_salt}" >> "$GITHUB_ENV"
           echo "SMOKE_AUTH_TOKEN_SECRET=${auth_token_secret}" >> "$GITHUB_ENV"
