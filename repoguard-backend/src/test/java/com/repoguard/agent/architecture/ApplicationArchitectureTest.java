@@ -192,6 +192,35 @@ class ApplicationArchitectureTest {
     }
 
     @Test
+    void llmChunkFallbackAndResultAggregationLiveInDedicatedReviewCollaborators() {
+        SourceUnit aggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewAggregator source was not discovered"));
+        SourceUnit fallbackHandler = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewFallbackHandler.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewFallbackHandler source was not discovered"));
+        SourceUnit resultAggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewResultAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewResultAggregator source was not discovered"));
+        SourceUnit outcome = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewOutcome.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewOutcome source was not discovered"));
+
+        assertThat(fallbackHandler.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(resultAggregator.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(outcome.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(fallbackHandler.sourceText()).contains("metrics.llmFallback", "ruleBasedReviewer.review");
+        assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
+        assertThat(aggregator.sourceText())
+            .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")
+            .doesNotContain("metrics.llmFallback(", "ReviewResult.completed(", "record ChunkAggregation");
+    }
+
+    @Test
     void transactionalWritesUseAfterCommitCacheEviction() {
         List<String> violations = SOURCES.stream()
             .filter(source -> TRANSACTIONAL_CACHE_EVICTION.matcher(source.sourceText()).find())
