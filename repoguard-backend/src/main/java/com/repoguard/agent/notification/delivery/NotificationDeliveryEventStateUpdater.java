@@ -1,27 +1,26 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryEventStateUpdater {
+public class NotificationDeliveryEventStateUpdater {
 
     private final NotificationEventMapper eventMapper;
     private final Clock clock;
 
     @Autowired
-    NotificationDeliveryEventStateUpdater(NotificationEventMapper eventMapper) {
+    public NotificationDeliveryEventStateUpdater(NotificationEventMapper eventMapper) {
         this(eventMapper, Clock.systemDefaultZone());
     }
 
-    NotificationDeliveryEventStateUpdater(NotificationEventMapper eventMapper, Clock clock) {
+    public NotificationDeliveryEventStateUpdater(NotificationEventMapper eventMapper, Clock clock) {
         this.eventMapper = eventMapper;
         this.clock = clock;
     }

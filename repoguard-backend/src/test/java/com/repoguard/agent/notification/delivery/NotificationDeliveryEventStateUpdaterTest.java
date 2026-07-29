@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -7,8 +7,7 @@ import static org.mockito.Mockito.when;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;

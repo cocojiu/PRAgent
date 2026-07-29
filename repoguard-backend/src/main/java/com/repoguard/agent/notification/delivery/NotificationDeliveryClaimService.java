@@ -1,8 +1,8 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import com.repoguard.agent.entity.NotificationEvent;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import com.repoguard.agent.notification.query.NotificationDeliverableEventQuery;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryClaim;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -12,7 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
-class NotificationDeliveryClaimService {
+public class NotificationDeliveryClaimService {
 
     private final NotificationDeliverableEventQuery deliverableEventQuery;
     private final NotificationDeliveryEventStateUpdater eventStateUpdater;
@@ -20,7 +20,7 @@ class NotificationDeliveryClaimService {
     private final String instanceId;
 
     @Autowired
-    NotificationDeliveryClaimService(
+    public NotificationDeliveryClaimService(
         NotificationDeliverableEventQuery deliverableEventQuery,
         NotificationDeliveryEventStateUpdater eventStateUpdater
     ) {
@@ -32,7 +32,7 @@ class NotificationDeliveryClaimService {
         );
     }
 
-    NotificationDeliveryClaimService(
+    public NotificationDeliveryClaimService(
         NotificationDeliverableEventQuery deliverableEventQuery,
         NotificationDeliveryEventStateUpdater eventStateUpdater,
         Clock clock,
@@ -44,7 +44,7 @@ class NotificationDeliveryClaimService {
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     }
 
-    Optional<NotificationEvent> claim(Long eventId) {
+    public Optional<NotificationEvent> claim(Long eventId) {
         Optional<NotificationEvent> deliverableEvent = deliverableEventQuery.load(eventId);
         if (deliverableEvent.isEmpty()) {
             return Optional.empty();

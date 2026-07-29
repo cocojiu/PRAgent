@@ -59,7 +59,7 @@ class ApplicationArchitectureTest {
         "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
         "com/repoguard/agent/worker/ReviewTaskClaimService.java"
     );
-    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 42;
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 38;
     private static final int SERVICE_IMPL_SOURCE_BASELINE = 32;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
@@ -244,6 +244,27 @@ class ApplicationArchitectureTest {
                 "com/repoguard/agent/notification/NotificationDeliveryCompletionDecider.java",
                 "com/repoguard/agent/notification/NotificationDeliveryFailurePolicy.java",
                 "com/repoguard/agent/notification/NotificationRetrySchedule.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryStateLifecycleLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryClaimService.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionService.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryEventStateUpdater.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryRecoveryCompensator.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryClaimService.java",
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionService.java",
+                "com/repoguard/agent/notification/NotificationDeliveryEventStateUpdater.java",
+                "com/repoguard/agent/notification/NotificationDeliveryRecoveryCompensator.java"
             );
     }
 

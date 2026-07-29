@@ -1,4 +1,4 @@
-package com.repoguard.agent.notification;
+package com.repoguard.agent.notification.delivery;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -8,8 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailureDecision;
-import com.repoguard.agent.notification.delivery.NotificationDeliveryFailurePolicy;
+import com.repoguard.agent.notification.NotificationEventStatus;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
