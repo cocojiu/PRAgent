@@ -1,6 +1,6 @@
-package com.repoguard.agent.github;
+package com.repoguard.agent.review;
 
-public record GithubChangedFile(
+public record PullRequestChangedFile(
     String filename,
     String status,
     Integer additions,

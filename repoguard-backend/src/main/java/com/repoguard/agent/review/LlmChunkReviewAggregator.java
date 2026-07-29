@@ -1,7 +1,6 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.review.ReviewPolicySettings;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.util.ArrayDeque;
@@ -64,7 +63,7 @@ class LlmChunkReviewAggregator {
 
     ReviewResult aggregate(
         ReviewPipelineContext context,
-        GithubPullRequestDiff fullDiff,
+        PullRequestDiff fullDiff,
         List<PullRequestDiffChunk> chunks,
         LlmReviewResultParser reviewResultParser,
         ReviewBudget budget

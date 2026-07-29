@@ -6,8 +6,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import java.util.List;
 import org.apache.ibatis.session.ExecutorType;
@@ -33,9 +33,9 @@ class ChangedFileReplacementServiceTest {
     void deletesExistingFilesAndStoresMappedChangedFilesFromDiff() {
         when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(sqlSession);
         when(sqlSession.getMapper(ChangedFileMapper.class)).thenReturn(changedFileMapper);
-        GithubChangedFile firstFile = new GithubChangedFile("src/New.java", "added", 3, null, "+class New {}");
-        GithubChangedFile secondFile = new GithubChangedFile("src/Old.java", "removed", null, 2, "-class Old {}");
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestChangedFile firstFile = new PullRequestChangedFile("src/New.java", "added", 3, null, "+class New {}");
+        PullRequestChangedFile secondFile = new PullRequestChangedFile("src/Old.java", "removed", null, 2, "-class Old {}");
+        PullRequestDiff diff = new PullRequestDiff(
             "octocat",
             "Hello-World",
             7,
@@ -61,7 +61,7 @@ class ChangedFileReplacementServiceTest {
 
     @Test
     void deletesExistingFilesWithoutOpeningBatchSessionWhenDiffHasNoFiles() {
-        service.replace(42L, new GithubPullRequestDiff("octocat", "Hello-World", 7, List.of()));
+        service.replace(42L, new PullRequestDiff("octocat", "Hello-World", 7, List.of()));
 
         verify(changedFileMapper).delete(any());
         org.mockito.Mockito.verifyNoInteractions(sqlSessionFactory);

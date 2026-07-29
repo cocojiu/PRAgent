@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -26,7 +25,7 @@ class SemanticDiffSegmenter {
         this.lineAllocator = Objects.requireNonNull(lineAllocator, "lineAllocator");
     }
 
-    List<SemanticDiffSegment> segments(GithubChangedFile file) {
+    List<SemanticDiffSegment> segments(PullRequestChangedFile file) {
         String patch = file.patch();
         if (patch == null || patch.isBlank() || !patch.contains("@@")) {
             return List.of(toSegment(
@@ -58,13 +57,13 @@ class SemanticDiffSegmenter {
     }
 
     private SemanticDiffSegment toSegment(
-        GithubChangedFile file,
+        PullRequestChangedFile file,
         String patch,
         int additions,
         int deletions
     ) {
         return new SemanticDiffSegment(
-            new GithubChangedFile(file.filename(), file.status(), additions, deletions, patch),
+            new PullRequestChangedFile(file.filename(), file.status(), additions, deletions, patch),
             scopeResolver.chunkGroupKey(file),
             scopeResolver.semanticKey(file, patch),
             scopeResolver.semanticReason(file, patch),

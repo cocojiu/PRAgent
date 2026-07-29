@@ -12,7 +12,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestClient;
+import com.repoguard.agent.review.PullRequestHeadProvider;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ class ReviewTaskRetryServiceTest {
             null,
             org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class),
             org.mockito.Mockito.mock(CacheEvictionService.class),
-            org.mockito.Mockito.mock(GithubPullRequestClient.class)
+            org.mockito.Mockito.mock(PullRequestHeadProvider.class)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("reviewTaskStateMachine");
@@ -42,10 +42,24 @@ class ReviewTaskRetryServiceTest {
             new ReviewTaskStateMachine(),
             org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class),
             null,
-            org.mockito.Mockito.mock(GithubPullRequestClient.class)
+            org.mockito.Mockito.mock(PullRequestHeadProvider.class)
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
+    }
+
+    @Test
+    void constructorRejectsMissingPullRequestHeadProvider() {
+        assertThatThrownBy(() -> new ReviewTaskRetryService(
+            org.mockito.Mockito.mock(ReviewTaskTransitionStore.class),
+            org.mockito.Mockito.mock(ReviewTimelineAppender.class),
+            new ReviewTaskStateMachine(),
+            org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class),
+            org.mockito.Mockito.mock(CacheEvictionService.class),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessage("pullRequestHeadProvider");
     }
 
     @Test
@@ -54,7 +68,7 @@ class ReviewTaskRetryServiceTest {
         ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
         ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
-        GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
+        PullRequestHeadProvider pullRequestHeadProvider = org.mockito.Mockito.mock(PullRequestHeadProvider.class);
         ReviewTask task = new ReviewTask();
         task.setId(42L);
         task.setStatus("FAILED");
@@ -70,7 +84,7 @@ class ReviewTaskRetryServiceTest {
             new ReviewTaskStateMachine(),
             publisher,
             cacheEvictionService,
-            githubPullRequestClient
+            pullRequestHeadProvider
         );
 
         assertThatThrownBy(() -> service.retry(42L))
@@ -80,7 +94,7 @@ class ReviewTaskRetryServiceTest {
             ).isEqualTo(ErrorCode.CONFLICT))
             .hasMessage(ReviewTaskTransitionStore.STATE_CHANGED_MESSAGE);
 
-        verifyNoInteractions(timelineAppender, publisher, cacheEvictionService, githubPullRequestClient);
+        verifyNoInteractions(timelineAppender, publisher, cacheEvictionService, pullRequestHeadProvider);
     }
 
     @Test
@@ -89,7 +103,7 @@ class ReviewTaskRetryServiceTest {
         ReviewTimelineAppender timelineAppender = org.mockito.Mockito.mock(ReviewTimelineAppender.class);
         ReviewTaskAfterCommitPublisher publisher = org.mockito.Mockito.mock(ReviewTaskAfterCommitPublisher.class);
         CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
-        GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
+        PullRequestHeadProvider pullRequestHeadProvider = org.mockito.Mockito.mock(PullRequestHeadProvider.class);
         ReviewTask task = new ReviewTask();
         task.setId(42L);
         task.setOrganization("octocat");
@@ -99,7 +113,7 @@ class ReviewTaskRetryServiceTest {
         task.setCommitSha("aaaaaaaa");
         task.setMqRetries(1);
         when(transitionStore.findById(42L)).thenReturn(task);
-        when(githubPullRequestClient.fetchPullRequestHeadSha(task)).thenReturn("bbbbbbbb");
+        when(pullRequestHeadProvider.fetchPullRequestHeadSha(task)).thenReturn("bbbbbbbb");
         doAnswer(invocation -> {
             task.setStatus("QUEUED");
             task.setCommitSha("bbbbbbbb");
@@ -116,13 +130,13 @@ class ReviewTaskRetryServiceTest {
             new ReviewTaskStateMachine(),
             publisher,
             cacheEvictionService,
-            githubPullRequestClient
+            pullRequestHeadProvider
         );
 
         var response = service.retry(42L);
 
         assertThat(response.status()).isEqualTo("queued");
-        verify(githubPullRequestClient).fetchPullRequestHeadSha(task);
+        verify(pullRequestHeadProvider).fetchPullRequestHeadSha(task);
         verify(transitionStore).retryReviewTask(task, 2, "bbbbbbbb");
         ArgumentCaptor<ReviewTaskMessage> messageCaptor = ArgumentCaptor.forClass(ReviewTaskMessage.class);
         verify(publisher).publishAfterCommit(

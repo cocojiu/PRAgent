@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -54,8 +53,8 @@ class ChunkBudgetPolicyTest {
         ), 40, segment("src/main/java/A.java", "a2", 25), policy)).isTrue();
     }
 
-    private GithubChangedFile file(String path, int additions, int deletions) {
-        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch");
+    private PullRequestChangedFile file(String path, int additions, int deletions) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, "@@ patch");
     }
 
     private SemanticDiffSegment segment(String path, String semanticKey, int lines) {

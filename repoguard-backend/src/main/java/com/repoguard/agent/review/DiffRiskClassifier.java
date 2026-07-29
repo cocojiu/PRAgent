@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -9,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DiffRiskClassifier {
 
-    public int priority(GithubChangedFile file) {
+    public int priority(PullRequestChangedFile file) {
         List<String> reasons = reasons(file);
         if (reasons.contains("database_migration")) {
             return 0;
@@ -26,7 +25,7 @@ public class DiffRiskClassifier {
         return 4;
     }
 
-    public List<String> reasons(GithubChangedFile file) {
+    public List<String> reasons(PullRequestChangedFile file) {
         String path = file.filename() == null ? "" : file.filename().toLowerCase(Locale.ROOT);
         List<String> reasons = new ArrayList<>();
         if (path.contains("db/migration") || path.endsWith(".sql")) {

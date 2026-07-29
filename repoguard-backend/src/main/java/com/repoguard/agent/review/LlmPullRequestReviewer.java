@@ -11,7 +11,6 @@ import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.util.List;
@@ -89,7 +88,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     @Override
-    public ReviewResult review(ReviewTask task, GithubPullRequestDiff diff) {
+    public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
         long startedAt = System.nanoTime();
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
         String promptSummary = promptBuilder.promptSummary(diff);
@@ -99,7 +98,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     @Override
-    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
+    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
         long startedAt = System.nanoTime();
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());

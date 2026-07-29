@@ -7,6 +7,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
+import com.repoguard.agent.review.PullRequestDiff;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -146,7 +147,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
     }
 
     @Override
-    public GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
+    public PullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         GithubIntegrationSettings settings = loadGithubSettings();
         GithubRepositoryRef repositoryRef = repositoryForTask(task, settings);
         String owner = repositoryRef.owner();
@@ -181,7 +182,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 resilience
             );
             ensureExpectedHead(expectedHeadSha, headAfterFetch);
-            return new GithubPullRequestDiff(
+            return new PullRequestDiff(
                 owner,
                 repository,
                 task.getPrNumber(),

@@ -1,7 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.PullRequestReviewer;
@@ -82,7 +82,7 @@ class ReviewExecutionWorkflow {
             executionLog.started(task, message);
 
             try {
-                GithubPullRequestDiff diff = fetchPullRequestDiff(task);
+                PullRequestDiff diff = fetchPullRequestDiff(task);
                 ensureDiffMatchesTask(task, diff);
                 executionLog.diffFetched(task, diff, diffStats);
                 ReviewResult reviewResult = stageTimer.record("review", () -> pullRequestReviewer.review(task, diff));
@@ -113,11 +113,11 @@ class ReviewExecutionWorkflow {
         }
     }
 
-    private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
+    private PullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         return diffFetcher.fetch(task);
     }
 
-    private ReviewResult applyDiffBudgetOutcome(GithubPullRequestDiff diff, ReviewResult reviewResult) {
+    private ReviewResult applyDiffBudgetOutcome(PullRequestDiff diff, ReviewResult reviewResult) {
         if (!diff.truncated()) {
             return reviewResult;
         }
@@ -130,7 +130,7 @@ class ReviewExecutionWorkflow {
         );
     }
 
-    private void ensureDiffMatchesTask(ReviewTask task, GithubPullRequestDiff diff) {
+    private void ensureDiffMatchesTask(ReviewTask task, PullRequestDiff diff) {
         if (diff == null) {
             throw new IllegalStateException("GitHub pull request diff is unavailable");
         }
@@ -159,7 +159,7 @@ class ReviewExecutionWorkflow {
 
     private ReviewExecutionResultWriter.WriteResult completeReview(
         ReviewTask task,
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         ReviewResult reviewResult,
         LocalDateTime startedAt,
         String claimId

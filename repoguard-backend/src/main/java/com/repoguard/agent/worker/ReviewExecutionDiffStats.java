@@ -1,32 +1,32 @@
 package com.repoguard.agent.worker;
 
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiff;
 import org.springframework.stereotype.Component;
 
 @Component
 class ReviewExecutionDiffStats {
 
-    int fileCount(GithubPullRequestDiff diff) {
+    int fileCount(PullRequestDiff diff) {
         return diff.files() == null ? 0 : diff.files().size();
     }
 
-    int totalAdditions(GithubPullRequestDiff diff) {
+    int totalAdditions(PullRequestDiff diff) {
         if (diff.files() == null) {
             return 0;
         }
         return diff.files().stream()
-            .map(GithubChangedFile::additions)
+            .map(PullRequestChangedFile::additions)
             .mapToInt(this::safeInt)
             .sum();
     }
 
-    int totalDeletions(GithubPullRequestDiff diff) {
+    int totalDeletions(PullRequestDiff diff) {
         if (diff.files() == null) {
             return 0;
         }
         return diff.files().stream()
-            .map(GithubChangedFile::deletions)
+            .map(PullRequestChangedFile::deletions)
             .mapToInt(this::safeInt)
             .sum();
     }

@@ -3,6 +3,8 @@ package com.repoguard.agent.github;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.config.GithubDiffBudgetProperties;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiffTruncation;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
@@ -17,7 +19,7 @@ class GithubChangedFileBudgetAccumulatorTest {
         GithubChangedFileBudgetAccumulator accumulator = new GithubChangedFileBudgetAccumulator(properties);
 
         boolean wantsMore = accumulator.acceptPage(
-            List.of(new GithubChangedFile("a.java", "modified", 1, 0, "ab中cd")),
+            List.of(new PullRequestChangedFile("a.java", "modified", 1, 0, "ab中cd")),
             false
         );
         GithubChangedFileFetch result = accumulator.finish(new GithubPaginator.PageTraversal(1, false, false));
@@ -26,7 +28,7 @@ class GithubChangedFileBudgetAccumulatorTest {
         assertThat(result.files().getFirst().patch()).isEqualTo("ab中");
         assertThat(result.files().getFirst().patch().getBytes(StandardCharsets.UTF_8)).hasSize(5);
         assertThat(result.truncation().reasons())
-            .containsExactly(GithubDiffTruncation.Reason.MAX_PATCH_BYTES);
+            .containsExactly(PullRequestDiffTruncation.Reason.MAX_PATCH_BYTES);
     }
 
     @Test
@@ -41,7 +43,7 @@ class GithubChangedFileBudgetAccumulatorTest {
             fileAccumulator.finish(new GithubPaginator.PageTraversal(1, false, true));
         assertThat(fileResult.files()).hasSize(1);
         assertThat(fileResult.truncation().reasons())
-            .containsExactly(GithubDiffTruncation.Reason.MAX_FILES);
+            .containsExactly(PullRequestDiffTruncation.Reason.MAX_FILES);
 
         GithubDiffBudgetProperties byteProperties = properties();
         byteProperties.setMaxTotalBytes(55);
@@ -52,7 +54,7 @@ class GithubChangedFileBudgetAccumulatorTest {
             byteAccumulator.finish(new GithubPaginator.PageTraversal(1, false, true));
         assertThat(byteResult.files()).hasSizeLessThanOrEqualTo(1);
         assertThat(byteResult.truncation().reasons())
-            .containsExactly(GithubDiffTruncation.Reason.MAX_TOTAL_BYTES);
+            .containsExactly(PullRequestDiffTruncation.Reason.MAX_TOTAL_BYTES);
     }
 
     @Test
@@ -86,7 +88,7 @@ class GithubChangedFileBudgetAccumulatorTest {
 
         assertThat(result.files()).isEmpty();
         assertThat(result.truncation().reasons())
-            .containsExactly(GithubDiffTruncation.Reason.TOTAL_TIMEOUT);
+            .containsExactly(PullRequestDiffTruncation.Reason.TOTAL_TIMEOUT);
     }
 
     private GithubDiffBudgetProperties properties() {
@@ -99,7 +101,7 @@ class GithubChangedFileBudgetAccumulatorTest {
         return properties;
     }
 
-    private GithubChangedFile file(String name) {
-        return new GithubChangedFile(name, "modified", 1, 0, "p");
+    private PullRequestChangedFile file(String name) {
+        return new PullRequestChangedFile(name, "modified", 1, 0, "p");
     }
 }

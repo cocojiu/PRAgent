@@ -2,8 +2,6 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -32,20 +30,20 @@ public class PullRequestDiffChunker {
         this.chunkFactory = Objects.requireNonNull(chunkFactory, "chunkFactory");
     }
 
-    public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff) {
+    public List<PullRequestDiffChunk> chunk(PullRequestDiff diff) {
         return chunk(diff, DiffChunkingPolicy.defaults());
     }
 
-    public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicyConfig config) {
+    public List<PullRequestDiffChunk> chunk(PullRequestDiff diff, ReviewPolicyConfig config) {
         return chunk(diff, DiffChunkingPolicy.from(config));
     }
 
-    public List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, ReviewPolicySettings settings) {
+    public List<PullRequestDiffChunk> chunk(PullRequestDiff diff, ReviewPolicySettings settings) {
         return chunk(diff, DiffChunkingPolicy.from(settings));
     }
 
-    private List<PullRequestDiffChunk> chunk(GithubPullRequestDiff diff, DiffChunkingPolicy policy) {
-        List<GithubChangedFile> files = diff.files() == null ? List.of() : diff.files();
+    private List<PullRequestDiffChunk> chunk(PullRequestDiff diff, DiffChunkingPolicy policy) {
+        List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
         if (!budgetPolicy.requiresChunking(files, policy)) {
             return List.of(chunkFactory.fileChunk(diff, files, 1, 1, policy));
         }

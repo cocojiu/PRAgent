@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.external.ExternalCallException;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.util.List;
@@ -128,7 +127,7 @@ class LlmReviewPipeline {
 
         private ReviewResult reviewWithOptionalChunks(ReviewPipelineContext context) {
             ReviewPolicySettings settings = context.settings();
-            GithubPullRequestDiff diff = context.diff();
+            PullRequestDiff diff = context.diff();
             ReviewBudget budget = ReviewBudget.startingAt(context.startedAtNanos(), pipelineBudget);
             List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, settings);
             if (chunks.size() == 1) {
@@ -162,7 +161,7 @@ class LlmReviewPipeline {
     private LlmCallResult callSingleChunk(
         ReviewPipelineContext context,
         ReviewPolicySettings settings,
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         ReviewBudget budget
     ) {
         if (budget.exhausted()) {

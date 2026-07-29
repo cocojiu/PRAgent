@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -16,8 +15,8 @@ class ChunkBudgetPolicy {
         this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
-    boolean requiresChunking(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
-        List<GithubChangedFile> safeFiles = files == null ? List.of() : files;
+    boolean requiresChunking(List<PullRequestChangedFile> files, DiffChunkingPolicy policy) {
+        List<PullRequestChangedFile> safeFiles = files == null ? List.of() : files;
         DiffChunkingPolicy effectivePolicy = policy == null ? DiffChunkingPolicy.defaults() : policy;
         int totalLines = safeFiles.stream().mapToInt(this::changedLines).sum();
         return safeFiles.size() > effectivePolicy.largePrFileThreshold()
@@ -49,7 +48,7 @@ class ChunkBudgetPolicy {
         return filenames.size();
     }
 
-    private int changedLines(GithubChangedFile file) {
+    private int changedLines(PullRequestChangedFile file) {
         return safeInt(file.additions()) + safeInt(file.deletions());
     }
 

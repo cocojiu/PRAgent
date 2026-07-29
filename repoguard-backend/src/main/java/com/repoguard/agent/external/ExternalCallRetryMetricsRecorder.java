@@ -1,7 +1,5 @@
 package com.repoguard.agent.external;
 
-import com.repoguard.agent.observability.RepoGuardMetrics;
-import com.repoguard.agent.observability.ObservabilityThresholdMonitor;
 import io.github.resilience4j.retry.event.RetryOnRetryEvent;
 import java.util.Objects;
 import java.util.function.Function;
@@ -10,15 +8,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class ExternalCallRetryMetricsRecorder {
 
-    private final RepoGuardMetrics metrics;
-    private final ObservabilityThresholdMonitor thresholdMonitor;
+    private final ExternalCallTelemetry telemetry;
 
-    public ExternalCallRetryMetricsRecorder(
-        RepoGuardMetrics metrics,
-        ObservabilityThresholdMonitor thresholdMonitor
-    ) {
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
-        this.thresholdMonitor = Objects.requireNonNull(thresholdMonitor, "thresholdMonitor");
+    public ExternalCallRetryMetricsRecorder(ExternalCallTelemetry telemetry) {
+        this.telemetry = Objects.requireNonNull(telemetry, "telemetry");
     }
 
     public void record(
@@ -31,7 +24,6 @@ public class ExternalCallRetryMetricsRecorder {
         }
         ExternalCallException classified = classifier.apply(runtimeException);
         int attempt = event.getNumberOfRetryAttempts();
-        metrics.externalCallRetried(classified, attempt);
-        thresholdMonitor.externalCallRetry(classified, attempt);
+        telemetry.recordRetry(classified, attempt);
     }
 }

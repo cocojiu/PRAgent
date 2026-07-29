@@ -74,7 +74,6 @@ class ApplicationArchitectureTest {
 
     // Existing cyclic edges are reviewed architecture debt. Removing an entry is safe; adding one is not.
     private static final Set<String> REVIEWED_CYCLIC_DEPENDENCY_BASELINE = Set.of(
-        "external->observability",
         "github->external",
         "github->observability",
         "github->review",
@@ -84,9 +83,7 @@ class ApplicationArchitectureTest {
         "notification->messaging",
         "observability->external",
         "observability->messaging",
-        "observability->worker",
         "review->external",
-        "review->github",
         "review->observability",
         "worker->external",
         "worker->github",
@@ -447,6 +444,27 @@ class ApplicationArchitectureTest {
             .contains("dashboard", "identity", "notification", "observability", "retention", "review", "worker");
         assertThat(unexpectedCycles)
             .as("New cyclic domain dependency edges are forbidden; break the dependency or document a migration first")
+            .isEmpty();
+    }
+
+    @Test
+    void retiredCycleEdgesRemainAbsent() {
+        Map<String, Set<String>> dependencies = domainDependencies();
+        Set<String> retiredEdges = Set.of(
+            "external->observability",
+            "observability->worker",
+            "review->github"
+        );
+        List<String> violations = retiredEdges.stream()
+            .filter(edge -> {
+                String[] packages = edge.split("->", 2);
+                return dependencies.getOrDefault(packages[0], Set.of()).contains(packages[1]);
+            })
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("Retired architecture debt edges must not be reintroduced")
             .isEmpty();
     }
 

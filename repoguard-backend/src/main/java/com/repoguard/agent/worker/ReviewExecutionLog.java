@@ -1,7 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
@@ -70,7 +70,7 @@ class ReviewExecutionLog {
         );
     }
 
-    void diffFetched(ReviewTask task, GithubPullRequestDiff diff, ReviewExecutionDiffStats diffStats) {
+    void diffFetched(ReviewTask task, PullRequestDiff diff, ReviewExecutionDiffStats diffStats) {
         LOGGER.info(
             "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={} diffTruncated={} truncationReasons={}",
             task.getId(),

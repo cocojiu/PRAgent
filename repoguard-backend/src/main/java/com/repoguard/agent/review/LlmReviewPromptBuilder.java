@@ -1,15 +1,13 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 class LlmReviewPromptBuilder {
 
-    String buildPrompt(ReviewTask task, GithubPullRequestDiff diff) {
+    String buildPrompt(ReviewTask task, PullRequestDiff diff) {
         return """
             请审查下面的 GitHub PR diff，并只返回严格 JSON 对象：
             {
@@ -39,14 +37,14 @@ class LlmReviewPromptBuilder {
             );
     }
 
-    String promptSummary(GithubPullRequestDiff diff) {
+    String promptSummary(PullRequestDiff diff) {
         int fileCount = diff.files() == null ? 0 : diff.files().size();
         int additions = 0;
         int deletions = 0;
         StringBuilder files = new StringBuilder();
         if (diff.files() != null) {
             for (int i = 0; i < diff.files().size(); i++) {
-                GithubChangedFile file = diff.files().get(i);
+                PullRequestChangedFile file = diff.files().get(i);
                 additions += file.additions() == null ? 0 : file.additions();
                 deletions += file.deletions() == null ? 0 : file.deletions();
                 if (i < 5) {
@@ -69,7 +67,7 @@ class LlmReviewPromptBuilder {
     }
 
     String chunkedPromptSummary(
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         List<PullRequestDiffChunk> chunks,
         int findingCount,
         String riskLevel,
@@ -96,9 +94,9 @@ class LlmReviewPromptBuilder {
             + "; chunkReasons=" + reasons;
     }
 
-    private String compactDiff(GithubPullRequestDiff diff) {
+    private String compactDiff(PullRequestDiff diff) {
         StringBuilder builder = new StringBuilder();
-        for (GithubChangedFile file : diff.files()) {
+        for (PullRequestChangedFile file : diff.files()) {
             builder.append("\n--- ").append(file.filename()).append('\n');
             if (file.patch() != null) {
                 builder.append(file.patch(), 0, Math.min(file.patch().length(), 6000)).append('\n');

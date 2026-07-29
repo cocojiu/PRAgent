@@ -15,6 +15,7 @@ import com.repoguard.agent.external.ExternalHttpResponseReader;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -121,7 +122,7 @@ class GithubPullRequestClientImplTest {
         try (GithubApiServer server = startGithubApiServer(30, 0)) {
             when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
 
-            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+            PullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
 
             assertThat(diff.files()).hasSize(30);
             assertThat(diff.headSha()).isEqualTo("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -201,7 +202,7 @@ class GithubPullRequestClientImplTest {
         try (GithubApiServer server = startGithubApiServer(50, 0)) {
             when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
 
-            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+            PullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
 
             assertThat(diff.files()).hasSize(50);
             assertThat(diff.files().get(49).filename()).isEqualTo("src/File050.java");
@@ -214,7 +215,7 @@ class GithubPullRequestClientImplTest {
         try (GithubApiServer server = startGithubApiServer(101, 0)) {
             when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings(server.baseUrl()));
 
-            GithubPullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
+            PullRequestDiff diff = client.fetchPullRequestDiff(reviewTask());
 
             assertThat(diff.files()).hasSize(101);
             assertThat(diff.files().get(100).filename()).isEqualTo("src/File101.java");

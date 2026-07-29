@@ -11,7 +11,7 @@ class ReviewResultIncompleteInputTest {
     void marksTruncatedInputAsPartialFallbackAndRequiresAtLeastMediumRisk() {
         ReviewResult result = ReviewResult.completed("LOW", List.of())
             .withIncompleteInput(
-                "GitHub diff truncated: reasons=max_total_bytes",
+                "Pull request diff truncated: reasons=max_total_bytes",
                 "diffTruncated=true"
             );
 

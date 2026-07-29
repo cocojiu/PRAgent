@@ -13,8 +13,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
 import java.util.List;
@@ -94,7 +92,7 @@ class LlmReviewPipelineTest {
 
     @Test
     void executeClassifiesInternalFailureAndLogsErrorWithStackTrace() {
-        GithubPullRequestDiff diff = diff();
+        PullRequestDiff diff = diff();
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
         LlmReviewCaller caller = (settings, task, callDiff) -> {
             throw new NullPointerException();
@@ -124,7 +122,7 @@ class LlmReviewPipelineTest {
 
     @Test
     void executeClassifiesExternalFailureAndLogsWarn() {
-        GithubPullRequestDiff diff = diff();
+        PullRequestDiff diff = diff();
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
         LlmReviewCaller caller = (settings, task, callDiff) -> {
             throw new ExternalCallException("LLM", "llm_rate_limited", true, 429, "operation=chat_completions", null);
@@ -156,7 +154,7 @@ class LlmReviewPipelineTest {
 
     @Test
     void executeRethrowsInternalFailureWhenFallbackToRulesDisabled() {
-        GithubPullRequestDiff diff = diff();
+        PullRequestDiff diff = diff();
         LlmReviewCaller caller = (settings, task, callDiff) -> {
             throw new NullPointerException();
         };
@@ -185,7 +183,7 @@ class LlmReviewPipelineTest {
                 executor,
                 properties
             );
-            GithubPullRequestDiff diff = diff();
+            PullRequestDiff diff = diff();
             CountDownLatch neverRelease = new CountDownLatch(1);
             CountDownLatch interrupted = new CountDownLatch(1);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -245,11 +243,11 @@ class LlmReviewPipelineTest {
         return new ReviewPipelineBudgetProperties();
     }
 
-    private ReviewPipelineContext context(GithubPullRequestDiff diff, LlmReviewCaller caller) {
+    private ReviewPipelineContext context(PullRequestDiff diff, LlmReviewCaller caller) {
         return context(diff, settings(true), caller);
     }
 
-    private ReviewPipelineContext context(GithubPullRequestDiff diff, ReviewPolicySettings settings, LlmReviewCaller caller) {
+    private ReviewPipelineContext context(PullRequestDiff diff, ReviewPolicySettings settings, LlmReviewCaller caller) {
         return new ReviewPipelineContext(
             new ReviewTask(),
             diff,
@@ -260,12 +258,12 @@ class LlmReviewPipelineTest {
         );
     }
 
-    private GithubPullRequestDiff diff() {
-        return new GithubPullRequestDiff(
+    private PullRequestDiff diff() {
+        return new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
-            List.of(new GithubChangedFile("src/A.java", "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value"))
+            List.of(new PullRequestChangedFile("src/A.java", "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value"))
         );
     }
 

@@ -1,6 +1,8 @@
 package com.repoguard.agent.github;
 
 import com.repoguard.agent.config.GithubDiffBudgetProperties;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiffTruncation;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -15,9 +17,9 @@ final class GithubChangedFileBudgetAccumulator {
     private final GithubDiffBudgetProperties properties;
     private final LongSupplier nanoTime;
     private final long deadlineNanos;
-    private final List<GithubChangedFile> files = new ArrayList<>();
-    private final EnumSet<GithubDiffTruncation.Reason> reasons =
-        EnumSet.noneOf(GithubDiffTruncation.Reason.class);
+    private final List<PullRequestChangedFile> files = new ArrayList<>();
+    private final EnumSet<PullRequestDiffTruncation.Reason> reasons =
+        EnumSet.noneOf(PullRequestDiffTruncation.Reason.class);
     private long retainedBytes;
 
     GithubChangedFileBudgetAccumulator(GithubDiffBudgetProperties properties) {
@@ -35,39 +37,39 @@ final class GithubChangedFileBudgetAccumulator {
         this.deadlineNanos = Long.MAX_VALUE - now < timeoutNanos ? Long.MAX_VALUE : now + timeoutNanos;
     }
 
-    boolean acceptPage(List<GithubChangedFile> pageItems, boolean sourceHasMore) {
+    boolean acceptPage(List<PullRequestChangedFile> pageItems, boolean sourceHasMore) {
         if (deadlineExceeded()) {
-            reasons.add(GithubDiffTruncation.Reason.TOTAL_TIMEOUT);
+            reasons.add(PullRequestDiffTruncation.Reason.TOTAL_TIMEOUT);
             return false;
         }
-        for (GithubChangedFile file : pageItems) {
+        for (PullRequestChangedFile file : pageItems) {
             if (deadlineExceeded()) {
-                reasons.add(GithubDiffTruncation.Reason.TOTAL_TIMEOUT);
+                reasons.add(PullRequestDiffTruncation.Reason.TOTAL_TIMEOUT);
                 return false;
             }
             if (files.size() >= properties.getMaxFiles()) {
-                reasons.add(GithubDiffTruncation.Reason.MAX_FILES);
+                reasons.add(PullRequestDiffTruncation.Reason.MAX_FILES);
                 return false;
             }
-            GithubChangedFile retained = retainWithinPatchBudget(file);
+            PullRequestChangedFile retained = retainWithinPatchBudget(file);
             long fileBytes = retainedBytes(retained);
             if (fileBytes > properties.getMaxTotalBytes() - retainedBytes) {
-                reasons.add(GithubDiffTruncation.Reason.MAX_TOTAL_BYTES);
+                reasons.add(PullRequestDiffTruncation.Reason.MAX_TOTAL_BYTES);
                 return false;
             }
             files.add(retained);
             retainedBytes += fileBytes;
         }
         if (sourceHasMore && files.size() >= properties.getMaxFiles()) {
-            reasons.add(GithubDiffTruncation.Reason.MAX_FILES);
+            reasons.add(PullRequestDiffTruncation.Reason.MAX_FILES);
             return false;
         }
         if (sourceHasMore && retainedBytes >= properties.getMaxTotalBytes()) {
-            reasons.add(GithubDiffTruncation.Reason.MAX_TOTAL_BYTES);
+            reasons.add(PullRequestDiffTruncation.Reason.MAX_TOTAL_BYTES);
             return false;
         }
         if (deadlineExceeded()) {
-            reasons.add(GithubDiffTruncation.Reason.TOTAL_TIMEOUT);
+            reasons.add(PullRequestDiffTruncation.Reason.TOTAL_TIMEOUT);
             return false;
         }
         return true;
@@ -79,11 +81,11 @@ final class GithubChangedFileBudgetAccumulator {
 
     GithubChangedFileFetch finish(GithubPaginator.PageTraversal traversal) {
         if (traversal.pageLimitReached()) {
-            reasons.add(GithubDiffTruncation.Reason.MAX_PAGES);
+            reasons.add(PullRequestDiffTruncation.Reason.MAX_PAGES);
         }
         return new GithubChangedFileFetch(
             files,
-            new GithubDiffTruncation(
+            new PullRequestDiffTruncation(
                 List.copyOf(reasons),
                 traversal.pagesFetched(),
                 files.size(),
@@ -92,16 +94,16 @@ final class GithubChangedFileBudgetAccumulator {
         );
     }
 
-    private GithubChangedFile retainWithinPatchBudget(GithubChangedFile file) {
+    private PullRequestChangedFile retainWithinPatchBudget(PullRequestChangedFile file) {
         String patch = file == null ? null : file.patch();
         String retainedPatch = truncateUtf8(patch, properties.getMaxPatchBytes());
         if (patch != null && !patch.equals(retainedPatch)) {
-            reasons.add(GithubDiffTruncation.Reason.MAX_PATCH_BYTES);
+            reasons.add(PullRequestDiffTruncation.Reason.MAX_PATCH_BYTES);
         }
         if (file == null) {
-            return new GithubChangedFile(null, null, null, null, retainedPatch);
+            return new PullRequestChangedFile(null, null, null, null, retainedPatch);
         }
-        return new GithubChangedFile(
+        return new PullRequestChangedFile(
             file.filename(),
             file.status(),
             file.additions(),
@@ -110,7 +112,7 @@ final class GithubChangedFileBudgetAccumulator {
         );
     }
 
-    private long retainedBytes(GithubChangedFile file) {
+    private long retainedBytes(PullRequestChangedFile file) {
         return ESTIMATED_JSON_OVERHEAD_BYTES
             + utf8Length(file.filename())
             + utf8Length(file.status())

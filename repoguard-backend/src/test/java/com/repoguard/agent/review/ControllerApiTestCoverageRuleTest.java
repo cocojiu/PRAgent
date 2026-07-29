@@ -3,8 +3,6 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.review.ReviewRuleSettings;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -16,7 +14,7 @@ class ControllerApiTestCoverageRuleTest {
 
     @Test
     void detectsControllerMappingChangeWithoutTestCoverage() {
-        GithubPullRequestDiff diff = diff(List.of(file(
+        PullRequestDiff diff = diff(List.of(file(
             "src/main/java/com/example/order/OrderController.java",
             """
                 @@ -18,0 +19,1 @@
@@ -35,7 +33,7 @@ class ControllerApiTestCoverageRuleTest {
 
     @Test
     void skipsWhenPullRequestContainsControllerTestChange() {
-        GithubPullRequestDiff diff = diff(List.of(
+        PullRequestDiff diff = diff(List.of(
             file(
                 "src/main/java/com/example/order/OrderController.java",
                 """
@@ -57,7 +55,7 @@ class ControllerApiTestCoverageRuleTest {
 
     @Test
     void honorsDisabledRuleConfiguration() {
-        GithubPullRequestDiff diff = diff(List.of(file(
+        PullRequestDiff diff = diff(List.of(file(
             "src/main/java/com/example/order/OrderController.java",
             """
                 @@ -18,0 +19,1 @@
@@ -72,11 +70,11 @@ class ControllerApiTestCoverageRuleTest {
         assertThat(rule.evaluate(diff, configuredRules)).isEmpty();
     }
 
-    private GithubPullRequestDiff diff(List<GithubChangedFile> files) {
-        return new GithubPullRequestDiff("octocat", "Hello-World", 1, files);
+    private PullRequestDiff diff(List<PullRequestChangedFile> files) {
+        return new PullRequestDiff("octocat", "Hello-World", 1, files);
     }
 
-    private GithubChangedFile file(String filename, String patch) {
-        return new GithubChangedFile(filename, "modified", 1, 0, patch);
+    private PullRequestChangedFile file(String filename, String patch) {
+        return new PullRequestChangedFile(filename, "modified", 1, 0, patch);
     }
 }

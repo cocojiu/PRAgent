@@ -3,8 +3,8 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiff;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ class LlmReviewPromptBuilderTest {
 
     @Test
     void promptSummaryIncludesCountsAndOnlyFirstFiveSampleFiles() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
@@ -42,7 +42,7 @@ class LlmReviewPromptBuilderTest {
 
     @Test
     void chunkedPromptSummaryIncludesAggregateCountsAndDistinctReasons() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
@@ -68,7 +68,7 @@ class LlmReviewPromptBuilderTest {
     void buildPromptIncludesTaskAndCompactsLongPatch() {
         ReviewTask task = new ReviewTask();
         task.setTitle("Improve review flow");
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
@@ -86,7 +86,7 @@ class LlmReviewPromptBuilderTest {
         assertThat(prompt).doesNotContain("a".repeat(6001));
     }
 
-    private GithubChangedFile file(String path, Integer additions, Integer deletions, String patch) {
-        return new GithubChangedFile(path, "modified", additions, deletions, patch);
+    private PullRequestChangedFile file(String path, Integer additions, Integer deletions, String patch) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, patch);
     }
 }

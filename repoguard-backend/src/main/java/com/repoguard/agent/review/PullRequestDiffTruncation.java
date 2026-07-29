@@ -1,24 +1,24 @@
-package com.repoguard.agent.github;
+package com.repoguard.agent.review;
 
 import java.util.List;
 import java.util.Locale;
 
-public record GithubDiffTruncation(
+public record PullRequestDiffTruncation(
     List<Reason> reasons,
     int pagesFetched,
     int filesReturned,
     long retainedBytes
 ) {
 
-    public GithubDiffTruncation {
+    public PullRequestDiffTruncation {
         reasons = reasons == null ? List.of() : List.copyOf(reasons);
         pagesFetched = Math.max(0, pagesFetched);
         filesReturned = Math.max(0, filesReturned);
         retainedBytes = Math.max(0L, retainedBytes);
     }
 
-    public static GithubDiffTruncation none() {
-        return new GithubDiffTruncation(List.of(), 0, 0, 0L);
+    public static PullRequestDiffTruncation none() {
+        return new PullRequestDiffTruncation(List.of(), 0, 0, 0L);
     }
 
     public boolean truncated() {
@@ -31,7 +31,7 @@ public record GithubDiffTruncation(
             .distinct()
             .reduce((left, right) -> left + "," + right)
             .orElse("none");
-        return "GitHub diff truncated: reasons=" + reasonCodes
+        return "Pull request diff truncated: reasons=" + reasonCodes
             + ", pages=" + pagesFetched
             + ", files=" + filesReturned
             + ", retainedBytes=" + retainedBytes;

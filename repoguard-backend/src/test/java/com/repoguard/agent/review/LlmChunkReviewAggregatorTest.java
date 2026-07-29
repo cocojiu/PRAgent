@@ -16,8 +16,6 @@ import com.repoguard.agent.concurrency.AsyncExecutorProperties;
 import com.repoguard.agent.concurrency.BoundedExecutorFactory;
 import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -111,7 +109,7 @@ class LlmChunkReviewAggregatorTest {
 
     @Test
     void aggregatesSuccessfulChunksAndFallsBackOnlyFailedChunksToRules() {
-        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
+        PullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
         List<PullRequestDiffChunk> chunks = List.of(
             chunk(1, "src/A.java"),
             chunk(2, "src/B.java"),
@@ -134,7 +132,7 @@ class LlmChunkReviewAggregatorTest {
             System.nanoTime(),
             caller
         );
-        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenReturn(ReviewResult.completed(
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenReturn(ReviewResult.completed(
             "MEDIUM",
             List.of(new ReviewFindingResult(
                 "MEDIUM",
@@ -178,7 +176,7 @@ class LlmChunkReviewAggregatorTest {
                 64,
                 2
             );
-            GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
+            PullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
             List<PullRequestDiffChunk> chunks = List.of(
                 chunk(1, 4, "src/A.java"),
                 chunk(2, 4, "src/B.java"),
@@ -243,7 +241,7 @@ class LlmChunkReviewAggregatorTest {
             64,
             2
         );
-        GithubPullRequestDiff fullDiff = diff(
+        PullRequestDiff fullDiff = diff(
             "src/A.java",
             "src/B.java",
             "src/C.java",
@@ -269,7 +267,7 @@ class LlmChunkReviewAggregatorTest {
                 return new LlmCallResult(llmJson("unused"), 100, 25, 125);
             }
         );
-        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
             .thenReturn(ReviewResult.completed("LOW", List.of()));
 
         CompletableFuture<ReviewResult> result = CompletableFuture.supplyAsync(
@@ -303,7 +301,7 @@ class LlmChunkReviewAggregatorTest {
             2,
             1
         );
-        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
+        PullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java", "src/D.java");
         List<PullRequestDiffChunk> chunks = List.of(
             chunk(1, 4, "src/A.java"),
             chunk(2, 4, "src/B.java"),
@@ -323,7 +321,7 @@ class LlmChunkReviewAggregatorTest {
                 return new LlmCallResult(llmJson(path), 100, 25, 125);
             }
         );
-        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
             .thenReturn(ReviewResult.completed("LOW", List.of()));
 
         ReviewResult result = cappedAggregator.aggregate(context, fullDiff, chunks, parser, budget());
@@ -357,7 +355,7 @@ class LlmChunkReviewAggregatorTest {
             64,
             2
         );
-        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
+        PullRequestDiff fullDiff = diff("src/A.java", "src/B.java", "src/C.java");
         List<PullRequestDiffChunk> chunks = List.of(
             chunk(1, 3, "src/A.java"),
             chunk(2, 3, "src/B.java"),
@@ -376,7 +374,7 @@ class LlmChunkReviewAggregatorTest {
                 125
             )
         );
-        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
             .thenReturn(ReviewResult.completed("LOW", List.of()));
 
         ReviewResult result = rejectingAggregator.aggregate(context, fullDiff, chunks, parser, budget());
@@ -407,7 +405,7 @@ class LlmChunkReviewAggregatorTest {
                 64,
                 2
             );
-            GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
+            PullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
             List<PullRequestDiffChunk> chunks = List.of(
                 chunk(1, 2, "src/A.java"),
                 chunk(2, 2, "src/B.java")
@@ -434,8 +432,8 @@ class LlmChunkReviewAggregatorTest {
                 System.nanoTime(),
                 caller
             );
-            when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenAnswer(invocation -> {
-                GithubPullRequestDiff fallbackDiff = invocation.getArgument(0);
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenAnswer(invocation -> {
+                PullRequestDiff fallbackDiff = invocation.getArgument(0);
                 String path = fallbackDiff.files().getFirst().filename();
                 return ReviewResult.completed(
                     "MEDIUM",
@@ -475,7 +473,7 @@ class LlmChunkReviewAggregatorTest {
 
     @Test
     void propagatesLogContextIntoChunkReviewTasks() {
-        GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
+        PullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
         List<PullRequestDiffChunk> chunks = List.of(chunk(1, 2, "src/A.java"), chunk(2, 2, "src/B.java"));
         ReviewTask task = new ReviewTask();
         task.setId(42L);
@@ -521,7 +519,7 @@ class LlmChunkReviewAggregatorTest {
         appender.start();
         logger.addAppender(appender);
         try {
-            GithubPullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
+            PullRequestDiff fullDiff = diff("src/A.java", "src/B.java");
             List<PullRequestDiffChunk> chunks = List.of(chunk(1, 2, "src/A.java"), chunk(2, 2, "src/B.java"));
             LlmReviewCaller caller = (ignoredSettings, ignoredTask, chunkDiff) -> {
                 String path = chunkDiff.files().getFirst().filename();
@@ -538,7 +536,7 @@ class LlmChunkReviewAggregatorTest {
                 System.nanoTime(),
                 caller
             );
-            when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class)))
+            when(ruleBasedReviewer.review(any(PullRequestDiff.class)))
                 .thenReturn(ReviewResult.completed("INFO", List.of()));
 
             aggregator.aggregate(context, fullDiff, chunks, parser, budget());
@@ -558,8 +556,8 @@ class LlmChunkReviewAggregatorTest {
         }
     }
 
-    private GithubPullRequestDiff diff(String... paths) {
-        return new GithubPullRequestDiff(
+    private PullRequestDiff diff(String... paths) {
+        return new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -572,12 +570,12 @@ class LlmChunkReviewAggregatorTest {
     }
 
     private PullRequestDiffChunk chunk(int index, int total, String path) {
-        GithubPullRequestDiff diff = diff(path);
+        PullRequestDiff diff = diff(path);
         return new PullRequestDiffChunk(index, total, diff, 1, 1, 0, List.of("test"));
     }
 
-    private GithubChangedFile file(String path) {
-        return new GithubChangedFile(path, "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value");
+    private PullRequestChangedFile file(String path) {
+        return new PullRequestChangedFile(path, "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value");
     }
 
     private String llmJson(String path) {

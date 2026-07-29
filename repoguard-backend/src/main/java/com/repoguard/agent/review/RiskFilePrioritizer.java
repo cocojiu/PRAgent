@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -15,18 +14,18 @@ class RiskFilePrioritizer {
         this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
-    List<GithubChangedFile> prioritizeFiles(List<GithubChangedFile> files) {
+    List<PullRequestChangedFile> prioritizeFiles(List<PullRequestChangedFile> files) {
         if (files == null || files.isEmpty()) {
             return List.of();
         }
         return files.stream()
             .sorted(Comparator
                 .comparingInt(riskClassifier::priority)
-                .thenComparing(GithubChangedFile::filename, Comparator.nullsLast(String::compareTo)))
+                .thenComparing(PullRequestChangedFile::filename, Comparator.nullsLast(String::compareTo)))
             .toList();
     }
 
-    List<SemanticDiffSegment> prioritizeSegments(List<GithubChangedFile> files, SemanticDiffSegmenter segmenter) {
+    List<SemanticDiffSegment> prioritizeSegments(List<PullRequestChangedFile> files, SemanticDiffSegmenter segmenter) {
         if (files == null || files.isEmpty()) {
             return List.of();
         }

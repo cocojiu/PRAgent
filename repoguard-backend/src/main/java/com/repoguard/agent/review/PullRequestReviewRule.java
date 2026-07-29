@@ -1,7 +1,6 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.review.ReviewRuleSettings;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import java.util.Map;
 
@@ -14,7 +13,7 @@ interface PullRequestReviewRule {
     }
 
     List<ReviewFindingResult> evaluate(
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     );
 }

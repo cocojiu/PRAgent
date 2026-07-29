@@ -5,8 +5,8 @@ import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.observability.LogContext;
+import com.repoguard.agent.review.PullRequestHeadProvider;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
@@ -24,7 +24,7 @@ public class ReviewTaskRetryService {
     private final ReviewTaskStateMachine reviewTaskStateMachine;
     private final ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher;
     private final CacheEvictionService cacheEvictionService;
-    private final GithubPullRequestClient githubPullRequestClient;
+    private final PullRequestHeadProvider pullRequestHeadProvider;
 
     @Autowired
     public ReviewTaskRetryService(
@@ -33,16 +33,16 @@ public class ReviewTaskRetryService {
         ReviewTaskStateMachine reviewTaskStateMachine,
         ReviewTaskAfterCommitPublisher reviewTaskAfterCommitPublisher,
         CacheEvictionService cacheEvictionService,
-        GithubPullRequestClient githubPullRequestClient
+        PullRequestHeadProvider pullRequestHeadProvider
     ) {
         this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.reviewTaskStateMachine = Objects.requireNonNull(reviewTaskStateMachine, "reviewTaskStateMachine");
         this.reviewTaskAfterCommitPublisher = reviewTaskAfterCommitPublisher;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
-        this.githubPullRequestClient = Objects.requireNonNull(
-            githubPullRequestClient,
-            "githubPullRequestClient"
+        this.pullRequestHeadProvider = Objects.requireNonNull(
+            pullRequestHeadProvider,
+            "pullRequestHeadProvider"
         );
     }
 
@@ -57,7 +57,7 @@ public class ReviewTaskRetryService {
         int retryCount = task.getMqRetries() == null ? 1 : task.getMqRetries() + 1;
         boolean superseded = reviewTaskStateMachine.isSuperseded(task.getStatus());
         String replacementCommitSha = superseded
-            ? githubPullRequestClient.fetchPullRequestHeadSha(task)
+            ? pullRequestHeadProvider.fetchPullRequestHeadSha(task)
             : task.getCommitSha();
         if (!StringUtils.hasText(replacementCommitSha)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review task commit SHA is unavailable");

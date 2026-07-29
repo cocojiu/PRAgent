@@ -2,8 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -15,9 +13,9 @@ class PullRequestDiffChunkFactoryTest {
 
     @Test
     void buildsFileChunkWithAggregatedCountsAndReasons() {
-        GithubChangedFile migration = file("src/main/resources/db/migration/V42__token.sql", 120, 10);
-        GithubChangedFile security = file("src/main/java/com/example/security/AuthTokenFilter.java", null, 5);
-        GithubPullRequestDiff source = diff(List.of(migration, security));
+        PullRequestChangedFile migration = file("src/main/resources/db/migration/V42__token.sql", 120, 10);
+        PullRequestChangedFile security = file("src/main/java/com/example/security/AuthTokenFilter.java", null, 5);
+        PullRequestDiff source = diff(List.of(migration, security));
 
         PullRequestDiffChunk chunk = factory.fileChunk(source, source.files(), 1, 2, DiffChunkingPolicy.defaults());
 
@@ -33,9 +31,9 @@ class PullRequestDiffChunkFactoryTest {
 
     @Test
     void buildsSemanticChunkWithDistinctFileCountAndSegmentCounts() {
-        GithubChangedFile service = file("src/main/java/com/example/order/OrderService.java", 100, 10);
-        GithubChangedFile controller = file("src/main/java/com/example/order/OrderController.java", 40, 4);
-        GithubPullRequestDiff source = diff(List.of(service, controller));
+        PullRequestChangedFile service = file("src/main/java/com/example/order/OrderService.java", 100, 10);
+        PullRequestChangedFile controller = file("src/main/java/com/example/order/OrderController.java", 40, 4);
+        PullRequestDiff source = diff(List.of(service, controller));
 
         PullRequestDiffChunk chunk = factory.semanticChunk(
             source,
@@ -59,16 +57,16 @@ class PullRequestDiffChunkFactoryTest {
         assertThat(chunk.reasons()).contains("semantic_scope", "multi_file", "code_scope");
     }
 
-    private GithubPullRequestDiff diff(List<GithubChangedFile> files) {
-        return new GithubPullRequestDiff("octocat", "repo", 17, "reviewed-commit", files);
+    private PullRequestDiff diff(List<PullRequestChangedFile> files) {
+        return new PullRequestDiff("octocat", "repo", 17, "reviewed-commit", files);
     }
 
-    private GithubChangedFile file(String path, Integer additions, Integer deletions) {
-        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch");
+    private PullRequestChangedFile file(String path, Integer additions, Integer deletions) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, "@@ patch");
     }
 
     private SemanticDiffSegment segment(
-        GithubChangedFile file,
+        PullRequestChangedFile file,
         String groupKey,
         String semanticKey,
         int additions,

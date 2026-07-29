@@ -2,7 +2,7 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.Duration;
 import java.util.Objects;
@@ -35,7 +35,7 @@ class GithubPullRequestDiffFetcher {
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
-    GithubPullRequestDiff fetch(ReviewTask task) {
+    PullRequestDiff fetch(ReviewTask task) {
         var startedAt = clock.now();
         try {
             LOGGER.info(
@@ -44,7 +44,7 @@ class GithubPullRequestDiffFetcher {
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber()
             );
-            GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
+            PullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
             Duration duration = Duration.between(startedAt, clock.now());
             String result = diff.truncated() ? "truncated" : "success";
             metricsRecorder.recordGithubDiffFetch(duration, result);

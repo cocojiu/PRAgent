@@ -3,6 +3,7 @@ package com.repoguard.agent.github;
 import com.repoguard.agent.config.GithubDiffBudgetProperties;
 import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -46,7 +47,7 @@ public class GithubChangedFileReader {
                 .build(owner, repository, pullNumber)
                 .toString(),
             settings,
-            GithubChangedFile[].class,
+            PullRequestChangedFile[].class,
             resilience,
             budgetProperties.getMaxPages(),
             accumulator::acceptPage

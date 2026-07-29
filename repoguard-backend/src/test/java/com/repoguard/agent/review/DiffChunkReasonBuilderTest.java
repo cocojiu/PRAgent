@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -36,7 +35,7 @@ class DiffChunkReasonBuilderTest {
 
     @Test
     void semanticReasonsDescribeScopeSplitsAndSegmentRisk() {
-        GithubChangedFile file = file("src/main/java/com/example/security/AuthTokenFilter.java", 260, 12);
+        PullRequestChangedFile file = file("src/main/java/com/example/security/AuthTokenFilter.java", 260, 12);
 
         List<String> reasons = reasonBuilder.semanticReasons(
             List.of(file),
@@ -51,12 +50,12 @@ class DiffChunkReasonBuilderTest {
             .contains("semantic_scope", "split_file_scope", "large_churn", "code_scope", "security_sensitive");
     }
 
-    private GithubChangedFile file(String path, int additions, int deletions) {
-        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch");
+    private PullRequestChangedFile file(String path, int additions, int deletions) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, "@@ patch");
     }
 
     private SemanticDiffSegment segment(
-        GithubChangedFile file,
+        PullRequestChangedFile file,
         String groupKey,
         String semanticKey,
         String semanticReason,

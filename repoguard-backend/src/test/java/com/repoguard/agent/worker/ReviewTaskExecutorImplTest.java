@@ -14,9 +14,9 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.github.GithubChangedFile;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
@@ -81,12 +81,12 @@ class ReviewTaskExecutorImplTest {
         task.setPublishClaimedBy("stale-publisher");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -123,12 +123,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -155,12 +155,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -192,12 +192,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -232,12 +232,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -320,12 +320,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 0);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -373,12 +373,12 @@ class ReviewTaskExecutorImplTest {
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
         when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             "b2c3d4e",
-            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"new\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"new\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
 
@@ -391,7 +391,7 @@ class ReviewTaskExecutorImplTest {
             .contains("current=b2c3d4e");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        verify(pullRequestReviewer, never()).review(any(ReviewTask.class), any(GithubPullRequestDiff.class));
+        verify(pullRequestReviewer, never()).review(any(ReviewTask.class), any(PullRequestDiff.class));
         verify(changedFileMapper, never()).insert(any(ChangedFile.class));
         verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
@@ -418,12 +418,12 @@ class ReviewTaskExecutorImplTest {
         when(reviewTaskMapper.update(any(UpdateWrapper.class)))
             .thenThrow(new CannotAcquireLockException("deadlock"))
             .thenReturn(1, 1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             COMMIT_SHA,
-            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));

@@ -1,9 +1,8 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 
 record SemanticDiffSegment(
-    GithubChangedFile file,
+    PullRequestChangedFile file,
     String chunkGroupKey,
     String semanticKey,
     String semanticReason,

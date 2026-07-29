@@ -6,10 +6,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubDiffTruncation;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiffTruncation;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -32,16 +32,16 @@ class GithubPullRequestDiffFetcherTest {
     @Test
     void fetchReturnsDiffAndRecordsSuccessMetric() {
         ReviewTask task = task();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "patch"))
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "patch"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         clock.setTimes("2026-07-04T22:40:00", "2026-07-04T22:40:05");
 
-        GithubPullRequestDiff fetched = fetcher.fetch(task);
+        PullRequestDiff fetched = fetcher.fetch(task);
 
         assertThat(fetched).isSameAs(diff);
         verify(githubPullRequestClient).fetchPullRequestDiff(task);
@@ -51,14 +51,14 @@ class GithubPullRequestDiffFetcherTest {
     @Test
     void fetchRecordsTruncatedMetricWhenDiffHitAHardBudget() {
         ReviewTask task = task();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
             null,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "patch")),
-            new GithubDiffTruncation(
-                List.of(GithubDiffTruncation.Reason.MAX_TOTAL_BYTES),
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "patch")),
+            new PullRequestDiffTruncation(
+                List.of(PullRequestDiffTruncation.Reason.MAX_TOTAL_BYTES),
                 2,
                 1,
                 1024

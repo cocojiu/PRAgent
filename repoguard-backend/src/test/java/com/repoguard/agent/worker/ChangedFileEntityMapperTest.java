@@ -3,7 +3,7 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.github.GithubChangedFile;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import org.junit.jupiter.api.Test;
 
 class ChangedFileEntityMapperTest {
@@ -14,7 +14,7 @@ class ChangedFileEntityMapperTest {
     void mapsGithubChangedFileToChangedFileEntity() {
         ChangedFile changedFile = mapper.toEntity(
             42L,
-            new GithubChangedFile("src/App.java", "added", 3, 2, "+class App {}")
+            new PullRequestChangedFile("src/App.java", "added", 3, 2, "+class App {}")
         );
 
         assertThat(changedFile.getTaskId()).isEqualTo(42L);
@@ -35,7 +35,7 @@ class ChangedFileEntityMapperTest {
         assertThat(mapper.toEntity(1L, changedFile("added", null, null)).getDeletions()).isZero();
     }
 
-    private GithubChangedFile changedFile(String status, Integer additions, Integer deletions) {
-        return new GithubChangedFile("src/App.java", status, additions, deletions, "patch");
+    private PullRequestChangedFile changedFile(String status, Integer additions, Integer deletions) {
+        return new PullRequestChangedFile("src/App.java", status, additions, deletions, "patch");
     }
 }
