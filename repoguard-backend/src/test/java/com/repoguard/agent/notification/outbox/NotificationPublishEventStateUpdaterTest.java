@@ -23,7 +23,7 @@ class NotificationPublishEventStateUpdaterTest {
     @Test
     void marksEventPublishedOnlyWhilePublishLeaseIsOwned() {
         NotificationEvent event = event();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
 
         assertThat(updater.markPublished(event)).isTrue();
 
@@ -41,7 +41,7 @@ class NotificationPublishEventStateUpdaterTest {
     @Test
     void marksEventPublishFailedWithFailureDecision() {
         NotificationEvent event = event();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
         NotificationPublishFailureDecision decision = new NotificationPublishFailureDecision(
             NotificationEventStatus.PUBLISH_FAILED.code(),
             2,
@@ -67,7 +67,7 @@ class NotificationPublishEventStateUpdaterTest {
     @Test
     void lostPublishLeaseDoesNotOverwriteConsumerState() {
         NotificationEvent event = event();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(eventMapper.update(any())).thenReturn(0);
         event.setStatus(NotificationEventStatus.DELIVERING.code());
 
         assertThat(updater.markPublished(event)).isFalse();
@@ -78,8 +78,7 @@ class NotificationPublishEventStateUpdaterTest {
     }
 
     private UpdateWrapper<NotificationEvent> captureUpdateWrapper() {
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.captor();
         verify(eventMapper).update(wrapperCaptor.capture());
         return wrapperCaptor.getValue();
     }

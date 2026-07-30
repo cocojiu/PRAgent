@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.CacheNames;
@@ -85,7 +84,7 @@ class MessageQueueHealthServiceImplTest {
 
     @BeforeEach
     void allowReviewTaskCasUpdates() {
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
     }
 
     @AfterEach
@@ -293,7 +292,7 @@ class MessageQueueHealthServiceImplTest {
         assertThat(task.getPublishAttempts()).isZero();
         assertThat(task.getNextPublishRetryAt()).isNull();
         assertThat(task.getLastPublishError()).isNull();
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
         verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
@@ -380,7 +379,7 @@ class MessageQueueHealthServiceImplTest {
             LocalDateTime.of(2026, 6, 11, 9, 0)
         );
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         assertThatThrownBy(() -> service.requeueTask(42L))
             .isInstanceOf(BusinessException.class)

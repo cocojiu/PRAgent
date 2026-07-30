@@ -8,7 +8,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
@@ -80,7 +79,7 @@ class ReviewTaskExecutorImplTest {
         task.setPublishClaimedAt(LocalDateTime.parse("2026-06-05T17:59:00"));
         task.setPublishClaimedBy("stale-publisher");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -106,7 +105,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getReviewClaimedBy()).isNull();
         assertThat(task.getPublishClaimedAt()).isNull();
         assertThat(task.getPublishClaimedBy()).isNull();
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));
         verify(reviewFindingMapper).insert(any(ReviewFinding.class));
@@ -122,7 +121,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -141,7 +140,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
         assertThat(task.getHumanReviewRequired()).isTrue();
         assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
     }
 
@@ -154,7 +153,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -191,7 +190,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -218,7 +217,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getLlmDurationMs()).isEqualTo(1234);
         assertThat(task.getLlmParseStatus()).isEqualTo("parsed");
         assertThat(task.getLlmPromptSummary()).contains("files=1");
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
     }
 
@@ -231,7 +230,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -287,7 +286,7 @@ class ReviewTaskExecutorImplTest {
 
         executor.execute(message());
 
-        verify(reviewTaskMapper, never()).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
@@ -300,11 +299,11 @@ class ReviewTaskExecutorImplTest {
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         executor.execute(message());
 
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
@@ -319,7 +318,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 0);
+        when(reviewTaskMapper.update(any())).thenReturn(1, 0);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -332,7 +331,7 @@ class ReviewTaskExecutorImplTest {
 
         executor.execute(message());
 
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(changedFileMapper, never()).insert(any(ChangedFile.class));
         verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
@@ -348,7 +347,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenThrow(new IllegalStateException("github unavailable"));
 
         executor.execute(message());
@@ -356,7 +355,7 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getRiskLevel()).isEqualTo("HIGH");
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
@@ -372,7 +371,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
@@ -415,7 +414,7 @@ class ReviewTaskExecutorImplTest {
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class)))
+        when(reviewTaskMapper.update(any()))
             .thenThrow(new CannotAcquireLockException("deadlock"))
             .thenReturn(1, 1);
         PullRequestDiff diff = new PullRequestDiff(

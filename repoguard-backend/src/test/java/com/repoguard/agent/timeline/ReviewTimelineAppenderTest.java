@@ -86,8 +86,7 @@ class ReviewTimelineAppenderTest {
     }
 
     private void verifyCurrentTimelineClosed() {
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTimeline>> updateCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTimeline>> updateCaptor = ArgumentCaptor.captor();
         verify(reviewTimelineMapper).update(updateCaptor.capture());
         assertThat(updateCaptor.getValue().getSqlSet()).contains("status");
     }

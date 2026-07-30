@@ -64,12 +64,8 @@ class DataRetentionCleanupAuditQueryServiceTest {
         assertThat(result.items().getFirst().cutoffTime()).isEqualTo("2026-04-08 22:00:00");
         assertThat(result.items().getFirst().completedAt()).isEqualTo("2026-07-07 22:00:02");
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<Page<DataRetentionCleanupAudit>> pageCaptor = ArgumentCaptor.forClass(Page.class);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<LambdaQueryWrapper<DataRetentionCleanupAudit>> wrapperCaptor = ArgumentCaptor.forClass(
-            LambdaQueryWrapper.class
-        );
+        ArgumentCaptor<Page<DataRetentionCleanupAudit>> pageCaptor = ArgumentCaptor.captor();
+        ArgumentCaptor<LambdaQueryWrapper<DataRetentionCleanupAudit>> wrapperCaptor = ArgumentCaptor.captor();
         verify(auditMapper).selectPage(pageCaptor.capture(), wrapperCaptor.capture());
         assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(2);
         assertThat(pageCaptor.getValue().getSize()).isEqualTo(10);

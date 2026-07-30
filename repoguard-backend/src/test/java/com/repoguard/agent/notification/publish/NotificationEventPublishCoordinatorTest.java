@@ -56,7 +56,7 @@ class NotificationEventPublishCoordinatorTest {
     @Test
     void publishesMessageAndMarksEventPublishedImmediatelyWithoutTransaction() {
         NotificationEvent event = event();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
 
         coordinator.publishAfterCommit(event);
 
@@ -65,7 +65,7 @@ class NotificationEventPublishCoordinatorTest {
         verify(publisher).publishOnce(messageCaptor.capture());
         assertThat(messageCaptor.getValue().eventId()).isEqualTo(99L);
         assertThat(messageCaptor.getValue().eventKey()).isEqualTo("REVIEW_COMPLETED:42");
-        verify(eventMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(eventMapper, org.mockito.Mockito.times(2)).update(any());
         assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.PUBLISHED.code());
     }
 
@@ -73,7 +73,7 @@ class NotificationEventPublishCoordinatorTest {
     void afterCommitOnlySubmitsPublishWorkToExecutor() {
         TransactionSynchronizationManager.initSynchronization();
         NotificationEvent event = event();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
 
         coordinator.publishAfterCommit(event);
 
@@ -97,22 +97,21 @@ class NotificationEventPublishCoordinatorTest {
         rejectingCoordinator.publishAfterCommit(event);
 
         verify(publisher, never()).publishOnce(any(NotificationEventMessage.class));
-        verify(eventMapper, never()).update(any(UpdateWrapper.class));
+        verify(eventMapper, never()).update(any());
         assertThat(event.getStatus()).isEqualTo(NotificationEventStatus.PENDING.code());
     }
 
     @Test
     void publishFailureMarksEventForCompensation() {
         properties.setPublishCompensationMaxAttempts(5);
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
         doThrow(new MessagePublishException("confirm timed out"))
             .when(publisher)
             .publishOnce(any(NotificationEventMessage.class));
 
         NotificationPublishResult result = coordinator.publish(event());
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.captor();
         verify(eventMapper, org.mockito.Mockito.times(2)).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getAllValues().getLast().getSqlSet())
             .contains("status", "retry_count", "next_retry_at", "last_error", "publish_claimed_at", "publish_claimed_by");

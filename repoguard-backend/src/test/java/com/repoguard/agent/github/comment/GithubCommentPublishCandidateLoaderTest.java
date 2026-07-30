@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
@@ -43,8 +42,8 @@ class GithubCommentPublishCandidateLoaderTest {
         when(reviewFindingMapper.selectGithubCommentPreviewFindingStat(521L)).thenReturn(stat);
         when(reviewFindingMapper.selectFindingSeverityCounts(521L))
             .thenReturn(new SeverityCounts(0L, 1L, 1L, 1L, 0L));
-        when(reviewFindingMapper.selectCount(any(Wrapper.class))).thenReturn(2L);
-        when(changedFileMapper.selectCount(any(Wrapper.class))).thenReturn(4L);
+        when(reviewFindingMapper.selectCount(any())).thenReturn(2L);
+        when(changedFileMapper.selectCount(any())).thenReturn(4L);
         when(changedFileMapper.selectTopChangedFilesByChurn(521L, 3)).thenReturn(List.of(changedFile("src/App.java")));
         when(publicationMapper.selectOne(any())).thenReturn(null);
 
@@ -62,8 +61,8 @@ class GithubCommentPublishCandidateLoaderTest {
         ReviewFinding prFinding = finding(102L, "docs/missing.md", 12);
         when(reviewFindingMapper.selectGithubCommentPublishCandidatesAfterId(521L, 100L, 50))
             .thenReturn(List.of(lineFinding, prFinding));
-        when(changedFileMapper.selectList(any(Wrapper.class))).thenReturn(List.of(changedFile("README.md")));
-        when(publicationMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(changedFile("README.md")));
+        when(publicationMapper.selectList(any())).thenReturn(List.of());
 
         var items = loader.loadFindingCandidates(521L, 100L, 50);
 

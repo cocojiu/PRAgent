@@ -23,15 +23,14 @@ class NotificationCandidateBindingQueryTest {
     void loadsEnabledBindingsForMessageRepository() {
         NotificationChannelBinding binding = new NotificationChannelBinding();
         binding.setId(7L);
-        when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding));
+        when(bindingMapper.selectList(any())).thenReturn(List.of(binding));
 
         List<NotificationChannelBinding> bindings = query.load(message());
 
         assertThat(bindings).containsExactly(binding);
 
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<QueryWrapper<NotificationChannelBinding>> wrapperCaptor =
-            ArgumentCaptor.forClass(QueryWrapper.class);
+            ArgumentCaptor.captor();
         verify(bindingMapper).selectList(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("enabled")

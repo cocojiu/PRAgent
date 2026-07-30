@@ -37,8 +37,7 @@ class ReviewTaskRecoveryStoreTest {
         List<ReviewTask> tasks = store.findExpiredReviewingTasks(expiredBefore, 25);
 
         assertThat(tasks).containsExactly(task);
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<QueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        ArgumentCaptor<QueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).selectList(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("status")

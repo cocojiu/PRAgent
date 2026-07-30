@@ -9,7 +9,6 @@ import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.notification.binding.NotificationBindingStatus;
 import com.repoguard.agent.notification.channel.NotificationChannelAdapter;
 import com.repoguard.agent.notification.channel.NotificationChannelAdapterRegistry;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.notification.delivery.NotificationSendResult;
 import java.time.LocalDateTime;
 import static org.mockito.ArgumentMatchers.any;
@@ -43,7 +42,7 @@ class NotificationBindingConnectionTestServiceImplTest {
         assertThat(binding.getLastError()).isEqualTo("timeout");
         assertThat(binding.getLastCheckedAt()).isNotNull();
         assertThat(binding.getUpdatedAt()).isNotNull();
-        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
+        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test
@@ -60,7 +59,7 @@ class NotificationBindingConnectionTestServiceImplTest {
         assertThat(result.status()).isEqualTo("connected");
         assertThat(binding.getStatus()).isEqualTo(NotificationBindingStatus.CONNECTED.code());
         assertThat(binding.getLastError()).isNull();
-        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
+        verify(bindingMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test

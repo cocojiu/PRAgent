@@ -53,15 +53,14 @@ class ReviewTaskClaimServiceTest {
         task.setDurationSeconds(300);
         task.setReviewClaimedAt(LocalDateTime.parse("2026-07-28T10:00:00"));
         task.setReviewClaimedBy("claim-1");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         boolean written = claimService.writeTerminalStateIfClaimOwned(task, "claim-1");
 
         assertThat(written).isTrue();
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("status", "review_claimed_by");
@@ -77,7 +76,7 @@ class ReviewTaskClaimServiceTest {
         task.setReviewClaimedAt(LocalDateTime.parse("2026-07-28T09:00:00"));
         task.setReviewClaimedBy("claim-1");
         LocalDateTime expiredBefore = LocalDateTime.parse("2026-07-28T09:30:00");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         boolean written = claimService.markRequeuePendingIfClaimOwned(task, expiredBefore, "expired");
 

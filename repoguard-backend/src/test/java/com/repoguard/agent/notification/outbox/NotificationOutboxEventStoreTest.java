@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
@@ -106,7 +105,7 @@ class NotificationOutboxEventStoreTest {
     void claimsDuePublishEventAndUpdatesInMemoryFence() {
         NotificationEvent event = event(7L);
         LocalDateTime claimedAt = LocalDateTime.now();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
 
         boolean claimed = store.claimForPublish(
             event,
@@ -124,7 +123,7 @@ class NotificationOutboxEventStoreTest {
     void claimReturnsFalseWhenFenceIsLost() {
         NotificationEvent event = event(7L);
         LocalDateTime claimedAt = LocalDateTime.now();
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(eventMapper.update(any())).thenReturn(0);
 
         assertThat(store.claimForPublish(event, new RabbitPublishClaim(claimedAt, "node-a", claimedAt.minusMinutes(2), 5)))
             .isFalse();

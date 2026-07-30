@@ -23,7 +23,7 @@ class NotificationDeliveryEventStateUpdaterTest {
 
     @Test
     void claimForDeliveryAcceptsPublishingOrPublishedAndTakesOwnership() {
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
         NotificationDeliveryClaim claim = new NotificationDeliveryClaim(
             LocalDateTime.of(2026, 6, 18, 10, 30),
             "worker-1"
@@ -89,8 +89,7 @@ class NotificationDeliveryEventStateUpdaterTest {
     }
 
     private UpdateWrapper<NotificationEvent> capturedUpdate() {
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.captor();
         org.mockito.Mockito.verify(eventMapper).update(wrapperCaptor.capture());
         return wrapperCaptor.getValue();
     }

@@ -7,7 +7,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
@@ -52,7 +51,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
         assertThat(secretCryptoService.decrypt(runner.configToProbe.getTokenValue())).isEqualTo("mysql-existing-1234");
         assertThat(runner.transientConfig).isTrue();
         verify(integrationConfigMapper, never()).updateById(any(IntegrationConfig.class));
-        verify(integrationConfigMapper, never()).update(any(UpdateWrapper.class));
+        verify(integrationConfigMapper, never()).update(any());
     }
 
     @Test
@@ -72,7 +71,7 @@ class ServiceIntegrationConnectionTestExecutorTest {
         assertThat(savedConfig.getStatus()).isEqualTo("FAILED");
         assertThat(savedConfig.getLastError()).isEqualTo("submitted failed");
         assertThat(savedConfig.getLastCheckedAt()).isNotNull();
-        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
+        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test

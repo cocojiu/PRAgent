@@ -42,16 +42,13 @@ class DataRetentionCleanupLeaseStoreTest {
     @Test
     void acquireClaimsExpiredLeaseWithFreshOwner() {
         properties.setCleanupLeaseMinutes(7);
-        when(leaseMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(leaseMapper.update(any())).thenReturn(1);
 
         DataRetentionCleanupLeaseStore.Lease lease = store.acquire();
 
         assertThat(lease).isNotNull();
         assertThat(lease.ownerId()).isNotBlank();
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<DataRetentionCleanupLease>> wrapperCaptor = ArgumentCaptor.forClass(
-            UpdateWrapper.class
-        );
+        ArgumentCaptor<UpdateWrapper<DataRetentionCleanupLease>> wrapperCaptor = ArgumentCaptor.captor();
         verify(leaseMapper).update(wrapperCaptor.capture());
         UpdateWrapper<DataRetentionCleanupLease> wrapper = wrapperCaptor.getValue();
         assertThat(wrapper.getSqlSegment())
@@ -68,7 +65,7 @@ class DataRetentionCleanupLeaseStoreTest {
 
     @Test
     void acquireReturnsNullWhenLeaseIsStillOwned() {
-        when(leaseMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(leaseMapper.update(any())).thenReturn(0);
 
         assertThat(store.acquire()).isNull();
     }
@@ -79,10 +76,7 @@ class DataRetentionCleanupLeaseStoreTest {
 
         store.release(lease);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<DataRetentionCleanupLease>> wrapperCaptor = ArgumentCaptor.forClass(
-            UpdateWrapper.class
-        );
+        ArgumentCaptor<UpdateWrapper<DataRetentionCleanupLease>> wrapperCaptor = ArgumentCaptor.captor();
         verify(leaseMapper).update(wrapperCaptor.capture());
         UpdateWrapper<DataRetentionCleanupLease> wrapper = wrapperCaptor.getValue();
         assertThat(wrapper.getSqlSegment())
@@ -100,7 +94,7 @@ class DataRetentionCleanupLeaseStoreTest {
     void releaseIgnoresMissingLease() {
         store.release(null);
 
-        verify(leaseMapper, never()).update(any(UpdateWrapper.class));
+        verify(leaseMapper, never()).update(any());
     }
 
     private long leaseDurationMinutes(UpdateWrapper<DataRetentionCleanupLease> wrapper) {

@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
@@ -71,12 +70,12 @@ class DefaultIdentityAccountLifecycleTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("密码至少 8 位，且必须同时包含字母和数字");
 
-        verify(userAccountMapper, never()).selectOne(any(Wrapper.class));
+        verify(userAccountMapper, never()).selectOne(any());
     }
 
     @Test
     void registrationRejectsDuplicateEmailAfterUsernameIsAvailable() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null, activeUser());
+        when(userAccountMapper.selectOne(any())).thenReturn(null, activeUser());
 
         assertThatThrownBy(() -> lifecycle.register(new RegistrationCommand(
             "new-admin",
@@ -92,7 +91,7 @@ class DefaultIdentityAccountLifecycleTest {
 
     @Test
     void registrationTranslatesConcurrentUniqueKeyConflict() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.insert(any(UserAccount.class))).thenThrow(new DuplicateKeyException("duplicate"));
 
         assertThatThrownBy(() -> lifecycle.register(new RegistrationCommand(
@@ -196,7 +195,7 @@ class DefaultIdentityAccountLifecycleTest {
             authAccountCache,
             transactionManager
         );
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.insert(any(UserAccount.class))).thenAnswer(invocation -> {
             UserAccount user = invocation.getArgument(0);
             user.setId(1001L);

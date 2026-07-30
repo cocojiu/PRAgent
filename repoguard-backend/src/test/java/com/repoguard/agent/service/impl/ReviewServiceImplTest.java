@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -254,7 +253,7 @@ class ReviewServiceImplTest {
 
     @BeforeEach
     void stubGithubCommentBatchPersistence() {
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         org.mockito.Mockito.doAnswer(invocation -> {
             GithubCommentPublicationBatch batch = invocation.getArgument(0);
             batch.setId(99L);
@@ -452,9 +451,8 @@ class ReviewServiceImplTest {
         assertThat(result.items()).isEmpty();
         verify(githubCommentPublicationMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublication.class));
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
-            ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor.captor();
         verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
         assertThat(historyCaptor.getValue()).hasSize(3);
     }
@@ -483,9 +481,8 @@ class ReviewServiceImplTest {
         var result = service.publishGithubComments(521L);
 
         assertThat(result.status()).isEqualTo("queued");
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
-            ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor.captor();
         verify(githubCommentPublicationBatchItemMapper).insertBatch(itemCaptor.capture());
         var historyItem = new GithubCommentPublicationHistoryAssembler(githubWritebackFailureClassifier)
             .assembleItem(itemCaptor.getValue().getFirst());
@@ -571,7 +568,7 @@ class ReviewServiceImplTest {
         assertThat(task.getHumanReviewStatus()).isEqualTo("CHANGES_REQUESTED");
         assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
         assertThat(task.getHumanReviewBy()).isEqualTo("review-lead");
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
     }
@@ -647,9 +644,8 @@ class ReviewServiceImplTest {
         assertThat(result.succeededCount()).isZero();
         assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).isEmpty();
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
-            ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor.captor();
         verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
         assertThat(historyCaptor.getValue()).hasSize(2);
     }
@@ -758,8 +754,7 @@ class ReviewServiceImplTest {
             null
         ));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).selectPage(any(), wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         assertThat(sqlSegment).contains("source", "trigger_source");
@@ -790,8 +785,7 @@ class ReviewServiceImplTest {
             null
         ));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).selectListSummaryStat(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("status", "source", "trigger_source");
         assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
@@ -1140,7 +1134,7 @@ class ReviewServiceImplTest {
 
         ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
         verify(reviewTaskMapper).insertManualReviewOrReuse(taskCaptor.capture());
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(1);
@@ -1230,7 +1224,7 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
         assertThat(task.getLlmStatus()).isEqualTo("PENDING");
@@ -1269,7 +1263,7 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("publish_failed");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(task.getPublishAttempts()).isEqualTo(1);

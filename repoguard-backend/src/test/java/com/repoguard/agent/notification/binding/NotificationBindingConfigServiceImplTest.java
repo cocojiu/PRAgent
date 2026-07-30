@@ -51,8 +51,7 @@ class NotificationBindingConfigServiceImplTest {
         assertThat(result.items().getFirst().webhookUrl()).isEqualTo("******");
         assertThat(result.items().getFirst().secret()).isEqualTo("******");
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<QueryWrapper<NotificationChannelBinding>> wrapperCaptor = ArgumentCaptor.forClass(QueryWrapper.class);
+        ArgumentCaptor<QueryWrapper<NotificationChannelBinding>> wrapperCaptor = ArgumentCaptor.captor();
         verify(bindingMapper).selectPage(any(), wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("<>");
         assertThat(wrapperCaptor.getValue().getParamNameValuePairs()).containsValue(NotificationBindingStatus.DELETED.code());

@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.TrustedProxyClientIpResolver;
 import com.repoguard.agent.common.TrustedProxyProperties;
@@ -47,7 +46,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
     void wrongPasswordAdvancesLockStateAndRecordsFailureAudit() {
         UserAccount user = activeUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authenticator.authenticate(
             "admin",
@@ -80,7 +79,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
 
         authenticator.recordSuccess(identityAccount(user), "admin", AuthenticationOperation.LOGIN, occurredAt);
 
-        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper).update(isNull(), any());
         ArgumentCaptor<UserLoginAudit> audit = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(audit.capture());
         assertThat(audit.getValue().getEventType()).isEqualTo("LOGIN");
@@ -100,7 +99,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
         );
 
         assertThat(user.getFailedLoginCount()).isEqualTo(3);
-        verify(userAccountMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper, never()).update(isNull(), any());
         ArgumentCaptor<UserLoginAudit> audit = ArgumentCaptor.forClass(UserLoginAudit.class);
         verify(userLoginAuditMapper).insert(audit.capture());
         assertThat(audit.getValue().getEventType()).isEqualTo("TOKEN_RESET");
@@ -113,7 +112,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
         user.setPasswordHash(passwordHashService.hash("Secure123"));
         user.setFailedLoginCount(20);
         user.setLockedUntil(LocalDateTime.now().plusMinutes(5));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authenticator.authenticate(
             "admin",
@@ -139,7 +138,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
         UserAccount user = activeUser();
         user.setStatus("DISABLED");
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authenticator.authenticate(
             "admin",
@@ -164,7 +163,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
                 auditRecorder,
                 transactionManager
             );
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
 
         assertThatThrownBy(() -> transactionalAuthenticator.authenticate(
             "missing",
@@ -191,7 +190,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
     void emailAccountIsNormalizedBeforeLookup() {
         UserAccount user = activeUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         IdentityAccount authenticated = authenticator.authenticate(
             "ADMIN@REPOGUARD.DEV",
@@ -202,7 +201,7 @@ class DefaultIdentityCredentialAuthenticatorTest {
         assertThat(authenticated.id()).isEqualTo(user.getId());
         assertThat(authenticated.username()).isEqualTo(user.getUsername());
         assertThat(authenticated.sessionVersion()).isZero();
-        verify(userAccountMapper).selectOne(any(Wrapper.class));
+        verify(userAccountMapper).selectOne(any());
     }
 
     private IdentityAccount identityAccount(UserAccount user) {

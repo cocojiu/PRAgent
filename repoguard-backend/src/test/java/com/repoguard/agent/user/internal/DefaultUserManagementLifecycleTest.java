@@ -9,7 +9,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.UserAccount;
@@ -58,7 +57,7 @@ class DefaultUserManagementLifecycleTest {
         Page<UserAccount> page = Page.of(2, 10);
         page.setRecords(List.of(user(1001L, "admin", "ADMIN", "ACTIVE")));
         page.setTotal(21L);
-        when(userAccountMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        when(userAccountMapper.selectPage(any(), any())).thenReturn(page);
 
         var users = lifecycle.listUsers(new UserSearch(2, 10, "ADMIN", "ACTIVE", "adm"));
 
@@ -85,7 +84,7 @@ class DefaultUserManagementLifecycleTest {
         Page<UserOperationAudit> page = Page.of(1, 20);
         page.setRecords(List.of(audit));
         page.setTotal(1L);
-        when(userOperationAuditMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        when(userOperationAuditMapper.selectPage(any(), any())).thenReturn(page);
 
         var audits = lifecycle.listOperationAudits(new PageRequest(1, 20));
 
@@ -98,7 +97,7 @@ class DefaultUserManagementLifecycleTest {
 
     @Test
     void createUserStoresViewerAccountAndAuditRecord() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
         when(userAccountMapper.insert(any(UserAccount.class))).thenAnswer(invocation -> {
             UserAccount user = invocation.getArgument(0);
@@ -136,7 +135,7 @@ class DefaultUserManagementLifecycleTest {
 
     @Test
     void createUserRejectsDuplicateUsername() {
-        when(userAccountMapper.selectOne(any(Wrapper.class)))
+        when(userAccountMapper.selectOne(any()))
             .thenReturn(user(1003L, "reviewer", "VIEWER", "ACTIVE"));
 
         assertThatThrownBy(() -> lifecycle.createUser(auditContext(), new CreateCommand(
@@ -156,7 +155,7 @@ class DefaultUserManagementLifecycleTest {
         UserAccount user = user(1001L, "admin", "ADMIN", "ACTIVE");
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
         when(userAccountMapper.selectById(1002L)).thenReturn(user(1002L, "operator", "ADMIN", "ACTIVE"));
-        when(userAccountMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(userAccountMapper.selectCount(any())).thenReturn(1L);
 
         var updated = lifecycle.updateRole(
             new AuditContext(1002L, "10.0.0.1", "JUnit"),
@@ -175,7 +174,7 @@ class DefaultUserManagementLifecycleTest {
         InOrder order = inOrder(userAccountMapper, sessionInvalidator);
         order.verify(userAccountMapper).lockActiveAdminInvariant();
         order.verify(userAccountMapper).selectById(1001L);
-        order.verify(userAccountMapper).selectCount(any(Wrapper.class));
+        order.verify(userAccountMapper).selectCount(any());
         order.verify(userAccountMapper).updateById(user);
         order.verify(sessionInvalidator).invalidateAccountSessions(
             eq(1001L),
@@ -187,7 +186,7 @@ class DefaultUserManagementLifecycleTest {
     @Test
     void updateRoleRejectsDemotingLastActiveAdmin() {
         when(userAccountMapper.selectById(1001L)).thenReturn(user(1001L, "admin", "ADMIN", "ACTIVE"));
-        when(userAccountMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        when(userAccountMapper.selectCount(any())).thenReturn(0L);
 
         assertThatThrownBy(() -> lifecycle.updateRole(
             auditContext(),

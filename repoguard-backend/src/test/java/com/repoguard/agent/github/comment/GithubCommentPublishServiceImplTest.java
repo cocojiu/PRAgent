@@ -122,9 +122,8 @@ class GithubCommentPublishServiceImplTest {
         verify(publicationMapper, org.mockito.Mockito.times(2)).insert(any(GithubCommentPublication.class));
         verify(batchMapper).insert(any(GithubCommentPublicationBatch.class));
         verify(batchMapper, org.mockito.Mockito.times(2)).update(any());
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
-            ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor.captor();
         verify(batchItemMapper).insertBatch(historyCaptor.capture());
         assertThat(historyCaptor.getValue()).hasSize(2);
         verify(metricsRecorder).recordItems(2, 0, 1);
@@ -160,9 +159,8 @@ class GithubCommentPublishServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
         publishExecutor.runPending();
 
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
-            ArgumentCaptor.forClass(List.class);
+            ArgumentCaptor.captor();
         verify(batchItemMapper).insertBatch(itemCaptor.capture());
         assertThat(itemCaptor.getValue()).singleElement().satisfies(item -> {
             assertThat(item.getStatus()).isEqualTo("failed");

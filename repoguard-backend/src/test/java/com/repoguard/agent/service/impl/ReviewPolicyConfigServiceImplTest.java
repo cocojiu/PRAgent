@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
@@ -77,7 +76,7 @@ class ReviewPolicyConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).isNull();
         assertThat(result.apiKey()).isNull();
         verify(reviewPolicyConfigMapper).updateById(config);
-        verify(reviewPolicyConfigMapper).update(any(UpdateWrapper.class));
+        verify(reviewPolicyConfigMapper).update(any());
     }
 
     @Test

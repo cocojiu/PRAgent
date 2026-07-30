@@ -40,9 +40,8 @@ class NotificationSuccessfulDeliveryQueryTest {
     }
 
     private void assertSuccessfulDeliveryQuery() {
-        @SuppressWarnings("unchecked")
         ArgumentCaptor<QueryWrapper<NotificationDeliveryLog>> wrapperCaptor =
-            ArgumentCaptor.forClass(QueryWrapper.class);
+            ArgumentCaptor.captor();
         verify(deliveryLogMapper).selectCount(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("event_id")

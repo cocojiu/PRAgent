@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubPullRequestSummary;
@@ -26,7 +25,7 @@ class GithubPullRequestOptionServiceImplTest {
             pullRequest(42, "queued review", "sha-auto-reviewed"),
             pullRequest(43, "new review", "sha-new")
         ));
-        when(reviewTaskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             reviewTask(42, "sha-auto-reviewed")
         ));
 

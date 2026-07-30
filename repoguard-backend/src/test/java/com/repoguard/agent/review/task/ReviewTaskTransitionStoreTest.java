@@ -29,12 +29,11 @@ class ReviewTaskTransitionStoreTest {
     @Test
     void retryUsesFailedCasAndExplicitlyClearsAttemptState() {
         ReviewTask task = staleFailedTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         store.retryFailedTask(task, 3);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         UpdateWrapper<ReviewTask> update = wrapperCaptor.getValue();
         assertThat(update.getSqlSegment()).contains("id", "status");
@@ -67,12 +66,11 @@ class ReviewTaskTransitionStoreTest {
     void supersededRetryUsesObservedStatusAndCommitFenceThenReplacesCommit() {
         ReviewTask task = staleFailedTask();
         task.setStatus("SUPERSEDED");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         store.retryReviewTask(task, 3, "latest-commit");
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         UpdateWrapper<ReviewTask> update = wrapperCaptor.getValue();
         assertThat(update.getSqlSegment()).contains("status", "commit_sha");
@@ -86,7 +84,7 @@ class ReviewTaskTransitionStoreTest {
     @Test
     void retryConflictReturnsConflictAndLeavesSnapshotUntouched() {
         ReviewTask task = staleFailedTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         assertThatThrownBy(() -> store.retryFailedTask(task, 3))
             .isInstanceOf(BusinessException.class)
@@ -108,7 +106,7 @@ class ReviewTaskTransitionStoreTest {
         task.setHumanReviewRequired(true);
         task.setHumanReviewStatus("PENDING");
         LocalDateTime reviewedAt = LocalDateTime.parse("2026-07-28T10:00:00");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         store.completeHumanReview(
             task,
@@ -119,8 +117,7 @@ class ReviewTaskTransitionStoreTest {
             reviewedAt
         );
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("status", "human_review_required", "human_review_status");
@@ -137,12 +134,11 @@ class ReviewTaskTransitionStoreTest {
         task.setStatus("EXECUTION_TIMEOUT");
         task.setPublishClaimedAt(null);
         task.setPublishClaimedBy(null);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         store.requeueForPublish(task);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("status", "publish_claimed_at", "IS NULL");

@@ -4,7 +4,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
@@ -40,7 +39,7 @@ class NotificationDeliveryRecoveryCompensatorTest {
             LocalDateTime.of(2026, 7, 15, 9, 15),
             "failed"
         );
-        when(eventMapper.selectList(any(LambdaQueryWrapper.class))).thenReturn(List.of(event));
+        when(eventMapper.selectList(any())).thenReturn(List.of(event));
         when(failurePolicy.decide(event)).thenReturn(decision);
         when(stateUpdater.recoverExpired(event, decision)).thenReturn(true);
 

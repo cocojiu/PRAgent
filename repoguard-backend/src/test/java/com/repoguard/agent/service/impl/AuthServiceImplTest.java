@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.TrustedProxyClientIpResolver;
 import com.repoguard.agent.common.TrustedProxyProperties;
@@ -101,7 +100,7 @@ class AuthServiceImplTest {
 
     @Test
     void registerStoresBCryptHashAndReturnsTokenPair() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.insert(any(UserAccount.class))).thenAnswer(invocation -> {
             UserAccount user = invocation.getArgument(0);
             user.setId(1001L);
@@ -143,7 +142,7 @@ class AuthServiceImplTest {
 
     @Test
     void registerRejectsDuplicateUsername() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(existingUser());
+        when(userAccountMapper.selectOne(any())).thenReturn(existingUser());
 
         assertThatThrownBy(() -> authService.register(new AuthRegisterRequest(
             "admin",
@@ -176,7 +175,7 @@ class AuthServiceImplTest {
     void loginRejectsWrongPasswordAndRecordsFailure() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Wrong123", false)))
             .isInstanceOf(BusinessException.class)
@@ -206,7 +205,7 @@ class AuthServiceImplTest {
         UserAccount user = existingUser();
         user.setFailedLoginCount(19);
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Wrong123", false)))
             .isInstanceOf(BusinessException.class)
@@ -229,7 +228,7 @@ class AuthServiceImplTest {
         user.setFailedLoginCount(20);
         user.setLockedUntil(LocalDateTime.now().plusMinutes(10));
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         assertThatThrownBy(() -> authService.login(new AuthLoginRequest("admin", "Secure123", false)))
             .isInstanceOf(BusinessException.class)
@@ -249,14 +248,14 @@ class AuthServiceImplTest {
         user.setFailedLoginCount(3);
         user.setLockedUntil(LocalDateTime.now().minusMinutes(1));
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         AuthResponse response = authService.login(new AuthLoginRequest("admin", "Secure123", true));
 
         assertThat(response.accessTokenExpiresInSeconds()).isEqualTo(10);
         assertThat(response.refreshTokenExpiresInSeconds()).isEqualTo(30);
         assertThat(response.tokenType()).isEqualTo("Bearer");
-        verify(userAccountMapper).update(isNull(), any(Wrapper.class));
+        verify(userAccountMapper).update(isNull(), any());
         ArgumentCaptor<UserRefreshToken> refreshCaptor = ArgumentCaptor.forClass(UserRefreshToken.class);
         verify(userRefreshTokenMapper).insert(refreshCaptor.capture());
         assertThat(refreshCaptor.getValue().getSessionVersion()).isEqualTo(3);
@@ -267,7 +266,7 @@ class AuthServiceImplTest {
     void loginAuditIgnoresForwardedHeadersFromUntrustedRemoteAddress() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
         request.setRemoteAddr("192.0.2.20");
         request.addHeader("X-Forwarded-For", "10.0.0.8, 10.0.0.9");
@@ -285,7 +284,7 @@ class AuthServiceImplTest {
     void loginAuditUsesRealIpSuppliedByTrustedProxy() {
         UserAccount user = existingUser();
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
         request.setRemoteAddr("172.18.0.2");
         request.addHeader("X-Forwarded-For", "203.0.113.7, 203.0.113.8");
@@ -339,7 +338,7 @@ class AuthServiceImplTest {
         );
         assertThat(passwordHashService.matchesOrDummy("Safer456", newPasswordHashCaptor.getValue())).isTrue();
         assertThat(passwordHashService.matchesOrDummy("Secure123", newPasswordHashCaptor.getValue())).isFalse();
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper).update(isNull(), any());
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
@@ -359,7 +358,7 @@ class AuthServiceImplTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("Password changed concurrently; sign in again");
 
-        verify(userRefreshTokenMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper, never()).update(isNull(), any());
         verify(userLoginAuditMapper, never()).insert(any(UserLoginAudit.class));
     }
 
@@ -400,9 +399,9 @@ class AuthServiceImplTest {
     void refreshRotatesRefreshTokenAndReturnsNewAccessToken() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(existingUser());
-        when(userRefreshTokenMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(userRefreshTokenMapper.update(isNull(), any())).thenReturn(1);
 
         AuthResponse response = authService.refresh(new AuthRefreshRequest(refreshToken));
 
@@ -410,7 +409,7 @@ class AuthServiceImplTest {
         assertThat(authTokenService.verify(response.accessToken())).isPresent();
         assertThat(response.refreshToken()).isNotEqualTo(refreshToken);
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper).update(isNull(), any());
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
@@ -419,9 +418,9 @@ class AuthServiceImplTest {
     void refreshRejectsRefreshTokenAlreadyUsedByConcurrentRequest() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(existingUser());
-        when(userRefreshTokenMapper.update(isNull(), any(Wrapper.class))).thenReturn(0);
+        when(userRefreshTokenMapper.update(isNull(), any())).thenReturn(0);
 
         assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
             .isInstanceOf(BusinessException.class)
@@ -440,7 +439,7 @@ class AuthServiceImplTest {
         storedToken.setLastUsedAt(LocalDateTime.now().minusSeconds(6));
         UserAccount user = existingUser();
         user.setSessionVersion(2);
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
@@ -449,7 +448,7 @@ class AuthServiceImplTest {
         assertThat(user.getSessionVersion()).isEqualTo(3);
         assertThat(storedToken.getLastUsedAt()).isNotNull();
         verify(userAccountMapper).updateById(user);
-        Mockito.verify(userRefreshTokenMapper, Mockito.times(2)).update(isNull(), any(Wrapper.class));
+        Mockito.verify(userRefreshTokenMapper, Mockito.times(2)).update(isNull(), any());
         Mockito.verify(userRefreshTokenMapper, Mockito.never()).insert(any(UserRefreshToken.class));
         verify(metrics).refreshTokenReuseDetected();
         ArgumentCaptor<UserLoginAudit> auditCaptor = ArgumentCaptor.forClass(UserLoginAudit.class);
@@ -466,7 +465,7 @@ class AuthServiceImplTest {
         storedToken.setLastUsedAt(LocalDateTime.now().minusSeconds(1));
         UserAccount user = existingUser();
         user.setSessionVersion(2);
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
@@ -475,7 +474,7 @@ class AuthServiceImplTest {
 
         assertThat(user.getSessionVersion()).isEqualTo(2);
         verify(userAccountMapper, never()).updateById(any(UserAccount.class));
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper).update(isNull(), any());
         verify(userRefreshTokenMapper, never()).insert(any(UserRefreshToken.class));
         verify(metrics).refreshTokenConcurrentReplay();
         verify(metrics, never()).refreshTokenReuseDetected();
@@ -493,7 +492,7 @@ class AuthServiceImplTest {
         storedToken.setSessionVersion(2);
         UserAccount user = existingUser();
         user.setSessionVersion(2);
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
         RecordingTransactionManager transactionManager = new RecordingTransactionManager();
         IdentitySessionLifecycle transactionalSessionLifecycle = new DefaultIdentitySessionLifecycle(
@@ -555,7 +554,7 @@ class AuthServiceImplTest {
     void refreshRejectsExpiredRefreshToken() {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().minusSeconds(1));
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
 
         assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
             .isInstanceOf(BusinessException.class)
@@ -571,7 +570,7 @@ class AuthServiceImplTest {
         storedToken.setSessionVersion(2);
         UserAccount user = existingUser();
         user.setSessionVersion(3);
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         assertThatThrownBy(() -> authService.refresh(new AuthRefreshRequest(refreshToken)))
@@ -589,7 +588,7 @@ class AuthServiceImplTest {
         String refreshToken = "refresh-token";
         UserRefreshToken storedToken = activeRefreshToken(refreshToken, LocalDateTime.now().plusHours(1));
         UserAccount user = existingUser();
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         authService.logout(new AuthLogoutRequest(refreshToken));
@@ -597,7 +596,7 @@ class AuthServiceImplTest {
         assertThat(user.getSessionVersion()).isEqualTo(1);
         assertThat(storedToken.getStatus()).isEqualTo("REVOKED");
         verify(userAccountMapper).updateById(user);
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper).update(isNull(), any());
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }
 
@@ -608,7 +607,7 @@ class AuthServiceImplTest {
         storedToken.setSessionVersion(1);
         UserAccount user = existingUser();
         user.setSessionVersion(2);
-        when(userRefreshTokenMapper.selectOne(any(Wrapper.class))).thenReturn(storedToken);
+        when(userRefreshTokenMapper.selectOne(any())).thenReturn(storedToken);
         when(userAccountMapper.selectById(1001L)).thenReturn(user);
 
         authService.logout(new AuthLogoutRequest(refreshToken));
@@ -625,7 +624,7 @@ class AuthServiceImplTest {
         UserAccount user = existingUser();
         user.setSessionVersion(3);
         user.setPasswordHash(passwordHashService.hash("Secure123"));
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(user);
+        when(userAccountMapper.selectOne(any())).thenReturn(user);
 
         AuthResponse response = authService.resetRefreshToken(new AuthRefreshTokenResetRequest("admin", "Secure123", false));
 
@@ -634,7 +633,7 @@ class AuthServiceImplTest {
         verify(userAccountMapper).updateById(accountUpdate.capture());
         assertThat(accountUpdate.getValue().getId()).isEqualTo(1001L);
         assertThat(accountUpdate.getValue().getSessionVersion()).isEqualTo(4);
-        verify(userRefreshTokenMapper).update(isNull(), any(Wrapper.class));
+        verify(userRefreshTokenMapper).update(isNull(), any());
         verify(userRefreshTokenMapper).insert(any(UserRefreshToken.class));
         verify(userLoginAuditMapper).insert(any(UserLoginAudit.class));
     }

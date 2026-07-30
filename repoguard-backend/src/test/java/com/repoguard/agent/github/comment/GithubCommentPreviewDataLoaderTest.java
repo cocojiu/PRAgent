@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -25,7 +24,7 @@ class GithubCommentPreviewDataLoaderTest {
 
     @Test
     void loadsPreviewDataAndSeparatesActionableFindingsFromMissingTests() {
-        when(changedFileMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+        when(changedFileMapper.selectList(any())).thenReturn(List.of(
             changedFile(2L, "src/App.java"),
             changedFile(1L, "README.md")
         ));
@@ -34,7 +33,7 @@ class GithubCommentPreviewDataLoaderTest {
         ReviewFinding missingTest = finding(1002L, "MISSING_TEST", "LOW", "src/App.java", null);
         missingTest.setMethodName("review");
         missingTest.setTestType("unit");
-        when(reviewFindingMapper.selectList(any(Wrapper.class))).thenReturn(List.of(actionable, missingTest));
+        when(reviewFindingMapper.selectList(any())).thenReturn(List.of(actionable, missingTest));
 
         var result = loader.load(521L);
 

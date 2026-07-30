@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.IntegrationConfig;
 import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import java.time.LocalDateTime;
@@ -28,7 +27,7 @@ class IntegrationConnectionCheckMarkerTest {
         assertThat(config.getLastError()).isNull();
         assertThat(config.getLastCheckedAt()).isNotNull();
         assertThat(config.getUpdatedAt()).isNotNull();
-        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
+        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test
@@ -40,7 +39,7 @@ class IntegrationConnectionCheckMarkerTest {
         assertThat(config.getStatus()).isEqualTo("FAILED");
         assertThat(config.getLastError()).isEqualTo("timeout");
         assertThat(config.getLastCheckedAt()).isNotNull();
-        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any(UpdateWrapper.class));
+        verify(integrationConfigMapper).update(org.mockito.ArgumentMatchers.isNull(), any());
     }
 
     @Test
@@ -50,7 +49,7 @@ class IntegrationConnectionCheckMarkerTest {
         verify(integrationConfigMapper, never()).updateById(any(IntegrationConfig.class));
         verify(integrationConfigMapper, never()).update(
             org.mockito.ArgumentMatchers.isNull(),
-            any(UpdateWrapper.class)
+            any()
         );
     }
 
@@ -63,7 +62,7 @@ class IntegrationConnectionCheckMarkerTest {
 
         verify(integrationConfigMapper, never()).update(
             org.mockito.ArgumentMatchers.isNull(),
-            any(UpdateWrapper.class)
+            any()
         );
     }
 

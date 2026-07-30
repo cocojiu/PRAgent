@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
@@ -123,8 +122,8 @@ class NotificationDeliveryWorkerTest {
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.success("request-1", "ok"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L), binding(2L)));
+        when(eventMapper.update(any())).thenReturn(1);
+        when(bindingMapper.selectList(any())).thenReturn(List.of(binding(1L), binding(2L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(0L);
 
         worker.deliver(11L);
@@ -141,8 +140,8 @@ class NotificationDeliveryWorkerTest {
         when(adapter.send(any(), any())).thenReturn(NotificationSendResult.failed("request-1", "timeout"));
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L)));
+        when(eventMapper.update(any())).thenReturn(1);
+        when(bindingMapper.selectList(any())).thenReturn(List.of(binding(1L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(0L);
 
         worker.deliver(11L);
@@ -152,8 +151,7 @@ class NotificationDeliveryWorkerTest {
         assertThat(logCaptor.getValue().getStatus()).isEqualTo("FAILED");
         assertThat(logCaptor.getValue().getFailureReason()).isEqualTo("timeout");
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<NotificationEvent>> wrapperCaptor = ArgumentCaptor.captor();
         org.mockito.Mockito.verify(eventMapper, org.mockito.Mockito.times(2)).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getAllValues().getLast().getParamNameValuePairs())
             .containsValue("DELIVERY_FAILED");
@@ -164,8 +162,8 @@ class NotificationDeliveryWorkerTest {
         NotificationDeliveryWorker worker = worker();
         NotificationEvent event = event();
         when(eventMapper.selectById(11L)).thenReturn(event);
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        when(bindingMapper.selectList(any(QueryWrapper.class))).thenReturn(List.of(binding(1L)));
+        when(eventMapper.update(any())).thenReturn(1);
+        when(bindingMapper.selectList(any())).thenReturn(List.of(binding(1L)));
         when(deliveryLogMapper.selectCount(any())).thenReturn(1L);
 
         worker.deliver(11L);

@@ -6,7 +6,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitNotificationQueueProperties;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.mapper.NotificationEventMapper;
@@ -66,12 +65,12 @@ class NotificationEventPublishCompensatorTest {
     void compensatesDeliveryFailedEventsAfterClaimingPublishLease() {
         NotificationEvent event = event();
         when(eventMapper.selectList(any())).thenReturn(List.of(event));
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
 
         compensator().compensate();
 
         verify(eventPublisher).publishOnce(any(NotificationEventMessage.class));
-        verify(eventMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(eventMapper, org.mockito.Mockito.times(2)).update(any());
         verify(metrics).rabbitPublishCompensationSucceeded("notification");
     }
 
@@ -79,7 +78,7 @@ class NotificationEventPublishCompensatorTest {
     void skipsPublishWhenClaimFenceIsLost() {
         NotificationEvent event = event();
         when(eventMapper.selectList(any())).thenReturn(List.of(event));
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(eventMapper.update(any())).thenReturn(0);
 
         compensator().compensate();
 
@@ -92,7 +91,7 @@ class NotificationEventPublishCompensatorTest {
     void recordsFailedCompensationMetricWhenPublishStillFails() {
         NotificationEvent event = event();
         when(eventMapper.selectList(any())).thenReturn(List.of(event));
-        when(eventMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(eventMapper.update(any())).thenReturn(1);
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(eventPublisher)
             .publishOnce(any(NotificationEventMessage.class));

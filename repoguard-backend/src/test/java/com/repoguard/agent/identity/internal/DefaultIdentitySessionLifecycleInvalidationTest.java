@@ -89,7 +89,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
     }
 
     private void assertRefreshTokensRevoked() {
-        ArgumentCaptor<Wrapper<UserRefreshToken>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<UserRefreshToken>> wrapperCaptor = ArgumentCaptor.captor();
         verify(userRefreshTokenMapper).update(isNull(), wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue()).isInstanceOf(UpdateWrapper.class);
         UpdateWrapper<UserRefreshToken> wrapper = (UpdateWrapper<UserRefreshToken>) wrapperCaptor.getValue();

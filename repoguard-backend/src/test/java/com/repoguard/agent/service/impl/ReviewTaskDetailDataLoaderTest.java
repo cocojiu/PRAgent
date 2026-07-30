@@ -68,11 +68,11 @@ class ReviewTaskDetailDataLoaderTest {
         assertThat(result.findingSeverityCounts().highOrZero()).isEqualTo(3);
         assertThat(result.findingSeverityCounts().mediumOrZero()).isEqualTo(2);
 
-        ArgumentCaptor<Page> changedFilePageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<Page<ChangedFile>> changedFilePageCaptor = ArgumentCaptor.captor();
         Mockito.verify(changedFileMapper).selectPage(changedFilePageCaptor.capture(), any());
         assertInitialDetailPage(changedFilePageCaptor.getValue());
 
-        ArgumentCaptor<Page> findingPageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<Page<ReviewFinding>> findingPageCaptor = ArgumentCaptor.captor();
         Mockito.verify(reviewFindingMapper, Mockito.times(2)).selectPage(findingPageCaptor.capture(), any());
         assertThat(findingPageCaptor.getAllValues()).hasSize(2);
         findingPageCaptor.getAllValues().forEach(this::assertInitialDetailPage);
@@ -116,7 +116,7 @@ class ReviewTaskDetailDataLoaderTest {
 
         assertThat(withFindings.items()).hasSize(1);
         assertThat(withoutFindings.items()).isEmpty();
-        ArgumentCaptor<Page> pageCaptor = ArgumentCaptor.forClass(Page.class);
+        ArgumentCaptor<Page<ChangedFile>> pageCaptor = ArgumentCaptor.captor();
         Mockito.verify(changedFileMapper).selectChangedFilesWithFindings(pageCaptor.capture(), Mockito.eq(521L));
         assertThat(pageCaptor.getValue().getCurrent()).isEqualTo(2);
         assertThat(pageCaptor.getValue().getSize()).isEqualTo(10);

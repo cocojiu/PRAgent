@@ -6,7 +6,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.GithubCommentPublicationMapper;
@@ -27,8 +26,8 @@ class GithubCommentPreviewPublicationLoaderTest {
         GithubCommentPublication duplicate = publication(1001L, "line", "duplicate");
         GithubCommentPublication second = publication(1002L, "pull_request", "second");
         GithubCommentPublication summary = publication(null, "pull_request", "summary");
-        when(publicationMapper.selectList(any(Wrapper.class))).thenReturn(List.of(first, duplicate, second));
-        when(publicationMapper.selectOne(any(Wrapper.class))).thenReturn(summary);
+        when(publicationMapper.selectList(any())).thenReturn(List.of(first, duplicate, second));
+        when(publicationMapper.selectOne(any())).thenReturn(summary);
 
         var result = loader.load(521L, List.of(finding(1001L), finding(1002L)));
 
@@ -41,13 +40,13 @@ class GithubCommentPreviewPublicationLoaderTest {
     @Test
     void skipsFindingPublicationQueryWhenNoFindings() {
         GithubCommentPublication summary = publication(null, "pull_request", "summary");
-        when(publicationMapper.selectOne(any(Wrapper.class))).thenReturn(summary);
+        when(publicationMapper.selectOne(any())).thenReturn(summary);
 
         var result = loader.load(521L, List.of());
 
         assertThat(result.publicationByFindingId()).isEmpty();
         assertThat(result.prSummaryPublication()).isSameAs(summary);
-        verify(publicationMapper, never()).selectList(any(Wrapper.class));
+        verify(publicationMapper, never()).selectList(any());
     }
 
     private ReviewFinding finding(Long id) {

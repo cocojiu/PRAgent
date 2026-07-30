@@ -7,7 +7,6 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.cache.CacheEvictionService;
@@ -194,7 +193,7 @@ class SystemConfigServiceImplTest {
         assertThat(config.getStatus()).isEqualTo("NOT_CONFIGURED");
         assertThat(result.token()).isNull();
         verify(integrationConfigMapper).updateById(config);
-        verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any());
     }
 
     @Test
@@ -224,7 +223,7 @@ class SystemConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).isNull();
         assertThat(result.apiKey()).isNull();
         verify(reviewPolicyConfigMapper).updateById(config);
-        verify(reviewPolicyConfigMapper).update(any(UpdateWrapper.class));
+        verify(reviewPolicyConfigMapper).update(any());
     }
 
     @Test
@@ -313,7 +312,7 @@ class SystemConfigServiceImplTest {
             assertThat(config.getLastError()).isNull();
             assertThat(config.getLastCheckedAt()).isNotNull();
             assertThat(server.authorization()).isEqualTo("Bearer ghp_test_1234");
-            verify(integrationConfigMapper).update(isNull(), any(UpdateWrapper.class));
+            verify(integrationConfigMapper).update(isNull(), any());
         }
     }
 
@@ -335,7 +334,7 @@ class SystemConfigServiceImplTest {
             assertThat(server.authorization()).isEqualTo("Bearer ghp_saved_1234");
             assertThat(savedConfig.getBaseUrl()).isEqualTo("https://api.github.com");
             verify(integrationConfigMapper, org.mockito.Mockito.never()).updateById(org.mockito.ArgumentMatchers.any(IntegrationConfig.class));
-            verify(integrationConfigMapper, org.mockito.Mockito.never()).update(any(UpdateWrapper.class));
+            verify(integrationConfigMapper, org.mockito.Mockito.never()).update(any());
         }
     }
 
@@ -352,7 +351,7 @@ class SystemConfigServiceImplTest {
             assertThat(config.getStatus()).isEqualTo("FAILED");
             assertThat(config.getLastError()).contains("500");
             assertThat(config.getLastCheckedAt()).isNotNull();
-            verify(integrationConfigMapper).update(isNull(), any(UpdateWrapper.class));
+            verify(integrationConfigMapper).update(isNull(), any());
         }
     }
 

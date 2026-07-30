@@ -7,7 +7,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -93,7 +92,7 @@ class ReviewTaskAfterCommitPublisherTest {
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(3);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         ReviewTaskAfterCommitPublisher publisher = new ReviewTaskAfterCommitPublisher(
             reviewTaskPublisher,
             outboxStore(),
@@ -114,7 +113,7 @@ class ReviewTaskAfterCommitPublisherTest {
         assertThat(accepted).isTrue();
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
 
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         ReviewTask failedTask = task;
         assertThat(failedTask.getStatus()).isEqualTo("PUBLISH_FAILED");
