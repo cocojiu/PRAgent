@@ -117,36 +117,38 @@ resolve_secret_path() {
 }
 
 validate_secret_file() {
-  setting="$1"
-  secret_path="$2"
-  if [ -L "$secret_path" ] || [ ! -f "$secret_path" ] \
-    || [ ! -r "$secret_path" ] || [ ! -s "$secret_path" ]; then
-    echo "$setting must reference a readable, non-empty regular file, not a symlink: $secret_path" >&2
+  validation_setting="$1"
+  validation_secret_path="$2"
+  if [ -L "$validation_secret_path" ] || [ ! -f "$validation_secret_path" ] \
+    || [ ! -r "$validation_secret_path" ] || [ ! -s "$validation_secret_path" ]; then
+    echo "$validation_setting must reference a readable, non-empty regular file, not a symlink: $validation_secret_path" >&2
     return 1
   fi
 
-  file_mode="$(stat -c '%a' "$secret_path")"
-  case "$file_mode" in
+  validation_file_mode="$(stat -c '%a' "$validation_secret_path")"
+  case "$validation_file_mode" in
     400|600) ;;
     *)
-      echo "$setting must use mode 0400 or 0600; found $file_mode on $secret_path" >&2
+      echo "$validation_setting must use mode 0400 or 0600; found $validation_file_mode on $validation_secret_path" >&2
       return 1
       ;;
   esac
 
-  directory_mode="$(stat -c '%a' "$(dirname "$secret_path")")"
-  case "$directory_mode" in
+  validation_directory_mode="$(stat -c '%a' "$(dirname "$validation_secret_path")")"
+  case "$validation_directory_mode" in
     500|700) ;;
     *)
-      echo "Secret directory must use mode 0500 or 0700; found $directory_mode for $(dirname "$secret_path")" >&2
+      echo "Secret directory must use mode 0500 or 0700; found $validation_directory_mode for $(dirname "$validation_secret_path")" >&2
       return 1
       ;;
   esac
 
-  last_byte="$(tail -c 1 "$secret_path" | od -An -t u1 | tr -d ' \n')"
-  case "$last_byte" in
+  validation_last_byte="$(
+    tail -c 1 "$validation_secret_path" | od -An -t u1 | tr -d ' \n'
+  )"
+  case "$validation_last_byte" in
     10|13)
-      echo "$setting contains a trailing newline: $secret_path" >&2
+      echo "$validation_setting contains a trailing newline: $validation_secret_path" >&2
       return 1
       ;;
   esac

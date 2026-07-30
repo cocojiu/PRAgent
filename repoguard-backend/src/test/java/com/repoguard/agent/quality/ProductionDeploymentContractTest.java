@@ -193,6 +193,7 @@ class ProductionDeploymentContractTest {
             )
             .contains("printf '%s' \"$legacy_value\" > \"$candidate\"")
             .contains("cmp -s \"$candidate\" \"$secret_path\"")
+            .contains("validation_secret_path=\"$2\"")
             .contains("unset MYSQL_ROOT_PASSWORD MYSQL_ROOT_PASSWORD_FILE")
             .contains(
                 "unset REPOGUARD_GITHUB_WEBHOOK_SECRET "
@@ -203,7 +204,12 @@ class ProductionDeploymentContractTest {
             .contains("rewrite_env false \"$backup_directory\"")
             .contains("Prepared production secret files without removing legacy fallback keys.")
             .contains("Removed legacy inline secret keys after successful deployment verification.")
-            .doesNotContain("openssl rand", "/dev/urandom", "date +%s%N");
+            .doesNotContain(
+                "\n  secret_path=\"$2\"\n",
+                "openssl rand",
+                "/dev/urandom",
+                "date +%s%N"
+            );
     }
 
     @Test
