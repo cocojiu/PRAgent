@@ -27,7 +27,7 @@ class ReviewExecutionLogTest {
     void usesMessageContextWhenTaskIsMissing() {
         ReviewTaskMessage message = message();
 
-        try (var ignored = executionLog.withExecutionContext(message, null)) {
+        try (var _ = executionLog.withExecutionContext(message, null)) {
             assertThat(MDC.get(LogContext.TASK_ID)).isEqualTo("42");
             assertThat(MDC.get(LogContext.PR_NUMBER)).isEqualTo("512");
             assertThat(MDC.get(LogContext.REPOSITORY)).isEqualTo("repo-guard-demo/spring-boot-demo");
@@ -46,7 +46,7 @@ class ReviewExecutionLogTest {
         task.setRepository("Hello-World");
         task.setPrNumber(7);
 
-        try (var ignored = executionLog.withExecutionContext(message(), task)) {
+        try (var _ = executionLog.withExecutionContext(message(), task)) {
             assertThat(MDC.get(LogContext.TASK_ID)).isEqualTo("43");
             assertThat(MDC.get(LogContext.PR_NUMBER)).isEqualTo("7");
             assertThat(MDC.get(LogContext.REPOSITORY)).isEqualTo("octocat/Hello-World");

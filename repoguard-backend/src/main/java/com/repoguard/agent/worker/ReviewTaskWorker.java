@@ -43,7 +43,7 @@ public class ReviewTaskWorker {
         @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag
     ) throws IOException {
         long startedAt = metricsRecorder.startedAt();
-        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+        try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             LOGGER.info(
                 "Rabbit review message received taskId={} repository={} prNumber={} operation=rabbit_consume result=received deliveryTag={} commit={}",
                 message.taskId(),

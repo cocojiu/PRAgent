@@ -696,6 +696,8 @@ class AuthServiceImplTest {
 
     private static final class RecordingTransactionManager extends AbstractPlatformTransactionManager {
 
+        private static final long serialVersionUID = 1L;
+
         private int commitCount;
         private int rollbackCount;
         private int lastPropagationBehavior = -1;

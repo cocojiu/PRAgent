@@ -2,6 +2,8 @@ package com.repoguard.agent.github;
 
 public final class GithubPullRequestHeadChangedException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final String expectedHeadSha;
     private final String currentHeadSha;
 

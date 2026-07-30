@@ -44,7 +44,7 @@ public class RabbitReviewTaskPublisher implements ReviewTaskPublisher {
     }
 
     private void publish(ReviewTaskMessage message, RabbitPublishSpec publishSpec) {
-        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+        try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             try {
                 RabbitPublishResult result = reliablePublisher.publish(message, publishSpec);
                 LOGGER.info(

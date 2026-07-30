@@ -105,7 +105,7 @@ public class ReviewTaskRecoveryCompensator {
     }
 
     void recover(ReviewTask task, LocalDateTime recoveredAt, LocalDateTime expiredBefore) {
-        try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
+        try (LogContext.Scope _ = LogContext.withReviewTask(task)) {
             if (!recoveryStore.markRequeuePendingIfClaimOwned(task, recoveredAt, expiredBefore, RECOVERY_REASON)) {
                 LOGGER.info(
                     "Review task recovery skipped taskId={} repository={} prNumber={} operation=review_recovery result=claim_lost claimedAt={} claimedBy={} expiredBefore={}",

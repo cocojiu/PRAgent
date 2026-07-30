@@ -22,7 +22,7 @@ class LogContextTest {
             "trace-123"
         );
 
-        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+        try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             assertThat(MDC.get(LogContext.TASK_ID)).isEqualTo("42");
             assertThat(MDC.get(LogContext.PR_NUMBER)).isEqualTo("512");
             assertThat(MDC.get(LogContext.REPOSITORY)).isEqualTo("repo-guard-demo/spring-boot-demo");
@@ -43,7 +43,7 @@ class LogContextTest {
         task.setOrganization("repo-guard-demo");
         task.setRepository("spring-boot-demo");
 
-        try (LogContext.Scope ignored = LogContext.withReviewTask(task, "trace-456")) {
+        try (LogContext.Scope _ = LogContext.withReviewTask(task, "trace-456")) {
             assertThat(MDC.get(LogContext.TASK_ID)).isEqualTo("42");
             assertThat(MDC.get(LogContext.PR_NUMBER)).isEqualTo("512");
             assertThat(MDC.get(LogContext.REPOSITORY)).isEqualTo("repo-guard-demo/spring-boot-demo");
@@ -71,7 +71,7 @@ class LogContextTest {
             "trace-123"
         );
 
-        try (LogContext.Scope ignored = LogContext.withReviewTaskMessage(message)) {
+        try (LogContext.Scope _ = LogContext.withReviewTaskMessage(message)) {
             assertThat(MDC.get(LogContext.TASK_ID)).isEqualTo("42");
             assertThat(MDC.get(LogContext.TRACE_ID)).isEqualTo("trace-123");
         }

@@ -117,7 +117,7 @@ public class ReviewTaskPublishCompensator {
     }
 
     void compensate(ReviewTask task) {
-        try (LogContext.Scope ignored = LogContext.withReviewTask(task)) {
+        try (LogContext.Scope _ = LogContext.withReviewTask(task)) {
             LocalDateTime claimedAt = LocalDateTime.now();
             RabbitPublishClaim claim = compensationQuery.claim(claimedAt, instanceId);
             String recoverySource = recoverySource(task);

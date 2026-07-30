@@ -548,6 +548,8 @@ class ReviewTaskExecutorImplTest {
 
     private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
 
+        private static final long serialVersionUID = 1L;
+
         @Override
         protected Object doGetTransaction() {
             return new Object();

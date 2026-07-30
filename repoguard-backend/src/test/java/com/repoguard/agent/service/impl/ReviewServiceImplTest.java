@@ -1490,6 +1490,9 @@ class ReviewServiceImplTest {
     }
 
     private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        private static final long serialVersionUID = 1L;
+
         private boolean committed;
 
         @Override

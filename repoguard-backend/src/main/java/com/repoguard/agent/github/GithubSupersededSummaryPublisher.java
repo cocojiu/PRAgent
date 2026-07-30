@@ -133,6 +133,3 @@ final class GithubSupersededSummaryPublisher {
         return commitSha.length() <= 12 ? commitSha : commitSha.substring(0, 12);
     }
 }
-
-record GithubCommentBatchResult(List<GithubReviewCommentResult> results, int failedCount) {
-}

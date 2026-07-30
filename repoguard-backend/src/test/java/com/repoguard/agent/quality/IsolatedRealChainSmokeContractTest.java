@@ -116,7 +116,8 @@ class IsolatedRealChainSmokeContractTest {
             .contains("<artifactId>maven-compiler-plugin</artifactId>")
             .contains("<showDeprecation>true</showDeprecation>")
             .contains("<failOnWarning>true</failOnWarning>")
-            .contains("<arg>-Xlint:unchecked</arg>")
+            .contains("<arg>-Xlint:all</arg>")
+            .doesNotContain("<arg>-Xlint:unchecked</arg>")
             .contains("<propertyName>jacoco.agent.argLine</propertyName>")
             .contains("@{jacoco.agent.argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar");
         assertThat(readiness)

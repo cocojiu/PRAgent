@@ -1,6 +1,5 @@
 package com.repoguard.agent.github;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
@@ -168,30 +167,4 @@ final class GithubCommentPublicationGateway {
     ) {
         return resilience.github(operation, supplier);
     }
-}
-
-record GithubCommentResponse(
-    Long id,
-    @JsonProperty("html_url")
-    String htmlUrl
-) {
-}
-
-record GithubReviewResponse(
-    Long id,
-    @JsonProperty("html_url")
-    String htmlUrl
-) {
-}
-
-record GithubReviewCommentDetail(
-    Long id,
-    @JsonProperty("html_url")
-    String htmlUrl,
-    String path,
-    Integer line,
-    @JsonProperty("original_line")
-    Integer originalLine,
-    String body
-) {
 }

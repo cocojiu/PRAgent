@@ -144,7 +144,7 @@
                     <showDeprecation>true</showDeprecation>
                     <failOnWarning>true</failOnWarning>
                     <compilerArgs>
-                        <arg>-Xlint:unchecked</arg>
+                        <arg>-Xlint:all</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>

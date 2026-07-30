@@ -82,7 +82,7 @@ class LlmChunkReviewAggregator {
         String traceId,
         ReviewBudget budget
     ) {
-        try (LogContext.Scope ignored = LogContext.withReviewTask(context.task(), traceId)) {
+        try (LogContext.Scope _ = LogContext.withReviewTask(context.task(), traceId)) {
             // Chunks are all queued up front, so a chunk may only reach a worker
             // thread long after the budget ran out. Degrade before spending on a
             // call that the pipeline can no longer wait for.

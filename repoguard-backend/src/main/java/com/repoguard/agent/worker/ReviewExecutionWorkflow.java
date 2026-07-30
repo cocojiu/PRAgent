@@ -63,7 +63,7 @@ class ReviewExecutionWorkflow {
     }
 
     void execute(ReviewTaskMessage message, ReviewTask task) {
-        try (var ignored = executionLog.withExecutionContext(message, task)) {
+        try (var _ = executionLog.withExecutionContext(message, task)) {
             if (task == null) {
                 executionLog.taskNotFound(message);
                 return;
