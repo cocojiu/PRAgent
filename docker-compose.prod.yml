@@ -257,14 +257,10 @@ services:
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /tmp:rw,noexec,nosuid,size=16m
-      - /var/cache/nginx:rw,noexec,nosuid,size=16m
-      - /etc/nginx/conf.d:rw,noexec,nosuid,size=4m
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      REPOGUARD_FRONTEND_SERVER_NAME: "${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}"
     expose:
       - "8080"
     healthcheck:

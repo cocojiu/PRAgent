@@ -402,6 +402,47 @@ jobs:
           cache-to: type=gha,scope=frontend,mode=max
           tags: ${{ env.FRONTEND_IMAGE_TAGS }}
 
+      - name: Verify production frontend runtime health
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="repoguard-frontend-runtime-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          image="${ALIYUN_FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}"
+          cleanup() {
+            status=$?
+            trap - EXIT
+            if [ "$status" -ne 0 ]; then
+              docker logs "$container" || true
+              docker inspect "$container" || true
+            fi
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          docker run -d --name "$container" \
+            --read-only \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
+            --add-host backend:127.0.0.1 \
+            "$image" >/dev/null
+          test "$(docker exec "$container" id -u)" != "0"
+
+          for attempt in $(seq 1 30); do
+            if docker exec "$container" sh -ec \
+              "wget -q -O - http://127.0.0.1:8080/healthz | grep -q '^ok$'"; then
+              exit 0
+            fi
+            if [ "$(docker inspect "$container" --format '{{.State.Running}}')" != "true" ]; then
+              echo "Frontend runtime container exited before becoming healthy." >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "Frontend runtime health check failed." >&2
+          exit 1
+
       - name: Scan backend image for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

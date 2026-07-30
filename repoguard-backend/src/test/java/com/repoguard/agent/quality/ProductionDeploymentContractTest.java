@@ -152,6 +152,9 @@ class ProductionDeploymentContractTest {
             .contains("wait_service_health frontend 30")
             .contains("compose up -d --no-deps --force-recreate caddy")
             .contains("wait_service_health caddy 30")
+            .contains("print_service_diagnostics \"$service\"")
+            .contains("compose logs --tail=120 \"$service\"")
+            .contains("--format '{{json .State}}'")
             .contains("restore_deployment_assets false")
             .contains(
                 "Keeping the validated candidate Compose model for backward-compatible image rollback."

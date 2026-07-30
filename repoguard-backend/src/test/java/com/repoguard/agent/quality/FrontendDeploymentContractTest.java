@@ -45,6 +45,44 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
+    void frontendImageBakesItsConfigurationForReadOnlyRuntime() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        String dockerfile = read(repositoryRoot.resolve("repoguard-frontend/Dockerfile"));
+        String nginx = read(repositoryRoot.resolve("repoguard-frontend/nginx.ip.conf"));
+        Map<String, Object> production =
+            yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
+        Map<String, Object> ipDeployment =
+            yaml(repositoryRoot.resolve("docker-compose.ip.yml"));
+        Map<String, Object> productionFrontend =
+            map(map(production.get("services")).get("frontend"));
+        Map<String, Object> ipFrontend =
+            map(map(ipDeployment.get("services")).get("frontend"));
+
+        assertThat(dockerfile)
+            .contains("COPY nginx.ip.conf /etc/nginx/conf.d/default.conf")
+            .doesNotContain("/etc/nginx/templates");
+        assertThat(nginx)
+            .contains("server_name _;")
+            .doesNotContain("${REPOGUARD_FRONTEND_SERVER_NAME}");
+        assertThat(stringList(productionFrontend.get("tmpfs")))
+            .containsExactly("/tmp:rw,noexec,nosuid,size=16m,mode=1777")
+            .noneMatch(this::shadowsFrontendImageDirectory);
+        assertThat(stringList(ipFrontend.get("tmpfs")))
+            .containsExactly("/tmp:rw,noexec,nosuid,size=16m,mode=1777")
+            .noneMatch(this::shadowsFrontendImageDirectory);
+        assertThat(productionFrontend).doesNotContainKey("environment");
+        assertThat(read(repositoryRoot.resolve("repoguard-frontend/nginx.conf")))
+            .contains(
+                "client_body_temp_path /tmp/client_temp;",
+                "proxy_temp_path /tmp/proxy_temp;",
+                "fastcgi_temp_path /tmp/fastcgi_temp;",
+                "uwsgi_temp_path /tmp/uwsgi_temp;",
+                "scgi_temp_path /tmp/scgi_temp;"
+            )
+            .doesNotContain("_temp_path /var/cache/nginx");
+    }
+
+    @Test
     void productionCaddyOnlyProxiesPlainHttpHealthChecks() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         String caddyfile = read(repositoryRoot.resolve("Caddyfile"));
@@ -65,7 +103,7 @@ class FrontendDeploymentContractTest {
         Map<String, Object> services = map(compose.get("services"));
         Map<String, Object> backendEnvironment = map(map(services.get("backend")).get("environment"));
         Map<String, Object> workerEnvironment = map(map(services.get("backend-worker")).get("environment"));
-        Map<String, Object> frontendEnvironment = map(map(services.get("frontend")).get("environment"));
+        Map<String, Object> frontend = map(services.get("frontend"));
         Map<String, Object> caddyEnvironment = map(map(services.get("caddy")).get("environment"));
 
         assertThat(backendEnvironment.get("REPOGUARD_AUTH_SECURE_COOKIES"))
@@ -76,10 +114,32 @@ class FrontendDeploymentContractTest {
             .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}");
         assertThat(workerEnvironment.get("REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS"))
             .isEqualTo("${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:-5}");
-        assertThat(frontendEnvironment.get("REPOGUARD_FRONTEND_SERVER_NAME"))
-            .isEqualTo("${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}");
+        assertThat(frontend).doesNotContainKey("environment");
         assertThat(caddyEnvironment.get("REPOGUARD_FRONTEND_SERVER_NAME"))
             .isEqualTo("${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}");
+    }
+
+    @Test
+    void releaseRunsFrontendUnderProductionSecurityConstraints() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        String workflow = read(repositoryRoot.resolve(".github/workflows/release-images.yml"));
+        String runtimeProbe = workflow.substring(
+            workflow.indexOf("- name: Verify production frontend runtime health"),
+            workflow.indexOf("- name: Scan backend image for high and critical CVEs")
+        );
+
+        assertThat(runtimeProbe)
+            .contains(
+                "${ALIYUN_FRONTEND_IMAGE}@${{ steps.frontend_image.outputs.digest }}",
+                "--read-only",
+                "--cap-drop ALL",
+                "--security-opt no-new-privileges:true",
+                "--tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777",
+                "test \"$(docker exec \"$container\" id -u)\" != \"0\"",
+                "http://127.0.0.1:8080/healthz",
+                "Frontend runtime container exited before becoming healthy."
+            )
+            .doesNotContain("--tmpfs /etc/nginx/conf.d", "--tmpfs /var/cache/nginx");
     }
 
     @Test
@@ -159,6 +219,11 @@ class FrontendDeploymentContractTest {
         assertThat(logging.get("driver")).as("logging driver for " + serviceName).isEqualTo("json-file");
         assertThat(options.get("max-size")).as("max-size for " + serviceName).isEqualTo(backendService ? "50m" : "10m");
         assertThat(options.get("max-file")).as("max-file for " + serviceName).isEqualTo(backendService ? "5" : "3");
+    }
+
+    private boolean shadowsFrontendImageDirectory(String mount) {
+        return mount.startsWith("/etc/nginx/conf.d")
+            || mount.startsWith("/var/cache/nginx");
     }
 
     private Path findRepositoryRoot() {
