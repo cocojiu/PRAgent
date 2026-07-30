@@ -155,17 +155,27 @@ class GithubChangedFileContextLoaderTest {
     }
 
     @Test
-    void excludesTestAndGeneratedPathsBeforeAnyRemoteRead() {
+    void loadsTestContextButExcludesGeneratedPathsBeforeRemoteRead() {
         ReviewContextProperties properties = new ReviewContextProperties();
         GithubChangedFileContextLoader loader = loader(properties, new AtomicLong()::get);
         PullRequestChangedFile testFile = controllerFile("src/test/java/com/example/AdminController.java");
         PullRequestChangedFile generated = controllerFile("target/generated/AdminController.java");
+        when(contentReader.fetch(any(), any(), any(), any(), any(), eq(testFile.filename()), any()))
+            .thenReturn("class AdminControllerTest {}");
 
         List<PullRequestChangedFile> loaded = load(loader, "head-a", List.of(testFile, generated));
 
         assertThat(loaded).extracting(file -> file.context().status())
-            .containsOnly(ChangedFileContext.Status.EXCLUDED);
-        org.mockito.Mockito.verifyNoInteractions(contentReader);
+            .containsExactly(ChangedFileContext.Status.AVAILABLE, ChangedFileContext.Status.EXCLUDED);
+        verify(contentReader).fetch(
+            settings,
+            "https://api.github.test",
+            "owner",
+            "repo",
+            "head-a",
+            testFile.filename(),
+            resilience
+        );
     }
 
     private GithubChangedFileContextLoader loader(

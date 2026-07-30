@@ -53,7 +53,8 @@ public class ReviewRuleProvider {
                 rule.getConfidence() == null ? -1 : rule.getConfidence(),
                 EnforcementMode.from(rule.getEnforcementMode()),
                 rule.getPositiveExample(),
-                rule.getFalsePositiveGuidance()
+                rule.getFalsePositiveGuidance(),
+                rule.getDescription()
             );
             if (!settings.disabled() && !reviewRuleRegistry.contains(settings.id())) {
                 meterRegistry.counter(

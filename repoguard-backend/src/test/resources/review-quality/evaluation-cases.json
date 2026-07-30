@@ -158,7 +158,7 @@
   {
     "id": "mq-consumer-without-idempotency",
     "category": "MESSAGE_QUEUE",
-    "description": "消息消费缺少幂等保护时应产生高风险发现",
+    "description": "缺少结构化证据的 LLM 高危候选应降为观察且不抬升 PR 风险",
     "files": [
       {
         "filename": "src/main/java/com/example/messaging/PaymentConsumer.java",
@@ -170,7 +170,7 @@
     ],
     "llmResponse": "```json\n{\"risk\":\"high\",\"findings\":[{\"severity\":\"HIGH\",\"path\":\"src/main/java/com/example/messaging/PaymentConsumer.java\",\"line_number\":24,\"issue\":\"Consumer side effect is not idempotent\",\"fix\":\"Persist and check a message idempotency key\"}]}\n```",
     "expected": {
-      "riskLevel": "MEDIUM",
+      "riskLevel": "INFO",
       "findingCount": 1,
       "ruleIds": [],
       "sources": ["LLM"],

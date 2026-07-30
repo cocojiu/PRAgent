@@ -16,7 +16,32 @@ public class ReviewFilePolicy {
         ".java",
         ".kt",
         ".kts",
-        ".sql"
+        ".sql",
+        ".go",
+        ".py",
+        ".rb",
+        ".rs",
+        ".cs",
+        ".c",
+        ".cc",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".scala",
+        ".groovy",
+        ".yml",
+        ".yaml",
+        ".properties",
+        ".toml",
+        ".xml",
+        ".json",
+        ".conf",
+        ".ini"
     );
 
     private final List<String> excludedPathPatterns;
@@ -82,26 +107,19 @@ public class ReviewFilePolicy {
     }
 
     public boolean requiresFullFileContext(PullRequestChangedFile file) {
-        if (file == null || excluded(file.filename()) || nonProduction(file.filename())) {
+        if (file == null || excluded(file.filename())) {
             return false;
         }
         String path = ReviewRuleApplicability.normalizePath(file.filename());
-        if (CONTEXTUAL_EXTENSIONS.stream().noneMatch(path::endsWith)) {
+        if (nonProduction(file.filename()) && !testContextCandidate(path)) {
             return false;
         }
-        if (path.endsWith(".sql")) {
-            return true;
-        }
-        String patch = file.patch() == null ? "" : file.patch().toLowerCase(Locale.ROOT);
-        return patch.contains("@postmapping")
-            || patch.contains("@putmapping")
-            || patch.contains("@patchmapping")
-            || patch.contains("@deletemapping")
-            || patch.contains("convertandsend")
-            || patch.contains("publishpullrequestcomment")
-            || patch.contains("publishlinecomment")
-            || patch.contains("/pulls/{pullnumber}/comments")
-            || patch.contains("/issues/{pullnumber}/comments");
+        return CONTEXTUAL_EXTENSIONS.stream().anyMatch(path::endsWith);
+    }
+
+    private boolean testContextCandidate(String normalizedPath) {
+        return normalizedPath.matches("(?:^|.*/)(?:src/)?(?:test|tests|it)(?:/.*)?")
+            || normalizedPath.matches(".*(?:test|tests|spec|it)\\.[^.]+$");
     }
 
     private boolean matchesAny(String filePath, List<String> patterns) {

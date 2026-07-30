@@ -142,7 +142,7 @@ public class GithubChangedFileContextLoader {
         if ("removed".equals(status) || "deleted".equals(status)) {
             return status(file, headSha, ChangedFileContext.Status.DELETED, "deleted_file");
         }
-        if (filePolicy.excluded(file.filename()) || filePolicy.nonProduction(file.filename())) {
+        if (filePolicy.excluded(file.filename())) {
             return status(file, headSha, ChangedFileContext.Status.EXCLUDED, "repository_path_policy");
         }
         if (!filePolicy.requiresFullFileContext(file)) {

@@ -21,6 +21,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
@@ -208,6 +209,121 @@ class LlmReviewPipelineTest {
         }
     }
 
+    @Test
+    void singleChunkRunsAdversarialVerificationAndAccountsForBothCalls() {
+        PullRequestDiff diff = diffWithContext();
+        when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
+        AtomicInteger generationCalls = new AtomicInteger();
+        AtomicInteger verificationCalls = new AtomicInteger();
+        LlmReviewCaller caller = new LlmReviewCaller() {
+            @Override
+            public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff callDiff) {
+                generationCalls.incrementAndGet();
+                return new LlmCallResult(highRiskCandidateJson(), 100, 20, 120);
+            }
+
+            @Override
+            public boolean supportsHighRiskVerification() {
+                return true;
+            }
+
+            @Override
+            public LlmCallResult verifyHighRisk(
+                ReviewPolicySettings settings,
+                ReviewTask task,
+                PullRequestDiff callDiff,
+                ReviewFindingResult candidate,
+                LlmReviewContext context
+            ) {
+                verificationCalls.incrementAndGet();
+                assertThat(candidate.verificationStatus()).isEqualTo("PENDING");
+                return new LlmCallResult(verifiedDecisionJson(), 30, 10, 40);
+            }
+        };
+        LlmReviewContext promptContext = promptBuilder.buildContext(diff);
+        ReviewPipelineContext context = new ReviewPipelineContext(
+            new ReviewTask(),
+            diff,
+            settings(true),
+            promptBuilder.promptSummary(diff, promptContext),
+            System.nanoTime(),
+            caller,
+            promptContext
+        );
+
+        ReviewResult result = pipelineWithVerification().execute(context);
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        assertThat(result.llmParseStatus()).isEqualTo("parsed");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.verificationStatus()).isEqualTo("VERIFIED");
+            assertThat(finding.enforcementMode()).isEqualTo("COMMENT");
+            assertThat(finding.isBlocking()).isFalse();
+        });
+        assertThat(result.llmPromptTokens()).isEqualTo(130);
+        assertThat(result.llmCompletionTokens()).isEqualTo(30);
+        assertThat(result.llmTotalTokens()).isEqualTo(160);
+        assertThat(result.llmPromptSummary()).contains(
+            "promptVersion=review-prompt-v2",
+            "verificationAttempted=1",
+            "verificationPassed=1",
+            "rulesApplied=true"
+        );
+        assertThat(generationCalls).hasValue(1);
+        assertThat(verificationCalls).hasValue(1);
+    }
+
+    @Test
+    void verifierParseFailureDegradesCandidateWithoutTriggeringRuleFallback() {
+        PullRequestDiff diff = diffWithContext();
+        when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
+        LlmReviewCaller caller = new LlmReviewCaller() {
+            @Override
+            public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff callDiff) {
+                return new LlmCallResult(highRiskCandidateJson(), 100, 20, 120);
+            }
+
+            @Override
+            public boolean supportsHighRiskVerification() {
+                return true;
+            }
+
+            @Override
+            public LlmCallResult verifyHighRisk(
+                ReviewPolicySettings settings,
+                ReviewTask task,
+                PullRequestDiff callDiff,
+                ReviewFindingResult candidate,
+                LlmReviewContext context
+            ) {
+                return new LlmCallResult("{\"verdict\":\"VERIFIED\"}", 5, 2, 7);
+            }
+        };
+        LlmReviewContext promptContext = promptBuilder.buildContext(diff);
+
+        ReviewResult result = pipelineWithVerification().execute(new ReviewPipelineContext(
+            new ReviewTask(),
+            diff,
+            settings(true),
+            promptBuilder.promptSummary(diff, promptContext),
+            System.nanoTime(),
+            caller,
+            promptContext
+        ));
+
+        assertThat(result.llmStatus()).isEqualTo("COMPLETED");
+        assertThat(result.llmParseStatus()).isEqualTo("parsed");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.severity()).isEqualTo("MEDIUM");
+            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+            assertThat(finding.verificationStatus()).isEqualTo("UNAVAILABLE");
+        });
+        assertThat(result.llmTotalTokens()).isEqualTo(127);
+        assertThat(result.llmPromptSummary()).contains("verificationUnavailable=1");
+    }
+
     private void assertMissing(String dependencyName, ThrowingCallable callable) {
         assertThatThrownBy(callable)
             .isInstanceOf(NullPointerException.class)
@@ -243,6 +359,32 @@ class LlmReviewPipelineTest {
         return new ReviewPipelineBudgetProperties();
     }
 
+    private LlmReviewPipeline pipelineWithVerification() {
+        ObjectMapper verificationObjectMapper = new ObjectMapper();
+        return new LlmReviewPipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            metrics,
+            fallbackReasonClassifier,
+            diffChunker,
+            llmChunkExecutor,
+            properties(),
+            new LlmHighRiskVerificationService(
+                new com.repoguard.agent.config.LlmVerificationProperties(),
+                new LlmHighRiskVerificationParser(
+                    verificationObjectMapper,
+                    new LlmReviewJsonExtractor()
+                ),
+                new FindingPolicyResolver(),
+                new ServerRiskAggregator()
+            )
+        );
+    }
+
     private ReviewPipelineContext context(PullRequestDiff diff, LlmReviewCaller caller) {
         return context(diff, settings(true), caller);
     }
@@ -265,6 +407,66 @@ class LlmReviewPipelineTest {
             1,
             List.of(new PullRequestChangedFile("src/A.java", "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value"))
         );
+    }
+
+    private PullRequestDiff diffWithContext() {
+        String path = "src/A.java";
+        return new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            "head-a",
+            List.of(new PullRequestChangedFile(
+                path,
+                "modified",
+                1,
+                0,
+                "@@ -0,0 +1,1 @@\n+dangerous();",
+                ChangedFileContext.available(path, "head-a", "dangerous();")
+            ))
+        );
+    }
+
+    private String highRiskCandidateJson() {
+        return """
+            {
+              "schemaVersion": "review-schema-v2",
+              "riskLevel": "HIGH",
+              "findings": [
+                {
+                  "issueType": "MISSING_AUTHORIZATION",
+                  "severity": "HIGH",
+                  "confidence": "HIGH",
+                  "filePath": "src/A.java",
+                  "lineNumber": 1,
+                  "relatedFiles": ["src/SecurityConfig.java"],
+                  "message": "The new administrative write lacks authorization",
+                  "evidence": "The added line invokes the write without a role guard",
+                  "preconditions": "An unauthenticated caller can reach this route",
+                  "impact": "Unauthorized state change",
+                  "recommendation": "Require an administrative role",
+                  "reviewDimension": "SECURITY",
+                  "blockingCandidate": true
+                }
+              ]
+            }
+            """;
+    }
+
+    private String verifiedDecisionJson() {
+        return """
+            {
+              "schemaVersion": "high-risk-verifier-v1",
+              "verdict": "VERIFIED",
+              "evidenceSupported": true,
+              "preconditionsSatisfied": true,
+              "addedLineValid": true,
+              "protectionPresent": false,
+              "existingProtection": "none",
+              "confidence": "HIGH",
+              "reason": "The exact-head context contains no authorization guard"
+            }
+            """;
     }
 
     private ReviewPolicySettings settings(boolean fallbackToRules) {

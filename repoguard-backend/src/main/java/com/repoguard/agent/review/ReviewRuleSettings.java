@@ -12,7 +12,8 @@ public record ReviewRuleSettings(
     int confidence,
     EnforcementMode enforcementMode,
     String positiveExample,
-    String falsePositiveGuidance
+    String falsePositiveGuidance,
+    String description
 ) {
 
     private static final Set<String> STATUSES = Set.of("ENABLED", "DISABLED");
@@ -31,10 +32,34 @@ public record ReviewRuleSettings(
         }
         positiveExample = positiveExample == null ? "" : positiveExample.trim();
         falsePositiveGuidance = falsePositiveGuidance == null ? "" : falsePositiveGuidance.trim();
+        description = description == null ? "" : description.trim();
+    }
+
+    public ReviewRuleSettings(
+        String id,
+        String status,
+        String filePatterns,
+        String severity,
+        int confidence,
+        EnforcementMode enforcementMode,
+        String positiveExample,
+        String falsePositiveGuidance
+    ) {
+        this(
+            id,
+            status,
+            filePatterns,
+            severity,
+            confidence,
+            enforcementMode,
+            positiveExample,
+            falsePositiveGuidance,
+            ""
+        );
     }
 
     public ReviewRuleSettings(String id, String status, String filePatterns) {
-        this(id, status, filePatterns, "MEDIUM", 90, EnforcementMode.COMMENT, "", "");
+        this(id, status, filePatterns, "MEDIUM", 90, EnforcementMode.COMMENT, "", "", "");
     }
 
     public boolean disabled() {

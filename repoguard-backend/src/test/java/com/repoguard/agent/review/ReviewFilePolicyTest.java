@@ -31,7 +31,7 @@ class ReviewFilePolicyTest {
     }
 
     @Test
-    void fetchesFullContextOnlyForContextDependentCandidates() {
+    void fetchesFullContextForEligibleSourceAndConfigFiles() {
         PullRequestChangedFile controller = file(
             "src/main/java/com/example/AdminController.java",
             "+@DeleteMapping(\"/users/{id}\")"
@@ -40,9 +40,19 @@ class ReviewFilePolicyTest {
             "src/main/java/com/example/Value.java",
             "+String value = \"public\";"
         );
+        PullRequestChangedFile test = file(
+            "src/test/java/com/example/ValueTest.java",
+            "+assertThat(value).isEqualTo(\"public\");"
+        );
+        PullRequestChangedFile demo = file(
+            "docs/examples/Value.java",
+            "+class Value {}"
+        );
 
         assertThat(policy.requiresFullFileContext(controller)).isTrue();
-        assertThat(policy.requiresFullFileContext(plain)).isFalse();
+        assertThat(policy.requiresFullFileContext(plain)).isTrue();
+        assertThat(policy.requiresFullFileContext(test)).isTrue();
+        assertThat(policy.requiresFullFileContext(demo)).isFalse();
     }
 
     private PullRequestChangedFile file(String path, String line) {

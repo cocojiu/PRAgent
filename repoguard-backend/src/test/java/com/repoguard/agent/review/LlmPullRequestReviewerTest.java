@@ -674,5 +674,15 @@ class LlmPullRequestReviewerTest {
                 """.formatted(riskLevel, riskLevel, firstFile);
             return new LlmCallResult(content, 100, 20, 120);
         }
+
+        @Override
+        public LlmCallResult callLlm(
+            ReviewPolicySettings settings,
+            ReviewTask task,
+            PullRequestDiff diff,
+            LlmReviewContext context
+        ) {
+            return callLlm(settings, task, diff);
+        }
     }
 }

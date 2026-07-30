@@ -36,7 +36,9 @@ class LlmReviewPromptBuilderTest {
         assertThat(summary).isEqualTo(
             "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
                 + "; files=6; additions=18; deletions=14; "
-                + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ..."
+                + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ...; "
+                + "promptVersion=review-prompt-v2; contextVersion=review-context-v2; "
+                + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
 
@@ -60,7 +62,9 @@ class LlmReviewPromptBuilderTest {
             "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
                 + "; chunked=true; chunks=2; files=2; additions=15; "
                 + "deletions=10; aggregateRisk=HIGH; aggregateFindings=4; failedChunks=1; "
-                + "chunkReasons=too_many_files,large_patch,security_sensitive"
+                + "chunkReasons=too_many_files,large_patch,security_sensitive; "
+                + "promptVersion=review-prompt-v2; contextVersion=review-context-v2; "
+                + "schemaVersion=review-schema-v2; verifierVersion=high-risk-verifier-v1"
         );
     }
 
@@ -84,6 +88,74 @@ class LlmReviewPromptBuilderTest {
         assertThat(prompt).contains("--- src/App.java");
         assertThat(prompt).contains("a".repeat(6000));
         assertThat(prompt).doesNotContain("a".repeat(6001));
+        assertThat(prompt).contains(
+            "review-prompt-v2",
+            "review-schema-v2",
+            "issueType",
+            "preconditions",
+            "relatedFiles",
+            "blockingCandidate",
+            "lineNumber 必须是当前 diff 中变更后的新增行"
+        );
+        assertThat(prompt).doesNotContain("\"isBlocking\":");
+    }
+
+    @Test
+    void verificationPromptIsAdversarialAndCarriesCandidateAndVersionedContext() {
+        ReviewTask task = new ReviewTask();
+        task.setTitle("Protect admin route");
+        String path = "src/AdminController.java";
+        PullRequestChangedFile file = new PullRequestChangedFile(
+            path,
+            "modified",
+            1,
+            0,
+            "@@ -0,0 +1,1 @@\n+void update() {}",
+            ChangedFileContext.available(path, COMMIT_SHA, "void update() {}")
+        );
+        PullRequestDiff diff = new PullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            COMMIT_SHA,
+            List.of(file)
+        );
+        ReviewFindingResult candidate = new ReviewFindingResult(
+            "HIGH",
+            "LLM",
+            null,
+            path,
+            1,
+            "The administrative route lacks authorization",
+            "Require an administrative role",
+            "HIGH",
+            "The added route has no role guard",
+            "Unauthorized state change",
+            "Add @RequireRole",
+            false,
+            "SECURITY",
+            "COMMENT",
+            "pending",
+            "MISSING_AUTHORIZATION",
+            "An unauthenticated caller reaches the route",
+            List.of("src/SecurityConfig.java"),
+            true,
+            "PENDING"
+        );
+
+        String prompt = builder.buildVerificationPrompt(task, diff, candidate, builder.buildContext(diff));
+
+        assertThat(builder.verificationSystemPrompt()).contains("尝试推翻候选");
+        assertThat(prompt).contains(
+            "high-risk-verifier-v1",
+            "请尝试推翻",
+            "MISSING_AUTHORIZATION",
+            "src/SecurityConfig.java",
+            "addedLineValid",
+            "protectionPresent",
+            "Context version: review-context-v2",
+            "[SOURCE] src/AdminController.java:L1-L1"
+        );
     }
 
     private PullRequestChangedFile file(String path, Integer additions, Integer deletions, String patch) {

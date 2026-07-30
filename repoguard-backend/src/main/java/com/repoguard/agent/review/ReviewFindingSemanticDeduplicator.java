@@ -30,6 +30,11 @@ class ReviewFindingSemanticDeduplicator {
 
     private ReviewFindingResult merge(ReviewFindingResult first, ReviewFindingResult second) {
         ReviewFindingResult stronger = stronger(first, second);
+        boolean consensus = differentEvidenceSources(first, second);
+        String mergedPolicyReason = mergeText(first.policyReason(), second.policyReason());
+        if (consensus) {
+            mergedPolicyReason = mergeText(mergedPolicyReason, "server_consensus_confidence_boost");
+        }
         return new ReviewFindingResult(
             stronger.severity(),
             mergeSource(first.source(), second.source()),
@@ -38,15 +43,65 @@ class ReviewFindingSemanticDeduplicator {
             stronger.lineNumber(),
             stronger.message(),
             mergeText(first.recommendation(), second.recommendation()),
-            higherConfidence(first.confidence(), second.confidence()),
+            consensus ? "HIGH" : higherConfidence(first.confidence(), second.confidence()),
             mergeText(first.evidence(), second.evidence()),
             mergeText(first.impact(), second.impact()),
             mergeText(first.fixExample(), second.fixExample()),
             first.isBlocking() || second.isBlocking(),
             mergeText(first.reviewDimension(), second.reviewDimension()),
             strongerEnforcement(first.enforcementMode(), second.enforcementMode()),
-            mergeText(first.policyReason(), second.policyReason())
+            mergedPolicyReason,
+            preferredIssueType(stronger, first == stronger ? second : first),
+            mergeText(first.preconditions(), second.preconditions()),
+            mergeRelatedFiles(first.relatedFiles(), second.relatedFiles()),
+            first.blockingCandidate() || second.blockingCandidate(),
+            preferredVerificationStatus(first.verificationStatus(), second.verificationStatus())
         );
+    }
+
+    private boolean differentEvidenceSources(ReviewFindingResult first, ReviewFindingResult second) {
+        String left = normalize(first.source()).toUpperCase(Locale.ROOT);
+        String right = normalize(second.source()).toUpperCase(Locale.ROOT);
+        return left.contains("LLM") && right.contains("RULE") || left.contains("RULE") && right.contains("LLM");
+    }
+
+    private String preferredIssueType(ReviewFindingResult preferred, ReviewFindingResult fallback) {
+        if (StringUtils.hasText(preferred.issueType()) && !"GENERAL".equalsIgnoreCase(preferred.issueType())) {
+            return preferred.issueType();
+        }
+        return fallback.issueType();
+    }
+
+    private List<String> mergeRelatedFiles(List<String> first, List<String> second) {
+        Set<String> merged = new LinkedHashSet<>();
+        if (first != null) {
+            merged.addAll(first);
+        }
+        if (second != null) {
+            merged.addAll(second);
+        }
+        return List.copyOf(merged);
+    }
+
+    private String preferredVerificationStatus(String first, String second) {
+        return verificationRank(first) >= verificationRank(second) ? first : second;
+    }
+
+    private int verificationRank(String value) {
+        if (LlmVerificationStatus.VERIFIED.name().equalsIgnoreCase(value)) {
+            return 5;
+        }
+        if (LlmVerificationStatus.PENDING.name().equalsIgnoreCase(value)) {
+            return 4;
+        }
+        if (LlmVerificationStatus.REJECTED.name().equalsIgnoreCase(value)
+            || LlmVerificationStatus.UNCERTAIN.name().equalsIgnoreCase(value)) {
+            return 3;
+        }
+        if (LlmVerificationStatus.UNAVAILABLE.name().equalsIgnoreCase(value)) {
+            return 2;
+        }
+        return 1;
     }
 
     private ReviewFindingResult stronger(ReviewFindingResult first, ReviewFindingResult second) {

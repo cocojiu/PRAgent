@@ -72,6 +72,16 @@ repoguard:
       cache-maximum-size: ${REPOGUARD_REVIEW_CONTEXT_CACHE_MAXIMUM_SIZE:2000}
       cache-maximum-bytes: ${REPOGUARD_REVIEW_CONTEXT_CACHE_MAXIMUM_BYTES:67108864}
       cache-ttl-seconds: ${REPOGUARD_REVIEW_CONTEXT_CACHE_TTL_SECONDS:600}
+    llm-context:
+      max-total-chars: ${REPOGUARD_LLM_CONTEXT_MAX_TOTAL_CHARS:24000}
+      max-slice-chars: ${REPOGUARD_LLM_CONTEXT_MAX_SLICE_CHARS:6000}
+      max-related-files: ${REPOGUARD_LLM_CONTEXT_MAX_RELATED_FILES:8}
+      max-rule-policies: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_POLICIES:20}
+      max-rule-text-chars: ${REPOGUARD_LLM_CONTEXT_MAX_RULE_TEXT_CHARS:360}
+    llm-verification:
+      enabled: ${REPOGUARD_LLM_VERIFICATION_ENABLED:true}
+      max-candidates: ${REPOGUARD_LLM_VERIFICATION_MAX_CANDIDATES:4}
+      enforcement-mode: ${REPOGUARD_LLM_VERIFICATION_ENFORCEMENT_MODE:COMMENT}
     human-review:
       minimum-severity: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_SEVERITY:HIGH}
       minimum-confidence: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_CONFIDENCE:HIGH}

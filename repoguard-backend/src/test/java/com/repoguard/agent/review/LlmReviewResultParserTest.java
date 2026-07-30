@@ -101,6 +101,7 @@ class LlmReviewResultParserTest {
                   "impact": "Unauthorized users can change settings",
                   "fixExample": "@RequireRole(\\"ADMIN\\")",
                   "isBlocking": true,
+                  "blockingCandidate": true,
                   "reviewDimension": "ACCESS_CONTROL"
                 }
               ]
@@ -112,7 +113,8 @@ class LlmReviewResultParserTest {
         assertThat(finding.evidence()).isEqualTo("POST /admin is public");
         assertThat(finding.impact()).isEqualTo("Unauthorized users can change settings");
         assertThat(finding.fixExample()).isEqualTo("@RequireRole(\"ADMIN\")");
-        assertThat(finding.isBlocking()).isTrue();
+        assertThat(finding.isBlocking()).isFalse();
+        assertThat(finding.blockingCandidate()).isTrue();
         assertThat(finding.reviewDimension()).isEqualTo("ACCESS_CONTROL");
     }
 

@@ -1,5 +1,8 @@
 package com.repoguard.agent.review;
 
+import java.util.List;
+import org.springframework.util.StringUtils;
+
 public record ReviewFindingResult(
     String severity,
     String source,
@@ -15,8 +18,68 @@ public record ReviewFindingResult(
     boolean isBlocking,
     String reviewDimension,
     String enforcementMode,
-    String policyReason
+    String policyReason,
+    String issueType,
+    String preconditions,
+    List<String> relatedFiles,
+    boolean blockingCandidate,
+    String verificationStatus
 ) {
+
+    public ReviewFindingResult {
+        issueType = StringUtils.hasText(issueType)
+            ? issueType.trim()
+            : StringUtils.hasText(ruleId) ? ruleId.trim() : "GENERAL";
+        preconditions = preconditions == null ? "" : preconditions.trim();
+        relatedFiles = relatedFiles == null
+            ? List.of()
+            : relatedFiles.stream().filter(StringUtils::hasText).map(String::trim).distinct().toList();
+        verificationStatus = StringUtils.hasText(verificationStatus)
+            ? verificationStatus.trim()
+            : LlmVerificationStatus.NOT_REQUIRED.name();
+    }
+
+    public ReviewFindingResult(
+        String severity,
+        String source,
+        String ruleId,
+        String filePath,
+        Integer lineNumber,
+        String message,
+        String recommendation,
+        String confidence,
+        String evidence,
+        String impact,
+        String fixExample,
+        boolean isBlocking,
+        String reviewDimension,
+        String enforcementMode,
+        String policyReason
+    ) {
+        this(
+            severity,
+            source,
+            ruleId,
+            filePath,
+            lineNumber,
+            message,
+            recommendation,
+            confidence,
+            evidence,
+            impact,
+            fixExample,
+            isBlocking,
+            reviewDimension,
+            enforcementMode,
+            policyReason,
+            StringUtils.hasText(ruleId) ? ruleId : "GENERAL",
+            "",
+            List.of(),
+            false,
+            LlmVerificationStatus.NOT_REQUIRED.name()
+        );
+    }
+
     public ReviewFindingResult(
         String severity,
         String source,

@@ -51,7 +51,11 @@ class LlmChunkReviewResultAggregatorTest {
             "src/B.java"
         )));
         List<LlmChunkReviewOutcome> outcomes = List.of(
-            LlmChunkReviewOutcome.llm(llmReview, new LlmCallResult("{}", 100, 25, 125)),
+            LlmChunkReviewOutcome.llm(
+                llmReview,
+                new LlmCallResult("{}", 130, 35, 165),
+                new LlmVerificationSummary(1, 1, 0, 0)
+            ),
             LlmChunkReviewOutcome.fallback(fallbackReview)
         );
 
@@ -67,12 +71,14 @@ class LlmChunkReviewResultAggregatorTest {
             "chunks=2",
             "aggregateRisk=MEDIUM",
             "aggregateFindings=2",
-            "failedChunks=1"
+            "failedChunks=1",
+            "verificationAttempted=1",
+            "verificationPassed=1"
         );
-        assertThat(result.llmPromptTokens()).isEqualTo(100);
-        assertThat(result.llmCompletionTokens()).isEqualTo(25);
-        assertThat(result.llmTotalTokens()).isEqualTo(125);
-        assertThat(result.llmEstimatedCost()).isEqualByComparingTo("0.000200");
+        assertThat(result.llmPromptTokens()).isEqualTo(130);
+        assertThat(result.llmCompletionTokens()).isEqualTo(35);
+        assertThat(result.llmTotalTokens()).isEqualTo(165);
+        assertThat(result.llmEstimatedCost()).isEqualByComparingTo("0.000270");
     }
 
     @Test

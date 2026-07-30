@@ -2,42 +2,183 @@ package com.repoguard.agent.review;
 
 import com.repoguard.agent.entity.ReviewTask;
 import java.util.List;
+import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 class LlmReviewPromptBuilder {
 
+    private final LlmReviewContextBuilder contextBuilder;
+
+    LlmReviewPromptBuilder() {
+        this(new LlmReviewContextBuilder());
+    }
+
+    @Autowired
+    LlmReviewPromptBuilder(LlmReviewContextBuilder contextBuilder) {
+        this.contextBuilder = Objects.requireNonNull(contextBuilder, "contextBuilder");
+    }
+
+    LlmReviewContext buildContext(PullRequestDiff diff) {
+        return contextBuilder.build(diff);
+    }
+
+    String systemPrompt() {
+        return "你是资深代码审查助手。只报告当前 PR 新引入且由当前证据支持的问题，严格输出 JSON，"
+            + "不得输出 Markdown、猜测、纯风格建议或已有代码问题。";
+    }
+
+    String verificationSystemPrompt() {
+        return "你是对抗式高危代码审查验证器。你的首要任务是尝试推翻候选，检查变更行、执行路径、"
+            + "前置条件、相关调用方与已有保护；只能输出严格 JSON。";
+    }
+
     String buildPrompt(ReviewTask task, PullRequestDiff diff) {
+        return buildPrompt(task, diff, buildContext(diff));
+    }
+
+    String buildPrompt(ReviewTask task, PullRequestDiff diff, LlmReviewContext context) {
+        LlmReviewContext effectiveContext = context == null ? LlmReviewContext.legacy() : context;
         return """
-            请审查下面的 GitHub PR diff，并只返回严格 JSON 对象：
+            审查协议版本：%s
+            输出 Schema 版本：%s
+
+            目标：只报告本次变更新引入、能够由当前 diff 与上下文直接支持、并且可定位到新增行的问题。
+
+            强制规则：
+            1. 不报告纯风格、泛化建议、已有代码问题、无法定位的猜测或仅凭文件名推断的问题。
+            2. HIGH/CRITICAL 只用于有明确执行路径的数据损坏、权限绕过、真实密钥泄露、可达注入、
+               不可逆生产迁移或严重并发一致性破坏；否则使用 MEDIUM/LOW。
+            3. 缺少完整文件、调用方、测试或运行配置时降低 confidence，并设置 blockingCandidate=false。
+            4. lineNumber 必须是当前 diff 中变更后的新增行；跨文件问题给出主锚点并把其他路径放入 relatedFiles。
+            5. evidence 必须引用实际代码事实；preconditions 必须写明问题成立所需的输入、调用路径或运行条件。
+            6. 你不能决定最终阻断。只可输出 blockingCandidate；不得输出 isBlocking，最终处置由服务端策略决定。
+            7. 没有可信问题时返回 riskLevel=INFO 且 findings=[]。
+
+            只返回下列严格 JSON 对象：
             {
-              "riskLevel": "INFO|LOW|MEDIUM|HIGH",
+              "schemaVersion": "%s",
+              "riskLevel": "INFO|LOW|MEDIUM|HIGH|CRITICAL",
               "findings": [
                 {
-                  "severity": "LOW|MEDIUM|HIGH",
-                  "filePath": "文件路径",
-                  "lineNumber": 变更后的行号或 null,
-                  "message": "问题描述",
-                  "recommendation": "修复建议"
+                  "issueType": "稳定的问题类型标识",
+                  "severity": "LOW|MEDIUM|HIGH|CRITICAL",
+                  "confidence": "LOW|MEDIUM|HIGH",
+                  "filePath": "主锚点文件路径",
+                  "lineNumber": 变更后的新增行号,
+                  "relatedFiles": ["关联文件路径"],
+                  "message": "具体问题描述",
+                  "evidence": "当前证据与执行路径",
+                  "preconditions": "问题成立的前置条件",
+                  "impact": "可验证的影响",
+                  "recommendation": "针对性修复建议",
+                  "reviewDimension": "SECURITY|CORRECTNESS|RELIABILITY|DATA|CONCURRENCY|OPERABILITY",
+                  "blockingCandidate": false
                 }
               ]
             }
+
             PR: %s/%s#%d
             Commit SHA: %s
             标题：%s
+
+            版本化上下文：
+            %s
+
             Diff:
             %s
             """.formatted(
+                LlmReviewVersions.PROMPT,
+                LlmReviewVersions.SCHEMA,
+                LlmReviewVersions.SCHEMA,
                 diff.owner(),
                 diff.repository(),
                 diff.prNumber(),
                 diff.headSha(),
-                task.getTitle(),
+                task == null ? "" : task.getTitle(),
+                effectiveContext.renderFor(diff),
+                compactDiff(diff)
+            );
+    }
+
+    String buildVerificationPrompt(
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewFindingResult candidate,
+        LlmReviewContext context
+    ) {
+        LlmReviewContext effectiveContext = context == null ? LlmReviewContext.legacy() : context;
+        return """
+            验证协议版本：%s
+            请尝试推翻下面的 HIGH/CRITICAL 或 blockingCandidate 候选，而不是为它辩护。
+            逐项检查：主锚点是否为新增行、证据是否存在、前置条件是否可达、关联调用是否成立、
+            是否已有权限/事务/幂等/校验/回滚等保护。证据不足必须返回 UNCERTAIN 或 REJECTED。
+
+            候选：
+            issueType=%s
+            severity=%s
+            confidence=%s
+            filePath=%s
+            lineNumber=%s
+            relatedFiles=%s
+            message=%s
+            evidence=%s
+            preconditions=%s
+            impact=%s
+            blockingCandidate=%s
+
+            只返回严格 JSON：
+            {
+              "schemaVersion": "%s",
+              "verdict": "VERIFIED|REJECTED|UNCERTAIN",
+              "evidenceSupported": true,
+              "preconditionsSatisfied": true,
+              "addedLineValid": true,
+              "protectionPresent": false,
+              "existingProtection": "已存在保护或 none",
+              "confidence": "LOW|MEDIUM|HIGH",
+              "reason": "验证结论依据"
+            }
+
+            PR: %s/%s#%d
+            Commit SHA: %s
+            标题：%s
+
+            版本化上下文：
+            %s
+
+            Diff:
+            %s
+            """.formatted(
+                LlmReviewVersions.VERIFIER,
+                candidate.issueType(),
+                candidate.severity(),
+                candidate.confidence(),
+                candidate.filePath(),
+                candidate.lineNumber(),
+                candidate.relatedFiles(),
+                candidate.message(),
+                candidate.evidence(),
+                candidate.preconditions(),
+                candidate.impact(),
+                candidate.blockingCandidate(),
+                LlmReviewVersions.VERIFIER,
+                diff.owner(),
+                diff.repository(),
+                diff.prNumber(),
+                diff.headSha(),
+                task == null ? "" : task.getTitle(),
+                effectiveContext.renderFor(diff),
                 compactDiff(diff)
             );
     }
 
     String promptSummary(PullRequestDiff diff) {
+        return promptSummary(diff, LlmReviewContext.legacy());
+    }
+
+    String promptSummary(PullRequestDiff diff, LlmReviewContext context) {
         int fileCount = diff.files() == null ? 0 : diff.files().size();
         int additions = 0;
         int deletions = 0;
@@ -58,12 +199,14 @@ class LlmReviewPromptBuilder {
         if (fileCount > 5) {
             files.append(", ...");
         }
+        LlmReviewContext effectiveContext = context == null ? LlmReviewContext.legacy() : context;
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
             + "; commit=" + diff.headSha()
             + "; files=" + fileCount
             + "; additions=" + additions
             + "; deletions=" + deletions
-            + "; sampleFiles=" + files;
+            + "; sampleFiles=" + files
+            + "; " + effectiveContext.versionSummary();
     }
 
     String chunkedPromptSummary(
@@ -73,6 +216,18 @@ class LlmReviewPromptBuilder {
         String riskLevel,
         int failedChunks
     ) {
+        return chunkedPromptSummary(diff, chunks, findingCount, riskLevel, failedChunks, LlmReviewContext.legacy(), null);
+    }
+
+    String chunkedPromptSummary(
+        PullRequestDiff diff,
+        List<PullRequestDiffChunk> chunks,
+        int findingCount,
+        String riskLevel,
+        int failedChunks,
+        LlmReviewContext context,
+        LlmVerificationSummary verification
+    ) {
         int additions = chunks.stream().mapToInt(chunk -> chunk.additions() == null ? 0 : chunk.additions()).sum();
         int deletions = chunks.stream().mapToInt(chunk -> chunk.deletions() == null ? 0 : chunk.deletions()).sum();
         String reasons = chunks.stream()
@@ -81,6 +236,7 @@ class LlmReviewPromptBuilder {
             .limit(6)
             .reduce((first, second) -> first + "," + second)
             .orElse("standard");
+        LlmReviewContext effectiveContext = context == null ? LlmReviewContext.legacy() : context;
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
             + "; commit=" + diff.headSha()
             + "; chunked=true"
@@ -91,7 +247,19 @@ class LlmReviewPromptBuilder {
             + "; aggregateRisk=" + riskLevel
             + "; aggregateFindings=" + findingCount
             + "; failedChunks=" + failedChunks
-            + "; chunkReasons=" + reasons;
+            + "; chunkReasons=" + reasons
+            + "; " + effectiveContext.versionSummary()
+            + verificationSummary(verification);
+    }
+
+    String verificationSummary(LlmVerificationSummary verification) {
+        if (verification == null) {
+            return "";
+        }
+        return "; verificationAttempted=" + verification.attempted()
+            + "; verificationPassed=" + verification.verified()
+            + "; verificationRejected=" + verification.rejected()
+            + "; verificationUnavailable=" + verification.unavailable();
     }
 
     private String compactDiff(PullRequestDiff diff) {

@@ -34,6 +34,10 @@ class LlmReviewQualityScorer {
     }
 
     ReviewResult score(ReviewResult review, PullRequestDiff diff) {
+        return score(review, diff, null);
+    }
+
+    ReviewResult score(ReviewResult review, PullRequestDiff diff, LlmReviewContext promptContext) {
         if (review == null) {
             return review;
         }
@@ -48,25 +52,54 @@ class LlmReviewQualityScorer {
                 scoredFindings.add(finding);
                 continue;
             }
-            scoredFindings.add(scoreFinding(finding, diffLineIndex));
+            scoredFindings.add(scoreFinding(finding, diffLineIndex, promptContext));
         }
         List<ReviewFindingResult> uniqueFindings = findingDeduplicator.deduplicate(scoredFindings);
         return ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
     }
 
-    private ReviewFindingResult scoreFinding(ReviewFindingResult finding, DiffLineIndex diffLineIndex) {
+    private ReviewFindingResult scoreFinding(
+        ReviewFindingResult finding,
+        DiffLineIndex diffLineIndex,
+        LlmReviewContext promptContext
+    ) {
         String filePath = normalizePath(finding.filePath());
         boolean fileExists = diffLineIndex.containsFile(filePath);
         LineCheck lineCheck = checkLine(finding, filePath, fileExists, diffLineIndex);
-        int score = qualityScore(finding, fileExists, lineCheck);
-        String evidence = appendQualityEvidence(finding.evidence(), score, fileExists, lineCheck);
+        boolean schemaComplete = completeCandidateSchema(finding);
+        boolean contextUnavailable = promptContext != null
+            && (!promptContext.hasSliceFor(finding.filePath()) || promptContext.unavailableFor(finding.filePath()));
+        int rawScore = qualityScore(finding, fileExists, lineCheck);
+        int score = effectiveScore(rawScore, finding.confidence(), schemaComplete, contextUnavailable);
+        String evidence = appendQualityEvidence(
+            finding.evidence(),
+            score,
+            fileExists,
+            lineCheck,
+            schemaComplete,
+            contextUnavailable
+        );
         Integer lineNumber = lineCheck.validAddedLine() ? finding.lineNumber() : null;
-        boolean strongEvidence = lineCheck.validAddedLine() && score >= 80;
+        boolean highRiskCandidate = isHighRisk(finding.severity()) || finding.blockingCandidate();
+        boolean strongEvidence = lineCheck.validAddedLine()
+            && score >= 80
+            && schemaComplete
+            && !contextUnavailable;
         String severity = effectiveSeverity(finding.severity(), strongEvidence);
-        String enforcementMode = strongEvidence ? EnforcementMode.COMMENT.name() : EnforcementMode.OBSERVE.name();
-        String policyReason = strongEvidence
-            ? "llm_candidate_requires_server_verification"
-            : "llm_evidence_below_high_risk_threshold:" + lineCheck.reason();
+        boolean verificationPending = highRiskCandidate && strongEvidence;
+        String enforcementMode = verificationPending
+            ? EnforcementMode.COMMENT.name()
+            : EnforcementMode.OBSERVE.name();
+        String policyReason = verificationPending
+            ? "llm_candidate_requires_adversarial_verification"
+            : highRiskCandidate
+                ? "llm_candidate_precheck_rejected:" + lineCheck.reason()
+                : "llm_observation_only";
+        String verificationStatus = verificationPending
+            ? LlmVerificationStatus.PENDING.name()
+            : highRiskCandidate
+                ? LlmVerificationStatus.PRECHECK_REJECTED.name()
+                : LlmVerificationStatus.NOT_REQUIRED.name();
 
         return new ReviewFindingResult(
             severity,
@@ -83,8 +116,44 @@ class LlmReviewQualityScorer {
             false,
             finding.reviewDimension(),
             enforcementMode,
-            policyReason
+            policyReason,
+            finding.issueType(),
+            finding.preconditions(),
+            finding.relatedFiles(),
+            verificationPending && finding.blockingCandidate(),
+            verificationStatus
         );
+    }
+
+    private boolean completeCandidateSchema(ReviewFindingResult finding) {
+        return StringUtils.hasText(finding.issueType())
+            && !"GENERAL".equalsIgnoreCase(finding.issueType())
+            && StringUtils.hasText(finding.evidence())
+            && StringUtils.hasText(finding.preconditions())
+            && StringUtils.hasText(finding.impact())
+            && StringUtils.hasText(finding.reviewDimension());
+    }
+
+    private int effectiveScore(
+        int score,
+        String declaredConfidence,
+        boolean schemaComplete,
+        boolean contextUnavailable
+    ) {
+        int effective = score;
+        if (!schemaComplete || contextUnavailable) {
+            effective = Math.min(effective, 65);
+        }
+        if ("LOW".equalsIgnoreCase(declaredConfidence)) {
+            effective = Math.min(effective, 54);
+        } else if (!"HIGH".equalsIgnoreCase(declaredConfidence)) {
+            effective = Math.min(effective, 79);
+        }
+        return effective;
+    }
+
+    private boolean isHighRisk(String severity) {
+        return "HIGH".equalsIgnoreCase(severity) || "CRITICAL".equalsIgnoreCase(severity);
     }
 
     private String effectiveSeverity(String severity, boolean strongEvidence) {
@@ -154,10 +223,19 @@ class LlmReviewQualityScorer {
         return "LOW";
     }
 
-    private String appendQualityEvidence(String evidence, int score, boolean fileExists, LineCheck lineCheck) {
+    private String appendQualityEvidence(
+        String evidence,
+        int score,
+        boolean fileExists,
+        LineCheck lineCheck,
+        boolean schemaComplete,
+        boolean contextUnavailable
+    ) {
         String quality = "LLM quality score=" + score
             + "; diffFile=" + (fileExists ? "matched" : "missing")
-            + "; diffLine=" + lineCheck.reason();
+            + "; diffLine=" + lineCheck.reason()
+            + "; schema=" + (schemaComplete ? "complete" : "incomplete")
+            + "; context=" + (contextUnavailable ? "unavailable" : "available_or_legacy");
         if (!StringUtils.hasText(evidence)) {
             return quality;
         }

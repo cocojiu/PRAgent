@@ -1,6 +1,8 @@
 package com.repoguard.agent.review;
 
+import java.util.Locale;
 import java.util.Objects;
+import org.springframework.util.StringUtils;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -41,6 +43,139 @@ class FindingPolicyResolver {
             blocking,
             reason
         );
+    }
+
+    ReviewFindingResult resolveVerifiedLlmCandidate(
+        ReviewFindingResult candidate,
+        LlmHighRiskVerificationDecision decision,
+        EnforcementMode configuredMode
+    ) {
+        Objects.requireNonNull(candidate, "candidate");
+        Objects.requireNonNull(decision, "decision");
+        Objects.requireNonNull(configuredMode, "configuredMode");
+        if (!decision.verified()) {
+            LlmVerificationStatus status = decision.verdict() == LlmHighRiskVerificationDecision.Verdict.UNCERTAIN
+                ? LlmVerificationStatus.UNCERTAIN
+                : LlmVerificationStatus.REJECTED;
+            return downgradeLlmCandidate(candidate, status, decision.reason());
+        }
+
+        boolean highConfidence = "HIGH".equalsIgnoreCase(candidate.confidence())
+            && "HIGH".equalsIgnoreCase(decision.confidence());
+        String confidence = highConfidence ? "HIGH" : "MEDIUM";
+        boolean highImpact = isHighImpact(candidate.severity());
+        boolean blocking = configuredMode == EnforcementMode.BLOCK
+            && candidate.blockingCandidate()
+            && highImpact
+            && highConfidence
+            && candidate.lineNumber() != null
+            && candidate.lineNumber() > 0;
+        EnforcementMode effectiveMode = blocking
+            ? EnforcementMode.BLOCK
+            : configuredMode == EnforcementMode.OBSERVE ? EnforcementMode.OBSERVE : EnforcementMode.COMMENT;
+        String reason = blocking
+            ? "llm_verified_server_block_policy_satisfied"
+            : "llm_verified_server_policy_" + effectiveMode.name().toLowerCase(Locale.ROOT);
+        return copyLlm(
+            candidate,
+            candidate.severity(),
+            confidence,
+            appendEvidence(candidate.evidence(), decision),
+            blocking,
+            effectiveMode,
+            reason,
+            candidate.blockingCandidate(),
+            LlmVerificationStatus.VERIFIED
+        );
+    }
+
+    ReviewFindingResult downgradeLlmCandidate(
+        ReviewFindingResult candidate,
+        LlmVerificationStatus status,
+        String reason
+    ) {
+        Objects.requireNonNull(candidate, "candidate");
+        Objects.requireNonNull(status, "status");
+        String severity = isHighImpact(candidate.severity()) ? "MEDIUM" : candidate.severity();
+        String confidence = "LOW".equalsIgnoreCase(candidate.confidence()) ? "LOW" : "MEDIUM";
+        return copyLlm(
+            candidate,
+            severity,
+            confidence,
+            appendText(candidate.evidence(), "verification=" + status.name().toLowerCase(Locale.ROOT)
+                + "; reason=" + normalizedReason(reason)),
+            false,
+            EnforcementMode.OBSERVE,
+            "llm_verification_" + status.name().toLowerCase(Locale.ROOT),
+            false,
+            status
+        );
+    }
+
+    private ReviewFindingResult copyLlm(
+        ReviewFindingResult candidate,
+        String severity,
+        String confidence,
+        String evidence,
+        boolean blocking,
+        EnforcementMode enforcementMode,
+        String policyReason,
+        boolean blockingCandidate,
+        LlmVerificationStatus verificationStatus
+    ) {
+        return new ReviewFindingResult(
+            severity,
+            candidate.source(),
+            candidate.ruleId(),
+            candidate.filePath(),
+            candidate.lineNumber(),
+            candidate.message(),
+            candidate.recommendation(),
+            confidence,
+            evidence,
+            candidate.impact(),
+            candidate.fixExample(),
+            blocking,
+            candidate.reviewDimension(),
+            enforcementMode.name(),
+            policyReason,
+            candidate.issueType(),
+            candidate.preconditions(),
+            candidate.relatedFiles(),
+            blockingCandidate,
+            verificationStatus.name()
+        );
+    }
+
+    private String appendEvidence(
+        String evidence,
+        LlmHighRiskVerificationDecision decision
+    ) {
+        return appendText(
+            evidence,
+            "verification=verified; confidence=" + decision.confidence().toLowerCase(Locale.ROOT)
+                + "; protection=" + normalizedReason(decision.existingProtection())
+                + "; reason=" + normalizedReason(decision.reason())
+        );
+    }
+
+    private String appendText(String current, String additional) {
+        if (!StringUtils.hasText(current)) {
+            return additional;
+        }
+        return current.trim() + " | " + additional;
+    }
+
+    private String normalizedReason(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "unspecified";
+        }
+        String normalized = value.trim().replaceAll("\\s+", " ");
+        return normalized.length() <= 500 ? normalized : normalized.substring(0, 500);
+    }
+
+    private boolean isHighImpact(String severity) {
+        return "HIGH".equalsIgnoreCase(severity) || "CRITICAL".equalsIgnoreCase(severity);
     }
 
     private String nonBlockingReason(

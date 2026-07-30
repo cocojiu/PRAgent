@@ -32,9 +32,29 @@ public class LlmReviewFindingMapper {
             finding.path("evidence").asText(""),
             finding.path("impact").asText(""),
             finding.path("fixExample").asText(finding.path("recommendation").asText()),
-            finding.path("isBlocking").asBoolean(false),
-            finding.path("reviewDimension").asText("LLM")
+            false,
+            finding.path("reviewDimension").asText("LLM"),
+            EnforcementMode.OBSERVE.name(),
+            "llm_candidate_unscored",
+            finding.path("issueType").asText("GENERAL"),
+            finding.path("preconditions").asText(""),
+            mapRelatedFiles(finding.path("relatedFiles")),
+            finding.path("blockingCandidate").asBoolean(false),
+            LlmVerificationStatus.NOT_REQUIRED.name()
         );
+    }
+
+    private List<String> mapRelatedFiles(JsonNode relatedFiles) {
+        if (relatedFiles == null || !relatedFiles.isArray()) {
+            return List.of();
+        }
+        List<String> values = new ArrayList<>();
+        relatedFiles.forEach(value -> {
+            if (value.isTextual() && !value.asText().isBlank()) {
+                values.add(value.asText().trim());
+            }
+        });
+        return List.copyOf(values);
     }
 
     private Integer readLineNumber(JsonNode finding) {

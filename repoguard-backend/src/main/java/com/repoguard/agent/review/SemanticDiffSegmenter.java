@@ -63,7 +63,14 @@ class SemanticDiffSegmenter {
         int deletions
     ) {
         return new SemanticDiffSegment(
-            new PullRequestChangedFile(file.filename(), file.status(), additions, deletions, patch),
+            new PullRequestChangedFile(
+                file.filename(),
+                file.status(),
+                additions,
+                deletions,
+                patch,
+                file.context()
+            ),
             scopeResolver.chunkGroupKey(file),
             scopeResolver.semanticKey(file, patch),
             scopeResolver.semanticReason(file, patch),

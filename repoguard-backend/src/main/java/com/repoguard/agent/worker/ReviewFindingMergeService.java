@@ -2,6 +2,8 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.RiskLevelRanker;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -34,8 +36,24 @@ class ReviewFindingMergeService {
             first.isBlocking() || second.isBlocking(),
             mergeText(first.reviewDimension(), second.reviewDimension()),
             stronger.enforcementMode(),
-            mergeText(first.policyReason(), second.policyReason())
+            mergeText(first.policyReason(), second.policyReason()),
+            stronger.issueType(),
+            mergeText(first.preconditions(), second.preconditions()),
+            mergeRelatedFiles(first.relatedFiles(), second.relatedFiles()),
+            first.blockingCandidate() || second.blockingCandidate(),
+            stronger.verificationStatus()
         );
+    }
+
+    private List<String> mergeRelatedFiles(List<String> first, List<String> second) {
+        LinkedHashSet<String> merged = new LinkedHashSet<>();
+        if (first != null) {
+            merged.addAll(first);
+        }
+        if (second != null) {
+            merged.addAll(second);
+        }
+        return List.copyOf(merged);
     }
 
     private String mergeSource(String first, String second) {
