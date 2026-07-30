@@ -671,10 +671,18 @@ class ProductionRuntimeContextIntegrationTest {
         jdbcTemplate.update("""
             insert into review_finding (
                 task_id, category, severity, source, rule_id, file_path,
-                line_number, message, recommendation, feedback_status
+                line_number, message, recommendation, feedback_status, anchor_type
             ) values (?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
-                      ?, ?, 'quality baseline recommendation', ?)
-            """, taskId, severity, ruleId, lineNumber, message, feedbackStatus);
+                      ?, ?, 'quality baseline recommendation', ?, ?)
+            """,
+            taskId,
+            severity,
+            ruleId,
+            lineNumber,
+            message,
+            feedbackStatus,
+            lineNumber == null ? "NONE" : "ADDED_LINE"
+        );
     }
 
     private void assertRetryStateWasCleared(JdbcTemplate jdbcTemplate, Long taskId) {
