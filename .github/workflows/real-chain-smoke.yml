@@ -16,6 +16,14 @@ on:
         description: Optional full backend image reference; defaults to the image recorded in the deployment environment
         required: false
         type: string
+      backend_image_tag:
+        description: Optional existing ACR backend image tag to pull into the isolated stack
+        required: false
+        type: string
+      expected_revision:
+        description: Optional full 40-character OCI revision; required with backend_image_tag
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -86,18 +94,91 @@ jobs:
       - name: Run three sequential real tasks in isolated stack
         shell: bash
         env:
+          ALIYUN_DEPLOY_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
+          ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
+          ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          ALIYUN_REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
+          ALIYUN_REPOSITORY: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
           BACKUP_PATH: ${{ inputs.backup_path }}
           BACKEND_IMAGE: ${{ inputs.backend_image }}
+          BACKEND_IMAGE_TAG: ${{ inputs.backend_image_tag }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
           MAX_TOTAL_TOKENS: ${{ inputs.max_total_tokens }}
           SMOKE_RUN_ATTEMPT: ${{ github.run_attempt }}
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
+          set -euo pipefail
+          backend_image="${BACKEND_IMAGE}"
+          pull_requested=false
+
+          case "${backend_image}" in
+            *[!a-zA-Z0-9._:/@-]*)
+              echo "backend_image contains unsupported characters." >&2
+              exit 2
+              ;;
+          esac
+          case "${BACKEND_IMAGE_TAG}" in
+            *[!a-zA-Z0-9_.-]*)
+              echo "backend_image_tag contains unsupported characters." >&2
+              exit 2
+              ;;
+          esac
+          case "${EXPECTED_REVISION}" in
+            ''|*[!0-9a-f]*)
+              if [ -n "${EXPECTED_REVISION}" ]; then
+                echo "expected_revision must be a lowercase hexadecimal commit SHA." >&2
+                exit 2
+              fi
+              ;;
+          esac
+          if [ -n "${EXPECTED_REVISION}" ] && [ "${#EXPECTED_REVISION}" -ne 40 ]; then
+            echo "expected_revision must contain exactly 40 hexadecimal characters." >&2
+            exit 2
+          fi
+
+          if [ -n "${BACKEND_IMAGE_TAG}" ]; then
+            test -z "${backend_image}" || {
+              echo "Specify either backend_image or backend_image_tag, not both." >&2
+              exit 2
+            }
+            test -n "${EXPECTED_REVISION}" || {
+              echo "expected_revision is required with backend_image_tag." >&2
+              exit 2
+            }
+            for value in \
+              "${ALIYUN_DEPLOY_REGISTRY}" \
+              "${ALIYUN_NAMESPACE}" \
+              "${ALIYUN_REPOSITORY}"; do
+              case "${value}" in
+                ''|*[!a-zA-Z0-9._:/-]*)
+                  echo "Aliyun image coordinates are missing or contain unsupported characters." >&2
+                  exit 2
+                  ;;
+              esac
+            done
+            case "${ALIYUN_REGISTRY_USERNAME}" in
+              ''|*[!a-zA-Z0-9._@-]*)
+                echo "Aliyun registry username is missing or contains unsupported characters." >&2
+                exit 2
+                ;;
+            esac
+            test -n "${ALIYUN_REGISTRY_PASSWORD}" || {
+              echo "Missing ALIYUN_REGISTRY_PASSWORD." >&2
+              exit 2
+            }
+            backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${BACKEND_IMAGE_TAG}"
+            pull_requested=true
+            printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" \
+              | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                  "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
+          fi
+
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "backend_image='${BACKEND_IMAGE}'; \
+            "backend_image='${backend_image}'; \
              if [ -z \"\${backend_image}\" ]; then \
                backend_container=\$(cd '${DEPLOY_PATH}' && docker compose --env-file .env -f docker-compose.prod.yml ps -q backend); \
                if [ -n \"\${backend_container}\" ]; then \
@@ -108,6 +189,16 @@ jobs:
                backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
              fi; \
              test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
+             if [ '${pull_requested}' = 'true' ]; then \
+               docker pull \"\${backend_image}\" >/dev/null; \
+             fi; \
+             if [ -n '${EXPECTED_REVISION}' ]; then \
+               actual_revision=\$(docker image inspect \"\${backend_image}\" --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'); \
+               test \"\${actual_revision}\" = '${EXPECTED_REVISION}' || { \
+                 echo \"Backend image revision mismatch: expected ${EXPECTED_REVISION}, found \${actual_revision:-missing}\" >&2; \
+                 exit 1; \
+               }; \
+             fi; \
              '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
              '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
              '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"

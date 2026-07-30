@@ -77,6 +77,12 @@ class IsolatedRealChainSmokeContractTest {
             .contains("chmod 0700");
         assertThat(smoke)
             .contains("inputs.backend_image")
+            .contains("inputs.backend_image_tag")
+            .contains("inputs.expected_revision")
+            .contains("ALIYUN_DEPLOY_REGISTRY")
+            .contains("docker pull")
+            .contains("org.opencontainers.image.revision")
+            .contains("expected_revision is required with backend_image_tag")
             .contains("github.run_id")
             .contains("github.run_attempt")
             .contains("run-isolated-real-chain-smoke.sh")

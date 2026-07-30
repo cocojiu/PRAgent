@@ -411,6 +411,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 22:39:04（Asia/Shanghai）：完成 Q4 云端真实数据库质量基线夹具校准。首次精确提交 CI 已成功执行全部 58 个 Flyway 迁移并启动 API/Worker 与 RabbitMQ，随后暴露生产上下文测试仍只写入旧 `line_number`、未同步写入 Q4 新增的 `anchor_type`，导致新锚定率口径把夹具数据正确识别为未锚定；现让真实 MySQL 质量样本按新增行是否存在显式写入 `ADDED_LINE/NONE`，与生产 Finding 持久化不变量一致。Q4 定向 22 项回归通过（其中本机无服务时 7 项真实依赖用例按条件跳过），JDK 25 干净全量 `clean verify` 再次完成 2255 项测试（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁）；待新精确提交 CI 复验 MySQL/RabbitMQ 锚定统计及全部发布门禁。
 
+- 2026-07-30 23:23:24（Asia/Shanghai）：完成 Q4 OBSERVE 灰度第一步的精确镜像隔离验证入口。仓库当前只配置 production GitHub Environment，`Release Images` 也明确拒绝从 `PRAgent-test` 直接部署，因此不冒险把测试分支覆盖到生产服务；改为扩展既有 Real Chain Smoke，使其可按已发布 ACR tag 拉取后端镜像，并强制同时提供完整 40 位 expected revision，在启动独立 MySQL/RabbitMQ/Backend、临时端口和临时卷之前校验 OCI `org.opencontainers.image.revision`。新入口拒绝同时传入完整镜像与 tag、限制所有镜像坐标字符、显式登录 ACR，生产服务在隔离链路前后继续接受健康检查，Smoke 资源仍由原生命周期脚本自动清理。Workflow/YAML/隔离边界定向 20 项测试通过，JDK 25 干净全量 `clean verify` 共 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁）；下一步使用 `pragent-test-6958f55efe15` 与完整提交 `6958f55efe151e009a10b85eec4828b92617d492` 运行三条真实 GitHub/LLM 样本。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
