@@ -424,8 +424,7 @@ jobs:
             --read-only \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
-            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
-            --tmpfs /var/cache/nginx:rw,noexec,nosuid,size=16m \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,mode=1777 \
             --add-host backend:127.0.0.1 \
             "$image" >/dev/null
           test "$(docker exec "$container" id -u)" != "0"
@@ -434,6 +433,10 @@ jobs:
             if docker exec "$container" sh -ec \
               "wget -q -O - http://127.0.0.1:8080/healthz | grep -q '^ok$'"; then
               exit 0
+            fi
+            if [ "$(docker inspect "$container" --format '{{.State.Running}}')" != "true" ]; then
+              echo "Frontend runtime container exited before becoming healthy." >&2
+              exit 1
             fi
             sleep 1
           done
