@@ -417,6 +417,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 23:56:04（Asia/Shanghai）：完成第二轮 OBSERVE 隔离验证兼容收敛。Real Chain Smoke Run `30558613271` 已直接输出并验证业务镜像 revision `6958f55efe151e009a10b85eec4828b92617d492`，成功加载文件化加密键与盐、恢复预 D1 数据、执行至 V58、启动隔离后端，并由只读探针确认唯一活动策略为 strategy 1、完整 Q3 运行版本、`OBSERVE`、replay 已通过；随后远端旧 Smoke 生命周期脚本在复制生产策略行时仍从生产 MySQL 容器内读取已迁移掉的 `MYSQL_PASSWORD`，因此被数据库拒绝。隔离资源再次完整清理且生产后置健康通过。工作流现从生产 `MYSQL_PASSWORD` 或 `MYSQL_PASSWORD_FILE` 取得兼容值，运行期在部署目录创建权限为 0700/0600 的临时 Docker 垫片与 env-file，只对精确生产 MySQL 容器的两个只读/导出 `docker exec` 注入旧变量，其他 Docker 调用原样转发；生命周期结束自动删除垫片，不修改生产容器和远端 Smoke 脚本。Workflow YAML、完整 Bash 块语法、JDK 25 定向 20 项契约测试及干净全量 `clean verify` 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过）；下一步推送后第三次运行同一精确业务镜像。
 
+- 2026-07-31 00:16:22（Asia/Shanghai）：完成 Q4 OBSERVE 隔离链路运行态验证并保持质量门禁关闭。Real Chain Smoke Run `30559410464` 与受控复跑 `30559971025` 均使用精确业务 revision `6958f55efe151e009a10b85eec4828b92617d492`，通过 ACR/OCI 校验、预 D1 恢复、V58 迁移、隔离 MySQL/RabbitMQ/Backend 启动、生产策略行兼容复制和唯一活动 `OBSERVE` 策略探针；两次运行的生产前后健康检查与隔离资源清理均通过，未部署或改写生产服务。小样本均正常完成；无风险代码样本 PR #12 两次分别产生 3 条 HIGH Finding，构成待人工标注的重复误报信号；旧“风险”样本 PR #13 实际只新增明确标注为临时 E2E 的假密钥 fixture，一次 LLM 超时降级、一次正常完成且 0 Finding，符合 Q2 测试/fixture 降噪语义，但触发旧 Smoke 的“必须有 Finding”断言。因此不降低门槛、不把 harmless 样本改标为风险，也不进入 COMMENT/BLOCK；下一批次先替换为经人工确认的真实正例，再按至少 30 个明确高危样本收集 precision、FPR、锚定率和重复率。工作流同时开始留存严格脱敏的 OBSERVE 摘要：无论门禁成功或失败，都在 Step Summary 与 90 天 artifact 中仅保存提交 revision、退出状态、策略版本、任务状态、token/耗时、变更文件数和 Finding 数，不保存镜像坐标、凭据、文件内容或 Finding 文本。Workflow YAML、完整 Bash 块语法、JDK 25 定向 20 项契约测试及干净全量 `clean verify` 2255 项测试均通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过）。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
