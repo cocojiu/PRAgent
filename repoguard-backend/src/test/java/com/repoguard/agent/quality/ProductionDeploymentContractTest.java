@@ -193,7 +193,11 @@ class ProductionDeploymentContractTest {
             )
             .contains("printf '%s' \"$legacy_value\" > \"$candidate\"")
             .contains("cmp -s \"$candidate\" \"$secret_path\"")
-            .contains("unset \"$legacy_key\"")
+            .contains("unset MYSQL_ROOT_PASSWORD MYSQL_ROOT_PASSWORD_FILE")
+            .contains(
+                "unset REPOGUARD_GITHUB_WEBHOOK_SECRET "
+                    + "REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE"
+            )
             .contains("config --environment")
             .contains("rewrite_env true \"$backup_directory\"")
             .contains("rewrite_env false \"$backup_directory\"")

@@ -63,6 +63,18 @@ REPOGUARD_ADMIN_API_KEY|REPOGUARD_ADMIN_API_KEY_FILE|./secrets/app.security.admi
 REPOGUARD_GITHUB_WEBHOOK_SECRET|REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE|./secrets/app.github.webhook.secret
 EOF
 
+# The migration must preserve the values stored in ENV_FILE. Explicitly clear
+# every target override before Compose reads the file; keeping this outside a
+# redirected compound command also makes the behavior portable across /bin/sh
+# implementations that may execute such commands in a subshell.
+unset MYSQL_ROOT_PASSWORD MYSQL_ROOT_PASSWORD_FILE
+unset MYSQL_PASSWORD MYSQL_PASSWORD_FILE
+unset REPOGUARD_SECURITY_ENCRYPTION_KEY REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE
+unset REPOGUARD_SECURITY_ENCRYPTION_SALT REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE
+unset REPOGUARD_AUTH_TOKEN_SECRET REPOGUARD_AUTH_TOKEN_SECRET_FILE
+unset REPOGUARD_ADMIN_API_KEY REPOGUARD_ADMIN_API_KEY_FILE
+unset REPOGUARD_GITHUB_WEBHOOK_SECRET REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE
+
 {
   echo "services:"
   echo "  secret-migration-environment:"
@@ -71,11 +83,6 @@ EOF
   while IFS='|' read -r legacy_key file_key default_reference; do
     printf '      %s: ${%s-}\n' "$legacy_key" "$legacy_key"
     printf '      %s: ${%s-}\n' "$file_key" "$file_key"
-    # The migration must preserve the values stored in ENV_FILE. An ambient
-    # shell override would otherwise create files that no longer match the
-    # fallback values retained for rollback.
-    unset "$legacy_key"
-    unset "$file_key"
   done < "$mapping_file"
 } > "$parse_compose_file"
 
