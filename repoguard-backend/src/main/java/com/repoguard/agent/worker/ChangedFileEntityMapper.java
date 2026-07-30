@@ -1,13 +1,13 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ChangedFile;
-import com.repoguard.agent.github.GithubChangedFile;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import org.springframework.stereotype.Component;
 
 @Component
 class ChangedFileEntityMapper {
 
-    ChangedFile toEntity(Long taskId, GithubChangedFile file) {
+    ChangedFile toEntity(Long taskId, PullRequestChangedFile file) {
         ChangedFile changedFile = new ChangedFile();
         changedFile.setTaskId(taskId);
         changedFile.setFilePath(file.filename());

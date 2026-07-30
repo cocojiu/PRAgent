@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +11,7 @@ class DiffHunkLineAllocatorTest {
 
     @Test
     void allocatesSourceLinesProportionallyAndAssignsRemainderToLastHunk() {
-        GithubChangedFile file = new GithubChangedFile("src/main/java/A.java", "modified", 10, 2, "");
+        PullRequestChangedFile file = new PullRequestChangedFile("src/main/java/A.java", "modified", 10, 2, "");
         List<String> hunks = List.of(
             """
                 @@ -1,3 +1,5 @@ first
@@ -38,7 +37,7 @@ class DiffHunkLineAllocatorTest {
 
     @Test
     void fallsBackToVisiblePatchLinesWhenSourceCountsAreMissing() {
-        GithubChangedFile file = new GithubChangedFile("src/main/java/A.java", "modified", null, null, "");
+        PullRequestChangedFile file = new PullRequestChangedFile("src/main/java/A.java", "modified", null, null, "");
         List<String> hunks = List.of(
             """
                 @@ -1,3 +1,5 @@ first

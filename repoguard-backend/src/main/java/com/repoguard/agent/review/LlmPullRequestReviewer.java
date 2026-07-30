@@ -1,8 +1,8 @@
 package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.review.ReviewPolicyProvider;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallResilience;
@@ -11,12 +11,12 @@ import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseProfile;
 import com.repoguard.agent.external.OutboundEndpointPolicy;
 import com.repoguard.agent.external.OutboundEndpointType;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -34,6 +34,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     private final ExternalHttpJsonResponseReader responseReader;
     private final LlmChatCompletionResponseExtractor responseExtractor;
     private final OutboundEndpointPolicy endpointPolicy;
+    private final AtomicReference<CachedRestClient> cachedRestClient = new AtomicReference<>();
 
     @Autowired
     public LlmPullRequestReviewer(
@@ -87,7 +88,7 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     @Override
-    public ReviewResult review(ReviewTask task, GithubPullRequestDiff diff) {
+    public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
         long startedAt = System.nanoTime();
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
         String promptSummary = promptBuilder.promptSummary(diff);
@@ -97,16 +98,12 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     }
 
     @Override
-    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
+    public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
         long startedAt = System.nanoTime();
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());
         }
-        RestClient restClient = restClientBuilder
-            .clone()
-            .baseUrl(settings.baseUrl().trim())
-            .requestFactory(ExternalHttpRequestFactory.sameTimeoutSeconds(settings.timeoutSeconds(), 60))
-            .build();
+        RestClient restClient = restClient(settings);
         String apiKey = settings.apiKey();
 
         Map<String, Object> payload = Map.of(
@@ -157,5 +154,34 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
 
     private <T> T executeLlm(String operation, java.util.function.Supplier<T> supplier) {
         return resilience.llm(operation, supplier);
+    }
+
+    private RestClient restClient(ReviewPolicySettings settings) {
+        String baseUrl = settings.baseUrl().trim();
+        int timeoutSeconds = Math.max(1, settings.timeoutSeconds() == null ? 60 : settings.timeoutSeconds());
+        CachedRestClient current = cachedRestClient.get();
+        if (current != null && current.matches(baseUrl, timeoutSeconds)) {
+            return current.client();
+        }
+        synchronized (cachedRestClient) {
+            current = cachedRestClient.get();
+            if (current != null && current.matches(baseUrl, timeoutSeconds)) {
+                return current.client();
+            }
+            RestClient client = restClientBuilder
+                .clone()
+                .baseUrl(baseUrl)
+                .requestFactory(ExternalHttpRequestFactory.sameTimeoutSeconds(timeoutSeconds, 60))
+                .build();
+            cachedRestClient.set(new CachedRestClient(baseUrl, timeoutSeconds, client));
+            return client;
+        }
+    }
+
+    private record CachedRestClient(String baseUrl, int timeoutSeconds, RestClient client) {
+
+        private boolean matches(String candidateBaseUrl, int candidateTimeoutSeconds) {
+            return timeoutSeconds == candidateTimeoutSeconds && baseUrl.equals(candidateBaseUrl);
+        }
     }
 }

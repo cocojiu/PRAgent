@@ -9,6 +9,11 @@ import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Base64;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -21,7 +26,8 @@ class AuthTokenFilterTest {
     private final AuthProperties authProperties = properties();
     private final AuthTokenService authTokenService = new AuthTokenService(authProperties);
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
-    private final AuthTokenFilter filter = new AuthTokenFilter(authTokenService, userAccountMapper, new ObjectMapper());
+    private final AuthAccountCache authAccountCache = new AuthAccountCache(userAccountMapper);
+    private final AuthTokenFilter filter = new AuthTokenFilter(authTokenService, authAccountCache, new ObjectMapper());
 
     @BeforeEach
     void setUp() {
@@ -89,6 +95,28 @@ class AuthTokenFilterTest {
     }
 
     @Test
+    void pathParameterVariantStillRequiresToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1;x=1/reviews");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
+    void percentEncodedVariantStillRequiresToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/%72eviews");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+    }
+
+    @Test
     void corsPreflightDoesNotRequireToken() throws ServletException, IOException {
         MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/v1/reviews");
         request.addHeader("Origin", "http://localhost:5173");
@@ -128,6 +156,55 @@ class AuthTokenFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(chain.getRequest()).isSameAs(request);
+    }
+
+    @Test
+    void protectedApiRejectsLegacyFourFieldToken() throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.addHeader("Authorization", "Bearer " + legacyFourFieldToken());
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("\"code\":\"UNAUTHORIZED\"");
+        Mockito.verify(userAccountMapper, Mockito.never()).selectById(1001L);
+    }
+
+    @Test
+    void protectedApiAllowsTokenSignedWithPreviousSecretAfterRotation() throws ServletException, IOException {
+        String token = authTokenService.issueAccessToken(user()).token();
+        authProperties.setTokenSecret("rotated-secret");
+        authProperties.setTokenSecretId("k2");
+        authProperties.setTokenSecretPrevious("test-secret");
+        authProperties.setTokenSecretPreviousId("k1");
+        Mockito.when(userAccountMapper.selectById(1001L)).thenReturn(user());
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(chain.getRequest()).isSameAs(request);
+        assertThat(request.getAttribute(RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL))
+            .isInstanceOf(AuthenticatedPrincipal.class);
+    }
+
+    @Test
+    void protectedApiRejectsTokenSignedWithRetiredSecret() throws ServletException, IOException {
+        String token = authTokenService.issueAccessToken(user()).token();
+        authProperties.setTokenSecret("rotated-secret");
+        authProperties.setTokenSecretId("k2");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
+        Mockito.verify(userAccountMapper, Mockito.never()).selectById(1001L);
     }
 
     @Test
@@ -213,10 +290,84 @@ class AuthTokenFilterTest {
             });
     }
 
+    @Test
+    void repeatedRequestsWithinCacheTtlQueryDatabaseOnce() throws ServletException, IOException {
+        String token = authTokenService.issueAccessToken(user()).token();
+        Mockito.when(userAccountMapper.selectById(1001L)).thenReturn(user());
+
+        for (int i = 0; i < 2; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+            request.addHeader("Authorization", "Bearer " + token);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilter(request, response, new MockFilterChain());
+
+            assertThat(response.getStatus()).isEqualTo(200);
+        }
+
+        Mockito.verify(userAccountMapper, Mockito.times(1)).selectById(1001L);
+    }
+
+    @Test
+    void cacheInvalidationForcesImmediateDatabaseReload() throws ServletException, IOException {
+        String token = authTokenService.issueAccessToken(user()).token();
+        UserAccount disabledUser = user();
+        disabledUser.setStatus("DISABLED");
+        Mockito.when(userAccountMapper.selectById(1001L)).thenReturn(user(), disabledUser);
+
+        MockHttpServletRequest firstRequest = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        firstRequest.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse firstResponse = new MockHttpServletResponse();
+        filter.doFilter(firstRequest, firstResponse, new MockFilterChain());
+        assertThat(firstResponse.getStatus()).isEqualTo(200);
+
+        authAccountCache.invalidateAfterCommit(1001L);
+
+        MockHttpServletRequest secondRequest = new MockHttpServletRequest("GET", "/api/v1/reviews");
+        secondRequest.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse secondResponse = new MockHttpServletResponse();
+        filter.doFilter(secondRequest, secondResponse, new MockFilterChain());
+
+        assertThat(secondResponse.getStatus()).isEqualTo(401);
+        Mockito.verify(userAccountMapper, Mockito.times(2)).selectById(1001L);
+    }
+
+    @Test
+    void missingUserLookupIsCachedWithinTtl() throws ServletException, IOException {
+        String token = authTokenService.issueAccessToken(user()).token();
+        Mockito.when(userAccountMapper.selectById(1001L)).thenReturn(null);
+
+        for (int i = 0; i < 2; i++) {
+            MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/reviews");
+            request.addHeader("Authorization", "Bearer " + token);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+
+            filter.doFilter(request, response, new MockFilterChain());
+
+            assertThat(response.getStatus()).isEqualTo(401);
+        }
+
+        Mockito.verify(userAccountMapper, Mockito.times(1)).selectById(1001L);
+    }
+
     private AuthProperties properties() {
         AuthProperties properties = new AuthProperties();
         properties.setTokenSecret("test-secret");
         return properties;
+    }
+
+    private String legacyFourFieldToken() {
+        String payload = "1001:admin:ADMIN:" + (Instant.now().getEpochSecond() + 900);
+        String encodedPayload = Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(payload.getBytes(StandardCharsets.UTF_8));
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec("test-secret".getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return encodedPayload + "." + Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(mac.doFinal(encodedPayload.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Test signing is not available", ex);
+        }
     }
 
     private UserAccount user() {

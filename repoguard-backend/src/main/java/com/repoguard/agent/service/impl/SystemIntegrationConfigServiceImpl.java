@@ -2,8 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
@@ -20,7 +19,6 @@ import com.repoguard.agent.service.SystemIntegrationConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
@@ -80,7 +78,6 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
 
     @Override
     @Transactional
-    @CacheEvict(cacheNames = CacheNames.GITHUB_OPEN_PULL_REQUESTS, allEntries = true)
     public GithubIntegrationConfigDto updateGithubIntegration(GithubIntegrationConfigRequest request) {
         IntegrationConfig config = loadGithubConfig();
         if (outboundEndpointPolicy != null) {
@@ -114,7 +111,7 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
                 .eq("id", config.getId())
                 .set("last_error", null)
         );
-        evictDashboardOverviewCompatibility();
+        evictGithubCaches();
         return toGithubDto(config);
     }
 
@@ -140,7 +137,8 @@ public class SystemIntegrationConfigServiceImpl implements SystemIntegrationConf
         return updateServiceIntegration(RABBITMQ_PROVIDER, request);
     }
 
-    private void evictDashboardOverviewCompatibility() {
+    private void evictGithubCaches() {
+        cacheEvictionService.evictGithubOpenPullRequests();
         cacheEvictionService.evictDashboardOverviewCompatibility();
     }
 

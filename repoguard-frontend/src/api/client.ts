@@ -2,6 +2,7 @@ import { normalizeRequestError, unwrapResponse } from "@/api/apiEnvelope";
 import type { ApiResponse } from "@/api/apiEnvelope";
 import { AuthSessionRefreshCoordinator } from "@/api/authRefreshCoordinator";
 import type { AuthRefreshResult, TokenPairResponse } from "@/api/authRefreshCoordinator";
+import { RequestError } from "@/utils/errors";
 import {
   clearAuthToken,
   hasAuthToken,
@@ -15,7 +16,9 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 const AUTH_FETCH_CREDENTIALS: RequestCredentials = "include";
 const TRACE_ID_HEADER = "X-Trace-Id";
-type InternalRequestInit = RequestInit & { skipAuthorization?: boolean };
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
+export type ClientRequestInit = RequestInit & { timeoutMs?: number };
+type InternalRequestInit = ClientRequestInit & { skipAuthorization?: boolean };
 
 export type RequestWithMetaResult<T> = {
   data: T;
@@ -47,7 +50,7 @@ const refreshCoordinator = new AuthSessionRefreshCoordinator(requestAuthRefreshS
 export const request = async <T>(
   path: string,
   params?: Record<string, string | number | undefined>,
-  options: RequestInit = {}
+  options: ClientRequestInit = {}
 ): Promise<T> => {
   const result = await requestWithMeta<T>(path, params, options);
   return result.data;
@@ -56,20 +59,29 @@ export const request = async <T>(
 export const requestWithMeta = async <T>(
   path: string,
   params?: Record<string, string | number | undefined>,
-  options: RequestInit = {}
+  options: ClientRequestInit = {}
 ): Promise<RequestWithMetaResult<T>> => {
-  const response = await safeDoRequest(path, params, options);
-  if (response.ok || response.status !== 401 || isRefreshExcludedAuthPath(path)) {
-    return unwrapResponseWithMeta<T>(response);
-  }
+  const deadline = createRequestDeadline(options);
+  const requestOptions: ClientRequestInit = { ...options, signal: deadline.signal };
+  try {
+    const response = await waitForSignal(doRequest(path, params, requestOptions), deadline.signal);
+    if (response.ok || response.status !== 401 || isRefreshExcludedAuthPath(path)) {
+      return await waitForSignal(unwrapResponseWithMeta<T>(response), deadline.signal);
+    }
 
-  const refreshed = await refreshCoordinator.refreshSession();
-  if (!refreshed) {
-    clearAuthToken();
-    redirectToLogin();
-    return unwrapResponseWithMeta<T>(response);
+    const refreshed = await waitForSignal(refreshCoordinator.refreshSession(), deadline.signal);
+    if (!refreshed) {
+      clearAuthToken();
+      redirectToLogin();
+      return await waitForSignal(unwrapResponseWithMeta<T>(response), deadline.signal);
+    }
+    const retryResponse = await waitForSignal(doRequest(path, params, requestOptions), deadline.signal);
+    return await waitForSignal(unwrapResponseWithMeta<T>(retryResponse), deadline.signal);
+  } catch (error) {
+    throw normalizeDeadlineError(error, deadline);
+  } finally {
+    deadline.dispose();
   }
-  return unwrapResponseWithMeta<T>(await safeDoRequest(path, params, options));
 };
 
 const doRequest = async (
@@ -77,7 +89,8 @@ const doRequest = async (
   params?: Record<string, string | number | undefined>,
   options: InternalRequestInit = {}
 ) => {
-  const { skipAuthorization, ...fetchOptions } = options;
+  const { skipAuthorization, timeoutMs: _timeoutMs, ...fetchOptions } = options;
+  void _timeoutMs;
   const headers = new Headers(options.headers);
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -121,31 +134,109 @@ const responseSizeBytes = (response: Response): number | undefined => {
   return undefined;
 };
 
-const safeDoRequest = async (
-  path: string,
-  params?: Record<string, string | number | undefined>,
-  options: InternalRequestInit = {}
-) => {
+async function requestAuthRefreshSession(): Promise<AuthRefreshResult> {
+  const deadline = createRequestDeadline({ timeoutMs: DEFAULT_REQUEST_TIMEOUT_MS });
   try {
-    return await doRequest(path, params, options);
-  } catch (error) {
-    throw normalizeRequestError(error);
+    const response = await waitForSignal(doRequest("/api/v1/auth/refresh", undefined, {
+      method: "POST",
+      skipAuthorization: true,
+      signal: deadline.signal
+    }), deadline.signal);
+    if (!response.ok) {
+      return { ok: false };
+    }
+    return {
+      ok: true,
+      body: await waitForSignal(
+        response.json() as Promise<ApiResponse<TokenPairResponse>>,
+        deadline.signal
+      )
+    };
+  } catch {
+    return { ok: false };
+  } finally {
+    deadline.dispose();
   }
+}
+
+type RequestDeadline = {
+  callerSignal?: AbortSignal;
+  dispose: () => void;
+  signal: AbortSignal;
+  timedOut: () => boolean;
 };
 
-async function requestAuthRefreshSession(): Promise<AuthRefreshResult> {
-  const response = await safeDoRequest("/api/v1/auth/refresh", undefined, {
-    method: "POST",
-    skipAuthorization: true
-  });
-  if (!response.ok) {
-    return { ok: false };
+const createRequestDeadline = (options: ClientRequestInit): RequestDeadline => {
+  const controller = new AbortController();
+  const callerSignal = options.signal ?? undefined;
+  let timeoutReached = false;
+  const configuredTimeout = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const timeoutMs = Number.isFinite(configuredTimeout)
+    ? Math.max(1, configuredTimeout)
+    : DEFAULT_REQUEST_TIMEOUT_MS;
+  const abortFromCaller = () => controller.abort(callerSignal?.reason);
+  if (callerSignal?.aborted) {
+    abortFromCaller();
+  } else {
+    callerSignal?.addEventListener("abort", abortFromCaller, { once: true });
   }
+  const timeout = setTimeout(() => {
+    timeoutReached = true;
+    controller.abort(new DOMException("Request deadline exceeded", "TimeoutError"));
+  }, timeoutMs);
+
   return {
-    ok: true,
-    body: await response.json() as ApiResponse<TokenPairResponse>
+    callerSignal,
+    signal: controller.signal,
+    timedOut: () => timeoutReached,
+    dispose: () => {
+      clearTimeout(timeout);
+      callerSignal?.removeEventListener("abort", abortFromCaller);
+    }
   };
-}
+};
+
+const waitForSignal = <T>(promise: Promise<T>, signal: AbortSignal) => {
+  if (signal.aborted) {
+    return Promise.reject(signal.reason ?? new DOMException("Request aborted", "AbortError"));
+  }
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason ?? new DOMException("Request aborted", "AbortError"));
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(
+      value => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      }
+    );
+  });
+};
+
+const normalizeDeadlineError = (error: unknown, deadline: RequestDeadline) => {
+  if (error instanceof RequestError) {
+    return error;
+  }
+  if (deadline.timedOut()) {
+    return new RequestError("Request timed out", {
+      status: 0,
+      code: "REQUEST_TIMEOUT"
+    });
+  }
+  if (deadline.callerSignal?.aborted || isAbortError(error)) {
+    return new RequestError("Request aborted", {
+      status: 0,
+      code: "REQUEST_ABORTED"
+    });
+  }
+  return normalizeRequestError(error);
+};
+
+const isAbortError = (error: unknown) =>
+  error instanceof DOMException && ["AbortError", "TimeoutError"].includes(error.name);
 
 const redirectToLogin = () => {
   if (window.location.pathname === "/login") {
@@ -172,6 +263,8 @@ const requiresAuthCsrfHeader = (path: string, method: string) =>
     "/api/v1/auth/logout"
   ].includes(path);
 
+let fallbackTraceSequence = 0;
+
 const generateTraceId = () => {
   const cryptoApi = globalThis.crypto;
   if (cryptoApi?.randomUUID) {
@@ -182,5 +275,6 @@ const generateTraceId = () => {
     cryptoApi.getRandomValues(bytes);
     return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
   }
-  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+  fallbackTraceSequence = (fallbackTraceSequence + 1) % Number.MAX_SAFE_INTEGER;
+  return `${Date.now().toString(16)}-${fallbackTraceSequence.toString(16).padStart(8, "0")}`;
 };

@@ -1,7 +1,6 @@
 package com.repoguard.agent.observability;
 
 import com.repoguard.agent.external.ExternalCallException;
-import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.Objects;
@@ -29,7 +28,7 @@ public class RepoGuardMetrics {
 
     public static RepoGuardMetrics forTesting(
         MeterRegistry meterRegistry,
-        ReviewExecutionFailureClassifier failureClassifier
+        ReviewFailureCategoryResolver failureClassifier
     ) {
         MetricRecorderSupport metrics = new MetricRecorderSupport(meterRegistry);
         return new RepoGuardMetrics(

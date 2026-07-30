@@ -14,6 +14,20 @@ import org.springframework.http.ResponseEntity;
 class GlobalExceptionHandlerTest {
 
     @Test
+    void conflictBusinessExceptionReturnsHttp409() {
+        GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+        ResponseEntity<ApiResponse<Void>> response = handler.handleBusinessException(
+            new BusinessException(ErrorCode.CONFLICT, "状态已变化，请刷新")
+        );
+
+        assertThat(response.getStatusCode().value()).isEqualTo(409);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().code()).isEqualTo("CONFLICT");
+        assertThat(response.getBody().message()).isEqualTo("状态已变化，请刷新");
+    }
+
+    @Test
     void unhandledExceptionReturnsSafeMessageAndCorrelatesTheDiagnosticLog() {
         GlobalExceptionHandler handler = new GlobalExceptionHandler();
         Logger logger = (Logger) LoggerFactory.getLogger(GlobalExceptionHandler.class);

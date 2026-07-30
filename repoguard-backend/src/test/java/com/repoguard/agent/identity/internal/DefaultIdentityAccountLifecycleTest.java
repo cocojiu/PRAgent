@@ -8,7 +8,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.identity.IdentityAccount;
@@ -18,6 +17,7 @@ import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidati
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.PasswordHashService;
 import java.time.LocalDateTime;
@@ -35,12 +35,14 @@ class DefaultIdentityAccountLifecycleTest {
     private final PasswordHashService passwordHashService = new PasswordHashService();
     private final IdentitySessionLifecycle sessionLifecycle = Mockito.mock(IdentitySessionLifecycle.class);
     private final AuthProperties authProperties = new AuthProperties();
+    private final AuthAccountCache authAccountCache = Mockito.mock(AuthAccountCache.class);
     private final DefaultIdentityAccountLifecycle lifecycle = new DefaultIdentityAccountLifecycle(
         userAccountMapper,
         auditRecorder,
         passwordHashService,
         sessionLifecycle,
-        authProperties
+        authProperties,
+        authAccountCache
     );
 
     @Test
@@ -68,12 +70,12 @@ class DefaultIdentityAccountLifecycleTest {
             .isInstanceOf(BusinessException.class)
             .hasMessage("密码至少 8 位，且必须同时包含字母和数字");
 
-        verify(userAccountMapper, never()).selectOne(any(Wrapper.class));
+        verify(userAccountMapper, never()).selectOne(any());
     }
 
     @Test
     void registrationRejectsDuplicateEmailAfterUsernameIsAvailable() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null, activeUser());
+        when(userAccountMapper.selectOne(any())).thenReturn(null, activeUser());
 
         assertThatThrownBy(() -> lifecycle.register(new RegistrationCommand(
             "new-admin",
@@ -89,7 +91,7 @@ class DefaultIdentityAccountLifecycleTest {
 
     @Test
     void registrationTranslatesConcurrentUniqueKeyConflict() {
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.insert(any(UserAccount.class))).thenThrow(new DuplicateKeyException("duplicate"));
 
         assertThatThrownBy(() -> lifecycle.register(new RegistrationCommand(
@@ -172,6 +174,7 @@ class DefaultIdentityAccountLifecycleTest {
             "Safer456"
         ));
 
+        verify(authAccountCache).invalidateAfterCommit(1001L);
         verify(sessionLifecycle).invalidateAccountSessions(
             eq(1001L),
             eq(SessionInvalidationMode.REFRESH_TOKENS_ONLY),
@@ -189,9 +192,10 @@ class DefaultIdentityAccountLifecycleTest {
             passwordHashService,
             sessionLifecycle,
             authProperties,
+            authAccountCache,
             transactionManager
         );
-        when(userAccountMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(userAccountMapper.selectOne(any())).thenReturn(null);
         when(userAccountMapper.insert(any(UserAccount.class))).thenAnswer(invocation -> {
             UserAccount user = invocation.getArgument(0);
             user.setId(1001L);
@@ -249,6 +253,8 @@ class DefaultIdentityAccountLifecycleTest {
     }
 
     private static final class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        private static final long serialVersionUID = 1L;
 
         private int commitCount;
         private int rollbackCount;

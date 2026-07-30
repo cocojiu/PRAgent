@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +11,7 @@ class RiskFilePrioritizerTest {
 
     @Test
     void prioritizeFilesOrdersByRiskThenPath() {
-        List<GithubChangedFile> files = List.of(
+        List<PullRequestChangedFile> files = List.of(
             file("src/main/java/com/example/UserService.java"),
             file("package.json"),
             file("src/main/resources/application-prod.yml"),
@@ -21,10 +20,10 @@ class RiskFilePrioritizerTest {
             file("src/main/resources/db/migration/V39__session_csrf.sql")
         );
 
-        List<GithubChangedFile> prioritized = prioritizer.prioritizeFiles(files);
+        List<PullRequestChangedFile> prioritized = prioritizer.prioritizeFiles(files);
 
         assertThat(prioritized)
-            .extracting(GithubChangedFile::filename)
+            .extracting(PullRequestChangedFile::filename)
             .containsExactly(
                 "src/main/resources/db/migration/V39__session_csrf.sql",
                 "src/main/java/com/example/security/AuthTokenFilter.java",
@@ -58,8 +57,8 @@ class RiskFilePrioritizerTest {
             );
     }
 
-    private GithubChangedFile file(String path) {
-        return new GithubChangedFile(path, "modified", 10, 2, "@@ patch");
+    private PullRequestChangedFile file(String path) {
+        return new PullRequestChangedFile(path, "modified", 10, 2, "@@ patch");
     }
 
     private SemanticDiffSegment segment(String path, int priority, String groupKey, String semanticKey) {

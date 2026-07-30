@@ -1,7 +1,7 @@
 package com.repoguard.agent.dashboard;
 
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.ReviewPolicyProvider;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.review.ReviewPolicyProvider;
 import com.repoguard.agent.dto.SystemHealthItemDto;
 import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import java.util.List;
@@ -38,9 +38,9 @@ public class DashboardSystemHealthProbe {
 
     private String rabbitMqHealthStatus() {
         try {
-            return statusMapper.rabbitMqHealth("CONNECTED".equals(rabbitRuntimeHealthProbe.connectionStatus()));
+            return statusMapper.rabbitMqHealth(rabbitRuntimeHealthProbe.connectionStatus());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 
@@ -48,7 +48,7 @@ public class DashboardSystemHealthProbe {
         try {
             return statusMapper.githubHealth(githubIntegrationProvider.getSettings());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 
@@ -56,7 +56,7 @@ public class DashboardSystemHealthProbe {
         try {
             return statusMapper.llmHealth(reviewPolicyProvider.getSettings());
         } catch (RuntimeException ex) {
-            return DashboardStatusMapper.HEALTH_ABNORMAL;
+            return DashboardStatusMapper.HEALTH_UNKNOWN;
         }
     }
 }

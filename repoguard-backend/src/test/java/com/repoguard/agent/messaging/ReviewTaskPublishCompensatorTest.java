@@ -21,6 +21,9 @@ import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.task.ReviewTaskDirectPublishFailurePolicy;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskPublisher;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -108,6 +111,59 @@ class ReviewTaskPublishCompensatorTest {
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("policy");
+    }
+
+    @Test
+    void directPublishFailureUsesQueuedCasAndExplicitlyClearsLlmTelemetry() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(0);
+        task.setLlmProvider("openai");
+        task.setLlmModel("gpt-old");
+        task.setLlmDurationMs(1200);
+        task.setLlmParseStatus("parsed");
+        task.setLlmPromptTokens(100);
+        task.setLlmCompletionTokens(20);
+        task.setLlmTotalTokens(120);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+
+        boolean marked = outboxStore.markDirectPublishFailed(
+            task,
+            new MessagePublishException("publisher confirm timed out"),
+            LocalDateTime.parse("2026-07-28T10:00:00"),
+            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
+        );
+
+        assertThat(marked).isTrue();
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getLlmProvider()).isNull();
+        assertThat(task.getLlmPromptTokens()).isNull();
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment())
+            .contains("status", "publish_attempts", "publish_claimed_at", "IS NULL");
+        assertThat(wrapperCaptor.getValue().getSqlSet())
+            .contains("llm_provider", "llm_prompt_tokens", "llm_estimated_cost");
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+    }
+
+    @Test
+    void directPublishFailureDoesNotOverwriteTaskOrTimelineAfterCasLoss() {
+        ReviewTask task = task();
+        task.setStatus("QUEUED");
+        task.setPublishAttempts(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
+
+        boolean marked = outboxStore.markDirectPublishFailed(
+            task,
+            new MessagePublishException("publisher confirm timed out"),
+            LocalDateTime.parse("2026-07-28T10:00:00"),
+            ReviewTaskDirectPublishFailurePolicy.directPublish(60000)
+        );
+
+        assertThat(marked).isFalse();
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
     }
 
     @Test
@@ -208,14 +264,14 @@ class ReviewTaskPublishCompensatorTest {
         ReviewTimeline latest = new ReviewTimeline();
         latest.setSortOrder(3);
         List<String> events = new ArrayList<>();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenAnswer(invocation -> {
+        when(reviewTaskMapper.update(any())).thenAnswer(invocation -> {
             events.add("database");
             return 1;
         });
         doAnswer(invocation -> {
             events.add("publish");
             return null;
-        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        }).when(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         when(reviewTimelineMapper.selectOne(any())).thenReturn(latest);
 
         compensator.compensate(task);
@@ -242,14 +298,14 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(1);
         properties.setPublishCompensationIntervalMs(1000);
         List<String> events = new ArrayList<>();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenAnswer(invocation -> {
+        when(reviewTaskMapper.update(any())).thenAnswer(invocation -> {
             events.add("database");
             return 1;
         });
         doAnswer(invocation -> {
             events.add("publish");
             throw new MessagePublishException("publisher confirm timed out password=raw-password token=raw-token");
-        }).when(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        }).when(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
 
@@ -277,11 +333,11 @@ class ReviewTaskPublishCompensatorTest {
     @Test
     void compensateSkipsPublishWhenClaimFails() {
         ReviewTask task = task();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
     }
@@ -290,10 +346,10 @@ class ReviewTaskPublishCompensatorTest {
     void compensateDoesNotOverwriteConsumerWhenAmbiguousPublishFailureWasAlreadyConsumed() {
         ReviewTask task = task();
         task.setPublishAttempts(1);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 0);
+        when(reviewTaskMapper.update(any())).thenReturn(1, 1, 0);
         doThrow(new MessagePublishException("publisher confirm timed out"))
             .when(reviewTaskPublisher)
-            .publish(any(ReviewTaskMessage.class));
+            .publishOnce(any(ReviewTaskMessage.class));
 
         compensator.compensate(task);
 
@@ -304,12 +360,11 @@ class ReviewTaskPublishCompensatorTest {
     @Test
     void compensateClaimUsesLeaseAwareConditionalUpdate() {
         ReviewTask task = task();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         compensator.compensate(task);
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         assertThat(sqlSegment)
@@ -326,12 +381,12 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(1);
         task.setPublishClaimedAt(LocalDateTime.now().minusMinutes(5));
         task.setPublishClaimedBy("dead-instance");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTaskMapper.update(any())).thenReturn(1, 1, 1);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
         assertThat(task.getPublishAttempts()).isEqualTo(2);
     }
@@ -343,12 +398,12 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(0);
         task.setPublishClaimedAt(null);
         task.setCreatedAt(LocalDateTime.now().minusMinutes(5));
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 1, 1);
+        when(reviewTaskMapper.update(any())).thenReturn(1, 1, 1);
         when(reviewTimelineMapper.selectOne(any())).thenReturn(null);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getStatus()).isEqualTo("QUEUED");
         assertThat(task.getPublishAttempts()).isEqualTo(1);
         assertThat(task.getPublishClaimedAt()).isNull();
@@ -363,11 +418,11 @@ class ReviewTaskPublishCompensatorTest {
         task.setPublishAttempts(3);
         task.setPublishClaimedAt(LocalDateTime.now().minusMinutes(5));
         task.setPublishClaimedBy("dead-instance");
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
         assertThat(task.getPublishAttempts()).isEqualTo(3);
         assertThat(task.getStatus()).isEqualTo("QUEUED");
     }
@@ -377,13 +432,12 @@ class ReviewTaskPublishCompensatorTest {
         properties.setPublishCompensationMaxAttempts(3);
         ReviewTask task = task();
         task.setPublishAttempts(3);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         compensator.compensate(task);
 
-        verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(reviewTaskPublisher, never()).publishOnce(any(ReviewTaskMessage.class));
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).update(wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue().getSqlSegment())
             .contains("publish_attempts")
@@ -397,8 +451,7 @@ class ReviewTaskPublishCompensatorTest {
 
         compensationQuery.loadDueTasks(LocalDateTime.now());
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).selectList(wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         int attemptsLimit = sqlSegment.indexOf("publish_attempts");

@@ -16,12 +16,14 @@ public final class IdentityAuditRecorder {
     private static final int USER_AGENT_MAX_LENGTH = 512;
 
     private final UserLoginAuditMapper userLoginAuditMapper;
+    private final AuditClientIpResolver clientIpResolver;
 
-    public IdentityAuditRecorder(UserLoginAuditMapper userLoginAuditMapper) {
+    public IdentityAuditRecorder(UserLoginAuditMapper userLoginAuditMapper, AuditClientIpResolver clientIpResolver) {
         this.userLoginAuditMapper = Objects.requireNonNull(
             userLoginAuditMapper,
             "userLoginAuditMapper must not be null"
         );
+        this.clientIpResolver = Objects.requireNonNull(clientIpResolver, "clientIpResolver must not be null");
     }
 
     public void record(Long userId, String account, String eventType, String result, String failureReason) {
@@ -35,7 +37,7 @@ public final class IdentityAuditRecorder {
 
         HttpServletRequest request = currentRequest();
         if (request != null) {
-            audit.setClientIp(AuditClientIpResolver.resolve(request));
+            audit.setClientIp(clientIpResolver.resolve(request));
             audit.setUserAgent(truncate(request.getHeader("User-Agent"), USER_AGENT_MAX_LENGTH));
         }
         userLoginAuditMapper.insert(audit);

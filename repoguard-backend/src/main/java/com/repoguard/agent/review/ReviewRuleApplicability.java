@@ -1,6 +1,6 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewRuleSettings;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;

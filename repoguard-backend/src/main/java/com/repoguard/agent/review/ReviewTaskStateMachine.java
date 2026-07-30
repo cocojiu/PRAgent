@@ -36,6 +36,10 @@ public class ReviewTaskStateMachine {
         return ReviewTaskStatus.FAILED.code();
     }
 
+    public String statusWhenSuperseded() {
+        return ReviewTaskStatus.SUPERSEDED.code();
+    }
+
     public String statusAfterReviewCompleted(boolean humanReviewRequired) {
         return humanReviewRequired
             ? ReviewTaskStatus.PENDING_HUMAN_REVIEW.code()
@@ -43,9 +47,17 @@ public class ReviewTaskStateMachine {
     }
 
     public void ensureRetryAllowed(String status) {
-        if (ReviewTaskStatus.FAILED != ReviewTaskStatus.from(status)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Only failed review tasks can be retried");
+        ReviewTaskStatus taskStatus = ReviewTaskStatus.from(status);
+        if (taskStatus != ReviewTaskStatus.FAILED && taskStatus != ReviewTaskStatus.SUPERSEDED) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Only failed or superseded review tasks can be retried"
+            );
         }
+    }
+
+    public boolean isSuperseded(String status) {
+        return ReviewTaskStatus.SUPERSEDED == ReviewTaskStatus.from(status);
     }
 
     public void ensurePublishRequeueAllowed(String status, boolean publishClaimed) {
@@ -97,6 +109,7 @@ public class ReviewTaskStateMachine {
         return List.of(
             ReviewTaskStatus.COMPLETED.code(),
             ReviewTaskStatus.FAILED.code(),
+            ReviewTaskStatus.SUPERSEDED.code(),
             ReviewTaskStatus.APPROVED.code(),
             ReviewTaskStatus.CHANGES_REQUESTED.code(),
             ReviewTaskStatus.REJECTED.code()

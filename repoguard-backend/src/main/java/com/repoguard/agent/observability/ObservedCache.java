@@ -5,8 +5,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 import org.springframework.cache.Cache;
-import org.springframework.lang.Nullable;
 
 public class ObservedCache implements Cache {
 

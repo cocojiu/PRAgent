@@ -69,7 +69,7 @@
       </template>
     </el-table-column>
     <el-table-column prop="createdAt" label="创建时间" min-width="180" />
-    <el-table-column label="操作" width="170" fixed="right">
+    <el-table-column label="操作" width="230" fixed="right">
       <template #default="{ row }">
         <div class="table-actions">
           <el-button type="primary" size="small" :disabled="isRetrying(row)" @click="emit('view', row.id)">查看</el-button>
@@ -81,7 +81,7 @@
                 :loading="retryingTaskId === row.id"
                 @click="emit('retry', row)"
               >
-                重试
+                {{ reviewTaskRetryText(row) }}
               </el-button>
             </span>
           </el-tooltip>
@@ -115,6 +115,7 @@ import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 import {
   canRetryReviewTask,
+  reviewTaskRetryText,
   reviewTaskRetryTooltip,
   reviewTaskSourceClass,
   reviewTaskSourceText

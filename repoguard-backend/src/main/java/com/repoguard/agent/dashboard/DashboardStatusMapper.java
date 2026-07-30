@@ -1,7 +1,7 @@
 package com.repoguard.agent.dashboard;
 
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.review.ReviewTaskStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -13,9 +13,23 @@ public class DashboardStatusMapper {
     static final String HEALTH_ABNORMAL = "异常";
     static final String HEALTH_NOT_CONFIGURED = "未接入";
     static final String HEALTH_DISABLED = "已禁用";
+    static final String HEALTH_UNKNOWN = "未知";
 
     public String rabbitMqHealth(Boolean open) {
+        if (open == null) {
+            return HEALTH_UNKNOWN;
+        }
         return Boolean.TRUE.equals(open) ? HEALTH_NORMAL : HEALTH_ABNORMAL;
+    }
+
+    public String rabbitMqHealth(String runtimeStatus) {
+        if ("CONNECTED".equals(runtimeStatus)) {
+            return HEALTH_NORMAL;
+        }
+        if ("DISCONNECTED".equals(runtimeStatus)) {
+            return HEALTH_ABNORMAL;
+        }
+        return HEALTH_UNKNOWN;
     }
 
     public String githubHealth(GithubIntegrationSettings settings) {
@@ -40,6 +54,7 @@ public class DashboardStatusMapper {
             case COMPLETED -> "已完成";
             case REVIEWING -> "审查中";
             case FAILED -> "失败";
+            case SUPERSEDED -> "已过期";
             case QUEUED -> "排队中";
             case PUBLISH_FAILED -> "发布失败";
             case EXECUTION_TIMEOUT -> "执行超时";

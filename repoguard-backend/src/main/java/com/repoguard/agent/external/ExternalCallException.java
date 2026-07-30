@@ -2,6 +2,8 @@ package com.repoguard.agent.external;
 
 public class ExternalCallException extends RuntimeException {
 
+    private static final long serialVersionUID = 1L;
+
     private final String system;
     private final String category;
     private final boolean retryable;

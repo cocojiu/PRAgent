@@ -3,7 +3,8 @@ import type {
   FindingFeedbackRequest,
   HumanReviewRequest,
   ManualReviewRequest,
-  ReviewQuery
+  ReviewQuery,
+  ReviewTaskListSummaryQuery
 } from "@/types";
 
 /**
@@ -11,6 +12,12 @@ import type {
  */
 export const fetchReviews = (query: ReviewQuery) =>
   apiRequest("fetchReviews", query);
+
+/**
+ * 查询当前筛选条件下的任务聚合指标，筛选口径与列表接口同源。
+ */
+export const fetchReviewListSummary = (query: ReviewTaskListSummaryQuery) =>
+  apiRequest("fetchReviewListSummary", query);
 
 /**
  * 查询单个评审任务首屏 summary；findings/files/missing-tests/timeline 通过分页接口加载。

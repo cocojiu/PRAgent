@@ -1,8 +1,6 @@
 package com.repoguard.agent.controller;
 
 import com.repoguard.agent.common.ApiResponse;
-import com.repoguard.agent.common.BusinessException;
-import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.NotificationBindingDto;
@@ -51,9 +49,9 @@ public class NotificationIntegrationController {
         return ApiResponse.ok(service.listBindings(
             page,
             pageSize,
-            checkedParam("organization", organization, 128),
-            checkedParam("repository", repository, 128),
-            checkedParam("provider", provider, 32)
+            organization,
+            repository,
+            provider
         ));
     }
 
@@ -96,7 +94,7 @@ public class NotificationIntegrationController {
         @RequestParam(required = false) @Size(max = 32) String status,
         @RequestParam(required = false) Long taskId
     ) {
-        return ApiResponse.ok(service.listEvents(page, pageSize, checkedParam("status", status, 32), taskId));
+        return ApiResponse.ok(service.listEvents(page, pageSize, status, taskId));
     }
 
     @PostMapping("/api/v1/notification-events/{id}/retry")
@@ -111,13 +109,6 @@ public class NotificationIntegrationController {
         @RequestParam(required = false) @Size(max = 32) String status,
         @RequestParam(required = false) Long taskId
     ) {
-        return ApiResponse.ok(service.listDeliveries(page, pageSize, checkedParam("status", status, 32), taskId));
-    }
-
-    private String checkedParam(String name, String value, int maxLength) {
-        if (value != null && value.length() > maxLength) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, name + " must be at most " + maxLength + " characters");
-        }
-        return value;
+        return ApiResponse.ok(service.listDeliveries(page, pageSize, status, taskId));
     }
 }

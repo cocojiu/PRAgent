@@ -92,6 +92,19 @@ describe("useReviewDetailLoader", () => {
     expect(loader.pollErrorMessage.value).toBe("自动刷新连续失败 3 次，已暂停。请手动刷新。");
     expect(stopPolling).toHaveBeenCalledOnce();
   });
+
+  it("clears stale GitHub comment data when a terminal task is superseded", async () => {
+    const clearGithubCommentPreviewAndHistory = vi.fn();
+    fetchReviewDetail.mockResolvedValueOnce(task(1, "superseded"));
+    const loader = createLoader(() => 1, {
+      clearGithubCommentPreviewAndHistory,
+      isTerminalReviewStatus: () => true
+    });
+
+    await loader.loadDetail();
+
+    expect(clearGithubCommentPreviewAndHistory).toHaveBeenCalledOnce();
+  });
 });
 
 const createLoader = (
@@ -109,7 +122,7 @@ const createLoader = (
     ...overrides
   });
 
-const task = (id: number) => ({ id, status: "pending" }) as ReviewTaskDetail;
+const task = (id: number, status = "pending") => ({ id, status }) as ReviewTaskDetail;
 
 const deferred = <T>() => {
   let resolve!: (value: T) => void;

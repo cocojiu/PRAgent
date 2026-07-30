@@ -144,7 +144,15 @@ mysql_query() {
   local sql="$3"
 
   docker exec "${container_name}" sh -lc \
-    'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --batch --skip-column-names --user=root "$1" --execute="$2"' \
+    'if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
+       mysql_root_password="$MYSQL_ROOT_PASSWORD"
+     elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+       mysql_root_password="$(cat "$MYSQL_ROOT_PASSWORD_FILE")"
+     else
+       echo "MySQL root password source is unavailable." >&2
+       exit 64
+     fi
+     MYSQL_PWD="$mysql_root_password" exec mysql --batch --skip-column-names --user=root "$1" --execute="$2"' \
     sh "${query_database}" "${sql}"
 }
 
@@ -153,7 +161,15 @@ dump_database() {
   local dump_database_name="$2"
 
   docker exec "${container_name}" sh -lc '
-    MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysqldump \
+    if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
+      mysql_root_password="$MYSQL_ROOT_PASSWORD"
+    elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+      mysql_root_password="$(cat "$MYSQL_ROOT_PASSWORD_FILE")"
+    else
+      echo "MySQL root password source is unavailable." >&2
+      exit 64
+    fi
+    MYSQL_PWD="$mysql_root_password" exec mysqldump \
       --user=root \
       --single-transaction \
       --quick \
@@ -342,7 +358,14 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
       fail "isolated_mysql_exited_before_ready"
     fi
     if docker exec "${verify_container}" sh -lc \
-      'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql \
+      'if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
+         mysql_root_password="$MYSQL_ROOT_PASSWORD"
+       elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+         mysql_root_password="$(cat "$MYSQL_ROOT_PASSWORD_FILE")"
+       else
+         exit 64
+       fi
+       MYSQL_PWD="$mysql_root_password" mysql \
         --batch \
         --skip-column-names \
         --connect-timeout=2 \
@@ -361,7 +384,14 @@ if [[ "${VERIFY_RESTORE}" == "true" ]]; then
     -in "${backup_path}" \
     | gzip -dc \
     | docker exec --interactive "${verify_container}" sh -lc \
-        'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --user=root --binary-mode=1'
+        'if [ -n "${MYSQL_ROOT_PASSWORD:-}" ]; then
+           mysql_root_password="$MYSQL_ROOT_PASSWORD"
+         elif [ -n "${MYSQL_ROOT_PASSWORD_FILE:-}" ] && [ -r "$MYSQL_ROOT_PASSWORD_FILE" ]; then
+           mysql_root_password="$(cat "$MYSQL_ROOT_PASSWORD_FILE")"
+         else
+           exit 64
+         fi
+         MYSQL_PWD="$mysql_root_password" exec mysql --user=root --binary-mode=1'
 
   mysql_query "${verify_container}" "${database_name}" "${MANIFEST_SQL}" >"${restored_manifest_file}"
   exact_row_count="$(awk -F '\t' '{ total += $2 } END { print total + 0 }' "${restored_manifest_file}")"

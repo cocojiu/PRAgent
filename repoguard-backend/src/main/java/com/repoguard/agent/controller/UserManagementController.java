@@ -44,9 +44,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserManagementController {
 
     private final UserManagementLifecycle lifecycle;
+    private final AuditClientIpResolver clientIpResolver;
 
-    public UserManagementController(UserManagementLifecycle lifecycle) {
+    public UserManagementController(UserManagementLifecycle lifecycle, AuditClientIpResolver clientIpResolver) {
         this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle must not be null");
+        this.clientIpResolver = Objects.requireNonNull(clientIpResolver, "clientIpResolver must not be null");
     }
 
     @GetMapping
@@ -115,7 +117,7 @@ public class UserManagementController {
         var user = RequestAuthentication.require(request);
         return new AuditContext(
             user.id(),
-            AuditClientIpResolver.resolve(request),
+            clientIpResolver.resolve(request),
             truncate(request.getHeader("User-Agent"), 512)
         );
     }

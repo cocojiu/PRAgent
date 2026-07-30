@@ -2,8 +2,6 @@ package com.repoguard.agent.review;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -46,7 +44,7 @@ final class ReviewQualityEvaluationRunner {
     }
 
     EvaluationOutcome evaluate(EvaluationCase evaluationCase) {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repoguard-evaluation",
             evaluationCase.id(),
             1,
@@ -76,7 +74,7 @@ final class ReviewQualityEvaluationRunner {
         String id,
         String category,
         String description,
-        List<GithubChangedFile> files,
+        List<PullRequestChangedFile> files,
         String llmResponse,
         ExpectedOutcome expected
     ) {

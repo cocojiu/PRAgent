@@ -1,8 +1,6 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewRuleSettings;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
@@ -25,7 +23,7 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
 
     @Override
     public List<ReviewFindingResult> evaluate(
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     ) {
         if (diff.files() == null || diff.files().isEmpty() || hasTestChange(diff.files())) {
@@ -47,9 +45,9 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
             .orElseGet(List::of);
     }
 
-    private boolean hasTestChange(List<GithubChangedFile> files) {
+    private boolean hasTestChange(List<PullRequestChangedFile> files) {
         return files.stream()
-            .map(GithubChangedFile::filename)
+            .map(PullRequestChangedFile::filename)
             .map(ReviewRuleApplicability::normalizePath)
             .anyMatch(path -> path.contains("/src/test/")
                 || path.endsWith("controllertest.java")
@@ -57,7 +55,7 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
                 || path.endsWith("integrationtest.java"));
     }
 
-    private boolean isControllerApiChange(GithubChangedFile file) {
+    private boolean isControllerApiChange(PullRequestChangedFile file) {
         if (file == null || !ReviewRuleApplicability.normalizePath(file.filename()).endsWith("controller.java")) {
             return false;
         }

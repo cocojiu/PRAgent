@@ -2,9 +2,9 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalFailureSignals;
-import org.springframework.dao.CannotAcquireLockException;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
+import com.repoguard.agent.observability.ReviewFailureCategoryResolver;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -13,9 +13,13 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
-public class ReviewExecutionFailureClassifier {
+public class ReviewExecutionFailureClassifier implements ReviewFailureCategoryResolver {
 
+    @Override
     public String failureCategory(RuntimeException ex) {
+        if (ex instanceof GithubPullRequestHeadChangedException) {
+            return "review_superseded";
+        }
         if (ex instanceof ExternalCallException externalCallException) {
             return externalCallException.getCategory();
         }
@@ -77,9 +81,7 @@ public class ReviewExecutionFailureClassifier {
     }
 
     private boolean isStateConflict(RuntimeException ex) {
-        return ex instanceof CannotAcquireLockException
-            || ex instanceof DeadlockLoserDataAccessException
-            || ex instanceof DuplicateKeyException
+        return ex instanceof DuplicateKeyException
             || ex instanceof OptimisticLockingFailureException
             || ex instanceof PessimisticLockingFailureException;
     }

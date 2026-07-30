@@ -8,8 +8,11 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
 import com.repoguard.agent.entity.AdminOperationAudit;
 import com.repoguard.agent.mapper.AdminOperationAuditMapper;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -20,7 +23,10 @@ import org.springframework.mock.web.MockHttpServletRequest;
 class AdminOperationAuditRecorderTest {
 
     private final AdminOperationAuditMapper mapper = Mockito.mock(AdminOperationAuditMapper.class);
-    private final AdminOperationAuditRecorder recorder = new AdminOperationAuditRecorder(mapper);
+    private final AdminOperationAuditRecorder recorder = new AdminOperationAuditRecorder(
+        mapper,
+        new AuditClientIpResolver(new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry()))
+    );
 
     @AfterEach
     void clearMdc() {
@@ -63,6 +69,19 @@ class AdminOperationAuditRecorderTest {
         verify(mapper).insert(auditCaptor.capture());
         assertThat(auditCaptor.getValue().getResult()).isEqualTo("FAILED");
         assertThat(auditCaptor.getValue().getFailureCategory()).isEqualTo("IllegalStateException");
+    }
+
+    @Test
+    void ignoresForwardedClientIpFromUntrustedRemoteAddress() {
+        MockHttpServletRequest request = request();
+        request.setRemoteAddr("198.51.100.20");
+        request.addHeader("X-Real-IP", "203.0.113.10");
+
+        recorder.record(request, 200, null);
+
+        ArgumentCaptor<AdminOperationAudit> auditCaptor = ArgumentCaptor.forClass(AdminOperationAudit.class);
+        verify(mapper).insert(auditCaptor.capture());
+        assertThat(auditCaptor.getValue().getClientIp()).isEqualTo("198.51.100.20");
     }
 
     @Test

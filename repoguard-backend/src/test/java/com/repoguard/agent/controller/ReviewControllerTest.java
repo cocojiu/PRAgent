@@ -40,6 +40,7 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
@@ -49,10 +50,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 
 class ReviewControllerTest {
 
     private ReviewQuery lastListQuery;
+    private ReviewQuery lastSummaryQuery;
     private Long lastFindingsTaskId;
     private int lastFindingsPage;
     private int lastFindingsPageSize;
@@ -104,6 +107,12 @@ class ReviewControllerTest {
                 "2026-06-12 11:00:00"
             );
             return new PageResponse<>(List.of(item), 1);
+        }
+
+        @Override
+        public ReviewTaskListSummary getReviewListSummary(ReviewQuery query) {
+            lastSummaryQuery = query;
+            return new ReviewTaskListSummary(321L, 12L, 7L, 96L);
         }
 
         @Override
@@ -455,9 +464,17 @@ class ReviewControllerTest {
     };
 
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new ReviewController(reviewService))
+        .standaloneSetup(validated(new ReviewController(reviewService)))
         .setControllerAdvice(new GlobalExceptionHandler())
         .build();
+
+    @SuppressWarnings("unchecked")
+    private <T> T validated(T controller) {
+        MethodValidationPostProcessor processor = new MethodValidationPostProcessor();
+        processor.setProxyTargetClass(true);
+        processor.afterPropertiesSet();
+        return (T) processor.postProcessAfterInitialization(controller, controller.getClass().getName());
+    }
 
     @Test
     void listReviewsReturnsPagedItems() throws Exception {
@@ -517,6 +534,35 @@ class ReviewControllerTest {
     @Test
     void listReviewsRejectsOverlongKeyword() throws Exception {
         mockMvc.perform(get("/api/v1/reviews")
+                .param("keyword", "x".repeat(256)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getReviewListSummaryReturnsFilteredAggregates() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/summary")
+                .param("repository", "repo-guard-demo/spring-boot-demo")
+                .param("status", "failed")
+                .param("riskLevel", "high")
+                .param("triggerSource", "github_webhook")
+                .param("keyword", "export"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.code").value("OK"))
+            .andExpect(jsonPath("$.data.total").value(321))
+            .andExpect(jsonPath("$.data.highRisk").value(12))
+            .andExpect(jsonPath("$.data.failed").value(7))
+            .andExpect(jsonPath("$.data.averageDurationSeconds").value(96));
+        assertThat(lastSummaryQuery.repository()).isEqualTo("repo-guard-demo/spring-boot-demo");
+        assertThat(lastSummaryQuery.status()).isEqualTo("failed");
+        assertThat(lastSummaryQuery.riskLevel()).isEqualTo("high");
+        assertThat(lastSummaryQuery.triggerSource()).isEqualTo("github_webhook");
+        assertThat(lastSummaryQuery.keyword()).isEqualTo("export");
+    }
+
+    @Test
+    void getReviewListSummaryRejectsOverlongKeyword() throws Exception {
+        mockMvc.perform(get("/api/v1/reviews/summary")
                 .param("keyword", "x".repeat(256)))
             .andExpect(status().isBadRequest());
     }

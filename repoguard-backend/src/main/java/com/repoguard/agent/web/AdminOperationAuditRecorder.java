@@ -16,9 +16,11 @@ public class AdminOperationAuditRecorder {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AdminOperationAuditRecorder.class);
     private final AdminOperationAuditMapper mapper;
+    private final AuditClientIpResolver clientIpResolver;
 
-    public AdminOperationAuditRecorder(AdminOperationAuditMapper mapper) {
+    public AdminOperationAuditRecorder(AdminOperationAuditMapper mapper, AuditClientIpResolver clientIpResolver) {
         this.mapper = mapper;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -34,7 +36,7 @@ public class AdminOperationAuditRecorder {
             audit.setTargetId(truncate(request.getRequestURI(), 255));
             audit.setDiffJson("{\"requestBody\":\"redacted\"}");
             audit.setTraceId(truncate(MDC.get("traceId"), 128));
-            audit.setClientIp(AuditClientIpResolver.resolve(request));
+            audit.setClientIp(clientIpResolver.resolve(request));
             audit.setUserAgent(truncate(request.getHeader("User-Agent"), 512));
             audit.setResult(status < 400 && failure == null ? "SUCCESS" : "FAILED");
             audit.setFailureCategory(

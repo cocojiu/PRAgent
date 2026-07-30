@@ -1,7 +1,7 @@
 package com.repoguard.agent.github;
 
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallErrorClassifier;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.observability.RepoGuardMetrics;
@@ -47,6 +47,10 @@ public class GithubIntegrationHealthReporter {
             recordGithubApiRequest(startedAt, operation, "success", null, null);
             markChecked(settings, null);
             return result;
+        } catch (GithubPullRequestHeadChangedException ex) {
+            recordGithubApiRequest(startedAt, operation, "superseded", null, null);
+            markChecked(settings, null);
+            throw ex;
         } catch (RuntimeException ex) {
             RuntimeException classified = ExternalCallErrorClassifier.github(ex);
             recordGithubApiRequest(startedAt, operation, "failed", classified);

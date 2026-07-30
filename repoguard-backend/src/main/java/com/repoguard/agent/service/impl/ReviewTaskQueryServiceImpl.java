@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
@@ -10,6 +11,7 @@ import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
@@ -18,15 +20,20 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.ReviewTaskMapper.ReviewTaskListSummaryStat;
+import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.service.impl.ReviewTaskDetailDataLoader.ReviewTaskDetailData;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -83,6 +90,25 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
                 .map(task -> queryItemLoader.assemble(task, timelinesByTaskId.get(task.getId())))
                 .toList(),
             page.getTotal()
+        );
+    }
+
+    @Override
+    @Cacheable(
+        cacheNames = CacheNames.REVIEW_TASK_LIST_SUMMARY,
+        key = "#query.listSummaryCacheKey()",
+        sync = true
+    )
+    public ReviewTaskListSummary getReviewListSummary(ReviewQuery query) {
+        ReviewTaskListSummaryStat stat = reviewTaskMapper.selectListSummaryStat(listQueryBuilder.buildCountQuery(query));
+        if (stat == null) {
+            return new ReviewTaskListSummary(0L, 0L, 0L, 0L);
+        }
+        return new ReviewTaskListSummary(
+            longValue(stat.getTotal()),
+            longValue(stat.getHighRisk()),
+            longValue(stat.getFailed()),
+            roundedSeconds(stat.getAverageDurationSeconds())
         );
     }
 
@@ -317,6 +343,14 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
 
     private long longValue(Integer value) {
         return value == null ? 0L : value.longValue();
+    }
+
+    private long longValue(Long value) {
+        return value == null ? 0L : value;
+    }
+
+    private long roundedSeconds(BigDecimal value) {
+        return value == null ? 0L : value.setScale(0, RoundingMode.HALF_UP).longValue();
     }
 
     private boolean hasAnyText(String... values) {

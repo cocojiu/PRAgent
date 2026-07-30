@@ -22,7 +22,6 @@ class ReviewExecutionTaskTerminalWriterTest {
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTaskStateMachine stateMachine = new ReviewTaskStateMachine();
     private final ReviewExecutionTaskTerminalWriter writer = new ReviewExecutionTaskTerminalWriter(
-        reviewTaskMapper,
         new ReviewTaskClaimService(reviewTaskMapper, stateMachine),
         new ReviewTaskCompletionApplier(
             stateMachine,
@@ -36,7 +35,7 @@ class ReviewExecutionTaskTerminalWriterTest {
     @Test
     void appliesCompletedTaskStateAndReleasesOwnedClaim() {
         ReviewTask task = reviewingTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         ReviewExecutionTaskTerminalWriter.CompletedTaskWrite result = writer.applyCompleted(
             task,
@@ -50,13 +49,27 @@ class ReviewExecutionTaskTerminalWriterTest {
         assertThat(task.getStatus()).isEqualTo("COMPLETED");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        verify(reviewTaskMapper).updateById(task);
+        org.mockito.ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor =
+            org.mockito.ArgumentCaptor.captor();
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSet()).contains(
+            "status",
+            "risk_level",
+            "llm_status",
+            "llm_provider",
+            "human_review_status",
+            "finished_at",
+            "duration_seconds",
+            "review_claimed_at",
+            "review_claimed_by"
+        );
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
     void throwsWhenCompletedClaimWasLostBeforePersistingTerminalState() {
         ReviewTask task = reviewingTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         assertThatThrownBy(() -> writer.applyCompleted(
             task,
@@ -71,7 +84,7 @@ class ReviewExecutionTaskTerminalWriterTest {
     @Test
     void appliesFailedTaskStateOnlyWhenClaimIsStillOwned() {
         ReviewTask task = reviewingTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
 
         ReviewExecutionTaskTerminalWriter.FailedTaskWrite result = writer.applyFailed(
             task,
@@ -86,13 +99,14 @@ class ReviewExecutionTaskTerminalWriterTest {
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
     void skipsFailedTaskUpdateWhenClaimWasLost() {
         ReviewTask task = reviewingTask();
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         ReviewExecutionTaskTerminalWriter.FailedTaskWrite result = writer.applyFailed(
             task,

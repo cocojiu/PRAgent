@@ -1,20 +1,26 @@
 package com.repoguard.agent.web;
 
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
 
-public final class AuditClientIpResolver {
+@Component
+public class AuditClientIpResolver {
 
     private static final int MAX_CLIENT_IP_LENGTH = 64;
 
-    private AuditClientIpResolver() {
+    private final TrustedProxyClientIpResolver clientIpResolver;
+
+    public AuditClientIpResolver(TrustedProxyClientIpResolver clientIpResolver) {
+        this.clientIpResolver = Objects.requireNonNull(clientIpResolver, "clientIpResolver must not be null");
     }
 
-    public static String resolve(HttpServletRequest request) {
+    public String resolve(HttpServletRequest request) {
         if (request == null) {
             return null;
         }
-        String forwarded = request.getHeader("X-Real-IP");
-        return truncate(forwarded == null || forwarded.isBlank() ? request.getRemoteAddr() : forwarded, MAX_CLIENT_IP_LENGTH);
+        return truncate(clientIpResolver.resolve(request), MAX_CLIENT_IP_LENGTH);
     }
 
     private static String truncate(String value, int maxLength) {

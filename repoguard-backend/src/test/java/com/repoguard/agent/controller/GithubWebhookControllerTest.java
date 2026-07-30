@@ -284,7 +284,7 @@ class GithubWebhookControllerTest {
                 .header("X-GitHub-Event", "ping")
                 .header("X-Hub-Signature-256", "sha256=invalid")
                 .content(payload))
-            .andExpect(status().isPayloadTooLarge())
+            .andExpect(status().isContentTooLarge())
             .andExpect(jsonPath("$.code").value("PAYLOAD_TOO_LARGE"));
 
         verify(reviewService, never()).triggerManualReview(any());
@@ -293,6 +293,7 @@ class GithubWebhookControllerTest {
     private GithubWebhookProperties webhookProperties() {
         GithubWebhookProperties result = new GithubWebhookProperties();
         result.setSecret(SIGNING_KEY);
+        result.setAllowedHeadBranches(java.util.List.of("PRAgent-test"));
         return result;
     }
 

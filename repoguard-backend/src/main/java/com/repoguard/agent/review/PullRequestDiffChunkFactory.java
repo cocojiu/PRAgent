@@ -1,7 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -18,13 +16,13 @@ class PullRequestDiffChunkFactory {
     }
 
     PullRequestDiffChunk fileChunk(
-        GithubPullRequestDiff source,
-        List<GithubChangedFile> files,
+        PullRequestDiff source,
+        List<PullRequestChangedFile> files,
         int index,
         int total,
         DiffChunkingPolicy policy
     ) {
-        List<GithubChangedFile> safeFiles = files == null ? List.of() : files;
+        List<PullRequestChangedFile> safeFiles = files == null ? List.of() : files;
         return new PullRequestDiffChunk(
             index,
             total,
@@ -37,14 +35,14 @@ class PullRequestDiffChunkFactory {
     }
 
     PullRequestDiffChunk semanticChunk(
-        GithubPullRequestDiff source,
+        PullRequestDiff source,
         List<SemanticDiffSegment> segments,
         int index,
         int total,
         DiffChunkingPolicy policy
     ) {
         List<SemanticDiffSegment> safeSegments = segments == null ? List.of() : segments;
-        List<GithubChangedFile> files = safeSegments.stream().map(SemanticDiffSegment::file).toList();
+        List<PullRequestChangedFile> files = safeSegments.stream().map(SemanticDiffSegment::file).toList();
         return new PullRequestDiffChunk(
             index,
             total,
@@ -56,15 +54,22 @@ class PullRequestDiffChunkFactory {
         );
     }
 
-    private GithubPullRequestDiff subDiff(GithubPullRequestDiff source, List<GithubChangedFile> files) {
-        return new GithubPullRequestDiff(source.owner(), source.repository(), source.prNumber(), files);
+    private PullRequestDiff subDiff(PullRequestDiff source, List<PullRequestChangedFile> files) {
+        return new PullRequestDiff(
+            source.owner(),
+            source.repository(),
+            source.prNumber(),
+            source.headSha(),
+            files,
+            source.truncation()
+        );
     }
 
-    private int additions(List<GithubChangedFile> files) {
+    private int additions(List<PullRequestChangedFile> files) {
         return files.stream().mapToInt(file -> safeInt(file.additions())).sum();
     }
 
-    private int deletions(List<GithubChangedFile> files) {
+    private int deletions(List<PullRequestChangedFile> files) {
         return files.stream().mapToInt(file -> safeInt(file.deletions())).sum();
     }
 

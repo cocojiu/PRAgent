@@ -266,12 +266,18 @@ const loadUsersWithMessage = async () => {
   }
 };
 
+const latestAuditsLoader = createLatestOnlyLoader<Awaited<ReturnType<typeof fetchUserOperationAudits>>>((page) => {
+  audits.value = page.items;
+  auditTotal.value = page.total;
+});
+
 const loadAudits = async () => {
   auditLoading.value = true;
   try {
-    const page = await fetchUserOperationAudits({ page: auditPage.value, pageSize: auditPageSize.value });
-    audits.value = page.items;
-    auditTotal.value = page.total;
+    await latestAuditsLoader.load(() => fetchUserOperationAudits({
+      page: auditPage.value,
+      pageSize: auditPageSize.value
+    }));
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "用户管理操作失败"));
   } finally {
@@ -469,6 +475,7 @@ onUnmounted(() => {
     clearTimeout(userFilterDebounceTimer);
   }
   latestUsersLoader.cancel();
+  latestAuditsLoader.cancel();
 });
 
 onMounted(loadAll);

@@ -2,8 +2,8 @@ package com.repoguard.agent.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.config.GithubIntegrationSettings;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
 
@@ -15,6 +15,7 @@ class DashboardStatusMapperTest {
     void mapsReviewTaskStatusesToDisplayText() {
         assertThat(mapper.reviewTaskStatusText("COMPLETED")).isEqualTo("已完成");
         assertThat(mapper.reviewTaskStatusText("reviewing")).isEqualTo("审查中");
+        assertThat(mapper.reviewTaskStatusText("SUPERSEDED")).isEqualTo("已过期");
         assertThat(mapper.reviewTaskStatusText("PUBLISH_FAILED")).isEqualTo("发布失败");
         assertThat(mapper.reviewTaskStatusText("EXECUTION_TIMEOUT")).isEqualTo("执行超时");
         assertThat(mapper.reviewTaskStatusText("REQUEUE_PENDING")).isEqualTo("重入队中");
@@ -43,7 +44,8 @@ class DashboardStatusMapperTest {
     void mapsRabbitMqHealthFromChannelState() {
         assertThat(mapper.rabbitMqHealth(true)).isEqualTo("正常");
         assertThat(mapper.rabbitMqHealth(false)).isEqualTo("异常");
-        assertThat(mapper.rabbitMqHealth(null)).isEqualTo("异常");
+        assertThat(mapper.rabbitMqHealth((Boolean) null)).isEqualTo("未知");
+        assertThat(mapper.rabbitMqHealth("UNKNOWN")).isEqualTo("未知");
     }
 
     private GithubIntegrationSettings githubSettings(String status, String token) {

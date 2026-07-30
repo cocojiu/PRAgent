@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -17,6 +20,8 @@ import com.repoguard.agent.authentication.AuthenticatedPrincipal;
 import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.common.TrustedProxyClientIpResolver;
+import com.repoguard.agent.common.TrustedProxyProperties;
 import com.repoguard.agent.dto.AuthCurrentUserDto;
 import com.repoguard.agent.dto.AuthLoginRequest;
 import com.repoguard.agent.dto.AuthLogoutRequest;
@@ -28,7 +33,9 @@ import com.repoguard.agent.dto.AuthResponse;
 import com.repoguard.agent.dto.AuthUserDto;
 import com.repoguard.agent.security.AuthAttemptLimiter;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.web.AuditClientIpResolver;
 import com.repoguard.agent.web.AuthSessionCookieManager;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.http.Cookie;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -39,6 +46,8 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class AuthControllerTest {
+
+    private static final String REFRESH_TOKEN_DIGEST_PREFIX = "e65009f6e0ae9fc2";
 
     private final AuthService authService = new AuthService() {
         @Override
@@ -194,7 +203,7 @@ class AuthControllerTest {
     void changePasswordAppliesDedicatedAttemptLimitForAuthenticatedUser() throws Exception {
         AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
         MockMvc limitedMockMvc = MockMvcBuilders
-            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter, clientIpResolver()))
             .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
             .build();
 
@@ -217,6 +226,60 @@ class AuthControllerTest {
     }
 
     @Test
+    void loginAttemptLimitIgnoresSpoofedForwardedIpFromUntrustedRemote() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter, realClientIpResolver()))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/login")
+                .with(request -> {
+                    request.setRemoteAddr("203.0.113.50");
+                    return request;
+                })
+                .header("X-Real-IP", "198.51.100.7")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "admin",
+                      "password": "Secure123",
+                      "remember": false
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        verify(limiter).requireAllowed("login", "admin", "203.0.113.50");
+    }
+
+    @Test
+    void loginAttemptLimitUsesForwardedIpFromTrustedProxy() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter, realClientIpResolver()))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/login")
+                .with(request -> {
+                    request.setRemoteAddr("172.18.0.2");
+                    return request;
+                })
+                .header("X-Real-IP", "203.0.113.9")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "account": "admin",
+                      "password": "Secure123",
+                      "remember": false
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        verify(limiter).requireAllowed("login", "admin", "203.0.113.9");
+    }
+
+    @Test
     void changePasswordWithoutAuthenticationReturns401() throws Exception {
         mockMvc.perform(post("/api/v1/auth/password/change")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -232,13 +295,13 @@ class AuthControllerTest {
     }
 
     @Test
-    void refreshAppliesAttemptLimitUsingTheCookieToken() throws Exception {
+    void refreshAppliesAttemptLimitUsingCookieTokenDigestInsteadOfRawValue() throws Exception {
         AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
         doThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, "Too many authentication attempts"))
             .when(limiter)
-            .requireAllowed(eq("refresh"), eq("refresh-token-value"), any(String.class));
+            .requireAllowed(eq("refresh"), eq(REFRESH_TOKEN_DIGEST_PREFIX), any(String.class));
         MockMvc limitedMockMvc = MockMvcBuilders
-            .standaloneSetup(new AuthController(authService, cookieManager(), limiter))
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter, clientIpResolver()))
             .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
             .build();
 
@@ -250,9 +313,26 @@ class AuthControllerTest {
 
         verify(limiter).requireAllowed(
             eq("refresh"),
-            eq("refresh-token-value"),
+            eq(REFRESH_TOKEN_DIGEST_PREFIX),
             any(String.class)
         );
+        verify(limiter, never()).requireAllowed(eq("refresh"), eq("refresh-token-value"), any(String.class));
+    }
+
+    @Test
+    void refreshWithoutCookieAppliesAttemptLimitWithoutBucketKey() throws Exception {
+        AuthAttemptLimiter limiter = mock(AuthAttemptLimiter.class);
+        MockMvc limitedMockMvc = MockMvcBuilders
+            .standaloneSetup(new AuthController(authService, cookieManager(), limiter, clientIpResolver()))
+            .setControllerAdvice(new com.repoguard.agent.common.GlobalExceptionHandler())
+            .build();
+
+        limitedMockMvc.perform(post("/api/v1/auth/refresh")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isUnauthorized());
+
+        verify(limiter).requireAllowed(eq("refresh"), isNull(), any(String.class));
     }
 
     @Test
@@ -567,6 +647,18 @@ class AuthControllerTest {
 
     private static AuthSessionCookieManager cookieManager() {
         return new AuthSessionCookieManager(false);
+    }
+
+    private static AuditClientIpResolver clientIpResolver() {
+        AuditClientIpResolver resolver = mock(AuditClientIpResolver.class);
+        when(resolver.resolve(any())).thenReturn("203.0.113.10");
+        return resolver;
+    }
+
+    private static AuditClientIpResolver realClientIpResolver() {
+        return new AuditClientIpResolver(
+            new TrustedProxyClientIpResolver(new TrustedProxyProperties(), new SimpleMeterRegistry())
+        );
     }
 
     private static Cookie csrfCookie() {

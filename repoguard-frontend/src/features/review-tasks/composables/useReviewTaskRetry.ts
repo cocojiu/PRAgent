@@ -21,8 +21,12 @@ export const useReviewTaskRetry = ({ canManage, onRetried }: UseReviewTaskRetryO
     }
     try {
       const failureText = task.failureReason ? `\n\n失败原因：${task.failureReason}` : "";
-      await ElMessageBox.confirm(`确认将 PR #${task.prNumber} 重新加入审查队列？${failureText}`, "确认重试审查任务", {
-        confirmButtonText: "确认重试",
+      const superseded = task.status === "superseded";
+      const prompt = superseded
+        ? `确认读取 PR #${task.prNumber} 的最新提交并重新审查？${failureText}`
+        : `确认将 PR #${task.prNumber} 重新加入审查队列？${failureText}`;
+      await ElMessageBox.confirm(prompt, superseded ? "确认按最新提交重评" : "确认重试审查任务", {
+        confirmButtonText: superseded ? "确认重评" : "确认重试",
         cancelButtonText: "取消",
         type: "warning"
       });

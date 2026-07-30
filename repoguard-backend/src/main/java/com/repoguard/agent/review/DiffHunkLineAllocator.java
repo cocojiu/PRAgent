@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -15,7 +14,7 @@ class DiffHunkLineAllocator {
         this.hunkSplitter = Objects.requireNonNull(hunkSplitter, "hunkSplitter");
     }
 
-    List<DiffHunkLineAllocation> allocate(GithubChangedFile file, List<String> hunks) {
+    List<DiffHunkLineAllocation> allocate(PullRequestChangedFile file, List<String> hunks) {
         List<String> safeHunks = hunks == null ? List.of() : hunks;
         if (safeHunks.isEmpty()) {
             return List.of();

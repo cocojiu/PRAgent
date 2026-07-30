@@ -8,6 +8,7 @@ HTTP_PORT_BIND="${HTTP_PORT_BIND:-80}"
 HTTPS_PORT_BIND="${HTTPS_PORT_BIND:-443}"
 PRODUCTION_ORIGIN="${PRODUCTION_ORIGIN:-http://CHANGE_ME_SERVER_IP}"
 PRODUCTION_SERVER_NAME="${PRODUCTION_SERVER_NAME:-CHANGE_ME_SERVER_IP}"
+SECRETS_DIR="$APP_DIR/secrets"
 
 need_root() {
   if [ "$(id -u)" -ne 0 ]; then
@@ -100,25 +101,59 @@ ensure_user() {
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -base64 48 | tr -d '\n'
+  elif [ -r /dev/urandom ] && command -v od >/dev/null 2>&1; then
+    od -An -N48 -tx1 /dev/urandom | tr -d ' \n'
   else
-    date +%s%N | sha256sum | awk '{print $1}'
+    echo "No cryptographically secure random source is available." >&2
+    return 1
   fi
+}
+
+write_secret_if_missing() {
+  target="$1"
+  value="$2"
+  if [ -e "$target" ]; then
+    if [ ! -f "$target" ] || [ ! -s "$target" ]; then
+      echo "Existing secret path must be a non-empty regular file: $target" >&2
+      exit 1
+    fi
+    echo "Keep existing $target"
+  else
+    printf '%s' "$value" > "$target"
+  fi
+  chmod 600 "$target"
+}
+
+write_initial_secret_files() {
+  install -d -m 700 "$SECRETS_DIR"
+  write_secret_if_missing "$SECRETS_DIR/mysql.root-password" "$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/spring.datasource.password" "$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/repoguard.security.encryption-key" "RG!1-$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/repoguard.security.encryption-salt" "$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/repoguard.auth.token-secret" "$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/app.security.admin-api-key.key" "$(random_secret)"
+  write_secret_if_missing "$SECRETS_DIR/app.github.webhook.secret" "$(random_secret)"
 }
 
 write_env_if_missing() {
   if [ -f "$APP_DIR/.env" ]; then
     echo "Keep existing $APP_DIR/.env"
+    if grep -Eq '^(MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|REPOGUARD_SECURITY_ENCRYPTION_KEY|REPOGUARD_SECURITY_ENCRYPTION_SALT|REPOGUARD_AUTH_TOKEN_SECRET|REPOGUARD_ADMIN_API_KEY|REPOGUARD_GITHUB_WEBHOOK_SECRET)=' "$APP_DIR/.env"; then
+      echo "Existing inline secrets require the README production migration procedure before the next deployment." >&2
+    fi
     return
   fi
+
+  write_initial_secret_files
 
   cat > "$APP_DIR/.env" <<EOF
 BACKEND_IMAGE=ghcr.io/your-org/pragent-backend:latest
 FRONTEND_IMAGE=ghcr.io/your-org/pragent-frontend:latest
 
-MYSQL_ROOT_PASSWORD=$(random_secret)
+MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password
 MYSQL_DATABASE=repoguard
 MYSQL_USER=repoguard
-MYSQL_PASSWORD=$(random_secret)
+MYSQL_PASSWORD_FILE=./secrets/spring.datasource.password
 
 RABBITMQ_DEFAULT_USER=repoguard
 RABBITMQ_DEFAULT_PASS=$(random_secret)
@@ -126,12 +161,13 @@ RABBITMQ_DEFAULT_VHOST=/repoguard
 
 REPOGUARD_FRONTEND_SERVER_NAME=${PRODUCTION_SERVER_NAME}
 APP_CORS_ALLOWED_ORIGINS=${PRODUCTION_ORIGIN}
-REPOGUARD_SECURITY_ENCRYPTION_KEY=$(random_secret)
+REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE=./secrets/repoguard.security.encryption-key
 REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=prod-001
-REPOGUARD_AUTH_TOKEN_SECRET=$(random_secret)
-REPOGUARD_ADMIN_API_KEY=$(random_secret)
+REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE=./secrets/repoguard.security.encryption-salt
+REPOGUARD_AUTH_TOKEN_SECRET_FILE=./secrets/repoguard.auth.token-secret
+REPOGUARD_ADMIN_API_KEY_FILE=./secrets/app.security.admin-api-key.key
 REPOGUARD_ADMIN_API_KEY_ENABLED=true
-REPOGUARD_GITHUB_WEBHOOK_SECRET=$(random_secret)
+REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret
 REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES=
 REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES=PRAgent-test
 REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE=true
@@ -166,6 +202,10 @@ main() {
 
   write_env_if_missing
   chown "$APP_USER:$APP_GROUP" "$APP_DIR/.env"
+  if [ -d "$SECRETS_DIR" ]; then
+    chown -R "$APP_USER:$APP_GROUP" "$SECRETS_DIR"
+    chmod 700 "$SECRETS_DIR"
+  fi
   check_port
 
   docker --version

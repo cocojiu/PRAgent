@@ -1,17 +1,15 @@
 package com.repoguard.agent.worker;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class ReviewExecutionNotifierTest {
 
@@ -30,21 +28,21 @@ class ReviewExecutionNotifierTest {
             "2026-07-09T10:00:04"
         );
 
-        notifier.reviewFinishedAfterCommit(task, 3);
-        notifier.reviewFailedAfterCommit(task);
+        notifier.reviewFinished(task, 3);
+        notifier.reviewFailed(task);
 
         verify(notificationDispatchService).reviewFinished(task, 3);
         verify(notificationDispatchService).reviewFailed(task);
         verify(metricsRecorder).recordStage(
             Duration.ofSeconds(1),
-            "notification_enqueue_review_completed",
+            "notification_outbox_review_completed",
             "success"
         );
-        verify(metricsRecorder).recordStage(Duration.ofSeconds(2), "notification_enqueue_review_failed", "success");
+        verify(metricsRecorder).recordStage(Duration.ofSeconds(2), "notification_outbox_review_failed", "success");
     }
 
     @Test
-    void defersNotificationUntilTransactionCommit() {
+    void propagatesOutboxFailureSoTerminalTransactionCanRollBack() {
         NotificationDispatchService notificationDispatchService =
             org.mockito.Mockito.mock(NotificationDispatchService.class);
         ReviewExecutionMetricsRecorder metricsRecorder = org.mockito.Mockito.mock(ReviewExecutionMetricsRecorder.class);
@@ -52,24 +50,19 @@ class ReviewExecutionNotifierTest {
         ReviewExecutionNotifier notifier = new ReviewExecutionNotifier(notificationDispatchService, clock, metricsRecorder);
         ReviewTask task = new ReviewTask();
         clock.setTimes("2026-07-09T10:05:00", "2026-07-09T10:05:01");
+        doThrow(new IllegalStateException("outbox insert failed"))
+            .when(notificationDispatchService)
+            .reviewFinished(task, 5);
 
-        TransactionSynchronizationManager.initSynchronization();
-        try {
-            notifier.reviewFinishedAfterCommit(task, 5);
-
-            verifyNoInteractions(notificationDispatchService);
-            for (TransactionSynchronization synchronization : TransactionSynchronizationManager.getSynchronizations()) {
-                synchronization.afterCommit();
-            }
-        } finally {
-            TransactionSynchronizationManager.clearSynchronization();
-        }
+        assertThatThrownBy(() -> notifier.reviewFinished(task, 5))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("outbox insert failed");
 
         verify(notificationDispatchService).reviewFinished(task, 5);
         verify(metricsRecorder).recordStage(
             Duration.ofSeconds(1),
-            "notification_enqueue_review_completed",
-            "success"
+            "notification_outbox_review_completed",
+            "failed"
         );
     }
 

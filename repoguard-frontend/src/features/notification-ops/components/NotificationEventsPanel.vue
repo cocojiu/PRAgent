@@ -3,6 +3,7 @@
     <div class="filter-bar notification-filter-bar">
       <el-select v-model="filter.status" placeholder="全部状态" clearable>
         <el-option label="PENDING" value="PENDING" />
+        <el-option label="PUBLISHING" value="PUBLISHING" />
         <el-option label="PUBLISHED" value="PUBLISHED" />
         <el-option label="DELIVERING" value="DELIVERING" />
         <el-option label="DELIVERED" value="DELIVERED" />

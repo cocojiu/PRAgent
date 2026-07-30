@@ -1,7 +1,6 @@
 package com.repoguard.agent.observability;
 
 import com.repoguard.agent.external.ExternalCallException;
-import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import java.time.Duration;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
@@ -10,11 +9,11 @@ import org.springframework.stereotype.Component;
 public class ReviewMetricsRecorder {
 
     private final MetricRecorderSupport metrics;
-    private final ReviewExecutionFailureClassifier failureClassifier;
+    private final ReviewFailureCategoryResolver failureClassifier;
 
     public ReviewMetricsRecorder(
         MetricRecorderSupport metrics,
-        ReviewExecutionFailureClassifier failureClassifier
+        ReviewFailureCategoryResolver failureClassifier
     ) {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");

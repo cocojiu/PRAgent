@@ -23,6 +23,11 @@ services:
       timeout: 5s
       retries: 12
     mem_limit: 700m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rabbitmq:
     image: rabbitmq:3.13.7@sha256:87178a0ee3e2f52980ba356d38646ed1056705ff2d5ff281f8965456eaa0c1e3
@@ -44,6 +49,11 @@ services:
       retries: 4
       start_period: 20s
     mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -51,6 +61,13 @@ services:
       dockerfile: Dockerfile
     container_name: repoguard-backend
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
     depends_on:
       mysql:
         condition: service_healthy
@@ -60,7 +77,7 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       SERVER_PORT: 8081
       JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC"
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-repoguard_demo}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-repoguard_demo}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-repoguard}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
       SPRING_RABBITMQ_HOST: rabbitmq
@@ -74,23 +91,41 @@ services:
       REPOGUARD_API_INSTANCE_COUNT: 1
       REPOGUARD_SECURITY_ENCRYPTION_KEY: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID:-demo-ip-20260614}
+      REPOGUARD_SECURITY_ENCRYPTION_SALT: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:-demo-ip-20260614-encryption-salt}
       REPOGUARD_AUTH_TOKEN_SECRET: ${REPOGUARD_AUTH_TOKEN_SECRET}
+      REPOGUARD_AUTH_TOKEN_SECRET_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:-k1}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:-}
+      REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:-}
       REPOGUARD_ADMIN_API_KEY: ${REPOGUARD_ADMIN_API_KEY}
       REPOGUARD_ADMIN_API_KEY_ENABLED: "true"
+      REPOGUARD_ADMIN_API_KEY_MIN_LENGTH: ${REPOGUARD_ADMIN_API_KEY_MIN_LENGTH:-32}
+      REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP: ${REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP:-30}
+      REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS: ${REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS:-10000}
       REPOGUARD_GITHUB_WEBHOOK_SECRET: ${REPOGUARD_GITHUB_WEBHOOK_SECRET}
       REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES:-}
-      REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:-PRAgent-test}
+      REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:?Set REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES}
       REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE: ${REPOGUARD_GITHUB_WEBHOOK_REQUIRE_SIGNATURE:-true}
       REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT: ${REPOGUARD_GITHUB_WEBHOOK_IGNORE_DRAFT:-true}
       REPOGUARD_REVIEW_EXCHANGE: repoguard.review.exchange.v2
       REPOGUARD_REVIEW_QUEUE: repoguard.review.queue.v2
       REPOGUARD_REVIEW_ROUTING_KEY: repoguard.review.created.v2
+      REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS:-2}
+      REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY:-100}
+      REPOGUARD_ASYNC_RECOVERY_THREADS: ${REPOGUARD_ASYNC_RECOVERY_THREADS:-3}
+      REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY: ${REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY:-100}
+      REPOGUARD_SCHEDULER_POOL_SIZE: ${REPOGUARD_SCHEDULER_POOL_SIZE:-4}
+      REPOGUARD_SCHEDULER_SHUTDOWN_WAIT: ${REPOGUARD_SCHEDULER_SHUTDOWN_WAIT:-10s}
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/actuator/health | grep -q 'UP'"]
       interval: 15s
       timeout: 5s
       retries: 20
     mem_limit: 800m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   frontend:
     build:
@@ -98,12 +133,31 @@ services:
       dockerfile: Dockerfile
     container_name: repoguard-frontend
     restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/cache/nginx:rw,noexec,nosuid,size=16m
+      - /etc/nginx/conf.d:rw,noexec,nosuid,size=4m
     depends_on:
       backend:
         condition: service_healthy
     ports:
       - "80:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz | grep -q '^ok$'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   repoguard_mysql_data:

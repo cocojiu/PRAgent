@@ -9,7 +9,7 @@ import org.springframework.core.Ordered;
 class ObservabilityFilterConfigTest {
 
     @Test
-    void traceFilterRunsBeforeApiObservationAndSecurityFilters() {
+    void traceFilterRunsFirstAndApiObservationRunsAfterSecurityFilters() {
         var traceRegistration = new TraceIdFilterConfig().traceIdFilterRegistration();
         RepoGuardMetrics metrics = RepoGuardMetrics.forTesting(
             new SimpleMeterRegistry(),
@@ -23,7 +23,7 @@ class ObservabilityFilterConfigTest {
             );
 
         assertThat(traceRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE);
-        assertThat(apiRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE + 1);
+        assertThat(apiRegistration.getOrder()).isEqualTo(Ordered.HIGHEST_PRECEDENCE + 20);
         assertThat(apiRegistration.getUrlPatterns()).containsExactly("/api/v1/*");
     }
 }

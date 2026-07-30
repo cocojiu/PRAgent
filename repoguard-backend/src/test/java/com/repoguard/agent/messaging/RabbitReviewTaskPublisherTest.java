@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDateTime;
@@ -167,6 +168,25 @@ class RabbitReviewTaskPublisherTest {
             .hasMessageContaining("publish attempt failed");
         verify(rabbitTemplate, times(3))
             .convertAndSend(eq("test.review.exchange"), eq("test.review.created"), eq(message), any(CorrelationData.class));
+    }
+
+    @Test
+    void publishOnceLeavesRetrySchedulingToDatabaseCompensation() {
+        RabbitTemplate rabbitTemplate = org.mockito.Mockito.mock(RabbitTemplate.class);
+        ReviewTaskMessage message = message();
+        doThrow(new AmqpConnectException(new RuntimeException("connection refused")))
+            .when(rabbitTemplate)
+            .convertAndSend(any(String.class), any(String.class), eq(message), any(CorrelationData.class));
+
+        assertThatThrownBy(() -> publisher(rabbitTemplate, properties()).publishOnce(message))
+            .isInstanceOf(MessagePublishException.class)
+            .hasMessageContaining("publish attempt failed");
+        verify(rabbitTemplate).convertAndSend(
+            eq("test.review.exchange"),
+            eq("test.review.created"),
+            eq(message),
+            any(CorrelationData.class)
+        );
     }
 
     private RabbitReviewQueueProperties properties() {

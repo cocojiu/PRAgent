@@ -22,47 +22,64 @@ describe("useIntegrationConfigPersistence", () => {
     vi.clearAllMocks();
   });
 
-  it("reports each partial save result and reloads server state", async () => {
+  it("saves only the selected integration and applies its returned state", async () => {
     const github = githubConfig();
     const mysql = serviceConfig("mysql");
     const rabbitMq = serviceConfig("rabbitmq");
     const reviewPolicy = policyConfig();
-    const applyGithubConfig = vi.fn();
-    const applyReviewPolicyConfig = vi.fn();
     const applyServiceConfig = vi.fn();
-    const requests = {
-      fetchGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
-      fetchMysqlIntegrationConfig: vi.fn().mockResolvedValue(mysql),
-      fetchRabbitMqIntegrationConfig: vi.fn().mockResolvedValue(rabbitMq),
-      fetchReviewPolicyConfig: vi.fn().mockResolvedValue(reviewPolicy),
-      updateGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
-      updateMysqlIntegrationConfig: vi.fn().mockRejectedValue(new Error("database unavailable")),
-      updateRabbitMqIntegrationConfig: vi.fn().mockResolvedValue(rabbitMq),
-      updateReviewPolicyConfig: vi.fn().mockResolvedValue(reviewPolicy)
-    };
+    const requests = requestActions({ github, mysql, rabbitMq, reviewPolicy });
     const persistence = useIntegrationConfigPersistence({
-      applyGithubConfig,
-      applyReviewPolicyConfig,
+      applyGithubConfig: vi.fn(),
+      applyReviewPolicyConfig: vi.fn(),
       applyServiceConfig,
       canManage: { value: true },
       payloads: payloads(reviewPolicy),
       requests
     });
 
-    await persistence.saveConfig();
+    await persistence.saveConfig("mysql");
 
-    expect(requests.fetchGithubIntegrationConfig).toHaveBeenCalledOnce();
-    expect(requests.fetchMysqlIntegrationConfig).toHaveBeenCalledOnce();
-    expect(requests.fetchRabbitMqIntegrationConfig).toHaveBeenCalledOnce();
-    expect(requests.fetchReviewPolicyConfig).toHaveBeenCalledOnce();
-    expect(persistence.githubConfig.value).toEqual(github);
+    expect(requests.updateMysqlIntegrationConfig).toHaveBeenCalledOnce();
+    expect(requests.updateGithubIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.updateRabbitMqIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.updateReviewPolicyConfig).not.toHaveBeenCalled();
+    expect(requests.fetchGithubIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.fetchMysqlIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.fetchRabbitMqIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.fetchReviewPolicyConfig).not.toHaveBeenCalled();
     expect(persistence.mysqlConfig.value).toEqual(mysql);
-    expect(persistence.rabbitMqConfig.value).toEqual(rabbitMq);
-    expect(persistence.reviewPolicyConfig.value).toEqual(reviewPolicy);
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("成功：GitHub、RabbitMQ、审查策略"));
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("失败：MySQL（database unavailable）"));
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining("服务端状态已重新加载"));
+    expect(applyServiceConfig).toHaveBeenCalledWith("mysql", mysql);
+    expect(showSuccess).toHaveBeenCalledWith("MySQL 配置保存成功");
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("reports a selected integration failure without writing or reloading other sections", async () => {
+    const github = githubConfig();
+    const mysql = serviceConfig("mysql");
+    const rabbitMq = serviceConfig("rabbitmq");
+    const reviewPolicy = policyConfig();
+    const requests = requestActions({ github, mysql, rabbitMq, reviewPolicy });
+    requests.updateMysqlIntegrationConfig.mockRejectedValue(new Error("database unavailable"));
+    const applyServiceConfig = vi.fn();
+    const persistence = useIntegrationConfigPersistence({
+      applyGithubConfig: vi.fn(),
+      applyReviewPolicyConfig: vi.fn(),
+      applyServiceConfig,
+      canManage: { value: true },
+      payloads: payloads(reviewPolicy),
+      requests
+    });
+
+    await persistence.saveConfig("mysql");
+
+    expect(showError).toHaveBeenCalledWith("MySQL 配置保存失败：database unavailable");
     expect(showSuccess).not.toHaveBeenCalled();
+    expect(applyServiceConfig).not.toHaveBeenCalled();
+    expect(requests.updateGithubIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.updateRabbitMqIntegrationConfig).not.toHaveBeenCalled();
+    expect(requests.updateReviewPolicyConfig).not.toHaveBeenCalled();
+    expect(requests.fetchMysqlIntegrationConfig).not.toHaveBeenCalled();
   });
 
   it("loads available configs when one fetch fails", async () => {
@@ -71,22 +88,23 @@ describe("useIntegrationConfigPersistence", () => {
     const rabbitMq = serviceConfig("rabbitmq");
     const reviewPolicy = policyConfig();
     const applyGithubConfig = vi.fn();
+    const requests = requestActions({ github, mysql, rabbitMq, reviewPolicy });
+    requests.fetchMysqlIntegrationConfig
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(mysql);
+    requests.fetchRabbitMqIntegrationConfig
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(rabbitMq);
+    requests.fetchReviewPolicyConfig
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(reviewPolicy);
     const persistence = useIntegrationConfigPersistence({
       applyGithubConfig,
       applyReviewPolicyConfig: vi.fn(),
       applyServiceConfig: vi.fn(),
       canManage: { value: true },
       payloads: payloads(reviewPolicy),
-      requests: {
-        fetchGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
-        fetchMysqlIntegrationConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(mysql),
-        fetchRabbitMqIntegrationConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(rabbitMq),
-        fetchReviewPolicyConfig: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(reviewPolicy),
-        updateGithubIntegrationConfig: vi.fn(),
-        updateMysqlIntegrationConfig: vi.fn(),
-        updateRabbitMqIntegrationConfig: vi.fn(),
-        updateReviewPolicyConfig: vi.fn()
-      }
+      requests
     });
 
     await persistence.loadConfig();
@@ -99,6 +117,27 @@ describe("useIntegrationConfigPersistence", () => {
     await persistence.loadConfig();
     expect(persistence.loadErrorMessage.value).toBe("");
   });
+});
+
+const requestActions = ({
+  github,
+  mysql,
+  rabbitMq,
+  reviewPolicy
+}: {
+  github: GithubIntegrationConfig;
+  mysql: ServiceIntegrationConfig;
+  rabbitMq: ServiceIntegrationConfig;
+  reviewPolicy: ReviewPolicyConfig;
+}) => ({
+  fetchGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
+  fetchMysqlIntegrationConfig: vi.fn().mockResolvedValue(mysql),
+  fetchRabbitMqIntegrationConfig: vi.fn().mockResolvedValue(rabbitMq),
+  fetchReviewPolicyConfig: vi.fn().mockResolvedValue(reviewPolicy),
+  updateGithubIntegrationConfig: vi.fn().mockResolvedValue(github),
+  updateMysqlIntegrationConfig: vi.fn().mockResolvedValue(mysql),
+  updateRabbitMqIntegrationConfig: vi.fn().mockResolvedValue(rabbitMq),
+  updateReviewPolicyConfig: vi.fn().mockResolvedValue(reviewPolicy)
 });
 
 const githubConfig = (): GithubIntegrationConfig => ({

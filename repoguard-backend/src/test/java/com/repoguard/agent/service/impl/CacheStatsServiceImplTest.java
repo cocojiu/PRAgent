@@ -3,7 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.config.CacheConfig;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
@@ -63,19 +63,23 @@ class CacheStatsServiceImplTest {
         Cache overview = cacheManager.getCache(CacheNames.DASHBOARD_OVERVIEW);
         Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
         Cache llmQuality = cacheManager.getCache(CacheNames.DASHBOARD_LLM_QUALITY);
+        Cache reviewListSummary = cacheManager.getCache(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         assertThat(overview).isNotNull();
         assertThat(summary).isNotNull();
         assertThat(llmQuality).isNotNull();
+        assertThat(reviewListSummary).isNotNull();
 
         overview.put("overview", "value");
         summary.put("summary", "value");
         llmQuality.put("7", "value");
+        reviewListSummary.put("filters", "value");
 
         evictionService.evictDashboardReviewActivity();
 
         assertThat(overview.get("overview")).isNull();
         assertThat(summary.get("summary")).isNull();
         assertThat(llmQuality.get("7")).isNull();
+        assertThat(reviewListSummary.get("filters")).isNull();
     }
 
     @Test
@@ -118,23 +122,56 @@ class CacheStatsServiceImplTest {
             () -> snapshotService,
             () -> snapshotStore
         );
+        Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
+        Cache reviewListSummary = cacheManager.getCache(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        assertThat(summary).isNotNull();
+        assertThat(reviewListSummary).isNotNull();
+        summary.put("summary", "value");
+        reviewListSummary.put("filters", "value");
 
         TransactionSynchronizationManager.initSynchronization();
         try {
             eviction.evictDashboardReviewActivity();
             assertThat(submitted).isEmpty();
+            assertThat(summary.get("summary")).isNotNull();
+            assertThat(reviewListSummary.get("filters")).isNotNull();
 
             TransactionSynchronizationManager.getSynchronizations()
                 .forEach(synchronization -> synchronization.afterCommit());
 
             Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
             assertThat(submitted).hasSize(1);
+            assertThat(summary.get("summary")).isNull();
+            assertThat(reviewListSummary.get("filters")).isNull();
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
 
         submitted.remove().run();
         Mockito.verify(snapshotService).refreshCurrentWindows();
+    }
+
+    @Test
+    void dashboardReviewActivityRollbackKeepsCachesAndSkipsSnapshotRefresh() {
+        DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
+        CacheEvictionService eviction = new CacheEvictionService(cacheManager, () -> snapshotService, () -> null);
+        Cache summary = cacheManager.getCache(CacheNames.DASHBOARD_SUMMARY);
+        Cache reviewListSummary = cacheManager.getCache(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        assertThat(summary).isNotNull();
+        assertThat(reviewListSummary).isNotNull();
+        summary.put("summary", "value");
+        reviewListSummary.put("filters", "value");
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            eviction.evictDashboardReviewActivity();
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+
+        assertThat(summary.get("summary")).isNotNull();
+        assertThat(reviewListSummary.get("filters")).isNotNull();
+        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
     }
 
     @Test
@@ -212,6 +249,15 @@ class CacheStatsServiceImplTest {
 
         assertThat(meterRegistry.find("repoguard.dashboard.cache.access")
             .tag("cache", CacheNames.GITHUB_OPEN_PULL_REQUESTS.toLowerCase())
+            .counter()).isNull();
+
+        Cache messageQueueHealthCache = observedCacheManager.getCache(CacheNames.MESSAGE_QUEUE_HEALTH);
+        assertThat(messageQueueHealthCache).isNotNull();
+        messageQueueHealthCache.put("health", "healthResponse");
+        assertThat(messageQueueHealthCache.get("health")).isNotNull();
+
+        assertThat(meterRegistry.find("repoguard.dashboard.cache.access")
+            .tag("cache", CacheNames.MESSAGE_QUEUE_HEALTH.toLowerCase())
             .counter()).isNull();
     }
 

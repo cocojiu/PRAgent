@@ -3,9 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.config.ReviewRuleProvider;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewRuleProvider;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -44,11 +42,11 @@ class ReviewRulePluginRegistrationTest {
             assertThat(context.getBeansOfType(PullRequestReviewRule.class)).hasSize(1);
             RuleBasedPullRequestReviewer reviewer = context.getBean(RuleBasedPullRequestReviewer.class);
 
-            ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+            ReviewResult result = reviewer.review(new PullRequestDiff(
                 "octocat",
                 "Hello-World",
                 1,
-                List.of(new GithubChangedFile(
+                List.of(new PullRequestChangedFile(
                     "src/App.java",
                     "modified",
                     1,

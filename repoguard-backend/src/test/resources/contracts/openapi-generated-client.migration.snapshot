@@ -27,6 +27,7 @@ fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration /
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail // GET /api/v1/reviews/{id}
 fetchReviewFindings -> reviewControllerListReviewFindings // GET /api/v1/reviews/{id}/findings
+fetchReviewListSummary -> reviewControllerGetReviewListSummary // GET /api/v1/reviews/summary
 fetchReviewMissingTests -> reviewControllerListMissingTests // GET /api/v1/reviews/{id}/missing-tests
 fetchReviewPolicyConfig -> systemConfigControllerGetReviewPolicy // GET /api/v1/config/review-policy
 fetchReviewRepositories -> reviewControllerListRepositories // GET /api/v1/reviews/repositories

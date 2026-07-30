@@ -9,6 +9,7 @@
       <el-option label="已完成" value="completed" />
       <el-option label="审查中" value="reviewing" />
       <el-option label="失败" value="failed" />
+      <el-option label="已过期" value="superseded" />
     </el-select>
     <el-select v-model="riskModel" placeholder="全部风险等级" clearable>
       <el-option label="全部风险等级" value="" />

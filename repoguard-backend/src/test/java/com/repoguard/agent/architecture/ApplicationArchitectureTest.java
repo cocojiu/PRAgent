@@ -19,6 +19,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
@@ -32,50 +34,44 @@ class ApplicationArchitectureTest {
 
     private static final String BASE_PACKAGE = "com.repoguard.agent";
     private static final String AUTHENTICATION_PACKAGE = BASE_PACKAGE + ".authentication";
+    private static final String CONFIG_PACKAGE = BASE_PACKAGE + ".config";
     private static final String CONTROLLER_PACKAGE = BASE_PACKAGE + ".controller";
     private static final String DTO_PACKAGE = BASE_PACKAGE + ".dto";
     private static final String ENTITY_PACKAGE = BASE_PACKAGE + ".entity";
     private static final String IDENTITY_PACKAGE = BASE_PACKAGE + ".identity";
     private static final String IDENTITY_INTERNAL_PACKAGE = IDENTITY_PACKAGE + ".internal";
     private static final String MAPPER_PACKAGE = BASE_PACKAGE + ".mapper";
+    private static final String NOTIFICATION_PACKAGE = BASE_PACKAGE + ".notification";
     private static final String SECURITY_PACKAGE = BASE_PACKAGE + ".security";
+    private static final String SERVICE_IMPL_PACKAGE = BASE_PACKAGE + ".service.impl";
     private static final String USER_PACKAGE = BASE_PACKAGE + ".user";
     private static final String USER_INTERNAL_PACKAGE = USER_PACKAGE + ".internal";
     private static final String WEB_PACKAGE = BASE_PACKAGE + ".web";
     private static final Path MAIN_SOURCE_ROOT = Path.of("src", "main", "java").toAbsolutePath().normalize();
+    private static final Pattern REVIEW_TASK_MAPPER_VARIABLE =
+        Pattern.compile("\\bReviewTaskMapper\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\b");
+    private static final Pattern TRANSACTIONAL_CACHE_EVICTION = Pattern.compile(
+        "@Transactional(?:\\([^\\r\\n]*\\))?\\s*@CacheEvict"
+            + "|@CacheEvict(?:\\([^\\r\\n]*\\))?\\s*@Transactional"
+    );
+    private static final Set<String> REVIEW_TASK_UPDATE_STORES = Set.of(
+        "com/repoguard/agent/messaging/ReviewTaskPublishOutboxStore.java",
+        "com/repoguard/agent/review/task/ReviewTaskTransitionStore.java",
+        "com/repoguard/agent/worker/ReviewTaskClaimService.java"
+    );
+    private static final int NOTIFICATION_ROOT_SOURCE_BASELINE = 8;
+    private static final int SERVICE_IMPL_SOURCE_BASELINE = 20;
     private static final Set<String> TECHNICAL_PACKAGE_ROOTS = Set.of(
         "common",
         "concurrency",
+        "cache",
         "config",
         "controller",
         "dto",
         "entity",
         "mapper",
-        "service"
-    );
-
-    // Existing cyclic edges are reviewed architecture debt. Removing an entry is safe; adding one is not.
-    private static final Set<String> REVIEWED_CYCLIC_DEPENDENCY_BASELINE = Set.of(
-        "external->observability",
-        "github->external",
-        "github->observability",
-        "github->review",
-        "messaging->observability",
-        "messaging->review",
-        "notification->external",
-        "notification->messaging",
-        "observability->external",
-        "observability->messaging",
-        "observability->worker",
-        "review->external",
-        "review->github",
-        "review->observability",
-        "worker->external",
-        "worker->github",
-        "worker->messaging",
-        "worker->notification",
-        "worker->observability",
-        "worker->review"
+        "service",
+        "settings"
     );
 
     private static final List<SourceUnit> SOURCES = loadSourceUnits();
@@ -100,6 +96,619 @@ class ApplicationArchitectureTest {
         assertThat(violations)
             .as("Controllers must call application services instead of persistence types")
             .isEmpty();
+    }
+
+    @Test
+    void mappersReturnPersistenceOwnedTypesInsteadOfApiDtos() {
+        List<String> mapperSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), MAPPER_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), MAPPER_PACKAGE))
+            .flatMap(source -> source.dependencies().stream()
+                .filter(dependency -> isInPackage(dependency, DTO_PACKAGE))
+                .map(dependency -> source.path() + " -> " + dependency))
+            .distinct()
+            .sorted()
+            .toList();
+
+        assertThat(mapperSources).as("mapper source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Persistence mappers must expose mapper projections or entities, never API DTOs")
+            .isEmpty();
+    }
+
+    @Test
+    void serviceImplementationPackageCanOnlyShrink() {
+        List<String> implementationSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), SERVICE_IMPL_PACKAGE))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(implementationSources).as("service implementation source discovery").isNotEmpty();
+        assertThat(implementationSources.size())
+            .as("The service.impl migration baseline may only move down")
+            .isLessThanOrEqualTo(SERVICE_IMPL_SOURCE_BASELINE);
+    }
+
+    @Test
+    void githubCommentWriterDelegatesHotspotResponsibilities() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        SourceUnit writer = SOURCES.stream()
+            .filter(source -> source.path().equals("com/repoguard/agent/github/GithubCommentWriter.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("GithubCommentWriter source was not discovered"));
+
+        assertThat(sourcePaths).contains(
+            "com/repoguard/agent/github/GithubCommentPublicationGateway.java",
+            "com/repoguard/agent/github/GithubReviewBatchPublisher.java",
+            "com/repoguard/agent/github/GithubLineCommentFallbackPublisher.java",
+            "com/repoguard/agent/github/GithubSupersededSummaryPublisher.java"
+        );
+        assertThat(writer.sourceText()).contains(
+            "GithubReviewBatchPublisher",
+            "GithubLineCommentFallbackPublisher",
+            "GithubSupersededSummaryPublisher"
+        );
+        assertThat(writer.sourceText().lines().count())
+            .as("GithubCommentWriter line-count baseline may only move down")
+            .isLessThanOrEqualTo(420);
+    }
+
+    @Test
+    void identitySessionLifecycleDelegatesPersistenceHotspots() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        SourceUnit lifecycle = SOURCES.stream()
+            .filter(source -> source.path().equals(
+                "com/repoguard/agent/identity/internal/DefaultIdentitySessionLifecycle.java"
+            ))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("DefaultIdentitySessionLifecycle source was not discovered"));
+
+        assertThat(sourcePaths).contains(
+            "com/repoguard/agent/identity/internal/IdentitySessionVersionPersistence.java",
+            "com/repoguard/agent/identity/internal/IdentityRefreshTokenRevoker.java"
+        );
+        assertThat(lifecycle.sourceText())
+            .contains("IdentitySessionVersionPersistence", "IdentityRefreshTokenRevoker")
+            .doesNotContain("authAccountCache.invalidateAfterCommit", "new UpdateWrapper<UserRefreshToken>()");
+        assertThat(lifecycle.sourceText().lines().count())
+            .as("DefaultIdentitySessionLifecycle line-count baseline may only move down")
+            .isLessThanOrEqualTo(440);
+    }
+
+    @Test
+    void notificationQueriesLiveInDedicatedBoundaryAndRootPackageCanOnlyShrink() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> notificationRootSources = SOURCES.stream()
+            .filter(source -> source.packageName().equals(NOTIFICATION_PACKAGE))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/query/NotificationCandidateBindingQuery.java",
+                "com/repoguard/agent/notification/query/NotificationDeliverableEventQuery.java",
+                "com/repoguard/agent/notification/query/NotificationSuccessfulDeliveryQuery.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationCandidateBindingQuery.java",
+                "com/repoguard/agent/notification/NotificationDeliverableEventQuery.java",
+                "com/repoguard/agent/notification/NotificationSuccessfulDeliveryQuery.java"
+            );
+        assertThat(notificationRootSources).as("notification root source discovery").isNotEmpty();
+        assertThat(notificationRootSources.size())
+            .as("The notification root package baseline may only move down")
+            .isLessThanOrEqualTo(NOTIFICATION_ROOT_SOURCE_BASELINE);
+    }
+
+    @Test
+    void notificationEventOperationsQueriesLiveInQueryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/query/NotificationEventQueryServiceImpl.java",
+                "com/repoguard/agent/notification/query/NotificationEventResponseAssembler.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/service/impl/NotificationEventQueryServiceImpl.java",
+                "com/repoguard/agent/service/impl/NotificationEventResponseAssembler.java"
+            );
+    }
+
+    @Test
+    void notificationUserFacingServicesLiveInDedicatedBoundaries() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/center/NotificationServiceImpl.java",
+                "com/repoguard/agent/notification/facade/NotificationIntegrationServiceImpl.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/service/impl/NotificationServiceImpl.java",
+                "com/repoguard/agent/service/impl/NotificationIntegrationServiceImpl.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryWorkerSupportLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailureClassifier.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryLogContextFormatter.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorkerClock.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorkerMetricsRecorder.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryFailureClassifier.java",
+                "com/repoguard/agent/notification/NotificationDeliveryLogContextFormatter.java",
+                "com/repoguard/agent/notification/NotificationDeliveryWorkerClock.java",
+                "com/repoguard/agent/notification/NotificationDeliveryWorkerMetricsRecorder.java"
+            );
+    }
+
+    @Test
+    void notificationRabbitConsumerLivesInDeliveryBoundaryAndWireContractStaysStable() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryWorker.java",
+                "com/repoguard/agent/notification/delivery/NotificationEventPayloadParser.java",
+                "com/repoguard/agent/notification/NotificationEventMessage.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryWorker.java",
+                "com/repoguard/agent/notification/NotificationEventPayloadParser.java",
+                "com/repoguard/agent/notification/delivery/NotificationEventMessage.java",
+                "com/repoguard/agent/messaging/NotificationEventMessage.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryValueModelLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryClaim.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionDecision.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailureDecision.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryResultSummary.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryStatus.java",
+                "com/repoguard/agent/notification/delivery/NotificationSendResult.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryClaim.java",
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionDecision.java",
+                "com/repoguard/agent/notification/NotificationDeliveryFailureDecision.java",
+                "com/repoguard/agent/notification/NotificationDeliveryResultSummary.java",
+                "com/repoguard/agent/notification/NotificationDeliveryStatus.java",
+                "com/repoguard/agent/notification/NotificationSendResult.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryDecisionPolicyAndRetryScheduleLiveInDedicatedBoundaries() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionDecider.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryFailurePolicy.java",
+                "com/repoguard/agent/notification/retry/NotificationRetrySchedule.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionDecider.java",
+                "com/repoguard/agent/notification/NotificationDeliveryFailurePolicy.java",
+                "com/repoguard/agent/notification/NotificationRetrySchedule.java"
+            );
+    }
+
+    @Test
+    void notificationDeliveryStateLifecycleLivesInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryClaimService.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryCompletionService.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryEventStateUpdater.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryRecoveryCompensator.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationDeliveryClaimService.java",
+                "com/repoguard/agent/notification/NotificationDeliveryCompletionService.java",
+                "com/repoguard/agent/notification/NotificationDeliveryEventStateUpdater.java",
+                "com/repoguard/agent/notification/NotificationDeliveryRecoveryCompensator.java"
+            );
+    }
+
+    @Test
+    void notificationBindingExecutionAndDeliveryLogLiveInDeliveryBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/delivery/NotificationBindingBatchDeliveryService.java",
+                "com/repoguard/agent/notification/delivery/NotificationBindingDeliveryService.java",
+                "com/repoguard/agent/notification/delivery/NotificationDeliveryLogFactory.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationBindingBatchDeliveryService.java",
+                "com/repoguard/agent/notification/NotificationBindingDeliveryService.java",
+                "com/repoguard/agent/notification/NotificationDeliveryLogFactory.java"
+            );
+    }
+
+    @Test
+    void notificationBindingPrimitivesLiveInBindingBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/binding/NotificationBindingMatcher.java",
+                "com/repoguard/agent/notification/binding/NotificationBindingStatus.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationBindingMatcher.java",
+                "com/repoguard/agent/notification/NotificationBindingStatus.java"
+            );
+    }
+
+    @Test
+    void notificationBindingManagementLivesInBindingBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> bindingManagementTypes = List.of(
+            "NotificationBindingConfigServiceImpl.java",
+            "NotificationBindingConnectionTestResultApplier.java",
+            "NotificationBindingConnectionTestServiceImpl.java",
+            "NotificationBindingRequestApplier.java",
+            "NotificationBindingResponseAssembler.java"
+        );
+
+        assertThat(sourcePaths)
+            .containsAll(bindingManagementTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/binding/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(bindingManagementTypes.stream()
+                .map(name -> "com/repoguard/agent/service/impl/" + name)
+                .toList());
+    }
+
+    @Test
+    void notificationPayloadConstructionLivesInOutboxBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/outbox/NotificationEventKeyFactory.java",
+                "com/repoguard/agent/notification/outbox/NotificationEventPayload.java",
+                "com/repoguard/agent/notification/outbox/NotificationEventPayloadBuilder.java",
+                "com/repoguard/agent/notification/outbox/NotificationMessageJsonSerializer.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationEventKeyFactory.java",
+                "com/repoguard/agent/notification/NotificationEventPayload.java",
+                "com/repoguard/agent/notification/NotificationEventPayloadBuilder.java",
+                "com/repoguard/agent/notification/NotificationMessageJsonSerializer.java"
+            );
+    }
+
+    @Test
+    void notificationOutboxPublishStateLivesInOutboxBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/outbox/NotificationOutboxEventStore.java",
+                "com/repoguard/agent/notification/outbox/NotificationPublishCompensationQuery.java",
+                "com/repoguard/agent/notification/outbox/NotificationPublishEventStateUpdater.java",
+                "com/repoguard/agent/notification/outbox/NotificationPublishFailureDecision.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationOutboxEventStore.java",
+                "com/repoguard/agent/notification/NotificationPublishCompensationQuery.java",
+                "com/repoguard/agent/notification/NotificationPublishEventStateUpdater.java",
+                "com/repoguard/agent/notification/NotificationPublishFailureDecision.java"
+            );
+    }
+
+    @Test
+    void notificationPublishOrchestrationLivesInPublishBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/publish/NotificationEventPublishCompensator.java",
+                "com/repoguard/agent/notification/publish/NotificationEventPublishCoordinator.java",
+                "com/repoguard/agent/notification/publish/NotificationPublishExecutor.java",
+                "com/repoguard/agent/notification/publish/NotificationPublishExecutorConfig.java",
+                "com/repoguard/agent/notification/publish/NotificationPublishFailurePolicy.java",
+                "com/repoguard/agent/notification/publish/NotificationPublishResult.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationEventPublishCompensator.java",
+                "com/repoguard/agent/notification/NotificationEventPublishCoordinator.java",
+                "com/repoguard/agent/notification/NotificationPublishExecutor.java",
+                "com/repoguard/agent/notification/NotificationPublishExecutorConfig.java",
+                "com/repoguard/agent/notification/NotificationPublishFailurePolicy.java",
+                "com/repoguard/agent/notification/NotificationPublishResult.java"
+            );
+    }
+
+    @Test
+    void notificationWebhookAdaptersLiveInWebhookBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        List<String> webhookTypes = List.of(
+            "AbstractWebhookNotificationAdapter.java",
+            "DingTalkNotificationAdapter.java",
+            "DingTalkWebhookSigner.java",
+            "WeComNotificationAdapter.java",
+            "WebhookNotificationContent.java",
+            "WebhookNotificationContentBuilder.java",
+            "WebhookNotificationEventTextFormatter.java",
+            "WebhookNotificationFieldFormatter.java",
+            "WebhookNotificationPayloadFactory.java",
+            "WebhookNotificationRequest.java",
+            "WebhookNotificationRequestFactory.java",
+            "WebhookNotificationResponseEvaluator.java"
+        );
+        assertThat(sourcePaths)
+            .containsAll(webhookTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/webhook/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(webhookTypes.stream()
+                .map(name -> "com/repoguard/agent/notification/" + name)
+                .toList());
+    }
+
+    @Test
+    void notificationChannelContractsLiveInChannelBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/channel/NotificationChannelAdapter.java",
+                "com/repoguard/agent/notification/channel/NotificationChannelAdapterRegistry.java",
+                "com/repoguard/agent/notification/channel/NotificationProviderKeyNormalizer.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationChannelAdapter.java",
+                "com/repoguard/agent/notification/NotificationChannelAdapterRegistry.java",
+                "com/repoguard/agent/notification/NotificationProviderKeyNormalizer.java"
+            );
+    }
+
+    @Test
+    void notificationDispatchCommandConstructionLivesInDispatchBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/notification/dispatch/NotificationCounterNormalizer.java",
+                "com/repoguard/agent/notification/dispatch/NotificationDispatchRequest.java",
+                "com/repoguard/agent/notification/dispatch/NotificationDispatchRequestFactory.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/notification/NotificationCounterNormalizer.java",
+                "com/repoguard/agent/notification/NotificationDispatchRequest.java",
+                "com/repoguard/agent/notification/NotificationDispatchRequestFactory.java"
+            );
+    }
+
+    @Test
+    void manualReviewCreationLivesInReviewBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+
+        assertThat(sourcePaths)
+            .contains(
+                "com/repoguard/agent/review/ReviewRepositoryDimensionService.java",
+                "com/repoguard/agent/review/task/ManualReviewCleanupExecutorConfig.java",
+                "com/repoguard/agent/review/task/ManualReviewCreationService.java",
+                "com/repoguard/agent/review/task/ManualReviewIdempotencyCoordinator.java"
+            )
+            .doesNotContain(
+                "com/repoguard/agent/service/impl/ReviewRepositoryDimensionService.java",
+                "com/repoguard/agent/service/impl/ManualReviewCleanupExecutorConfig.java",
+                "com/repoguard/agent/service/impl/ManualReviewCreationService.java",
+                "com/repoguard/agent/service/impl/ManualReviewIdempotencyCoordinator.java"
+            );
+    }
+
+    @Test
+    void reviewRuleConfigurationLivesInReviewBoundary() {
+        List<String> sourcePaths = SOURCES.stream()
+            .map(SourceUnit::path)
+            .toList();
+        List<String> ruleConfigurationTypes = List.of(
+            "ReviewRuleConfigPolicy.java",
+            "ReviewRuleConfigServiceImpl.java",
+            "ReviewRuleMetricAssembler.java"
+        );
+
+        assertThat(sourcePaths)
+            .containsAll(ruleConfigurationTypes.stream()
+                .map(name -> "com/repoguard/agent/review/config/" + name)
+                .toList())
+            .doesNotContainAnyElementsOf(ruleConfigurationTypes.stream()
+                .map(name -> "com/repoguard/agent/service/impl/" + name)
+                .toList());
+    }
+
+    @Test
+    void llmChunkCapacityAndSchedulingLiveInDedicatedReviewCollaborator() {
+        SourceUnit aggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewAggregator source was not discovered"));
+        SourceUnit scheduler = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewScheduler.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewScheduler source was not discovered"));
+
+        assertThat(scheduler.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(scheduler.sourceText()).contains("maxTotalChunks", "maxInFlightChunks", "FutureTask<T>");
+        assertThat(aggregator.sourceText())
+            .contains("LlmChunkReviewScheduler")
+            .doesNotContain("FutureTask<", "Deque<PendingChunk");
+    }
+
+    @Test
+    void llmChunkFallbackAndResultAggregationLiveInDedicatedReviewCollaborators() {
+        SourceUnit aggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewAggregator source was not discovered"));
+        SourceUnit fallbackHandler = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewFallbackHandler.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewFallbackHandler source was not discovered"));
+        SourceUnit resultAggregator = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewResultAggregator.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewResultAggregator source was not discovered"));
+        SourceUnit outcome = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmChunkReviewOutcome.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmChunkReviewOutcome source was not discovered"));
+
+        assertThat(fallbackHandler.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(resultAggregator.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(outcome.packageName()).isEqualTo(BASE_PACKAGE + ".review");
+        assertThat(fallbackHandler.sourceText()).contains("metrics.llmFallback", "ruleBasedReviewer.review");
+        assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
+        assertThat(aggregator.sourceText())
+            .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")
+            .doesNotContain("metrics.llmFallback(", "ReviewResult.completed(", "record ChunkAggregation");
+    }
+
+    @Test
+    void transactionalWritesUseAfterCommitCacheEviction() {
+        List<String> violations = SOURCES.stream()
+            .filter(source -> TRANSACTIONAL_CACHE_EVICTION.matcher(source.sourceText()).find())
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("Transactional writes must evict caches through an afterCommit boundary, never direct @CacheEvict")
+            .isEmpty();
+    }
+
+    @Test
+    void configPackageContainsOnlyConfigurationInfrastructure() {
+        List<String> configSources = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), CONFIG_PACKAGE))
+            .map(SourceUnit::path)
+            .toList();
+        List<String> violations = SOURCES.stream()
+            .filter(source -> isInPackage(source.packageName(), CONFIG_PACKAGE))
+            .filter(source -> source.sourceText().contains("@Service")
+                || source.sourceText().contains("@Repository")
+                || source.path().matches(".*(?:Provider|Settings|Service|Mapper|Assembler)\\.java$"))
+            .map(SourceUnit::path)
+            .sorted()
+            .toList();
+
+        assertThat(configSources).as("configuration source discovery").isNotEmpty();
+        assertThat(violations)
+            .as("Business providers, settings and services must live in their owning domain")
+            .isEmpty();
+    }
+
+    @Test
+    void sqlVerificationPlansStayOutOfProductionBeans() {
+        List<String> violations = SOURCES.stream()
+            .map(SourceUnit::path)
+            .filter(path -> path.endsWith("SqlVerificationPlan.java"))
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("SQL verification plans are test infrastructure and must not ship in production")
+            .isEmpty();
+    }
+
+    @Test
+    void reviewTaskStateWritesStayInAdjudicatedStoresAndNeverUseUpdateById() {
+        List<String> violations = new ArrayList<>();
+        Set<String> storesWithWrites = new TreeSet<>();
+        for (SourceUnit source : SOURCES) {
+            Matcher variableMatcher = REVIEW_TASK_MAPPER_VARIABLE.matcher(source.sourceText());
+            while (variableMatcher.find()) {
+                String variableName = variableMatcher.group(1);
+                Pattern updateCall = Pattern.compile(
+                    "\\b" + Pattern.quote(variableName) + "\\s*\\.\\s*(updateById|update)\\s*\\("
+                );
+                Matcher updateMatcher = updateCall.matcher(source.sourceText());
+                while (updateMatcher.find()) {
+                    String method = updateMatcher.group(1);
+                    if ("updateById".equals(method)) {
+                        violations.add(source.path() + " -> " + variableName + ".updateById");
+                    } else if (!REVIEW_TASK_UPDATE_STORES.contains(source.path())) {
+                        violations.add(source.path() + " -> " + variableName + ".update");
+                    } else {
+                        storesWithWrites.add(source.path());
+                    }
+                }
+            }
+        }
+
+        assertThat(violations)
+            .as("ReviewTask updates must use conditional wrappers inside the adjudicated stores")
+            .isEmpty();
+        assertThat(storesWithWrites)
+            .as("The ReviewTask update allowlist is a ratchet and must not contain stale entries")
+            .containsExactlyInAnyOrderElementsOf(REVIEW_TASK_UPDATE_STORES);
     }
 
     @Test
@@ -298,7 +907,7 @@ class ApplicationArchitectureTest {
     }
 
     @Test
-    void domainPackageCyclesDoNotExceedReviewedBaseline() {
+    void domainPackageGraphRemainsAcyclic() {
         Map<String, Set<String>> dependencies = domainDependencies();
         Set<String> cyclicEdges = new TreeSet<>();
         dependencies.forEach((source, targets) -> targets.stream()
@@ -306,14 +915,32 @@ class ApplicationArchitectureTest {
             .map(target -> source + "->" + target)
             .forEach(cyclicEdges::add));
 
-        Set<String> unexpectedCycles = new TreeSet<>(cyclicEdges);
-        unexpectedCycles.removeAll(REVIEWED_CYCLIC_DEPENDENCY_BASELINE);
-
         assertThat(dependencies.keySet())
             .as("domain package discovery")
             .contains("dashboard", "identity", "notification", "observability", "retention", "review", "worker");
-        assertThat(unexpectedCycles)
-            .as("New cyclic domain dependency edges are forbidden; break the dependency or document a migration first")
+        assertThat(cyclicEdges)
+            .as("Domain package dependencies must remain acyclic")
+            .isEmpty();
+    }
+
+    @Test
+    void retiredCycleEdgesRemainAbsent() {
+        Map<String, Set<String>> dependencies = domainDependencies();
+        Set<String> retiredEdges = Set.of(
+            "external->observability",
+            "observability->worker",
+            "review->github"
+        );
+        List<String> violations = retiredEdges.stream()
+            .filter(edge -> {
+                String[] packages = edge.split("->", 2);
+                return dependencies.getOrDefault(packages[0], Set.of()).contains(packages[1]);
+            })
+            .sorted()
+            .toList();
+
+        assertThat(violations)
+            .as("Retired architecture debt edges must not be reintroduced")
             .isEmpty();
     }
 
@@ -441,7 +1068,8 @@ class ApplicationArchitectureTest {
                 sources.add(new SourceUnit(
                     MAIN_SOURCE_ROOT.relativize(sourcePath).toString().replace('\\', '/'),
                     packageName,
-                    Set.copyOf(dependencies)
+                    Set.copyOf(dependencies),
+                    Files.readString(sourcePath, StandardCharsets.UTF_8)
                 ));
             }
             List<Diagnostic<? extends JavaFileObject>> errors = diagnostics.getDiagnostics().stream()
@@ -456,5 +1084,10 @@ class ApplicationArchitectureTest {
         }
     }
 
-    private record SourceUnit(String path, String packageName, Set<String> dependencies) {}
+    private record SourceUnit(
+        String path,
+        String packageName,
+        Set<String> dependencies,
+        String sourceText
+    ) {}
 }

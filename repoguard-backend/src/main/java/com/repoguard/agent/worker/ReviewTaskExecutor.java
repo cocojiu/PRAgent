@@ -1,6 +1,6 @@
 package com.repoguard.agent.worker;
 
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 
 public interface ReviewTaskExecutor {
 

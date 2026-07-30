@@ -12,6 +12,10 @@ $Root = Split-Path -Parent $PSScriptRoot
 $BackendDir = Join-Path $Root "repoguard-backend"
 $FrontendDir = Join-Path $Root "repoguard-frontend"
 $MigrationDir = Join-Path $BackendDir "src/main/resources/db/migration"
+$MavenWrapper = Join-Path $BackendDir "mvnw"
+if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    $MavenWrapper = Join-Path $BackendDir "mvnw.cmd"
+}
 
 if ($IncludeFrontendBuild) {
     $Mode = "full"
@@ -135,6 +139,28 @@ Invoke-Check "repository governance tracked file guard" {
     }
 }
 
+Invoke-Check "production deployment shell syntax" {
+    $shCommand = Get-Command "sh" -ErrorAction SilentlyContinue
+    $shPath = if ($shCommand) { $shCommand.Source } else { $null }
+    if (-not $shPath -and $env:OS -eq "Windows_NT") {
+        $windowsCandidates = @(
+            "C:\Program Files\Git\bin\sh.exe",
+            "C:\Program Files\Git\usr\bin\sh.exe"
+        )
+        $shPath = $windowsCandidates |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+    }
+    if (-not $shPath) {
+        throw "A POSIX sh executable is required to validate scripts/deploy-prod.sh"
+    }
+
+    Invoke-CommandChecked `
+        -FilePath $shPath `
+        -Arguments @("-n", "scripts/deploy-prod.sh") `
+        -WorkingDirectory $Root
+}
+
 Invoke-Check "Flyway migration naming and duplicate version check" {
     $migrations = Get-ChildItem -LiteralPath $MigrationDir -Filter "*.sql" | Sort-Object Name
     if ($migrations.Count -eq 0) {
@@ -152,6 +178,38 @@ Invoke-Check "Flyway migration naming and duplicate version check" {
             throw "Duplicate Flyway migration version V$version`: $($versions[$version]) and $($migration.Name)"
         }
         $versions[$version] = $migration.Name
+    }
+}
+
+Invoke-Check "Schema version guard expectation matches migration chain" {
+    $migrations = Get-ChildItem -LiteralPath $MigrationDir -Filter "*.sql" | Sort-Object Name
+    if ($migrations.Count -eq 0) {
+        throw "No Flyway migration files found under $MigrationDir"
+    }
+
+    $highestVersion = 0
+    foreach ($migration in $migrations) {
+        if ($migration.Name -match '^V(?<version>\d+)__') {
+            $version = [int]$Matches.version
+            if ($version -gt $highestVersion) {
+                $highestVersion = $version
+            }
+        }
+    }
+
+    $applicationYml = Join-Path $BackendDir "src/main/resources/application.yml"
+    if (-not (Test-Path -LiteralPath $applicationYml)) {
+        throw "application.yml not found at $applicationYml"
+    }
+
+    $content = Get-Content -LiteralPath $applicationYml -Raw -Encoding UTF8
+    if ($content -notmatch 'expected-version:\s*\$\{REPOGUARD_SCHEMA_EXPECTED_VERSION:(?<expected>\d+)\}') {
+        throw "Could not read repoguard.schema.expected-version from application.yml. SchemaVersionGuard relies on this default; keep the '`${REPOGUARD_SCHEMA_EXPECTED_VERSION:<n>}' form."
+    }
+
+    $expectedVersion = [int]$Matches.expected
+    if ($expectedVersion -ne $highestVersion) {
+        throw "repoguard.schema.expected-version is $expectedVersion but the highest migration is V$highestVersion. Update the default in application.yml so non-owner roles reject a stale schema."
     }
 }
 
@@ -239,7 +297,7 @@ Invoke-Check "secret and token leakage heuristic scan" {
 if (-not $SkipBackendTests) {
     Invoke-Check "backend production readiness test slice" {
         Invoke-CommandChecked `
-            -FilePath "mvn" `
+            -FilePath $MavenWrapper `
             -Arguments @("-Dtest=ApiContractTest,ControllerAuthorizationContractTest,DashboardControllerTest,ReviewControllerTest,GithubWebhookControllerTest,NotificationIntegrationControllerTest,DashboardMapperSqlContractTest,DashboardSqlVerificationPlanTest,SpringBeanConstructorSelectionTest", "test") `
             -WorkingDirectory $BackendDir
     }

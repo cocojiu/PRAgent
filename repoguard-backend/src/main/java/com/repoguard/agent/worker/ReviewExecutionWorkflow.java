@@ -1,14 +1,16 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.PullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 @Component
 class ReviewExecutionWorkflow {
@@ -20,6 +22,7 @@ class ReviewExecutionWorkflow {
     private final ReviewExecutionTimelineRecorder timelineRecorder;
     private final ReviewTaskClaimService claimService;
     private final ReviewExecutionFailureHandler failureHandler;
+    private final ReviewExecutionSupersededHandler supersededHandler;
     private final ReviewExecutionResultWriter resultWriter;
     private final ReviewExecutionNotifier notifier;
     private final ReviewExecutionDiffStats diffStats;
@@ -35,6 +38,7 @@ class ReviewExecutionWorkflow {
         ReviewExecutionTimelineRecorder timelineRecorder,
         ReviewTaskClaimService claimService,
         ReviewExecutionFailureHandler failureHandler,
+        ReviewExecutionSupersededHandler supersededHandler,
         ReviewExecutionResultWriter resultWriter,
         ReviewExecutionNotifier notifier,
         ReviewExecutionDiffStats diffStats,
@@ -49,6 +53,7 @@ class ReviewExecutionWorkflow {
         this.timelineRecorder = Objects.requireNonNull(timelineRecorder, "timelineRecorder");
         this.claimService = Objects.requireNonNull(claimService, "claimService");
         this.failureHandler = Objects.requireNonNull(failureHandler, "failureHandler");
+        this.supersededHandler = Objects.requireNonNull(supersededHandler, "supersededHandler");
         this.resultWriter = Objects.requireNonNull(resultWriter, "resultWriter");
         this.notifier = Objects.requireNonNull(notifier, "notifier");
         this.diffStats = Objects.requireNonNull(diffStats, "diffStats");
@@ -58,7 +63,7 @@ class ReviewExecutionWorkflow {
     }
 
     void execute(ReviewTaskMessage message, ReviewTask task) {
-        try (var ignored = executionLog.withExecutionContext(message, task)) {
+        try (var _ = executionLog.withExecutionContext(message, task)) {
             if (task == null) {
                 executionLog.taskNotFound(message);
                 return;
@@ -77,9 +82,11 @@ class ReviewExecutionWorkflow {
             executionLog.started(task, message);
 
             try {
-                GithubPullRequestDiff diff = fetchPullRequestDiff(task);
+                PullRequestDiff diff = fetchPullRequestDiff(task);
+                ensureDiffMatchesTask(task, diff);
                 executionLog.diffFetched(task, diff, diffStats);
                 ReviewResult reviewResult = stageTimer.record("review", () -> pullRequestReviewer.review(task, diff));
+                reviewResult = applyDiffBudgetOutcome(diff, reviewResult);
                 ReviewExecutionResultWriter.WriteResult writeResult = completeReview(
                     task,
                     diff,
@@ -88,6 +95,12 @@ class ReviewExecutionWorkflow {
                     claimId
                 );
                 executionLog.completed(task, reviewResult, writeResult, startedAt);
+            } catch (GithubPullRequestHeadChangedException ex) {
+                if (!supersedeReview(task, startedAt, claimId, ex)) {
+                    executionLog.failureClaimLost(task, ex);
+                    return;
+                }
+                executionLog.superseded(task, ex, startedAt);
             } catch (ReviewTaskClaimLostException ex) {
                 executionLog.resultClaimLost(task);
             } catch (RuntimeException ex) {
@@ -100,8 +113,38 @@ class ReviewExecutionWorkflow {
         }
     }
 
-    private GithubPullRequestDiff fetchPullRequestDiff(ReviewTask task) {
+    private PullRequestDiff fetchPullRequestDiff(ReviewTask task) {
         return diffFetcher.fetch(task);
+    }
+
+    private ReviewResult applyDiffBudgetOutcome(PullRequestDiff diff, ReviewResult reviewResult) {
+        if (!diff.truncated()) {
+            return reviewResult;
+        }
+        return reviewResult.withIncompleteInput(
+            diff.truncation().summary(),
+            "diffTruncated=true; diffTruncationReasons=" + diff.truncation().reasons().stream()
+                .map(reason -> reason.code())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("unknown")
+        );
+    }
+
+    private void ensureDiffMatchesTask(ReviewTask task, PullRequestDiff diff) {
+        if (diff == null) {
+            throw new IllegalStateException("GitHub pull request diff is unavailable");
+        }
+        if (!StringUtils.hasText(task.getCommitSha())) {
+            throw new IllegalStateException("Review task commit SHA is unavailable");
+        }
+        if (!StringUtils.hasText(diff.headSha())) {
+            throw new IllegalStateException("GitHub pull request diff head SHA is unavailable");
+        }
+        String expectedHeadSha = task.getCommitSha().trim();
+        String diffHeadSha = diff.headSha().trim();
+        if (!expectedHeadSha.equalsIgnoreCase(diffHeadSha)) {
+            throw new GithubPullRequestHeadChangedException(expectedHeadSha, diffHeadSha);
+        }
     }
 
     private boolean markReviewing(ReviewTask task, LocalDateTime startedAt, String claimId) {
@@ -116,7 +159,7 @@ class ReviewExecutionWorkflow {
 
     private ReviewExecutionResultWriter.WriteResult completeReview(
         ReviewTask task,
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         ReviewResult reviewResult,
         LocalDateTime startedAt,
         String claimId
@@ -124,7 +167,7 @@ class ReviewExecutionWorkflow {
         return stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
             ReviewExecutionResultWriter.WriteResult writeResult =
                 resultWriter.applyCompleted(task, diff, reviewResult, startedAt, claimId);
-            notifier.reviewFinishedAfterCommit(task, writeResult.findingCount());
+            notifier.reviewFinished(task, writeResult.findingCount());
             return writeResult;
         }));
     }
@@ -133,10 +176,22 @@ class ReviewExecutionWorkflow {
         Boolean failed = stageTimer.record("db_write", () -> transactionRunner.execute(() -> {
             boolean applied = failureHandler.applyFailure(task, startedAt, claimId, ex);
             if (applied) {
-                notifier.reviewFailedAfterCommit(task);
+                notifier.reviewFailed(task);
             }
             return applied;
         }));
         return Boolean.TRUE.equals(failed);
+    }
+
+    private boolean supersedeReview(
+        ReviewTask task,
+        LocalDateTime startedAt,
+        String claimId,
+        GithubPullRequestHeadChangedException ex
+    ) {
+        Boolean superseded = stageTimer.record("db_write", () -> transactionRunner.execute(
+            () -> supersededHandler.applySuperseded(task, startedAt, claimId, ex)
+        ));
+        return Boolean.TRUE.equals(superseded);
     }
 }

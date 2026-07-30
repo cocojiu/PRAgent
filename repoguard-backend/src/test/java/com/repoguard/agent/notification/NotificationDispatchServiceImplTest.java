@@ -9,6 +9,13 @@ import static org.mockito.Mockito.when;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.NotificationEventMapper;
+import com.repoguard.agent.notification.dispatch.NotificationCounterNormalizer;
+import com.repoguard.agent.notification.dispatch.NotificationDispatchRequestFactory;
+import com.repoguard.agent.notification.outbox.NotificationEventKeyFactory;
+import com.repoguard.agent.notification.outbox.NotificationEventPayloadBuilder;
+import com.repoguard.agent.notification.outbox.NotificationMessageJsonSerializer;
+import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCoordinator;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 

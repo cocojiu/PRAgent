@@ -5,10 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -39,7 +40,7 @@ class GithubPaginatorTest {
                 "fetch_pull_request_diff",
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
-                GithubChangedFile[].class,
+                PullRequestChangedFile[].class,
                 passthroughResilience()
             ))
                 .isInstanceOf(IllegalStateException.class)
@@ -56,11 +57,11 @@ class GithubPaginatorTest {
         try (PagedGithubServer server = startServer(101)) {
             GithubPaginator paginator = paginator();
 
-            List<GithubChangedFile> result = paginator.fetchPages(
+            List<PullRequestChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
-                GithubChangedFile[].class,
+                PullRequestChangedFile[].class,
                 passthroughResilience()
             );
 
@@ -75,11 +76,11 @@ class GithubPaginatorTest {
         try (PagedGithubServer server = startServer(200, true)) {
             GithubPaginator paginator = paginator();
 
-            List<GithubChangedFile> result = paginator.fetchPages(
+            List<PullRequestChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
-                GithubChangedFile[].class,
+                PullRequestChangedFile[].class,
                 passthroughResilience()
             );
 
@@ -94,11 +95,11 @@ class GithubPaginatorTest {
         try (PagedGithubServer server = startServer(150, true)) {
             GithubPaginator paginator = paginator();
 
-            List<GithubChangedFile> result = paginator.fetchPages(
+            List<PullRequestChangedFile> result = paginator.fetchPages(
                 "fetch_pull_request_diff",
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
-                GithubChangedFile[].class,
+                PullRequestChangedFile[].class,
                 passthroughResilience()
             );
 
@@ -116,7 +117,7 @@ class GithubPaginatorTest {
             "fetch_pull_request_diff",
             page -> "http://127.0.0.1/items?page=" + page,
             settings(),
-            GithubChangedFile[].class,
+            PullRequestChangedFile[].class,
             null
         ))
             .isInstanceOf(NullPointerException.class)
@@ -138,7 +139,7 @@ class GithubPaginatorTest {
                 "fetch_pull_request_diff",
                 page -> server.baseUrl() + "/items?per_page=100&page=" + page,
                 settings(),
-                GithubChangedFile[].class,
+                PullRequestChangedFile[].class,
                 passthroughResilience()
             ))
                 .isInstanceOfSatisfying(RestClientResponseException.class, ex -> {

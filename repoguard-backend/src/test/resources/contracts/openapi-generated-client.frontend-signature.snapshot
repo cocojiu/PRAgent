@@ -27,6 +27,7 @@ fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration()
 fetchReviewChangedFiles -> reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail(input: { path: { id: number } }): Promise<ReviewTaskSummary>; // GET /api/v1/reviews/{id}
 fetchReviewFindings -> reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
+fetchReviewListSummary -> reviewControllerGetReviewListSummary(input?: { query?: { keyword?: string; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<ReviewTaskListSummary>; // GET /api/v1/reviews/summary
 fetchReviewMissingTests -> reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<MissingTest>>; // GET /api/v1/reviews/{id}/missing-tests
 fetchReviewPolicyConfig -> systemConfigControllerGetReviewPolicy(): Promise<ReviewPolicyConfig>; // GET /api/v1/config/review-policy
 fetchReviewRepositories -> reviewControllerListRepositories(): Promise<string[]>; // GET /api/v1/reviews/repositories

@@ -5,6 +5,7 @@ import java.util.Locale;
 public enum NotificationEventStatus {
 
     PENDING("PENDING"),
+    PUBLISHING("PUBLISHING"),
     PUBLISHED("PUBLISHED"),
     DELIVERING("DELIVERING"),
     DELIVERED("DELIVERED"),

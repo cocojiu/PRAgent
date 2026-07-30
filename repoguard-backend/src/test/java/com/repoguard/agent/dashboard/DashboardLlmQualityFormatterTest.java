@@ -11,7 +11,7 @@ class DashboardLlmQualityFormatterTest {
 
     @Test
     void formatsAverageDuration() {
-        assertThat(formatter.averageDuration(null)).isEqualTo("0 ms");
+        assertThat(formatter.averageDuration(null)).isEqualTo("—");
         assertThat(formatter.averageDuration(BigDecimal.ZERO)).isEqualTo("0 ms");
         assertThat(formatter.averageDuration(BigDecimal.valueOf(999))).isEqualTo("999 ms");
         assertThat(formatter.averageDuration(BigDecimal.valueOf(1499))).isEqualTo("1.5 s");

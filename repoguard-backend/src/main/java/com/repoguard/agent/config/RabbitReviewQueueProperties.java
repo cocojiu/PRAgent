@@ -26,6 +26,7 @@ public class RabbitReviewQueueProperties implements RabbitPublishProperties, Rab
     private int reviewRecoveryBatchSize = 20;
     private int workerConcurrency = 1;
     private long healthCheckTimeoutMs = 1500;
+    private int healthQueryWindowDays = 30;
 
     public String getExchange() {
         return exchange;
@@ -177,5 +178,13 @@ public class RabbitReviewQueueProperties implements RabbitPublishProperties, Rab
 
     public void setHealthCheckTimeoutMs(long healthCheckTimeoutMs) {
         this.healthCheckTimeoutMs = healthCheckTimeoutMs;
+    }
+
+    public int getHealthQueryWindowDays() {
+        return healthQueryWindowDays;
+    }
+
+    public void setHealthQueryWindowDays(int healthQueryWindowDays) {
+        this.healthQueryWindowDays = healthQueryWindowDays;
     }
 }

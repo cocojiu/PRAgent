@@ -14,9 +14,10 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
-import com.repoguard.agent.config.CacheEvictionService;
-import com.repoguard.agent.config.GithubIntegrationProvider;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.github.GithubIntegrationProvider;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.GithubCommentPublication;
 import com.repoguard.agent.entity.GithubCommentPublicationBatch;
@@ -27,6 +28,23 @@ import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.github.GithubPullRequestClient;
 import com.repoguard.agent.github.GithubReviewCommentResult;
 import com.repoguard.agent.github.GithubWritebackFailureClassifier;
+import com.repoguard.agent.github.comment.GithubCommentApplicationServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentDraftPublisher;
+import com.repoguard.agent.github.comment.GithubCommentHistoryQueryServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentPreviewDataLoader;
+import com.repoguard.agent.github.comment.GithubCommentPreviewItemBuilder;
+import com.repoguard.agent.github.comment.GithubCommentPreviewPublicationLoader;
+import com.repoguard.agent.github.comment.GithubCommentPreviewResponseAssembler;
+import com.repoguard.agent.github.comment.GithubCommentPreviewServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentPublicationHistoryAssembler;
+import com.repoguard.agent.github.comment.GithubCommentPublicationRecorder;
+import com.repoguard.agent.github.comment.GithubCommentPublishCandidateLoader;
+import com.repoguard.agent.github.comment.GithubCommentPublishExecutor;
+import com.repoguard.agent.github.comment.GithubCommentPublishGuard;
+import com.repoguard.agent.github.comment.GithubCommentPublishMetricsRecorder;
+import com.repoguard.agent.github.comment.GithubCommentPublishPlanBuilder;
+import com.repoguard.agent.github.comment.GithubCommentPublishServiceImpl;
+import com.repoguard.agent.github.comment.GithubCommentWritebackCheckBuilder;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchItemMapper;
 import com.repoguard.agent.mapper.GithubCommentPublicationBatchMapper;
@@ -35,22 +53,33 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.notification.NotificationDispatchService;
-import com.repoguard.agent.dto.FindingSeverityCountsDto;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
-import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.dto.HumanReviewRequest;
 import com.repoguard.agent.dto.ManualReviewRequest;
 import com.repoguard.agent.dto.ReviewQuery;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.messaging.MessagePublishException;
-import com.repoguard.agent.messaging.ReviewTaskPublisher;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.task.ReviewTaskPublisher;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
+import com.repoguard.agent.review.task.HumanReviewCommandService;
+import com.repoguard.agent.review.task.ManualReviewCreationService;
+import com.repoguard.agent.review.task.ManualReviewIdempotencyCoordinator;
+import com.repoguard.agent.review.task.ReviewFailureSummaryResolver;
+import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisher;
+import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
+import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
+import com.repoguard.agent.review.task.ReviewTaskRetryService;
+import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubCommentHistoryQueryService;
@@ -60,12 +89,12 @@ import com.repoguard.agent.service.GithubPullRequestOptionService;
 import com.repoguard.agent.service.ReviewTaskCommandService;
 import com.repoguard.agent.service.ReviewTaskQueryService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -81,7 +110,6 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.AbstractPlatformTransactionManager;
 import org.springframework.transaction.support.DefaultTransactionStatus;
-import org.springframework.transaction.support.TransactionTemplate;
 
 class ReviewServiceImplTest {
 
@@ -160,7 +188,7 @@ class ReviewServiceImplTest {
         );
     private final GithubCommentPublishMetricsRecorder githubCommentPublishMetricsRecorder =
         new GithubCommentPublishMetricsRecorder(metrics);
-    private final Executor githubCommentPublishExecutor = Runnable::run;
+    private final GithubCommentPublishExecutor githubCommentPublishExecutor = directGithubCommentPublishExecutor();
     private final GithubCommentPreviewService githubCommentPreviewService = new GithubCommentPreviewServiceImpl(
         reviewTaskMapper,
         githubIntegrationProvider,
@@ -225,6 +253,7 @@ class ReviewServiceImplTest {
 
     @BeforeEach
     void stubGithubCommentBatchPersistence() {
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         org.mockito.Mockito.doAnswer(invocation -> {
             GithubCommentPublicationBatch batch = invocation.getArgument(0);
             batch.setId(99L);
@@ -235,7 +264,7 @@ class ReviewServiceImplTest {
 
     private HumanReviewCommandService humanReviewCommandService() {
         return new HumanReviewCommandService(
-            reviewTaskMapper,
+            transitionStore(),
             timelineAppender(),
             reviewTaskStateMachine,
             cacheEvictionService
@@ -244,11 +273,12 @@ class ReviewServiceImplTest {
 
     private ReviewTaskRetryService reviewTaskRetryService(ReviewTaskAfterCommitPublisher afterCommitPublisher) {
         return new ReviewTaskRetryService(
-            reviewTaskMapper,
+            transitionStore(),
             timelineAppender(),
             reviewTaskStateMachine,
             afterCommitPublisher,
-            cacheEvictionService
+            cacheEvictionService,
+            githubPullRequestClient
         );
     }
 
@@ -262,7 +292,7 @@ class ReviewServiceImplTest {
             metrics,
             cacheEvictionService,
             reviewTaskStateMachine,
-            new TransactionTemplate(manualReviewTransactionManager),
+            manualReviewTransactionManager,
             coordinator,
             afterCommitPublisher,
             repositoryDimensionService
@@ -277,12 +307,37 @@ class ReviewServiceImplTest {
                 timelineAppender(),
                 reviewTaskStateMachine
             ),
-            Runnable::run
+            directReviewTaskPublishExecutor(),
+            new RabbitReviewQueueProperties()
         );
+    }
+
+    private GithubCommentPublishExecutor directGithubCommentPublishExecutor() {
+        GithubCommentPublishExecutor executor = org.mockito.Mockito.mock(GithubCommentPublishExecutor.class);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(executor).execute(any(Runnable.class));
+        return executor;
+    }
+
+    private ReviewTaskAfterCommitPublisherExecutor directReviewTaskPublishExecutor() {
+        ReviewTaskAfterCommitPublisherExecutor executor = org.mockito.Mockito.mock(
+            ReviewTaskAfterCommitPublisherExecutor.class
+        );
+        org.mockito.Mockito.doAnswer(invocation -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(executor).execute(any(Runnable.class));
+        return executor;
     }
 
     private ReviewTimelineAppender timelineAppender() {
         return new ReviewTimelineAppender(reviewTimelineMapper);
+    }
+
+    private ReviewTaskTransitionStore transitionStore() {
+        return new ReviewTaskTransitionStore(reviewTaskMapper, reviewTaskStateMachine);
     }
 
     @Test
@@ -396,7 +451,10 @@ class ReviewServiceImplTest {
         assertThat(result.items()).isEmpty();
         verify(githubCommentPublicationMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublication.class));
         verify(githubCommentPublicationBatchMapper).insert(any(GithubCommentPublicationBatch.class));
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(3)).insert(any(GithubCommentPublicationBatchItem.class));
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
+            ArgumentCaptor.captor();
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
+        assertThat(historyCaptor.getValue()).hasSize(3);
     }
 
     @Test
@@ -423,11 +481,11 @@ class ReviewServiceImplTest {
         var result = service.publishGithubComments(521L);
 
         assertThat(result.status()).isEqualTo("queued");
-        ArgumentCaptor<GithubCommentPublicationBatchItem> itemCaptor =
-            ArgumentCaptor.forClass(GithubCommentPublicationBatchItem.class);
-        verify(githubCommentPublicationBatchItemMapper).insert(itemCaptor.capture());
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> itemCaptor =
+            ArgumentCaptor.captor();
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(itemCaptor.capture());
         var historyItem = new GithubCommentPublicationHistoryAssembler(githubWritebackFailureClassifier)
-            .assembleItem(itemCaptor.getValue());
+            .assembleItem(itemCaptor.getValue().getFirst());
         assertThat(historyItem.failureCategory()).isEqualTo("github_permission_denied");
         assertThat(historyItem.failureReason()).isEqualTo("GitHub Token 权限不足");
         assertThat(historyItem.failureSuggestion()).contains("评论权限");
@@ -510,7 +568,8 @@ class ReviewServiceImplTest {
         assertThat(task.getHumanReviewStatus()).isEqualTo("CHANGES_REQUESTED");
         assertThat(task.getHumanReviewNote()).isEqualTo("修复高风险问题后重新审查");
         assertThat(task.getHumanReviewBy()).isEqualTo("review-lead");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
     }
 
@@ -585,8 +644,10 @@ class ReviewServiceImplTest {
         assertThat(result.succeededCount()).isZero();
         assertThat(result.skippedCount()).isZero();
         assertThat(result.items()).isEmpty();
-        verify(githubCommentPublicationBatchItemMapper, org.mockito.Mockito.times(2))
-            .insert(any(GithubCommentPublicationBatchItem.class));
+        ArgumentCaptor<List<GithubCommentPublicationBatchItem>> historyCaptor =
+            ArgumentCaptor.captor();
+        verify(githubCommentPublicationBatchItemMapper).insertBatch(historyCaptor.capture());
+        assertThat(historyCaptor.getValue()).hasSize(2);
     }
 
     @Test
@@ -693,8 +754,7 @@ class ReviewServiceImplTest {
             null
         ));
 
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
         verify(reviewTaskMapper).selectPage(any(), wrapperCaptor.capture());
         String sqlSegment = wrapperCaptor.getValue().getSqlSegment();
         assertThat(sqlSegment).contains("source", "trigger_source");
@@ -702,6 +762,35 @@ class ReviewServiceImplTest {
             .contains("GITHUB_PR_PICKER", "EXISTING_REUSED");
         assertThat(result.total()).isEqualTo(1);
         assertThat(result.items().getFirst().source()).isEqualTo("github_pr_picker");
+    }
+
+    @Test
+    void getReviewListSummaryReusesListFilterConstructionForAggregation() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), ReviewTask.class);
+        ReviewTaskMapper.ReviewTaskListSummaryStat stat = new ReviewTaskMapper.ReviewTaskListSummaryStat();
+        stat.setTotal(260L);
+        stat.setHighRisk(13L);
+        stat.setFailed(26L);
+        stat.setAverageDurationSeconds(new BigDecimal("94.6"));
+        when(reviewTaskMapper.selectListSummaryStat(any())).thenReturn(stat);
+
+        var summary = service.getReviewListSummary(new ReviewQuery(
+            1,
+            1,
+            null,
+            "failed",
+            null,
+            "github_pr_picker",
+            "existing_reused",
+            null
+        ));
+
+        ArgumentCaptor<LambdaQueryWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
+        verify(reviewTaskMapper).selectListSummaryStat(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("status", "source", "trigger_source");
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+            .contains("FAILED", "GITHUB_PR_PICKER", "EXISTING_REUSED");
+        assertThat(summary).isEqualTo(new ReviewTaskListSummary(260L, 13L, 26L, 95L));
     }
 
     @Test
@@ -1044,7 +1133,9 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
 
         ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
+        verify(reviewTaskMapper).insertManualReviewOrReuse(taskCaptor.capture());
+        verify(reviewTaskMapper).update(any());
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         assertThat(taskCaptor.getValue().getStatus()).isEqualTo("PUBLISH_FAILED");
         assertThat(taskCaptor.getValue().getPublishAttempts()).isEqualTo(1);
         assertThat(taskCaptor.getValue().getNextPublishRetryAt()).isNotNull();
@@ -1133,12 +1224,12 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("queued");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getValue().getStatus()).isEqualTo("QUEUED");
-        assertThat(taskCaptor.getValue().getLlmStatus()).isEqualTo("PENDING");
-        assertThat(taskCaptor.getValue().getRiskLevel()).isEqualTo("INFO");
-        assertThat(taskCaptor.getValue().getMqRetries()).isEqualTo(3);
+        verify(reviewTaskMapper).update(any());
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("QUEUED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
+        assertThat(task.getRiskLevel()).isEqualTo("INFO");
+        assertThat(task.getMqRetries()).isEqualTo(3);
 
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper).insert(timelineCaptor.capture());
@@ -1172,11 +1263,11 @@ class ReviewServiceImplTest {
         assertThat(result.status()).isEqualTo("publish_failed");
         assertThat(result.retryCount()).isEqualTo(3);
 
-        ArgumentCaptor<ReviewTask> taskCaptor = ArgumentCaptor.forClass(ReviewTask.class);
-        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).updateById(taskCaptor.capture());
-        assertThat(taskCaptor.getAllValues().getLast().getStatus()).isEqualTo("PUBLISH_FAILED");
-        assertThat(taskCaptor.getAllValues().getLast().getPublishAttempts()).isEqualTo(1);
-        assertThat(taskCaptor.getAllValues().getLast().getLastPublishError()).contains("unroutable");
+        verify(reviewTaskMapper, org.mockito.Mockito.times(2)).update(any());
+        verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
+        assertThat(task.getStatus()).isEqualTo("PUBLISH_FAILED");
+        assertThat(task.getPublishAttempts()).isEqualTo(1);
+        assertThat(task.getLastPublishError()).contains("unroutable");
     }
 
     @Test
@@ -1185,7 +1276,7 @@ class ReviewServiceImplTest {
 
         assertThatThrownBy(() -> service.retryReview(521L))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("Only failed review tasks can be retried");
+            .hasMessageContaining("Only failed or superseded review tasks can be retried");
 
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(reviewTaskPublisher, never()).publish(any(ReviewTaskMessage.class));
@@ -1282,20 +1373,16 @@ class ReviewServiceImplTest {
         long commentableFindings,
         long publishedFindings
     ) {
-        GithubCommentPreviewFindingStat stat = new GithubCommentPreviewFindingStat();
-        stat.setTotalFindings(totalFindings);
-        stat.setCommentableFindings(commentableFindings);
-        stat.setPublishedFindings(publishedFindings);
-        return stat;
+        return new GithubCommentPreviewFindingStat(totalFindings, commentableFindings, publishedFindings);
     }
 
-    private FindingSeverityCountsDto severityCounts(List<ReviewFinding> findings) {
+    private SeverityCounts severityCounts(List<ReviewFinding> findings) {
         long critical = findings.stream().filter(finding -> "CRITICAL".equalsIgnoreCase(finding.getSeverity())).count();
         long high = findings.stream().filter(finding -> "HIGH".equalsIgnoreCase(finding.getSeverity())).count();
         long medium = findings.stream().filter(finding -> "MEDIUM".equalsIgnoreCase(finding.getSeverity())).count();
         long low = findings.stream().filter(finding -> "LOW".equalsIgnoreCase(finding.getSeverity())).count();
         long known = critical + high + medium + low;
-        return new FindingSeverityCountsDto(critical, high, medium, low, findings.size() - known);
+        return new SeverityCounts(critical, high, medium, low, findings.size() - known);
     }
 
     private <T> Page<T> page(List<T> records) {
@@ -1403,6 +1490,9 @@ class ReviewServiceImplTest {
     }
 
     private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        private static final long serialVersionUID = 1L;
+
         private boolean committed;
 
         @Override

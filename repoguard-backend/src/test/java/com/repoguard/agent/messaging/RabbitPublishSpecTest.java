@@ -27,4 +27,22 @@ class RabbitPublishSpecTest {
         assertThat(spec.normalizedBackoffMultiplier()).isEqualTo(1.0);
         assertThat(spec.normalizedConfirmTimeoutMs()).isEqualTo(1);
     }
+
+    @Test
+    void singleAttemptDisablesInProcessRetryAndBackoff() {
+        RabbitPublishSpec spec = new RabbitPublishSpec(
+            "test.exchange",
+            "test.created",
+            5,
+            1000,
+            3.0,
+            5000,
+            "notification-event-7"
+        ).singleAttempt();
+
+        assertThat(spec.normalizedMaxAttempts()).isOne();
+        assertThat(spec.normalizedInitialBackoffMs()).isZero();
+        assertThat(spec.normalizedBackoffMultiplier()).isEqualTo(1.0);
+        assertThat(spec.normalizedConfirmTimeoutMs()).isEqualTo(5000);
+    }
 }

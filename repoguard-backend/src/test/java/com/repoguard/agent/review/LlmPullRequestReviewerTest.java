@@ -8,15 +8,13 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.config.ReviewPolicyProvider;
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.review.ReviewPolicyProvider;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalCallResilience;
 import com.repoguard.agent.external.ExternalHttpJsonResponseReader;
 import com.repoguard.agent.external.ExternalHttpResponseReader;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
@@ -132,7 +130,7 @@ class LlmPullRequestReviewerTest {
         RepoGuardMetrics metrics = org.mockito.Mockito.mock(RepoGuardMetrics.class);
         ExternalCallResilience resilience = org.mockito.Mockito.mock(ExternalCallResilience.class);
         ReviewPolicySettings settings = llmSettings();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
+        PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
 
         when(reviewPolicyProvider.getSettings()).thenReturn(settings);
         when(resilience.llm(eq("chat_completions"), any())).thenThrow(new ExternalCallException(
@@ -168,8 +166,8 @@ class LlmPullRequestReviewerTest {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
         ReviewPolicySettings settings = llmSettings();
-        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+        List<PullRequestDiff> reviewedChunks = new ArrayList<>();
+        PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
             file("src/main/java/com/repoguard/agent/security/AuthTokenFilter.java", 140, 30),
             file("src/main/resources/application-prod.yml", 20, 5),
@@ -207,8 +205,8 @@ class LlmPullRequestReviewerTest {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
         ReviewPolicySettings settings = llmSettings(99, 700, 4, 450);
-        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+        List<PullRequestDiff> reviewedChunks = new ArrayList<>();
+        PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/java/com/repoguard/agent/service/A.java", 10, 2)
         ));
 
@@ -274,7 +272,7 @@ class LlmPullRequestReviewerTest {
                 450,
                 "http://127.0.0.1:" + server.getAddress().getPort()
             );
-            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+            PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
                 file("src/main/java/com/repoguard/agent/service/A.java", 10, 2)
             ));
 
@@ -319,7 +317,7 @@ class LlmPullRequestReviewerTest {
                 450,
                 "http://127.0.0.1:" + server.getAddress().getPort()
             );
-            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
+            PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
 
             when(reviewPolicyProvider.getSettings()).thenReturn(settings);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -374,8 +372,8 @@ class LlmPullRequestReviewerTest {
         ReviewPolicyProvider reviewPolicyProvider = org.mockito.Mockito.mock(ReviewPolicyProvider.class);
         RuleBasedPullRequestReviewer ruleBasedReviewer = org.mockito.Mockito.mock(RuleBasedPullRequestReviewer.class);
         ReviewPolicySettings settings = llmSettings();
-        List<GithubPullRequestDiff> reviewedChunks = new ArrayList<>();
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
+        List<PullRequestDiff> reviewedChunks = new ArrayList<>();
+        PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of(
             file("src/main/resources/db/migration/V22__risk.sql", 180, 20),
             file("src/main/resources/application-prod.yml", 20, 5),
             file("src/main/java/com/repoguard/agent/service/A.java", 110, 30),
@@ -386,10 +384,10 @@ class LlmPullRequestReviewerTest {
         ));
 
         when(reviewPolicyProvider.getSettings()).thenReturn(settings);
-        when(ruleBasedReviewer.review(any(GithubPullRequestDiff.class))).thenAnswer(invocation -> {
-            GithubPullRequestDiff reviewedDiff = invocation.getArgument(0);
+        when(ruleBasedReviewer.review(any(PullRequestDiff.class))).thenAnswer(invocation -> {
+            PullRequestDiff reviewedDiff = invocation.getArgument(0);
             String matchedFile = reviewedDiff.files().stream()
-                .map(GithubChangedFile::filename)
+                .map(PullRequestChangedFile::filename)
                 .filter(file -> file.contains("service/C.java"))
                 .findFirst()
                 .orElse(null);
@@ -472,8 +470,8 @@ class LlmPullRequestReviewerTest {
         );
     }
 
-    private GithubChangedFile file(String path, int additions, int deletions) {
-        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
+    private PullRequestChangedFile file(String path, int additions, int deletions) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
     }
 
     private LlmPullRequestReviewer reviewer(
@@ -543,7 +541,9 @@ class LlmPullRequestReviewerTest {
             parser(objectMapper),
             metrics,
             new LlmFallbackReasonClassifier(),
-            diffChunker
+            diffChunker,
+            Runnable::run,
+            new ReviewPipelineBudgetProperties()
         );
     }
 
@@ -577,7 +577,7 @@ class LlmPullRequestReviewerTest {
                 450,
                 "http://127.0.0.1:" + server.getAddress().getPort()
             );
-            GithubPullRequestDiff diff = new GithubPullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
+            PullRequestDiff diff = new PullRequestDiff("repo-guard-demo", "spring-boot-demo", 512, List.of());
 
             when(reviewPolicyProvider.getSettings()).thenReturn(settings);
             when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -595,13 +595,13 @@ class LlmPullRequestReviewerTest {
 
     private static class TestableLlmPullRequestReviewer extends LlmPullRequestReviewer {
 
-        private final List<GithubPullRequestDiff> reviewedChunks;
+        private final List<PullRequestDiff> reviewedChunks;
         private final String failingFilePart;
 
         TestableLlmPullRequestReviewer(
             ReviewPolicyProvider reviewPolicyProvider,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
-            List<GithubPullRequestDiff> reviewedChunks
+            List<PullRequestDiff> reviewedChunks
         ) {
             this(reviewPolicyProvider, ruleBasedReviewer, reviewedChunks, null);
         }
@@ -609,7 +609,7 @@ class LlmPullRequestReviewerTest {
         TestableLlmPullRequestReviewer(
             ReviewPolicyProvider reviewPolicyProvider,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
-            List<GithubPullRequestDiff> reviewedChunks,
+            List<PullRequestDiff> reviewedChunks,
             String failingFilePart
         ) {
             this(
@@ -624,7 +624,7 @@ class LlmPullRequestReviewerTest {
         private TestableLlmPullRequestReviewer(
             ReviewPolicyProvider reviewPolicyProvider,
             RuleBasedPullRequestReviewer ruleBasedReviewer,
-            List<GithubPullRequestDiff> reviewedChunks,
+            List<PullRequestDiff> reviewedChunks,
             String failingFilePart,
             RepoGuardMetrics metrics
         ) {
@@ -649,11 +649,11 @@ class LlmPullRequestReviewerTest {
         }
 
         @Override
-        public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, GithubPullRequestDiff diff) {
+        public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
             reviewedChunks.add(diff);
             String firstFile = diff.files().isEmpty() ? "unknown" : diff.files().getFirst().filename();
             boolean shouldFail = failingFilePart != null
-                && diff.files().stream().map(GithubChangedFile::filename).anyMatch(file -> file.contains(failingFilePart));
+                && diff.files().stream().map(PullRequestChangedFile::filename).anyMatch(file -> file.contains(failingFilePart));
             if (shouldFail) {
                 throw new IllegalStateException("chunk llm unavailable");
             }

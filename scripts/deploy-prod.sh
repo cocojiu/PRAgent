@@ -2,12 +2,17 @@
 set -eu
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
+COMPOSE_ADDITIONAL_FILES="${COMPOSE_ADDITIONAL_FILES:-}"
 ENV_FILE="${ENV_FILE:-.env}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/actuator/health}"
 BACKEND_SERVICE="${BACKEND_SERVICE:-backend}"
 COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-}"
 LEGACY_COMPOSE_FILE="${LEGACY_COMPOSE_FILE:-}"
 LEGACY_ENV_FILE="${LEGACY_ENV_FILE:-}"
+DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
+DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
+DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
+PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -29,6 +34,14 @@ if [ -z "${FRONTEND_IMAGE:-}" ]; then
   echo "Missing FRONTEND_IMAGE environment variable." >&2
   exit 1
 fi
+
+case "$PREFLIGHT_ONLY" in
+  true|false) ;;
+  *)
+    echo "PREFLIGHT_ONLY must be true or false." >&2
+    exit 1
+    ;;
+esac
 
 read_env_value() {
   key="$1"
@@ -78,6 +91,10 @@ if [ -z "$COMPOSE_PROJECT_NAME" ]; then
   COMPOSE_PROJECT_NAME="$(read_env_value COMPOSE_PROJECT_NAME)"
 fi
 
+if [ -z "$COMPOSE_ADDITIONAL_FILES" ]; then
+  COMPOSE_ADDITIONAL_FILES="$(read_env_value COMPOSE_ADDITIONAL_FILES)"
+fi
+
 if [ -z "${COMPOSE_PROFILES:-}" ]; then
   COMPOSE_PROFILES="$(read_env_value COMPOSE_PROFILES)"
 fi
@@ -86,7 +103,211 @@ export COMPOSE_PROJECT_NAME
 export COMPOSE_PROFILES
 
 compose() {
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  compose_file_list="$COMPOSE_FILE"
+  for additional_file in $COMPOSE_ADDITIONAL_FILES; do
+    compose_file_list="${compose_file_list}:${additional_file}"
+  done
+  COMPOSE_FILE="$compose_file_list" COMPOSE_PATH_SEPARATOR=: \
+    docker compose --env-file "$ENV_FILE" "$@"
+}
+
+validate_secret_files() {
+  for required_command in od stat tail; do
+    if ! command -v "$required_command" >/dev/null 2>&1; then
+      echo "Missing required secret preflight command: $required_command" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+  done
+
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  compose_environment="$(compose config --environment)"
+  secret_file_keys="
+MYSQL_ROOT_PASSWORD_FILE
+MYSQL_PASSWORD_FILE
+REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE
+REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE
+REPOGUARD_AUTH_TOKEN_SECRET_FILE
+REPOGUARD_ADMIN_API_KEY_FILE
+REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE
+"
+
+  for key in $secret_file_keys; do
+    configured_path="$(printf '%s\n' "$compose_environment" \
+      | sed -n "s/^${key}=//p" | tail -n 1)"
+    if [ -z "$configured_path" ]; then
+      echo "Missing required secret file setting: $key" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+
+    case "$configured_path" in
+      /*) secret_path="$configured_path" ;;
+      *) secret_path="${compose_directory}/${configured_path}" ;;
+    esac
+
+    if [ -L "$secret_path" ] || [ ! -f "$secret_path" ] \
+      || [ ! -r "$secret_path" ] || [ ! -s "$secret_path" ]; then
+      echo "$key must reference a readable, non-empty regular file, not a symlink: $secret_path" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+
+    file_mode="$(stat -c '%a' "$secret_path")"
+    case "$file_mode" in
+      400|600) ;;
+      *)
+        echo "$key must use mode 0400 or 0600; found $file_mode on $secret_path" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+
+    directory_mode="$(stat -c '%a' "$(dirname "$secret_path")")"
+    case "$directory_mode" in
+      500|700) ;;
+      *)
+        echo "Secret directory must use mode 0500 or 0700; found $directory_mode for $(dirname "$secret_path")" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+
+    last_byte="$(tail -c 1 "$secret_path" | od -An -t u1 | tr -d ' \n')"
+    case "$last_byte" in
+      10|13)
+        echo "$key contains a trailing newline; rewrite it with printf '%s': $secret_path" >&2
+        echo "No running service has been changed." >&2
+        return 1
+        ;;
+    esac
+  done
+}
+
+validate_edge_observability_isolation() {
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  edge_config="${compose_directory}/Caddyfile"
+  if grep -Eiq 'grafana|loki|alloy|repoguard_observability' "$edge_config"; then
+    echo "Production edge configuration must not route to observability services: $edge_config" >&2
+    echo "Use the loopback Grafana port through an SSH tunnel." >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
+}
+
+validate_required_bind_sources() {
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  required_bind_sources="
+Caddyfile
+config/rabbitmq/rabbitmq.conf
+"
+
+  for relative_path in $required_bind_sources; do
+    source_path="${compose_directory}/${relative_path}"
+    if [ ! -f "$source_path" ] || [ ! -r "$source_path" ] || [ ! -s "$source_path" ]; then
+      echo "Missing, unreadable, or empty required bind source: $source_path" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+  done
+
+  metrics_bridge_enabled=false
+  for additional_file in $COMPOSE_ADDITIONAL_FILES; do
+    if [ ! -f "$additional_file" ] || [ ! -r "$additional_file" ] || [ ! -s "$additional_file" ]; then
+      echo "Missing, unreadable, or empty additional Compose file: $additional_file" >&2
+      echo "No running service has been changed." >&2
+      return 1
+    fi
+    if [ "$(basename "$additional_file")" = "docker-compose.metrics-bridge.yml" ]; then
+      metrics_bridge_enabled=true
+    fi
+  done
+
+  if [ "$metrics_bridge_enabled" = "true" ] \
+    && ! docker network inspect repoguard_observability >/dev/null 2>&1; then
+    echo "Metrics bridge requires the repoguard_observability network." >&2
+    echo "Start the observability stack before deploying the application." >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
+
+  if ! command -v sha256sum >/dev/null 2>&1; then
+    echo "Missing required deployment command: sha256sum" >&2
+    echo "No running service has been changed." >&2
+    return 1
+  fi
+
+  # Resolve the complete model while deployment is still side-effect free.
+  compose config >/dev/null
+}
+
+validate_review_timeout_layering() {
+  compose_environment="$(compose config --environment)"
+  pipeline_budget_ms="$(printf '%s\n' "$compose_environment" \
+    | sed -n 's/^REPOGUARD_REVIEW_PIPELINE_BUDGET_MS=//p' | tail -n 1)"
+  recovery_timeout_ms="$(printf '%s\n' "$compose_environment" \
+    | sed -n 's/^REPOGUARD_REVIEW_EXECUTION_TIMEOUT_MS=//p' | tail -n 1)"
+  pipeline_budget_ms="${pipeline_budget_ms:-600000}"
+  recovery_timeout_ms="${recovery_timeout_ms:-1800000}"
+
+  rabbitmq_config="$(dirname "$COMPOSE_FILE")/config/rabbitmq/rabbitmq.conf"
+  consumer_timeout_ms="$(sed -n \
+    's/^[[:space:]]*consumer_timeout[[:space:]]*=[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' \
+    "$rabbitmq_config" | tail -n 1)"
+
+  for numeric_value in "$pipeline_budget_ms" "$consumer_timeout_ms" "$recovery_timeout_ms"; do
+    case "$numeric_value" in
+      *[!0-9]*|"")
+        echo "Review timeout values must be positive integer milliseconds." >&2
+        return 1
+        ;;
+    esac
+    if [ "$numeric_value" -le 0 ]; then
+      echo "Review timeout values must be positive integer milliseconds." >&2
+      return 1
+    fi
+  done
+
+  if [ "$pipeline_budget_ms" -ge "$consumer_timeout_ms" ] \
+    || [ "$consumer_timeout_ms" -ge "$recovery_timeout_ms" ]; then
+    echo "Invalid review timeout layering." >&2
+    echo "  pipeline budget:             $pipeline_budget_ms ms" >&2
+    echo "  RabbitMQ consumer_timeout:   $consumer_timeout_ms ms" >&2
+    echo "  recovery staleness timeout:  $recovery_timeout_ms ms" >&2
+    echo "Required: pipeline budget < consumer_timeout < recovery timeout." >&2
+    return 1
+  fi
+}
+
+rabbitmq_config_digest() {
+  current_config="$(dirname "$COMPOSE_FILE")/config/rabbitmq/rabbitmq.conf"
+  sha256sum "$current_config" | awk '{print $1}'
+}
+
+rabbitmq_config_requires_restart() {
+  current_digest="$(rabbitmq_config_digest)"
+  applied_digest=""
+  if [ -f "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256" ]; then
+    applied_digest="$(sed -n '1p' "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256")"
+  fi
+  if [ -n "$applied_digest" ] && [ "$current_digest" = "$applied_digest" ]; then
+    return 1
+  fi
+  # Missing state also forces a restart. This covers first deployment, manual
+  # deployment, and a prior upload that failed before the broker was recreated.
+  return 0
+}
+
+record_rabbitmq_config_digest() {
+  mkdir -p "$DEPLOY_STATE_DIR"
+  digest_file="$DEPLOY_STATE_DIR/rabbitmq.conf.sha256"
+  digest_tmp="${digest_file}.tmp.$$"
+  rabbitmq_config_digest > "$digest_tmp"
+  mv "$digest_tmp" "$digest_file"
+}
+
+invalidate_rabbitmq_config_digest() {
+  rm -f "$DEPLOY_STATE_DIR/rabbitmq.conf.sha256"
 }
 
 print_backend_logs() {
@@ -352,15 +573,67 @@ stop_inactive_split_worker() {
   fi
 }
 
+restore_deployment_assets() {
+  if [ -z "$DEPLOY_ASSET_BACKUP_DIR" ]; then
+    echo "No deployment asset backup was supplied; keeping the uploaded assets." >&2
+    return 0
+  fi
+  if [ ! -d "$DEPLOY_ASSET_BACKUP_DIR" ]; then
+    echo "Deployment asset backup is unavailable: $DEPLOY_ASSET_BACKUP_DIR" >&2
+    return 0
+  fi
+
+  compose_directory="$(dirname "$COMPOSE_FILE")"
+  restored_assets=false
+  for relative_path in config/rabbitmq/rabbitmq.conf Caddyfile docker-compose.metrics-bridge.yml; do
+    backup_path="${DEPLOY_ASSET_BACKUP_DIR}/${relative_path}"
+    target_path="${compose_directory}/${relative_path}"
+    if [ -f "$backup_path" ]; then
+      mkdir -p "$(dirname "$target_path")"
+      cp -p "$backup_path" "$target_path"
+      restored_assets=true
+    fi
+  done
+  if [ -f "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" ]; then
+    cp -p "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
+    restored_assets=true
+  fi
+
+  if [ "$restored_assets" = "true" ]; then
+    echo "Previous deployment assets restored from $DEPLOY_ASSET_BACKUP_DIR." >&2
+  else
+    echo "No previous deployment assets existed; keeping the uploaded assets." >&2
+  fi
+}
+
 rollback_deployment() {
   status="$1"
   trap - 0
-  if [ "$status" -eq 0 ] || [ "${rollback_needed:-false}" != "true" ] || [ -z "${previous_backend_image:-}" ]; then
+  if [ "$status" -eq 0 ] || [ "${rollback_needed:-false}" != "true" ]; then
     exit "$status"
   fi
 
   set +e
-  echo "Deployment failed; restoring the previous application images..." >&2
+  echo "Deployment failed; restoring the previous deployment assets and services..." >&2
+  restore_deployment_assets
+  compose up -d --no-deps mysql
+  # Bind-file contents are not part of Compose's service hash. A forced broker
+  # recreation is required to reload the restored consumer_timeout.
+  compose up -d --no-deps --force-recreate rabbitmq
+  wait_service_health mysql 45
+  if wait_service_health rabbitmq 45; then
+    record_rabbitmq_config_digest
+  else
+    invalidate_rabbitmq_config_digest
+    echo "RabbitMQ rollback is unhealthy; the next deployment will force another recreation." >&2
+  fi
+
+  if [ -z "${previous_backend_image:-}" ]; then
+    compose ps >&2
+    echo "No previous backend image was running; infrastructure rollback attempt finished." >&2
+    exit "$status"
+  fi
+
   BACKEND_IMAGE="$previous_backend_image"
   export BACKEND_IMAGE
   if has_compose_service backend-worker; then
@@ -438,14 +711,27 @@ verify_deployment() {
   print_service_release_identity frontend
 }
 
+exec 9>"$DEPLOY_LOCK_FILE"
+if ! flock -n 9; then
+  echo "Another deployment already holds $DEPLOY_LOCK_FILE; refusing to run concurrently." >&2
+  exit 1
+fi
+
 echo "Deploying RepoGuard images:"
 echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
 echo "  domains:  ${REPOGUARD_FRONTEND_SERVER_NAME:-}"
 
+validate_required_bind_sources
+validate_secret_files
+validate_edge_observability_isolation
 validate_split_runtime_mode
 validate_production_data_routing
-stop_inactive_split_worker
+validate_review_timeout_layering
+if [ "$PREFLIGHT_ONLY" = "true" ]; then
+  echo "Production deployment preflight passed; no image was pulled and no service was changed."
+  exit 0
+fi
 deploy_services="mysql rabbitmq backend frontend caddy"
 if has_compose_service backend-worker; then
   deploy_services="mysql rabbitmq backend backend-worker frontend caddy"
@@ -455,6 +741,13 @@ preflight_release_images
 
 previous_backend_image="$(running_service_image_id backend)"
 previous_frontend_image="$(running_service_image_id frontend)"
+rabbitmq_config_changed=false
+if rabbitmq_config_requires_restart; then
+  rabbitmq_config_changed=true
+fi
+rollback_needed=true
+
+stop_inactive_split_worker
 
 if [ -z "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   if [ -n "$LEGACY_COMPOSE_FILE" ] && [ -f "$LEGACY_COMPOSE_FILE" ]; then
@@ -466,11 +759,15 @@ if [ -z "$(compose ps -q mysql rabbitmq 2>/dev/null)" ]; then
   fi
 fi
 
-compose up -d --no-deps mysql rabbitmq
+compose up -d --no-deps mysql
+if [ "$rabbitmq_config_changed" = "true" ]; then
+  echo "RabbitMQ configuration changed; recreating the broker to load it."
+  compose up -d --no-deps --force-recreate rabbitmq
+else
+  compose up -d --no-deps rabbitmq
+fi
 wait_service_health mysql 45
 wait_service_health rabbitmq 45
-
-rollback_needed=true
 
 if has_compose_service backend-worker; then
   worker_container_id="$(compose ps -q backend-worker 2>/dev/null || true)"
@@ -492,6 +789,7 @@ compose up -d --no-deps frontend
 compose up -d --no-deps caddy
 compose ps
 verify_deployment 15 30
+record_rabbitmq_config_digest
 
 rollback_needed=false
 echo "RepoGuard deployment is healthy: $HEALTH_URL"

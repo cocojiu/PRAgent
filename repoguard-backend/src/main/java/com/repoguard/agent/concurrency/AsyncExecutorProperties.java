@@ -11,10 +11,16 @@ public class AsyncExecutorProperties {
     private int githubCommentQueueCapacity = 100;
     private int reviewPublishThreads = 2;
     private int reviewPublishQueueCapacity = 100;
+    private int notificationPublishThreads = 2;
+    private int notificationPublishQueueCapacity = 100;
+    private int recoveryThreads = 3;
+    private int recoveryQueueCapacity = 100;
     private int dashboardThreads = 1;
     private int dashboardQueueCapacity = 16;
     private int rabbitHealthThreads = 1;
     private int rabbitHealthQueueCapacity = 4;
+    private int llmChunkThreads = 3;
+    private int llmChunkQueueCapacity = 100;
     private int shutdownWaitSeconds = 10;
     private long rabbitHealthCacheMillis = 5_000;
     private long rabbitHealthFailureBackoffMillis = 10_000;
@@ -27,6 +33,14 @@ public class AsyncExecutorProperties {
     public void setReviewPublishThreads(int value) { reviewPublishThreads = value; }
     public int getReviewPublishQueueCapacity() { return reviewPublishQueueCapacity; }
     public void setReviewPublishQueueCapacity(int value) { reviewPublishQueueCapacity = value; }
+    public int getNotificationPublishThreads() { return notificationPublishThreads; }
+    public void setNotificationPublishThreads(int value) { notificationPublishThreads = value; }
+    public int getNotificationPublishQueueCapacity() { return notificationPublishQueueCapacity; }
+    public void setNotificationPublishQueueCapacity(int value) { notificationPublishQueueCapacity = value; }
+    public int getRecoveryThreads() { return recoveryThreads; }
+    public void setRecoveryThreads(int value) { recoveryThreads = value; }
+    public int getRecoveryQueueCapacity() { return recoveryQueueCapacity; }
+    public void setRecoveryQueueCapacity(int value) { recoveryQueueCapacity = value; }
     public int getDashboardThreads() { return dashboardThreads; }
     public void setDashboardThreads(int value) { dashboardThreads = value; }
     public int getDashboardQueueCapacity() { return dashboardQueueCapacity; }
@@ -35,6 +49,10 @@ public class AsyncExecutorProperties {
     public void setRabbitHealthThreads(int value) { rabbitHealthThreads = value; }
     public int getRabbitHealthQueueCapacity() { return rabbitHealthQueueCapacity; }
     public void setRabbitHealthQueueCapacity(int value) { rabbitHealthQueueCapacity = value; }
+    public int getLlmChunkThreads() { return llmChunkThreads; }
+    public void setLlmChunkThreads(int value) { llmChunkThreads = value; }
+    public int getLlmChunkQueueCapacity() { return llmChunkQueueCapacity; }
+    public void setLlmChunkQueueCapacity(int value) { llmChunkQueueCapacity = value; }
     public int getShutdownWaitSeconds() { return shutdownWaitSeconds; }
     public void setShutdownWaitSeconds(int value) { shutdownWaitSeconds = value; }
     public long getRabbitHealthCacheMillis() { return rabbitHealthCacheMillis; }

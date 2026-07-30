@@ -48,6 +48,7 @@ import LoginForm from "@/components/LoginForm.vue";
 import LoginHeroPanel from "@/components/LoginHeroPanel.vue";
 import RegisterForm from "@/components/RegisterForm.vue";
 import { resolveSafePostAuthRedirect } from "@/router/authRedirect";
+import { resetCurrentUser } from "@/stores/authState";
 import { getAuthErrorMessage } from "@/utils/errors";
 
 type AuthMode = "login" | "register";
@@ -99,6 +100,7 @@ const handleLogin = async () => {
       password: loginForm.value.password,
       remember: loginForm.value.remember
     });
+    resetCurrentUser();
     ElMessage.success("登录成功");
     void router.replace(resolveSafePostAuthRedirect(route.query.redirect));
   } catch (error) {
@@ -128,6 +130,7 @@ const handleRegister = async () => {
       password: registerForm.value.password,
       confirmPassword: registerForm.value.confirmPassword
     });
+    resetCurrentUser();
     ElMessage.success("注册成功");
     void router.replace(resolveSafePostAuthRedirect(route.query.redirect));
   } catch (error) {

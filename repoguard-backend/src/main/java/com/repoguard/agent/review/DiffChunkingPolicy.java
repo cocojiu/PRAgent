@@ -1,6 +1,6 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewPolicySettings;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 
 record DiffChunkingPolicy(

@@ -19,11 +19,10 @@ import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewRetryResponse;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTaskSummary;
 import com.repoguard.agent.dto.ReviewTaskStatusResponse;
 import com.repoguard.agent.dto.ReviewTimelineItem;
-import com.repoguard.agent.common.BusinessException;
-import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.security.RequireRole;
 import com.repoguard.agent.web.RequestAuthentication;
 import com.repoguard.agent.service.ReviewService;
@@ -79,17 +78,42 @@ public class ReviewController {
         ReviewQuery query = new ReviewQuery(
             page,
             pageSize,
-            checkedParam("repository", repository, 128),
-            checkedParam("status", status, 32),
-            checkedParam("riskLevel", riskLevel, 32),
-            checkedParam("source", source, 64),
-            checkedParam("triggerSource", triggerSource, 64),
-            checkedParam("keyword", keyword, 255),
-            checkedParam("cursorCreatedAt", cursorCreatedAt, 32),
+            repository,
+            status,
+            riskLevel,
+            source,
+            triggerSource,
+            keyword,
+            cursorCreatedAt,
             cursorId,
             totalHint
         );
         return ApiResponse.ok(reviewService.listReviews(query));
+    }
+
+    /**
+     * 返回当前筛选条件下的评审任务聚合指标，筛选口径与列表接口同源。
+     */
+    @GetMapping("/summary")
+    public ApiResponse<ReviewTaskListSummary> getReviewListSummary(
+        @RequestParam(required = false) @Size(max = 128) String repository,
+        @RequestParam(required = false) @Size(max = 32) String status,
+        @RequestParam(required = false) @Size(max = 32) String riskLevel,
+        @RequestParam(required = false) @Size(max = 64) String source,
+        @RequestParam(required = false) @Size(max = 64) String triggerSource,
+        @RequestParam(required = false) @Size(max = 255) String keyword
+    ) {
+        ReviewQuery query = new ReviewQuery(
+            1,
+            1,
+            repository,
+            status,
+            riskLevel,
+            source,
+            triggerSource,
+            keyword
+        );
+        return ApiResponse.ok(reviewService.getReviewListSummary(query));
     }
 
     @GetMapping("/repositories")
@@ -120,9 +144,9 @@ public class ReviewController {
             id,
             page,
             pageSize,
-            checkedParam("severity", severity, 32),
-            checkedParam("category", category, 64),
-            checkedParam("feedbackStatus", feedbackStatus, 32)
+            severity,
+            category,
+            feedbackStatus
         ));
     }
 
@@ -196,7 +220,7 @@ public class ReviewController {
             id,
             page,
             pageSize,
-            checkedParam("status", status, 32)
+            status
         ));
     }
 
@@ -242,10 +266,4 @@ public class ReviewController {
         return RequestAuthentication.require(request).username();
     }
 
-    private String checkedParam(String name, String value, int maxLength) {
-        if (value != null && value.length() > maxLength) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, name + " must be at most " + maxLength + " characters");
-        }
-        return value;
-    }
 }

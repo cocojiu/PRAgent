@@ -1,15 +1,13 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 class LlmReviewPromptBuilder {
 
-    String buildPrompt(ReviewTask task, GithubPullRequestDiff diff) {
+    String buildPrompt(ReviewTask task, PullRequestDiff diff) {
         return """
             请审查下面的 GitHub PR diff，并只返回严格 JSON 对象：
             {
@@ -25,20 +23,28 @@ class LlmReviewPromptBuilder {
               ]
             }
             PR: %s/%s#%d
+            Commit SHA: %s
             标题：%s
             Diff:
             %s
-            """.formatted(diff.owner(), diff.repository(), diff.prNumber(), task.getTitle(), compactDiff(diff));
+            """.formatted(
+                diff.owner(),
+                diff.repository(),
+                diff.prNumber(),
+                diff.headSha(),
+                task.getTitle(),
+                compactDiff(diff)
+            );
     }
 
-    String promptSummary(GithubPullRequestDiff diff) {
+    String promptSummary(PullRequestDiff diff) {
         int fileCount = diff.files() == null ? 0 : diff.files().size();
         int additions = 0;
         int deletions = 0;
         StringBuilder files = new StringBuilder();
         if (diff.files() != null) {
             for (int i = 0; i < diff.files().size(); i++) {
-                GithubChangedFile file = diff.files().get(i);
+                PullRequestChangedFile file = diff.files().get(i);
                 additions += file.additions() == null ? 0 : file.additions();
                 deletions += file.deletions() == null ? 0 : file.deletions();
                 if (i < 5) {
@@ -53,6 +59,7 @@ class LlmReviewPromptBuilder {
             files.append(", ...");
         }
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; commit=" + diff.headSha()
             + "; files=" + fileCount
             + "; additions=" + additions
             + "; deletions=" + deletions
@@ -60,7 +67,7 @@ class LlmReviewPromptBuilder {
     }
 
     String chunkedPromptSummary(
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         List<PullRequestDiffChunk> chunks,
         int findingCount,
         String riskLevel,
@@ -75,6 +82,7 @@ class LlmReviewPromptBuilder {
             .reduce((first, second) -> first + "," + second)
             .orElse("standard");
         return "PR " + diff.owner() + "/" + diff.repository() + "#" + diff.prNumber()
+            + "; commit=" + diff.headSha()
             + "; chunked=true"
             + "; chunks=" + chunks.size()
             + "; files=" + (diff.files() == null ? 0 : diff.files().size())
@@ -86,9 +94,9 @@ class LlmReviewPromptBuilder {
             + "; chunkReasons=" + reasons;
     }
 
-    private String compactDiff(GithubPullRequestDiff diff) {
+    private String compactDiff(PullRequestDiff diff) {
         StringBuilder builder = new StringBuilder();
-        for (GithubChangedFile file : diff.files()) {
+        for (PullRequestChangedFile file : diff.files()) {
             builder.append("\n--- ").append(file.filename()).append('\n');
             if (file.patch() != null) {
                 builder.append(file.patch(), 0, Math.min(file.patch().length(), 6000)).append('\n');

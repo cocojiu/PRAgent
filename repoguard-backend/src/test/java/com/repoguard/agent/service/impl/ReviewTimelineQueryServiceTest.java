@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
@@ -22,7 +21,7 @@ class ReviewTimelineQueryServiceTest {
     void loadsTimelineMapByTaskIdAndGroupsResults() {
         ReviewTask first = task(101L);
         ReviewTask second = task(102L);
-        when(reviewTimelineMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
             timeline(101L, "Queued", "DONE", 1),
             timeline(102L, "Running", "CURRENT", 2),
             timeline(101L, "Failed", "FAILED", 3)
@@ -37,7 +36,7 @@ class ReviewTimelineQueryServiceTest {
 
     @Test
     void loadsTimelineItemsAndMapsDisplayStatus() {
-        when(reviewTimelineMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
             timeline(101L, "Queued", "DONE", 1),
             timeline(101L, "Running", "CURRENT", 2),
             timeline(101L, "Failed", "FAILED", 3),
@@ -54,7 +53,7 @@ class ReviewTimelineQueryServiceTest {
 
     @Test
     void loadsLatestTimelineItemsInDisplayOrder() {
-        when(reviewTimelineMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+        when(reviewTimelineMapper.selectList(any())).thenReturn(List.of(
             timeline(101L, "Waiting", "PENDING", 4),
             timeline(101L, "Failed", "FAILED", 3)
         ));

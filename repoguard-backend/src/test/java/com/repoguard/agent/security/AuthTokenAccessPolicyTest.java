@@ -70,6 +70,19 @@ class AuthTokenAccessPolicyTest {
         assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/")).isFalse();
     }
 
+    @Test
+    void coversHandlerEquivalentPathVariants() {
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/api/v1;x=1/users")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/api/v1/reviews;x=1")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/%61pi/v1/reviews")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/api/v1/%72eviews")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/api/v1//reviews")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("GET", "/API/v1/reviews")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("POST", "/api/v1/auth/login/")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("POST", "/api/v1/AUTH/login")).isTrue();
+        assertThat(AuthTokenAccessPolicy.requiresAuth("POST", "/api/v1/auth/login;x=1")).isFalse();
+    }
+
     private boolean allowsAnonymous(Endpoint endpoint) {
         return endpoint.method().isAnnotationPresent(AllowAnonymous.class)
             || endpoint.controller().isAnnotationPresent(AllowAnonymous.class);

@@ -1,12 +1,12 @@
 package com.repoguard.agent.mapper;
 
-import com.repoguard.agent.dto.DashboardLlmQualityModelStat;
-import com.repoguard.agent.dto.DashboardLlmQualityRepositoryStat;
-import com.repoguard.agent.dto.DashboardLlmQualityTrendCount;
-import com.repoguard.agent.dto.DashboardMetricStat;
-import com.repoguard.agent.dto.DashboardReviewTrendCount;
-import com.repoguard.agent.dto.DashboardRiskLevelCount;
-import com.repoguard.agent.dto.DashboardRuleHitCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.LlmQualityModelStat;
+import com.repoguard.agent.mapper.projection.DashboardProjections.LlmQualityRepositoryStat;
+import com.repoguard.agent.mapper.projection.DashboardProjections.LlmQualityTrendCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.MetricStat;
+import com.repoguard.agent.mapper.projection.DashboardProjections.ReviewTrendCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.RiskLevelCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.RuleHitCount;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Delete;
@@ -68,8 +68,8 @@ public interface DashboardDailySnapshotMapper {
             sum(case when risk_bucket_norm = 'LOW' then 1 else 0 end) as low_risk_count,
             sum(case when risk_bucket_norm = 'INFO' then 1 else 0 end) as info_risk_count,
             sum(case when status_norm = 'FAILED' then 1 else 0 end) as failed_count,
-            sum(coalesce(duration_seconds, 0)) as duration_seconds_sum,
-            count(*) as duration_sample_count
+            sum(case when finished_at is not null then duration_seconds else 0 end) as duration_seconds_sum,
+            sum(case when finished_at is not null then 1 else 0 end) as duration_sample_count
         from review_task
         where created_at >= #{startDate}
         group by created_date
@@ -149,7 +149,7 @@ public interface DashboardDailySnapshotMapper {
                 repository_label as repository_label,
                 count(*) as task_count,
                 sum(coalesce(llm_duration_ms, 0)) as duration_ms_sum,
-                count(*) as duration_sample_count,
+                sum(case when llm_duration_ms is not null then 1 else 0 end) as duration_sample_count,
                 sum(case when llm_total_tokens is not null and llm_total_tokens > 0 then llm_total_tokens else 0 end) as token_sum,
                 sum(case when llm_total_tokens is not null and llm_total_tokens > 0 then 1 else 0 end) as token_sample_count,
                 sum(coalesce(llm_estimated_cost, 0)) as cost_sum,
@@ -203,11 +203,11 @@ public interface DashboardDailySnapshotMapper {
             coalesce(sum(task_count), 0) as total,
             coalesce(sum(high_risk_count), 0) as highRisk,
             coalesce(sum(failed_count), 0) as failed,
-            coalesce(sum(duration_seconds_sum) / nullif(sum(duration_sample_count), 0), 0) as averageDurationSeconds
+            sum(duration_seconds_sum) / nullif(sum(duration_sample_count), 0) as averageDurationSeconds
         from dashboard_review_daily_stat
         where stat_date >= #{startDate}
         """)
-    DashboardMetricStat selectMetricStat(@Param("startDate") LocalDate startDate);
+    MetricStat selectMetricStat(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select date_format(stat_date, '%m-%d') as dayLabel, task_count as total
@@ -215,7 +215,7 @@ public interface DashboardDailySnapshotMapper {
         where stat_date >= #{startDate}
         order by stat_date
         """)
-    List<DashboardReviewTrendCount> selectReviewTrendCounts(@Param("startDate") LocalDate startDate);
+    List<ReviewTrendCount> selectReviewTrendCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select 'HIGH' as riskLevel, coalesce(sum(high_risk_count), 0) as total
@@ -234,7 +234,7 @@ public interface DashboardDailySnapshotMapper {
         from dashboard_review_daily_stat
         where stat_date >= #{startDate}
         """)
-    List<DashboardRiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
+    List<RiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select rule_id as ruleId, sum(total_count) as total
@@ -242,7 +242,7 @@ public interface DashboardDailySnapshotMapper {
         where stat_date >= #{startDate}
         group by rule_id
         """)
-    List<DashboardRuleHitCount> selectRuleHitCounts(@Param("startDate") LocalDate startDate);
+    List<RuleHitCount> selectRuleHitCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select
@@ -255,7 +255,7 @@ public interface DashboardDailySnapshotMapper {
         where stat_date >= #{startDate}
         group by stat_date
         """)
-    List<DashboardLlmQualityTrendCount> selectLlmQualityTrendCounts(@Param("startDate") LocalDate startDate);
+    List<LlmQualityTrendCount> selectLlmQualityTrendCounts(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select
@@ -276,7 +276,7 @@ public interface DashboardDailySnapshotMapper {
         order by taskCount desc
         limit 6
         """)
-    List<DashboardLlmQualityModelStat> selectLlmQualityByModelStats(@Param("startDate") LocalDate startDate);
+    List<LlmQualityModelStat> selectLlmQualityByModelStats(@Param("startDate") LocalDate startDate);
 
     @Select("""
         select
@@ -293,5 +293,5 @@ public interface DashboardDailySnapshotMapper {
         order by taskCount desc
         limit 6
         """)
-    List<DashboardLlmQualityRepositoryStat> selectLlmQualityByRepositoryStats(@Param("startDate") LocalDate startDate);
+    List<LlmQualityRepositoryStat> selectLlmQualityByRepositoryStats(@Param("startDate") LocalDate startDate);
 }

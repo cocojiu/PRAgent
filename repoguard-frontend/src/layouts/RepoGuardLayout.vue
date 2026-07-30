@@ -124,7 +124,14 @@
             >
               <button type="button" role="menuitem" @click="handleUserMenuCommand('profile')">个人资料</button>
               <button type="button" role="menuitem" @click="handleUserMenuCommand('change-password')">修改密码</button>
-              <button type="button" role="menuitem" @click="handleUserMenuCommand('settings')">系统设置</button>
+              <button
+                v-if="canOpenPath('/repoguard/settings')"
+                type="button"
+                role="menuitem"
+                @click="handleUserMenuCommand('settings')"
+              >
+                系统设置
+              </button>
               <button
                 class="user-action-menu-divider"
                 type="button"
@@ -169,7 +176,11 @@ import {
   Users
 } from "@lucide/vue";
 import { logout } from "@/api/auth";
+import { hasAuthToken } from "@/api/client";
 import { fetchNotifications } from "@/api/notifications";
+import { createPageAwarePoller } from "@/composables/pageAwarePoller";
+import { pruneReadNotificationIds } from "@/layouts/notificationReadState";
+import { canAccessRouteMeta } from "@/router/accessPolicy";
 import { canManage, currentUser, loadCurrentUser, resetCurrentUser } from "@/stores/authState";
 import type { NotificationCenter, NotificationItem } from "@/types";
 
@@ -187,6 +198,7 @@ const loadingNotifications = ref(false);
 const notificationError = ref("");
 const readNotificationIds = ref<Set<string>>(new Set());
 const NOTIFICATION_READ_KEY = "repoguard-read-notifications";
+const NOTIFICATION_POLL_INTERVAL_MS = 90000;
 let notificationWarmupTimer: ReturnType<typeof setTimeout> | undefined;
 
 const navItems = [
@@ -196,11 +208,15 @@ const navItems = [
   { label: "集成设置", path: "/repoguard/integrations", icon: Plug },
   { label: "消息队列", path: "/repoguard/message-queue", icon: RadioTower },
   { label: "通知运维", path: "/repoguard/notifications", icon: BellRing },
-  { label: "用户管理", path: "/repoguard/users", icon: Users, requiresManage: true },
+  { label: "用户管理", path: "/repoguard/users", icon: Users },
   { label: "系统设置", path: "/repoguard/settings", icon: Cog }
 ];
 
-const visibleNavItems = computed(() => navItems.filter((item) => !item.requiresManage || canManage.value));
+const canOpenPath = (path: string) => canAccessRouteMeta(router.resolve(path).meta, {
+  authenticated: hasAuthToken(),
+  managementAllowed: canManage.value
+});
+const visibleNavItems = computed(() => navItems.filter((item) => canOpenPath(item.path)));
 const currentTitle = computed(() => String(route.meta.title || "RepoGuard Agent"));
 const notifications = computed(() => notificationCenter.value?.items ?? []);
 const unreadCount = computed(() => notifications.value.filter((item) => !isNotificationRead(item.id)).length);
@@ -250,13 +266,30 @@ const loadNotifications = async (options: { force?: boolean } = {}) => {
   loadingNotifications.value = true;
   notificationError.value = "";
   try {
-    notificationCenter.value = await fetchNotifications();
+    const center = await fetchNotifications();
+    notificationCenter.value = center;
+    pruneReadNotifications(center.items);
   } catch (error) {
     notificationError.value = error instanceof Error ? error.message : "通知加载失败";
   } finally {
     loadingNotifications.value = false;
   }
 };
+
+const pruneReadNotifications = (items: NotificationItem[]) => {
+  const pruned = pruneReadNotificationIds(readNotificationIds.value, items.map((item) => item.id));
+  if (pruned.size === readNotificationIds.value.size) {
+    return;
+  }
+  readNotificationIds.value = pruned;
+  persistReadNotificationIds();
+};
+
+const notificationPoller = createPageAwarePoller({
+  intervalMs: () => NOTIFICATION_POLL_INTERVAL_MS,
+  isEnabled: () => true,
+  poll: () => loadNotifications({ force: true })
+});
 
 const markAllRead = () => {
   if (!notifications.value.length) {
@@ -318,10 +351,16 @@ const handleUserCommand = async (command: string) => {
     return;
   }
   if (command === "logout") {
-    await logout();
     resetCurrentUser();
-    ElMessage.success("已退出登录");
-    router.push("/login");
+    try {
+      await logout();
+      ElMessage.success("已退出登录");
+    } catch {
+      ElMessage.warning("服务端退出失败，本地登录状态已清理");
+    } finally {
+      resetCurrentUser();
+      await router.replace("/login");
+    }
     return;
   }
   if (command === "profile") {
@@ -351,6 +390,7 @@ onMounted(() => {
     notificationWarmupTimer = undefined;
     void loadNotifications();
   }, 12000);
+  notificationPoller.start();
 });
 
 onBeforeUnmount(() => {
@@ -359,5 +399,6 @@ onBeforeUnmount(() => {
   if (notificationWarmupTimer) {
     clearTimeout(notificationWarmupTimer);
   }
+  notificationPoller.dispose();
 });
 </script>

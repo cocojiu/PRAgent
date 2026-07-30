@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -73,7 +72,7 @@ class SemanticDiffPathClassifier {
             || path.contains("config");
     }
 
-    String normalizedPath(GithubChangedFile file) {
+    String normalizedPath(PullRequestChangedFile file) {
         return file.filename() == null ? "" : file.filename().replace('\\', '/').toLowerCase(Locale.ROOT);
     }
 

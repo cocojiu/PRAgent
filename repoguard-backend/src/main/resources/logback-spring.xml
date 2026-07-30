@@ -3,9 +3,9 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <conversionRule conversionWord="safeMsg"
-                    converterClass="com.repoguard.agent.common.SanitizingMessageConverter"/>
+                    class="com.repoguard.agent.common.SanitizingMessageConverter"/>
     <conversionRule conversionWord="safeEx"
-                    converterClass="com.repoguard.agent.common.SanitizingThrowableConverter"/>
+                    class="com.repoguard.agent.common.SanitizingThrowableConverter"/>
 
     <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="repoguard-backend"/>
     <property name="LOG_PATH" value="${REPOGUARD_LOG_PATH:-logs/backend}"/>

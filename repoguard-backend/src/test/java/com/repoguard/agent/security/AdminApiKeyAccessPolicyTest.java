@@ -53,6 +53,20 @@ class AdminApiKeyAccessPolicyTest {
     }
 
     @Test
+    void matchesHandlerEquivalentPathVariants() {
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/reviews/manual;x=1")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("PUT", "/api/v1/%75sers/1/role")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/reviews/42;x=1/retry")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("POST", "/api/v1/%72eviews/manual")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/API/v1/users")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("get", "/api/v1/Config/review-policy")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1//users")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1//config//review-policy")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/config/review-policy?x=1")).isTrue();
+        assertThat(AdminApiKeyAccessPolicy.requiresAdminKey("GET", "/api/v1/reviews/42;x=1")).isFalse();
+    }
+
+    @Test
     void policyCoversEveryControllerAdminEndpoint() throws ClassNotFoundException {
         List<String> uncoveredEndpoints = new ArrayList<>();
 

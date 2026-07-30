@@ -3,6 +3,7 @@ package com.repoguard.agent.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.repoguard.agent.review.task.ReviewTaskDirectPublishFailurePolicy;
 import org.junit.jupiter.api.Test;
 
 class ReviewTaskDirectPublishFailurePolicyTest {

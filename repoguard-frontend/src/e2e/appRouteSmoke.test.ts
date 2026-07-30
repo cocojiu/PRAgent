@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearAuthToken, saveAuthToken } from "@/api/client";
+import { clearAuthToken, hasAuthToken, saveAuthToken } from "@/api/client";
 import { resetCurrentUser } from "@/stores/authState";
 import { routeNames } from "@/router/names";
 import { router } from "@/router";
+
+const messages = vi.hoisted(() => ({
+  error: vi.fn()
+}));
+
+vi.mock("element-plus/es/components/message/index.mjs", () => ({
+  ElMessage: messages
+}));
 
 const okResponse = (data: unknown) => new Response(JSON.stringify({
   success: true,
@@ -14,6 +22,8 @@ const okResponse = (data: unknown) => new Response(JSON.stringify({
   status: 200,
   headers: { "Content-Type": "application/json" }
 });
+
+const errorResponse = (status: number) => new Response("error", { status });
 
 const currentAdminUser = {
   id: 1,
@@ -36,6 +46,7 @@ describe("application route smoke", () => {
     clearAuthToken();
     resetCurrentUser();
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it("redirects protected pages to login when no session is available", async () => {
@@ -75,6 +86,33 @@ describe("application route smoke", () => {
       expect.stringContaining("/api/v1/auth/me"),
       expect.objectContaining({ credentials: "include" })
     );
+  });
+
+  it("redirects to overview with a message when loading the current user fails without 401", async () => {
+    saveAuthToken("access-token", false);
+    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(502)));
+
+    const route = await navigate("/repoguard/users");
+
+    expect(route.name).toBe(routeNames.overview);
+    expect(messages.error).toHaveBeenCalledWith("权限信息加载失败，请稍后重试");
+  });
+
+  it("clears the local session and redirects to login after a management 401", async () => {
+    saveAuthToken("access-token", false);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/api/v1/auth/refresh")) {
+        return okResponse({ accessToken: "new-access" });
+      }
+      return errorResponse(401);
+    }));
+
+    const route = await navigate("/repoguard/users");
+
+    expect(route.name).toBe(routeNames.login);
+    expect(route.query.redirect).toBe("/repoguard/users");
+    expect(hasAuthToken()).toBe(false);
+    expect(messages.error).not.toHaveBeenCalled();
   });
 });
 

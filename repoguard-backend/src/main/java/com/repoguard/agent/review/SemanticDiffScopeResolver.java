@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
@@ -15,18 +14,18 @@ class SemanticDiffScopeResolver {
         this.scopeExtractor = Objects.requireNonNull(scopeExtractor, "scopeExtractor");
     }
 
-    String semanticKey(GithubChangedFile file, String patch) {
+    String semanticKey(PullRequestChangedFile file, String patch) {
         String path = pathClassifier.normalizedPath(file);
         String scope = scopeExtractor.scope(path, patch, pathClassifier);
         return pathClassifier.semanticDomain(path) + ":" + pathClassifier.moduleKey(path) + ":" + scope;
     }
 
-    String chunkGroupKey(GithubChangedFile file) {
+    String chunkGroupKey(PullRequestChangedFile file) {
         String path = pathClassifier.normalizedPath(file);
         return pathClassifier.semanticDomain(path) + ":" + pathClassifier.moduleKey(path);
     }
 
-    String semanticReason(GithubChangedFile file, String patch) {
+    String semanticReason(PullRequestChangedFile file, String patch) {
         return pathClassifier.semanticReason(pathClassifier.normalizedPath(file));
     }
 }

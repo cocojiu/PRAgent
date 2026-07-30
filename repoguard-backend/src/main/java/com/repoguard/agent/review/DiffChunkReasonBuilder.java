@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -17,8 +16,8 @@ class DiffChunkReasonBuilder {
         this.riskClassifier = Objects.requireNonNull(riskClassifier, "riskClassifier");
     }
 
-    List<String> fileReasons(List<GithubChangedFile> files, DiffChunkingPolicy policy) {
-        List<GithubChangedFile> safeFiles = files == null ? List.of() : files;
+    List<String> fileReasons(List<PullRequestChangedFile> files, DiffChunkingPolicy policy) {
+        List<PullRequestChangedFile> safeFiles = files == null ? List.of() : files;
         DiffChunkingPolicy effectivePolicy = policy == null ? DiffChunkingPolicy.defaults() : policy;
         List<String> reasons = new ArrayList<>();
         int changedLines = safeFiles.stream().mapToInt(this::changedLines).sum();
@@ -36,7 +35,7 @@ class DiffChunkReasonBuilder {
     }
 
     List<String> semanticReasons(
-        List<GithubChangedFile> sourceFiles,
+        List<PullRequestChangedFile> sourceFiles,
         List<SemanticDiffSegment> segments,
         DiffChunkingPolicy policy
     ) {
@@ -75,18 +74,18 @@ class DiffChunkReasonBuilder {
         return filenames.size();
     }
 
-    private int distinctFileCount(List<GithubChangedFile> files) {
+    private int distinctFileCount(List<PullRequestChangedFile> files) {
         if (files == null) {
             return 0;
         }
         Set<String> filenames = new LinkedHashSet<>();
-        for (GithubChangedFile file : files) {
+        for (PullRequestChangedFile file : files) {
             filenames.add(file.filename());
         }
         return filenames.size();
     }
 
-    private int changedLines(GithubChangedFile file) {
+    private int changedLines(PullRequestChangedFile file) {
         return safeInt(file.additions()) + safeInt(file.deletions());
     }
 

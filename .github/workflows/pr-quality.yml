@@ -15,13 +15,105 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  secret-scan:
+    name: PR secret diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+
   edge-config:
     name: Production edge configuration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - name: Validate production Compose configuration
-        run: docker compose --env-file .env.prod.example -f docker-compose.prod.yml config --quiet
+      - name: Generate ephemeral validation secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_dir="${RUNNER_TEMP}/repoguard-compose-secrets"
+          install -d -m 700 "${secret_dir}"
+          write_secret() {
+            setting="$1"
+            filename="$2"
+            value="$3"
+            path="${secret_dir}/${filename}"
+            printf '%s' "${value}" > "${path}"
+            chmod 600 "${path}"
+            echo "${setting}=${path}" >> "$GITHUB_ENV"
+          }
+          encryption_key="CI!1-$(openssl rand -hex 32)"
+          encryption_salt="$(openssl rand -hex 32)"
+          auth_token_secret="$(openssl rand -hex 32)"
+          admin_api_key="$(openssl rand -hex 32)"
+          webhook_secret="$(openssl rand -hex 32)"
+          for value in "${encryption_key}" "${encryption_salt}" "${auth_token_secret}" "${admin_api_key}" "${webhook_secret}"; do
+            echo "::add-mask::${value}"
+          done
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=${encryption_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=${encryption_salt}" >> "$GITHUB_ENV"
+          echo "SMOKE_AUTH_TOKEN_SECRET=${auth_token_secret}" >> "$GITHUB_ENV"
+          echo "SMOKE_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=${webhook_secret}" >> "$GITHUB_ENV"
+          write_secret MYSQL_ROOT_PASSWORD_FILE mysql.root-password "$(openssl rand -hex 32)"
+          write_secret MYSQL_PASSWORD_FILE spring.datasource.password "$(openssl rand -hex 32)"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE repoguard.security.encryption-key "${encryption_key}"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE repoguard.security.encryption-salt "${encryption_salt}"
+          write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret "${auth_token_secret}"
+          write_secret REPOGUARD_ADMIN_API_KEY_FILE app.security.admin-api-key.key "${admin_api_key}"
+          write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret "${webhook_secret}"
+      - name: Validate Compose configuration matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+          REPOGUARD_RUNTIME_ROLE=api \
+          REPOGUARD_DEPLOYMENT_MODE=split \
+            docker compose --profile worker-split \
+              --env-file .env.prod.example \
+              -f docker-compose.prod.yml config --quiet
+          SMOKE_BACKEND_IMAGE=repoguard/backend:validation \
+          SMOKE_BACKEND_PORT=18081 \
+          SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
+          SMOKE_MYSQL_PASSWORD=validation-db \
+          SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
+            docker compose -f docker-compose.smoke.yml config --quiet
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml \
+            -f docker-compose.metrics-bridge.yml config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              -f config/observability/docker-compose.metrics.yml \
+              config --quiet
+      - name: Exercise production deployment preflight
+        shell: bash
+        run: >-
+          BACKEND_IMAGE=repoguard/backend:validation
+          FRONTEND_IMAGE=repoguard/frontend:validation
+          ENV_FILE=.env.prod.example
+          PREFLIGHT_ONLY=true
+          sh scripts/deploy-prod.sh
       - name: Validate production Caddy configuration
         run: >-
           docker run --rm
@@ -40,9 +132,12 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Run backend production readiness slice
+        shell: pwsh
+        run: ./scripts/production-readiness-check.ps1 -Mode quick
       - name: Run backend tests
         working-directory: repoguard-backend
-        run: mvn -B verify
+        run: ./mvnw -B verify
       - name: Scan backend libraries for high and critical CVEs
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -112,7 +207,7 @@ jobs:
           --health-retries=12
     env:
       REPOGUARD_RUN_INTEGRATION_TESTS: 'true'
-      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_URL: jdbc:mysql://127.0.0.1:3306/repoguard_integration?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
       SPRING_DATASOURCE_USERNAME: repoguard
       SPRING_DATASOURCE_PASSWORD: integration-db
       SPRING_RABBITMQ_HOST: 127.0.0.1
@@ -120,10 +215,7 @@ jobs:
       SPRING_RABBITMQ_USERNAME: guest
       SPRING_RABBITMQ_PASSWORD: guest
       SPRING_RABBITMQ_VIRTUAL_HOST: /
-      REPOGUARD_SECURITY_ENCRYPTION_KEY: Integration-Key-2026!abc123XYZ-secure
       REPOGUARD_SECURITY_ENCRYPTION_KEY_ID: integration-001
-      REPOGUARD_AUTH_TOKEN_SECRET: Integration-Auth-Token-2026!abc123XYZ
-      REPOGUARD_ADMIN_API_KEY: Integration-Admin-Key-2026!abc123XYZ
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
@@ -131,9 +223,16 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Generate ephemeral integration secrets
+        shell: bash
+        run: |
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=CI!1-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "REPOGUARD_ADMIN_API_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
       - name: Run production-like context tests
         working-directory: repoguard-backend
-        run: mvn -B -Dtest=ProductionRuntimeContextIntegrationTest test
+        run: ./mvnw -B -Dtest=ProductionRuntimeContextIntegrationTest test
 
   dependency-review:
     name: Dependency review

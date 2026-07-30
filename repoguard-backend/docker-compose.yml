@@ -3,7 +3,7 @@ services:
     image: mysql:8.0.46@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b
     container_name: repoguard-mysql
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: repoguard
@@ -22,8 +22,8 @@ services:
     container_name: repoguard-rabbitmq
     hostname: repoguard-rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_NODENAME: rabbit@repoguard-rabbitmq
       RABBITMQ_DEFAULT_USER: repoguard

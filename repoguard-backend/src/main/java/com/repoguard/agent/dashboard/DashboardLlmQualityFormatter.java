@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
 public class DashboardLlmQualityFormatter {
 
     public String averageDuration(BigDecimal durationMs) {
+        if (durationMs == null) {
+            return "—";
+        }
         int roundedDurationMs = roundedInt(durationMs);
         if (roundedDurationMs <= 0) {
             return "0 ms";

@@ -1,0 +1,17 @@
+# Optional overlay for Prometheus scraping and remote write.
+#
+# The base observability stack is logs-only. Enable metrics explicitly:
+#   docker compose --env-file .env \
+#     -f docker-compose.observability.yml \
+#     -f config/observability/docker-compose.production.yml \
+#     -f config/observability/docker-compose.metrics.yml up -d
+services:
+  alloy:
+    environment:
+      METRICS_REMOTE_WRITE_URL: ${METRICS_REMOTE_WRITE_URL:?Set METRICS_REMOTE_WRITE_URL when enabling metrics}
+      METRICS_REMOTE_WRITE_USERNAME: ${METRICS_REMOTE_WRITE_USERNAME:?Set METRICS_REMOTE_WRITE_USERNAME when enabling metrics}
+      METRICS_REMOTE_WRITE_PASSWORD: ${METRICS_REMOTE_WRITE_PASSWORD:?Set METRICS_REMOTE_WRITE_PASSWORD when enabling metrics}
+    volumes:
+      - ./config/observability/alloy/metrics.alloy:/etc/alloy/metrics.alloy:ro
+    # Remote-write WAL needs more headroom than the logs-only process.
+    mem_limit: ${ALLOY_MEM_LIMIT:-320m}

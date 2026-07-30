@@ -1,7 +1,6 @@
 package com.repoguard.agent.observability;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
 import org.slf4j.MDC;
 
 public final class LogContext {
@@ -15,6 +14,10 @@ public final class LogContext {
     }
 
     public static Scope withReviewTask(ReviewTask task) {
+        return withReviewTask(task, null);
+    }
+
+    public static Scope withReviewTask(ReviewTask task, String traceId) {
         if (task == null) {
             return new Scope(null, null, null, null);
         }
@@ -22,11 +25,11 @@ public final class LogContext {
             value(task.getId()),
             value(task.getPrNumber()),
             repository(task.getOrganization(), task.getRepository()),
-            null
+            traceId
         );
     }
 
-    public static Scope withReviewTaskMessage(ReviewTaskMessage message) {
+    public static Scope withReviewTaskMessage(ReviewTaskLogContextValues message) {
         if (message == null) {
             return new Scope(null, null, null, null);
         }

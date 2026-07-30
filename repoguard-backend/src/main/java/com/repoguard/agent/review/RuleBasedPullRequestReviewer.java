@@ -1,9 +1,7 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewRuleProvider;
-import com.repoguard.agent.config.ReviewRuleSettings;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewRuleProvider;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -48,14 +46,14 @@ public class RuleBasedPullRequestReviewer {
             .toList();
     }
 
-    public ReviewResult review(GithubPullRequestDiff diff) {
+    public ReviewResult review(PullRequestDiff diff) {
         Map<String, ReviewRuleSettings> configuredRules = reviewRuleProvider.getRulesById();
         if (configuredRules == null) {
             configuredRules = Map.of();
         }
         List<ReviewFindingResult> findings = new ArrayList<>();
-        List<GithubChangedFile> files = diff.files() == null ? List.of() : diff.files();
-        for (GithubChangedFile file : files) {
+        List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
+        for (PullRequestChangedFile file : files) {
             String patch = file.patch();
             if (patch == null || patch.isBlank()) {
                 continue;
@@ -67,7 +65,7 @@ public class RuleBasedPullRequestReviewer {
     }
 
     private void scanPullRequestLevelRules(
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules,
         List<ReviewFindingResult> findings
     ) {

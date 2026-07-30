@@ -11,6 +11,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 class GithubWebhookRateLimiterTest {
@@ -75,6 +81,36 @@ class GithubWebhookRateLimiterTest {
         clock.advance(Duration.ofMinutes(1));
 
         assertThat(limiter.tryAcquireIp("overflow-client")).isTrue();
+    }
+
+    @Test
+    void sameKeyIsCountedAtomicallyWithoutSerializingUnrelatedKeys() throws Exception {
+        GithubWebhookProperties properties = new GithubWebhookProperties();
+        properties.setMaxRequestsPerMinutePerIp(25);
+        GithubWebhookRateLimiter limiter = new GithubWebhookRateLimiter(
+            properties,
+            new SimpleMeterRegistry(),
+            new MutableClock()
+        );
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Boolean>> results = new ArrayList<>();
+
+        try (ExecutorService executor = Executors.newFixedThreadPool(12)) {
+            for (int index = 0; index < 100; index++) {
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return limiter.tryAcquireIp("same-client");
+                }));
+            }
+            start.countDown();
+            int accepted = 0;
+            for (Future<Boolean> result : results) {
+                if (result.get()) {
+                    accepted++;
+                }
+            }
+            assertThat(accepted).isEqualTo(25);
+        }
     }
 
     private static final class MutableClock extends Clock {

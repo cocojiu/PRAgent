@@ -2,6 +2,8 @@ package com.repoguard.agent.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.notification.binding.NotificationBindingStatus;
+import com.repoguard.agent.notification.delivery.NotificationDeliveryStatus;
 import org.junit.jupiter.api.Test;
 
 class NotificationStatusTest {
@@ -18,6 +20,7 @@ class NotificationStatusTest {
     @Test
     void eventStatusNormalizesStoredCodes() {
         assertThat(NotificationEventStatus.from("pending")).isEqualTo(NotificationEventStatus.PENDING);
+        assertThat(NotificationEventStatus.from("publishing")).isEqualTo(NotificationEventStatus.PUBLISHING);
         assertThat(NotificationEventStatus.from("delivery_failed")).isEqualTo(NotificationEventStatus.DELIVERY_FAILED);
         assertThat(NotificationEventStatus.from(" publish_failed ")).isEqualTo(NotificationEventStatus.PUBLISH_FAILED);
         assertThat(NotificationEventStatus.from(null)).isEqualTo(NotificationEventStatus.UNKNOWN);

@@ -181,6 +181,16 @@
   font-weight: 500;
 }
 
+.integration-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.integration-actions .el-button {
+  margin-left: 0;
+}
+
 .integration-diagnostics {
   display: grid;
   gap: 6px;

@@ -4,6 +4,8 @@ import java.io.IOException;
 
 public class ExternalHttpResponseTooLargeException extends IOException {
 
+    private static final long serialVersionUID = 1L;
+
     private final ExternalHttpResponseProfile profile;
     private final long maxBytes;
     private final long observedBytes;

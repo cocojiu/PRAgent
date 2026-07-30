@@ -1,5 +1,6 @@
 package com.repoguard.agent.worker;
 
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.LlmParseStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewResult;
@@ -34,11 +35,28 @@ class ReviewExecutionTimelineLabelFormatter {
         return truncateLabel("Review failed: " + normalize(message));
     }
 
+    String reviewSuperseded(GithubPullRequestHeadChangedException ex) {
+        return truncateLabel(
+            "Review superseded: expected "
+                + shortCommit(ex.expectedHeadSha())
+                + ", current "
+                + shortCommit(ex.currentHeadSha())
+        );
+    }
+
     private String normalize(String value) {
         return value.replaceAll("\\s+", " ").trim();
     }
 
     private String truncateLabel(String label) {
         return label.length() > 120 ? label.substring(0, 117) + "..." : label;
+    }
+
+    private String shortCommit(String value) {
+        if (value == null || value.isBlank()) {
+            return "unavailable";
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= 12 ? trimmed : trimmed.substring(0, 12);
     }
 }

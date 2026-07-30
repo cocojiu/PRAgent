@@ -3,21 +3,24 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiff;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class LlmReviewPromptBuilderTest {
 
+    private static final String COMMIT_SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
     private final LlmReviewPromptBuilder builder = new LlmReviewPromptBuilder();
 
     @Test
     void promptSummaryIncludesCountsAndOnlyFirstFiveSampleFiles() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(
                 file("src/A.java", 1, 0, "patch"),
                 file("src/B.java", 2, 1, "patch"),
@@ -31,17 +34,19 @@ class LlmReviewPromptBuilderTest {
         String summary = builder.promptSummary(diff);
 
         assertThat(summary).isEqualTo(
-            "PR repo-guard-demo/spring-boot-demo#512; files=6; additions=18; deletions=14; "
+            "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
+                + "; files=6; additions=18; deletions=14; "
                 + "sampleFiles=src/A.java, src/B.java, src/C.java, src/D.java, src/E.java, ..."
         );
     }
 
     @Test
     void chunkedPromptSummaryIncludesAggregateCountsAndDistinctReasons() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(file("src/A.java", 1, 1, "patch"), file("src/B.java", 2, 2, "patch"))
         );
         List<PullRequestDiffChunk> chunks = List.of(
@@ -52,7 +57,8 @@ class LlmReviewPromptBuilderTest {
         String summary = builder.chunkedPromptSummary(diff, chunks, 4, "HIGH", 1);
 
         assertThat(summary).isEqualTo(
-            "PR repo-guard-demo/spring-boot-demo#512; chunked=true; chunks=2; files=2; additions=15; "
+            "PR repo-guard-demo/spring-boot-demo#512; commit=" + COMMIT_SHA
+                + "; chunked=true; chunks=2; files=2; additions=15; "
                 + "deletions=10; aggregateRisk=HIGH; aggregateFindings=4; failedChunks=1; "
                 + "chunkReasons=too_many_files,large_patch,security_sensitive"
         );
@@ -62,23 +68,25 @@ class LlmReviewPromptBuilderTest {
     void buildPromptIncludesTaskAndCompactsLongPatch() {
         ReviewTask task = new ReviewTask();
         task.setTitle("Improve review flow");
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
+            COMMIT_SHA,
             List.of(file("src/App.java", 1, 1, "a".repeat(7000)))
         );
 
         String prompt = builder.buildPrompt(task, diff);
 
         assertThat(prompt).contains("repo-guard-demo/spring-boot-demo#512");
+        assertThat(prompt).contains("Commit SHA: " + COMMIT_SHA);
         assertThat(prompt).contains("Improve review flow");
         assertThat(prompt).contains("--- src/App.java");
         assertThat(prompt).contains("a".repeat(6000));
         assertThat(prompt).doesNotContain("a".repeat(6001));
     }
 
-    private GithubChangedFile file(String path, Integer additions, Integer deletions, String patch) {
-        return new GithubChangedFile(path, "modified", additions, deletions, patch);
+    private PullRequestChangedFile file(String path, Integer additions, Integer deletions, String patch) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, patch);
     }
 }

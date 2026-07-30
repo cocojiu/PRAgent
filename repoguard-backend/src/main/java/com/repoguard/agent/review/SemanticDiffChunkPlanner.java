@@ -1,6 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -49,7 +48,7 @@ class SemanticDiffChunkPlanner {
             && !segment.semanticKey().equals(next.semanticKey()));
     }
 
-    private boolean sameFile(GithubChangedFile left, GithubChangedFile right) {
+    private boolean sameFile(PullRequestChangedFile left, PullRequestChangedFile right) {
         String leftPath = left.filename() == null ? "" : left.filename();
         String rightPath = right.filename() == null ? "" : right.filename();
         return leftPath.equals(rightPath);

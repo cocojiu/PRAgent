@@ -65,7 +65,7 @@ export const useReviewDetailLoader = ({
   };
 
   const clearNonTerminalGithubCommentData = (status: ReviewStatus | string) => {
-    if (isTerminalReviewStatus(status)) {
+    if (isTerminalReviewStatus(status) && String(status).toLowerCase() !== "superseded") {
       return;
     }
     clearGithubCommentPreviewAndHistory();

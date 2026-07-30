@@ -2,8 +2,8 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestChangedFile;
+import com.repoguard.agent.review.PullRequestDiff;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -122,9 +122,9 @@ class LlmReviewQualityScorerTest {
         );
     }
 
-    private GithubPullRequestDiff diff(String patch) {
-        return new GithubPullRequestDiff("octocat", "Hello-World", 1, List.of(
-            new GithubChangedFile(
+    private PullRequestDiff diff(String patch) {
+        return new PullRequestDiff("octocat", "Hello-World", 1, List.of(
+            new PullRequestChangedFile(
                 "src/main/java/com/example/AdminController.java",
                 "modified",
                 2,

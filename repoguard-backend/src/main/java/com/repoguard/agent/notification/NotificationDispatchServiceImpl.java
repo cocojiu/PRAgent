@@ -1,8 +1,15 @@
 package com.repoguard.agent.notification;
 
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.GithubCommentPublishResponse;
 import com.repoguard.agent.entity.NotificationEvent;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.notification.dispatch.NotificationDispatchRequest;
+import com.repoguard.agent.notification.dispatch.NotificationDispatchRequestFactory;
+import com.repoguard.agent.notification.outbox.NotificationEventPayload;
+import com.repoguard.agent.notification.outbox.NotificationEventPayloadBuilder;
+import com.repoguard.agent.notification.outbox.NotificationOutboxEventStore;
+import com.repoguard.agent.notification.publish.NotificationEventPublishCoordinator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

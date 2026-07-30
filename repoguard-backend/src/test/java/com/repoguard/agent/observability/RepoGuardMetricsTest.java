@@ -2,6 +2,7 @@ package com.repoguard.agent.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.config.RuntimeRoleContract;
 import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.worker.ReviewExecutionFailureClassifier;
 import io.micrometer.core.instrument.config.MeterFilter;
@@ -17,6 +18,27 @@ class RepoGuardMetricsTest {
         meterRegistry,
         new ReviewExecutionFailureClassifier()
     );
+
+    @Test
+    void stampsMetersWithApplicationAndResolvedRuntimeRole() {
+        RuntimeRoleContract runtimeRole = new RuntimeRoleContract(
+            RuntimeRoleContract.Mode.API,
+            RuntimeRoleContract.DeploymentMode.SPLIT,
+            1,
+            false
+        );
+        SimpleMeterRegistry taggedRegistry = filteredRegistry(
+            new MetricsCommonTagsConfig().repoGuardCommonTags(runtimeRole)
+        );
+
+        taggedRegistry.counter("repoguard.test.counter").increment();
+
+        assertThat(taggedRegistry.find("repoguard.test.counter")
+            .tag("application", "repoguard-backend")
+            .tag("role", "api")
+            .counter()
+            .count()).isEqualTo(1.0);
+    }
 
     @Test
     void recordsReviewTaskCountersWithStableTags() {
@@ -371,6 +393,27 @@ class RepoGuardMetricsTest {
         }
         assertThat(thresholdRegistry.find("repoguard.observability.threshold.exceeded").counters())
             .hasSize(FrontendPerformanceMeterFilterConfig.MAX_THRESHOLD_SUBJECTS);
+    }
+
+    @Test
+    void capsApiRequestPathDimensions() {
+        ApiRequestMeterFilterConfig config = new ApiRequestMeterFilterConfig();
+
+        SimpleMeterRegistry durationRegistry = filteredRegistry(config.apiRequestDurationPathCardinalityLimit());
+        RepoGuardMetrics durationMetrics = metrics(durationRegistry);
+        for (int index = 0; index <= ApiRequestMeterFilterConfig.MAX_API_PATHS; index++) {
+            durationMetrics.apiRequest(Duration.ofMillis(1), "GET", "/api/v1/path-" + index, 200, "success", 1L);
+        }
+        assertThat(durationRegistry.find("repoguard.api.request.duration").timers())
+            .hasSize(ApiRequestMeterFilterConfig.MAX_API_PATHS);
+
+        SimpleMeterRegistry bytesRegistry = filteredRegistry(config.apiResponseBytesPathCardinalityLimit());
+        RepoGuardMetrics bytesMetrics = metrics(bytesRegistry);
+        for (int index = 0; index <= ApiRequestMeterFilterConfig.MAX_API_PATHS; index++) {
+            bytesMetrics.apiRequest(Duration.ofMillis(1), "GET", "/api/v1/path-" + index, 200, "success", 1L);
+        }
+        assertThat(bytesRegistry.find("repoguard.api.response.bytes").summaries())
+            .hasSize(ApiRequestMeterFilterConfig.MAX_API_PATHS);
     }
 
     private SimpleMeterRegistry filteredRegistry(MeterFilter filter) {

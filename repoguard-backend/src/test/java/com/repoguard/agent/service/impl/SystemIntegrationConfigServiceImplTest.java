@@ -6,8 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.entity.IntegrationConfig;
@@ -73,7 +72,7 @@ class SystemIntegrationConfigServiceImplTest {
 
     @Test
     void updateGithubIntegrationStoresNewTokenAndEvictsDashboardOverviewCompatibility() {
-        IntegrationConfig config = githubConfig("old-token");
+        IntegrationConfig config = githubConfig(secretCryptoService.encrypt("old-token"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
@@ -83,18 +82,19 @@ class SystemIntegrationConfigServiceImplTest {
             "spring-boot-demo"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("ghp_new_secret_1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(config.getLastError()).isNull();
         assertThat(result.token()).isEqualTo("****1234");
         verify(integrationConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test
     void updateGithubIntegrationClearsTokenWhenBlankValueIsSubmitted() {
-        IntegrationConfig config = githubConfig("old-token");
+        IntegrationConfig config = githubConfig(secretCryptoService.encrypt("old-token"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateGithubIntegration(new GithubIntegrationConfigRequest(
@@ -108,7 +108,8 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(config.getStatus()).isEqualTo("NOT_CONFIGURED");
         assertThat(result.token()).isNull();
         verify(integrationConfigMapper).updateById(config);
-        verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any(UpdateWrapper.class));
+        verify(integrationConfigMapper, org.mockito.Mockito.times(2)).update(any());
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
@@ -169,12 +170,13 @@ class SystemIntegrationConfigServiceImplTest {
         assertThat(result.token()).isNull();
         assertThat(result.secretStatus()).isEqualTo("decrypt_failed");
         verify(integrationConfigMapper).updateById(config);
+        verify(cacheEvictionService).evictGithubOpenPullRequests();
         verify(cacheEvictionService).evictDashboardOverviewCompatibility();
     }
 
     @Test
     void updateMysqlIntegrationKeepsExistingSecretWhenMaskedValueIsSubmitted() {
-        IntegrationConfig config = serviceConfig("MYSQL", "mysql-existing-1234");
+        IntegrationConfig config = serviceConfig("MYSQL", secretCryptoService.encrypt("mysql-existing-1234"));
         when(integrationConfigMapper.selectOne(any())).thenReturn(config);
 
         var result = service.updateMysqlIntegration(new ServiceIntegrationConfigRequest(
@@ -184,7 +186,7 @@ class SystemIntegrationConfigServiceImplTest {
             "repoguard"
         ));
 
-        assertThat(config.getTokenValue()).startsWith("enc:v2:local:");
+        assertThat(config.getTokenValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getTokenValue())).isEqualTo("mysql-existing-1234");
         assertThat(config.getStatus()).isEqualTo("CONFIGURED");
         assertThat(result.secret()).isEqualTo("****1234");

@@ -39,8 +39,17 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
 
     @Override
     public void publish(NotificationEventMessage message) {
+        publish(message, spec(message));
+    }
+
+    @Override
+    public void publishOnce(NotificationEventMessage message) {
+        publish(message, spec(message).singleAttempt());
+    }
+
+    private void publish(NotificationEventMessage message, RabbitPublishSpec publishSpec) {
         try {
-            RabbitPublishResult result = reliablePublisher.publish(message, spec(message));
+            RabbitPublishResult result = reliablePublisher.publish(message, publishSpec);
             LOGGER.info(
                 "Rabbit notification event published eventId={} taskId={} eventType={} operation=rabbit_notification_publish result=success attempt={} exchange={} routingKey={}",
                 message.eventId(),
@@ -57,7 +66,7 @@ public class RabbitNotificationEventPublisher implements NotificationEventPublis
                 message.eventId(),
                 message.taskId(),
                 safePart(message.eventType()),
-                Math.max(1, properties.getPublishMaxAttempts()),
+                publishSpec.normalizedMaxAttempts(),
                 failureReason
             );
             metricsRecorder.recordFailed(RabbitPublishFailurePhase.NOTIFICATION, failureReason);

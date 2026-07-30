@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import org.junit.jupiter.api.Test;
 
 class SemanticDiffPathClassifierTest {
@@ -11,7 +10,7 @@ class SemanticDiffPathClassifierTest {
 
     @Test
     void normalizesChangedFilePathForStableClassification() {
-        GithubChangedFile file = new GithubChangedFile(
+        PullRequestChangedFile file = new PullRequestChangedFile(
             "SRC\\Main\\Java\\Com\\Example\\OrderService.java",
             "modified",
             1,

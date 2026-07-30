@@ -2,7 +2,8 @@ package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import java.time.Duration;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -34,7 +35,7 @@ class GithubPullRequestDiffFetcher {
         this.failureClassifier = Objects.requireNonNull(failureClassifier, "failureClassifier");
     }
 
-    GithubPullRequestDiff fetch(ReviewTask task) {
+    PullRequestDiff fetch(ReviewTask task) {
         var startedAt = clock.now();
         try {
             LOGGER.info(
@@ -43,26 +44,33 @@ class GithubPullRequestDiffFetcher {
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber()
             );
-            GithubPullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
+            PullRequestDiff diff = githubPullRequestClient.fetchPullRequestDiff(task);
             Duration duration = Duration.between(startedAt, clock.now());
-            metricsRecorder.recordGithubDiffFetch(duration, "success");
+            String result = diff.truncated() ? "truncated" : "success";
+            metricsRecorder.recordGithubDiffFetch(duration, result);
             LOGGER.info(
-                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result=success durationMs={} files={}",
+                "GitHub diff fetch completed taskId={} repository={} prNumber={} operation=github_diff_fetch result={} durationMs={} files={} pages={} retainedBytes={} truncationReasons={}",
                 task.getId(),
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
+                result,
                 duration.toMillis(),
-                diff.files() == null ? 0 : diff.files().size()
+                diff.files().size(),
+                diff.truncation().pagesFetched(),
+                diff.truncation().retainedBytes(),
+                diff.truncation().reasons()
             );
             return diff;
         } catch (RuntimeException ex) {
             Duration duration = Duration.between(startedAt, clock.now());
-            metricsRecorder.recordGithubDiffFetch(duration, "failed");
+            String result = ex instanceof GithubPullRequestHeadChangedException ? "superseded" : "failed";
+            metricsRecorder.recordGithubDiffFetch(duration, result);
             LOGGER.warn(
-                "GitHub diff fetch failed taskId={} repository={} prNumber={} operation=github_diff_fetch result=failed failureCategory={} exceptionType={} durationMs={}",
+                "GitHub diff fetch ended taskId={} repository={} prNumber={} operation=github_diff_fetch result={} failureCategory={} exceptionType={} durationMs={}",
                 task.getId(),
                 logContextFormatter.repositorySlug(task),
                 task.getPrNumber(),
+                result,
                 failureClassifier.failureCategory(ex),
                 ex.getClass().getName(),
                 duration.toMillis()

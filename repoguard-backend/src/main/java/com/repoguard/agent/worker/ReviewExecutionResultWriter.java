@@ -1,7 +1,7 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
@@ -34,7 +34,7 @@ class ReviewExecutionResultWriter {
 
     WriteResult applyCompleted(
         ReviewTask task,
-        GithubPullRequestDiff diff,
+        PullRequestDiff diff,
         ReviewResult reviewResult,
         LocalDateTime startedAt,
         String claimId

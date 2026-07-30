@@ -1,5 +1,6 @@
 import { clearAuthToken, hasAuthToken, saveAuthTokens } from "@/api/client";
 import { apiRequest } from "@/api/contracts";
+import type { ApiRequestOptions } from "@/api/contracts";
 
 export interface AuthUser {
   id: number;
@@ -58,7 +59,8 @@ export const register = async (payload: RegisterRequest) => {
   return response;
 };
 
-export const getCurrentUser = () => apiRequest("getCurrentUser", undefined);
+export const getCurrentUser = (options: ApiRequestOptions = {}) =>
+  apiRequest("getCurrentUser", undefined, options);
 
 export const changePassword = async (payload: PasswordChangeRequest) => {
   await apiRequest("changePassword", payload);

@@ -1,4 +1,5 @@
 import { requestWithMeta } from "@/api/client";
+import type { ClientRequestInit } from "@/api/client";
 import { observeFrontendApiRequest } from "@/observability/frontendPerformanceBuffer";
 import type { FrontendPerformanceReport } from "@/observability/frontendPerformanceBuffer";
 import type { AuthResponse, CurrentUser, LoginRequest, PasswordChangeRequest, RefreshTokenResetRequest, RegisterRequest } from "@/api/auth";
@@ -61,6 +62,8 @@ import type {
   SecretReEncryptionResponse,
   ReviewTrendPoint,
   ReviewTask,
+  ReviewTaskListSummary,
+  ReviewTaskListSummaryQuery,
   ReviewTaskSummary,
   ReviewTaskStatus,
   ServiceIntegrationConfig,
@@ -77,6 +80,8 @@ type QueryParams = Record<string, string | number | undefined>;
 
 export type ApiRequestOptions = {
   signal?: AbortSignal;
+  keepalive?: boolean;
+  timeoutMs?: number;
 };
 
 type ApiOperation<Input, Response> = {
@@ -176,6 +181,7 @@ export type ApiContract = {
     PageResponse<DataRetentionCleanupAudit>
   >;
   fetchReviews: ApiOperation<ReviewQuery, PageResponse<ReviewTask>>;
+  fetchReviewListSummary: ApiOperation<ReviewTaskListSummaryQuery, ReviewTaskListSummary>;
   fetchReviewDetail: ApiOperation<{ id: number }, ReviewTaskSummary>;
   fetchReviewFindings: ApiOperation<ReviewFindingsPageInput, PageResponse<ReviewFinding>>;
   fetchReviewChangedFiles: ApiOperation<ReviewChangedFilesPageInput, PageResponse<ChangedFile>>;
@@ -346,6 +352,17 @@ const apiEndpoints: ApiEndpointMap = {
       cursorCreatedAt: input.cursorCreatedAt,
       cursorId: input.cursorId,
       totalHint: input.totalHint
+    })
+  },
+  fetchReviewListSummary: {
+    path: () => "/api/v1/reviews/summary",
+    query: input => ({
+      repository: input.repository,
+      status: input.status,
+      riskLevel: input.riskLevel,
+      source: input.source,
+      triggerSource: input.triggerSource,
+      keyword: input.keyword
     })
   },
   fetchReviewDetail: {
@@ -614,7 +631,11 @@ export const apiRequest = async <Operation extends keyof ApiContract>(
     ApiContract[Operation]["input"],
     ApiContract[Operation]["response"]
   >;
-  const options: RequestInit = { signal: requestOptions.signal };
+  const options: ClientRequestInit = {
+    signal: requestOptions.signal,
+    keepalive: requestOptions.keepalive,
+    timeoutMs: requestOptions.timeoutMs
+  };
   const method = endpoint.method ?? "GET";
   const path = endpoint.path(input);
   const observationPath = stableObservationPath(path);

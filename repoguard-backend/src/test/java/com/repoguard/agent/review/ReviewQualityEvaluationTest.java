@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.repoguard.agent.config.ReviewRuleProvider;
+import com.repoguard.agent.review.ReviewRuleProvider;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;

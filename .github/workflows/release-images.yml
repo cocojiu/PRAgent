@@ -33,6 +33,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: release-images-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   ALIYUN_REGISTRY: ${{ secrets.ALIYUN_REGISTRY || vars.ALIYUN_REGISTRY }}
@@ -50,10 +54,102 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Scan pushed Git range for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
       - name: Repository governance guard
         shell: pwsh
         run: ./scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests
+
+      - name: Generate ephemeral validation secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          secret_dir="${RUNNER_TEMP}/repoguard-compose-secrets"
+          install -d -m 700 "${secret_dir}"
+          write_secret() {
+            setting="$1"
+            filename="$2"
+            value="$3"
+            path="${secret_dir}/${filename}"
+            printf '%s' "${value}" > "${path}"
+            chmod 600 "${path}"
+            echo "${setting}=${path}" >> "$GITHUB_ENV"
+          }
+          encryption_key="CI!1-$(openssl rand -hex 32)"
+          encryption_salt="$(openssl rand -hex 32)"
+          auth_token_secret="$(openssl rand -hex 32)"
+          admin_api_key="$(openssl rand -hex 32)"
+          webhook_secret="$(openssl rand -hex 32)"
+          for value in "${encryption_key}" "${encryption_salt}" "${auth_token_secret}" "${admin_api_key}" "${webhook_secret}"; do
+            echo "::add-mask::${value}"
+          done
+          echo "REPOGUARD_SECURITY_ENCRYPTION_KEY=${encryption_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_SECURITY_ENCRYPTION_SALT=${encryption_salt}" >> "$GITHUB_ENV"
+          echo "SMOKE_AUTH_TOKEN_SECRET=${auth_token_secret}" >> "$GITHUB_ENV"
+          echo "SMOKE_ADMIN_API_KEY=${admin_api_key}" >> "$GITHUB_ENV"
+          echo "REPOGUARD_GITHUB_WEBHOOK_SECRET=${webhook_secret}" >> "$GITHUB_ENV"
+          write_secret MYSQL_ROOT_PASSWORD_FILE mysql.root-password "$(openssl rand -hex 32)"
+          write_secret MYSQL_PASSWORD_FILE spring.datasource.password "$(openssl rand -hex 32)"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE repoguard.security.encryption-key "${encryption_key}"
+          write_secret REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE repoguard.security.encryption-salt "${encryption_salt}"
+          write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret "${auth_token_secret}"
+          write_secret REPOGUARD_ADMIN_API_KEY_FILE app.security.admin-api-key.key "${admin_api_key}"
+          write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret "${webhook_secret}"
+
+      - name: Validate production Compose models
+        shell: bash
+        run: |
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+          REPOGUARD_RUNTIME_ROLE=api \
+          REPOGUARD_DEPLOYMENT_MODE=split \
+          docker compose --profile worker-split \
+            --env-file .env.prod.example \
+            -f docker-compose.prod.yml config --quiet
+          SMOKE_BACKEND_IMAGE=repoguard/backend:validation \
+          SMOKE_BACKEND_PORT=18081 \
+          SMOKE_MYSQL_ROOT_PASSWORD=validation-root \
+          SMOKE_MYSQL_PASSWORD=validation-db \
+          SMOKE_RABBITMQ_PASSWORD=validation-rabbit \
+          REPOGUARD_SECURITY_ENCRYPTION_KEY_ID=validation-001 \
+            docker compose -f docker-compose.smoke.yml config --quiet
+          docker compose --env-file .env.prod.example \
+            -f docker-compose.prod.yml \
+            -f docker-compose.metrics-bridge.yml config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              config --quiet
+          GRAFANA_ADMIN_PASSWORD=validation-only \
+          DOCKER_SOCKET_GID=0 \
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose --env-file /dev/null \
+              -f docker-compose.observability.yml \
+              -f config/observability/docker-compose.production.yml \
+              -f config/observability/docker-compose.metrics.yml \
+              config --quiet
+
+      - name: Exercise production deployment preflight
+        shell: bash
+        run: >-
+          BACKEND_IMAGE=repoguard/backend:validation
+          FRONTEND_IMAGE=repoguard/frontend:validation
+          ENV_FILE=.env.prod.example
+          PREFLIGHT_ONLY=true
+          sh scripts/deploy-prod.sh
 
       - name: Set up Java
         uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5.5.0
@@ -64,7 +160,7 @@ jobs:
 
       - name: Build backend
         working-directory: repoguard-backend
-        run: mvn -B verify
+        run: ./mvnw -B verify
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -206,6 +302,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.deploy && (github.ref_name == 'main' || github.ref_name == 'master' || startsWith(github.ref, 'refs/tags/v')) && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
     environment: production
     steps:
       - name: Checkout compose file
@@ -252,9 +351,34 @@ jobs:
           test -n "${DEPLOY_USER}" || { echo "Missing DEPLOY_USER secret or variable"; exit 1; }
           test -n "${DEPLOY_HOST}" || { echo "Missing DEPLOY_HOST secret or variable"; exit 1; }
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
+          test -s config/rabbitmq/rabbitmq.conf || { echo "Missing RabbitMQ deployment config"; exit 1; }
+          test -s docker-compose.metrics-bridge.yml || { echo "Missing metrics bridge overlay"; exit 1; }
+          asset_backup_dir="${DEPLOY_PATH}/.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "mkdir -p '${DEPLOY_PATH}/scripts' '${DEPLOY_PATH}/performance/remote'"
+            "set -eu
+             mkdir -p '${DEPLOY_PATH}/scripts' \
+                      '${DEPLOY_PATH}/performance/remote' \
+                      '${DEPLOY_PATH}/config/rabbitmq' \
+                      '${asset_backup_dir}/config/rabbitmq'
+             if [ -f '${DEPLOY_PATH}/docker-compose.prod.yml' ]; then
+               cp -p '${DEPLOY_PATH}/docker-compose.prod.yml' '${asset_backup_dir}/docker-compose.prod.yml'
+             fi
+             if [ -f '${DEPLOY_PATH}/docker-compose.metrics-bridge.yml' ]; then
+               cp -p '${DEPLOY_PATH}/docker-compose.metrics-bridge.yml' \
+                     '${asset_backup_dir}/docker-compose.metrics-bridge.yml'
+             fi
+             if [ -f '${DEPLOY_PATH}/Caddyfile' ]; then
+               cp -p '${DEPLOY_PATH}/Caddyfile' '${asset_backup_dir}/Caddyfile'
+             fi
+             if [ -f '${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf' ]; then
+               cp -p '${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf' \
+                     '${asset_backup_dir}/config/rabbitmq/rabbitmq.conf'
+             fi"
+          echo "DEPLOY_ASSET_BACKUP_DIR=.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_ENV"
+          # Upload bind sources before the compose file that references them.
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" config/rabbitmq/rabbitmq.conf "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/config/rabbitmq/rabbitmq.conf"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.prod.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.prod.yml"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.metrics-bridge.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.metrics-bridge.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
@@ -317,4 +441,5 @@ jobs:
              REPOGUARD_FRONTEND_SERVER_NAME='${REPOGUARD_FRONTEND_SERVER_NAME}' \
              APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
              HEALTH_URL='${health_url}' \
+             DEPLOY_ASSET_BACKUP_DIR='${DEPLOY_ASSET_BACKUP_DIR}' \
              sh scripts/deploy-prod.sh"

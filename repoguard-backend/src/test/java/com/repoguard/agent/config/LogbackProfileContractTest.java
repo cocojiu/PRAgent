@@ -22,6 +22,13 @@ class LogbackProfileContractTest {
 
         assertThat(childAttributeValues(configuration, "conversionRule", "conversionWord"))
             .containsExactly("safeMsg", "safeEx");
+        assertThat(childAttributeValues(configuration, "conversionRule", "class"))
+            .containsExactly(
+                "com.repoguard.agent.common.SanitizingMessageConverter",
+                "com.repoguard.agent.common.SanitizingThrowableConverter"
+            );
+        assertThat(directChildren(configuration, "conversionRule"))
+            .allSatisfy(rule -> assertThat(rule.hasAttribute("converterClass")).isFalse());
         Element logPattern = directChildren(configuration, "property").stream()
             .filter(element -> "LOG_PATTERN".equals(element.getAttribute("name")))
             .findFirst()

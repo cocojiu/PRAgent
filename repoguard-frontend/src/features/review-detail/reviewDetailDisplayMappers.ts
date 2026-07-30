@@ -64,6 +64,9 @@ export const timelineLabelText = (label: string) => {
   if (label.startsWith("Review failed:")) {
     return `审查失败：${label.replace("Review failed:", "").trim()}`;
   }
+  if (label.startsWith("Review superseded:")) {
+    return `审查已过期：${label.replace("Review superseded:", "").trim()}`;
+  }
   return label;
 };
 

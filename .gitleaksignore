@@ -1,0 +1,10 @@
+# Historical CI validation placeholders introduced in adb052dff215 and removed
+# in f493a18d. Delete these after the introducing commit leaves rewritten history.
+adb052dff215ba677c2e3496269facd5dfbd3127:.github/workflows/pr-quality.yml:generic-api-key:39
+adb052dff215ba677c2e3496269facd5dfbd3127:.github/workflows/release-images.yml:generic-api-key:77
+
+# Intentional redaction-test literal introduced in e884d8c4a5c7. The exact
+# fingerprint is valid only while that negative assertion remains; a moved or
+# changed fixture must be reviewed again. Delete after replacing the fixture or
+# removing the introducing commit from rewritten history.
+e884d8c4a5c760a415837a7ddb2927f0f33ebe59:repoguard-backend/src/test/java/com/repoguard/agent/external/ExternalHttpFailureDetailTest.java:generic-api-key:31

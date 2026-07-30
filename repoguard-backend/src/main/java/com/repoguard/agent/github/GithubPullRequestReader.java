@@ -1,7 +1,7 @@
 package com.repoguard.agent.github;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.repoguard.agent.config.GithubIntegrationSettings;
+import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.external.ExternalCallResilience;
 import java.util.List;
 import org.springframework.stereotype.Component;

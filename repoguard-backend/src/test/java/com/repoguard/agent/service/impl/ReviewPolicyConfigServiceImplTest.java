@@ -5,8 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
@@ -49,12 +48,12 @@ class ReviewPolicyConfigServiceImplTest {
 
     @Test
     void updateReviewPolicyKeepsExistingApiKeyWhenMaskedValueIsSubmitted() {
-        ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
+        ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request("****5678"));
 
-        assertThat(config.getApiKeyValue()).startsWith("enc:v2:local:");
+        assertThat(config.getApiKeyValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
         assertThat(config.getWorkerConcurrency()).isEqualTo(2);
@@ -69,7 +68,7 @@ class ReviewPolicyConfigServiceImplTest {
 
     @Test
     void updateReviewPolicyClearsApiKeyWhenBlankValueIsSubmitted() {
-        ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
+        ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(request(""));
@@ -77,7 +76,7 @@ class ReviewPolicyConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).isNull();
         assertThat(result.apiKey()).isNull();
         verify(reviewPolicyConfigMapper).updateById(config);
-        verify(reviewPolicyConfigMapper).update(any(UpdateWrapper.class));
+        verify(reviewPolicyConfigMapper).update(any());
     }
 
     @Test
@@ -120,7 +119,7 @@ class ReviewPolicyConfigServiceImplTest {
 
     @Test
     void updateReviewPolicyStoresNewApiKeyAndTrimsOptionalBaseUrl() {
-        ReviewPolicyConfig config = reviewPolicyConfig("sk-existing-5678");
+        ReviewPolicyConfig config = reviewPolicyConfig(secretCryptoService.encrypt("sk-existing-5678"));
         when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
 
         var result = service.updateReviewPolicy(new ReviewPolicyConfigRequest(

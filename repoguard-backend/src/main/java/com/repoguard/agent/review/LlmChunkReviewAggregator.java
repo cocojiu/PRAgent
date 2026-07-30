@@ -1,22 +1,24 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.config.ReviewPolicySettings;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewPolicySettings;
+import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 
 class LlmChunkReviewAggregator {
 
-    static final String CHUNK_PARTIAL_FAILURE_CATEGORY = "chunk_partial_failure";
+    static final String CHUNK_PARTIAL_FAILURE_CATEGORY =
+        LlmChunkReviewFallbackHandler.CHUNK_PARTIAL_FAILURE_CATEGORY;
+    static final String BUDGET_EXHAUSTED_CATEGORY = LlmChunkReviewScheduler.BUDGET_EXHAUSTED_CATEGORY;
+    static final String CHUNK_LIMIT_EXCEEDED_CATEGORY = LlmChunkReviewScheduler.CHUNK_LIMIT_EXCEEDED_CATEGORY;
+    static final String EXECUTOR_REJECTED_CATEGORY = LlmChunkReviewScheduler.EXECUTOR_REJECTED_CATEGORY;
 
-    private final RuleBasedPullRequestReviewer ruleBasedReviewer;
-    private final LlmReviewPromptBuilder promptBuilder;
-    private final LlmRuleReviewMerger reviewMerger;
     private final LlmReviewQualityScorer qualityScorer;
-    private final LlmReviewCostEstimator costEstimator;
-    private final RepoGuardMetrics metrics;
+    private final LlmChunkReviewScheduler chunkReviewScheduler;
+    private final LlmChunkReviewFallbackHandler fallbackHandler;
+    private final LlmChunkReviewResultAggregator resultAggregator;
 
     LlmChunkReviewAggregator(
         RuleBasedPullRequestReviewer ruleBasedReviewer,
@@ -24,122 +26,76 @@ class LlmChunkReviewAggregator {
         LlmRuleReviewMerger reviewMerger,
         LlmReviewQualityScorer qualityScorer,
         LlmReviewCostEstimator costEstimator,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        Executor chunkExecutor,
+        int maxTotalChunks,
+        int maxInFlightChunks
     ) {
-        this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
-        this.promptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
-        this.reviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
+        RuleBasedPullRequestReviewer requiredRuleBasedReviewer = Objects.requireNonNull(
+            ruleBasedReviewer,
+            "ruleBasedReviewer"
+        );
+        LlmReviewPromptBuilder requiredPromptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
+        LlmRuleReviewMerger requiredReviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
         this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
-        this.costEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
-        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        LlmReviewCostEstimator requiredCostEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
+        RepoGuardMetrics requiredMetrics = Objects.requireNonNull(metrics, "metrics");
+        this.chunkReviewScheduler = new LlmChunkReviewScheduler(
+            chunkExecutor,
+            maxTotalChunks,
+            maxInFlightChunks
+        );
+        this.fallbackHandler = new LlmChunkReviewFallbackHandler(
+            requiredRuleBasedReviewer,
+            requiredMetrics
+        );
+        this.resultAggregator = new LlmChunkReviewResultAggregator(
+            requiredPromptBuilder,
+            requiredReviewMerger,
+            requiredCostEstimator
+        );
     }
 
     ReviewResult aggregate(
         ReviewPipelineContext context,
-        GithubPullRequestDiff fullDiff,
+        PullRequestDiff fullDiff,
         List<PullRequestDiffChunk> chunks,
-        LlmReviewResultParser reviewResultParser
+        LlmReviewResultParser reviewResultParser,
+        ReviewBudget budget
     ) {
         ReviewPolicySettings settings = context.settings();
-        ChunkAggregation aggregation = ChunkAggregation.empty();
-        for (PullRequestDiffChunk chunk : chunks) {
-            aggregation = reviewChunk(context, settings, chunk, reviewResultParser, aggregation);
-        }
-        return ReviewResult.completed(
-            aggregation.riskLevel(),
-            aggregation.findings(),
-            null,
-            null,
-            null,
-            aggregation.failedChunks() > 0 ? LlmParseStatus.PARTIAL_FALLBACK.code() : null,
-            promptBuilder.chunkedPromptSummary(
-                fullDiff,
-                chunks,
-                aggregation.findings().size(),
-                aggregation.riskLevel(),
-                aggregation.failedChunks()
-            ),
-            zeroToNull(aggregation.promptTokens()),
-            zeroToNull(aggregation.completionTokens()),
-            zeroToNull(aggregation.totalTokens()),
-            costEstimator.estimate(
-                settings,
-                zeroToNull(aggregation.promptTokens()),
-                zeroToNull(aggregation.completionTokens())
-            )
+        String traceId = LogContext.currentTraceId();
+        List<LlmChunkReviewOutcome> outcomes = chunkReviewScheduler.schedule(
+            chunks,
+            budget,
+            chunk -> reviewChunk(context, settings, chunk, reviewResultParser, traceId, budget),
+            fallbackHandler::fallback
         );
+        return resultAggregator.aggregate(settings, fullDiff, chunks, outcomes);
     }
 
-    private ChunkAggregation reviewChunk(
+    private LlmChunkReviewOutcome reviewChunk(
         ReviewPipelineContext context,
         ReviewPolicySettings settings,
         PullRequestDiffChunk chunk,
         LlmReviewResultParser reviewResultParser,
-        ChunkAggregation aggregation
+        String traceId,
+        ReviewBudget budget
     ) {
-        try {
-            LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
-            ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
-            return aggregation.addLlmResult(parsed, callResult, reviewMerger);
-        } catch (RuntimeException ex) {
-            metrics.llmFallback(CHUNK_PARTIAL_FAILURE_CATEGORY);
-            ReviewResult ruleReview = ruleBasedReviewer.review(chunk.diff());
-            return aggregation.addFallbackResult(ruleReview, reviewMerger);
-        }
-    }
-
-    private Integer zeroToNull(int value) {
-        return value <= 0 ? null : value;
-    }
-
-    private record ChunkAggregation(
-        String riskLevel,
-        List<ReviewFindingResult> findings,
-        int promptTokens,
-        int completionTokens,
-        int totalTokens,
-        int failedChunks
-    ) {
-        static ChunkAggregation empty() {
-            return new ChunkAggregation("INFO", new ArrayList<>(), 0, 0, 0, 0);
-        }
-
-        ChunkAggregation addLlmResult(
-            ReviewResult parsed,
-            LlmCallResult callResult,
-            LlmRuleReviewMerger reviewMerger
-        ) {
-            List<ReviewFindingResult> nextFindings = new ArrayList<>(findings);
-            if (parsed.findings() != null) {
-                nextFindings.addAll(parsed.findings());
+        try (LogContext.Scope _ = LogContext.withReviewTask(context.task(), traceId)) {
+            // Chunks are all queued up front, so a chunk may only reach a worker
+            // thread long after the budget ran out. Degrade before spending on a
+            // call that the pipeline can no longer wait for.
+            if (budget.exhausted()) {
+                return fallbackHandler.fallback(chunk, BUDGET_EXHAUSTED_CATEGORY, null);
             }
-            return new ChunkAggregation(
-                reviewMerger.maxRisk(riskLevel, parsed.riskLevel()),
-                nextFindings,
-                promptTokens + safeInt(callResult.promptTokens()),
-                completionTokens + safeInt(callResult.completionTokens()),
-                totalTokens + safeInt(callResult.totalTokens()),
-                failedChunks
-            );
-        }
-
-        ChunkAggregation addFallbackResult(ReviewResult ruleReview, LlmRuleReviewMerger reviewMerger) {
-            List<ReviewFindingResult> nextFindings = new ArrayList<>(findings);
-            if (ruleReview.findings() != null) {
-                nextFindings.addAll(ruleReview.findings());
+            try {
+                LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
+                ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
+                return LlmChunkReviewOutcome.llm(parsed, callResult);
+            } catch (RuntimeException ex) {
+                return fallbackHandler.fallback(chunk, CHUNK_PARTIAL_FAILURE_CATEGORY, ex);
             }
-            return new ChunkAggregation(
-                reviewMerger.maxRisk(riskLevel, ruleReview.riskLevel()),
-                nextFindings,
-                promptTokens,
-                completionTokens,
-                totalTokens,
-                failedChunks + 1
-            );
-        }
-
-        private static int safeInt(Integer value) {
-            return value == null ? 0 : value;
         }
     }
 }

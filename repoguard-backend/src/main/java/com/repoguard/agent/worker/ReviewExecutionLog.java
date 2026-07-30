@@ -1,8 +1,9 @@
 package com.repoguard.agent.worker;
 
 import com.repoguard.agent.entity.ReviewTask;
-import com.repoguard.agent.github.GithubPullRequestDiff;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
+import com.repoguard.agent.review.PullRequestDiff;
+import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.review.ReviewResult;
 import java.time.Duration;
@@ -69,15 +70,17 @@ class ReviewExecutionLog {
         );
     }
 
-    void diffFetched(ReviewTask task, GithubPullRequestDiff diff, ReviewExecutionDiffStats diffStats) {
+    void diffFetched(ReviewTask task, PullRequestDiff diff, ReviewExecutionDiffStats diffStats) {
         LOGGER.info(
-            "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={}",
+            "Review task diff fetched taskId={} repository={} prNumber={} operation=review_execute files={} additions={} deletions={} diffTruncated={} truncationReasons={}",
             task.getId(),
             logContextFormatter.repositorySlug(task),
             task.getPrNumber(),
             diffStats.fileCount(diff),
             diffStats.totalAdditions(diff),
-            diffStats.totalDeletions(diff)
+            diffStats.totalDeletions(diff),
+            diff.truncated(),
+            diff.truncation().reasons()
         );
     }
 
@@ -128,6 +131,22 @@ class ReviewExecutionLog {
             task.getPrNumber(),
             failureCategory,
             ex.getClass().getName(),
+            Duration.between(startedAt, clock.now()).toMillis()
+        );
+    }
+
+    void superseded(
+        ReviewTask task,
+        GithubPullRequestHeadChangedException ex,
+        LocalDateTime startedAt
+    ) {
+        LOGGER.info(
+            "Review task superseded taskId={} repository={} prNumber={} operation=review_execute result=superseded expectedCommit={} currentHead={} durationMs={}",
+            task.getId(),
+            logContextFormatter.repositorySlug(task),
+            task.getPrNumber(),
+            logContextFormatter.safePart(ex.expectedHeadSha()),
+            logContextFormatter.safePart(ex.currentHeadSha()),
             Duration.between(startedAt, clock.now()).toMillis()
         );
     }

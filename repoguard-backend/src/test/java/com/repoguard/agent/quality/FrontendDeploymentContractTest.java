@@ -36,6 +36,15 @@ class FrontendDeploymentContractTest {
     }
 
     @Test
+    void nginxDoesNotExposeObservabilityServices() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        String nginx = read(repositoryRoot.resolve("repoguard-frontend/nginx.ip.conf"));
+
+        assertThat(nginx)
+            .doesNotContain("/grafana", "http://grafana:3000", "http://loki", "http://alloy");
+    }
+
+    @Test
     void productionCaddyOnlyProxiesPlainHttpHealthChecks() throws IOException {
         Path repositoryRoot = findRepositoryRoot();
         String caddyfile = read(repositoryRoot.resolve("Caddyfile"));
@@ -98,6 +107,58 @@ class FrontendDeploymentContractTest {
             .contains("Compose services require REPOGUARD_DEPLOYMENT_MODE=$expected_deployment_mode")
             .contains("REPOGUARD_API_INSTANCE_COUNT=1")
             .contains("REPOGUARD_WORKER_ENABLED is deprecated");
+    }
+
+    @Test
+    void productionDeployScriptHoldsAnExclusiveDeploymentLock() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        String deployScript = read(repositoryRoot.resolve("scripts/deploy-prod.sh"));
+
+        assertThat(deployScript)
+            .contains("DEPLOY_LOCK_FILE=\"${DEPLOY_LOCK_FILE:-.deploy.lock}\"")
+            .contains("exec 9>\"$DEPLOY_LOCK_FILE\"")
+            .contains("flock -n 9")
+            .contains("refusing to run concurrently");
+        assertThat(deployScript.indexOf("flock -n 9")).isLessThan(deployScript.indexOf("compose pull"));
+    }
+
+    @Test
+    void applicationComposeStacksRotateContainerLogs() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        Map<String, Object> prodServices = map(yaml(repositoryRoot.resolve("docker-compose.prod.yml")).get("services"));
+        Map<String, Object> ipServices = map(yaml(repositoryRoot.resolve("docker-compose.ip.yml")).get("services"));
+
+        assertThat(prodServices.keySet())
+            .containsExactlyInAnyOrder("mysql", "rabbitmq", "backend", "backend-worker", "frontend", "caddy");
+        assertThat(ipServices.keySet()).containsExactlyInAnyOrder("mysql", "rabbitmq", "backend", "frontend");
+        prodServices.forEach((name, service) -> assertRotatedLogging(name, map(service)));
+        ipServices.forEach((name, service) -> assertRotatedLogging(name, map(service)));
+    }
+
+    @Test
+    void grafanaIsLoopbackOnlyAndHasNoApplicationBridge() throws IOException {
+        Path repositoryRoot = findRepositoryRoot();
+        Map<String, Object> observability = yaml(repositoryRoot.resolve("docker-compose.observability.yml"));
+        Map<String, Object> grafana = map(map(observability.get("services")).get("grafana"));
+        Map<String, Object> grafanaEnvironment = map(grafana.get("environment"));
+        Map<String, Object> prodCompose = yaml(repositoryRoot.resolve("docker-compose.prod.yml"));
+
+        assertThat(Files.exists(repositoryRoot.resolve("docker-compose.grafana-bridge.yml"))).isFalse();
+        assertThat(stringList(grafana.get("ports"))).containsExactly("127.0.0.1:3000:3000");
+        assertThat(grafanaEnvironment)
+            .containsEntry("GF_SERVER_ROOT_URL", "http://localhost:3000/")
+            .containsEntry("GF_SERVER_SERVE_FROM_SUB_PATH", "false");
+        assertThat(prodCompose).doesNotContainKey("networks");
+    }
+
+    private void assertRotatedLogging(String serviceName, Map<String, Object> service) {
+        Map<String, Object> logging = map(service.get("logging"));
+        assertThat(logging).as("logging for " + serviceName).isNotNull();
+        Map<String, Object> options = map(logging.get("options"));
+        boolean backendService = serviceName.startsWith("backend");
+        assertThat(logging.get("driver")).as("logging driver for " + serviceName).isEqualTo("json-file");
+        assertThat(options.get("max-size")).as("max-size for " + serviceName).isEqualTo(backendService ? "50m" : "10m");
+        assertThat(options.get("max-file")).as("max-file for " + serviceName).isEqualTo(backendService ? "5" : "3");
     }
 
     private Path findRepositoryRoot() {

@@ -7,26 +7,30 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
+import com.repoguard.agent.dto.ReviewTaskListSummary;
 import com.repoguard.agent.dto.ReviewTimelineItem;
 import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.cache.annotation.Cacheable;
 
 class ReviewTaskQueryServiceImplTest {
 
@@ -226,13 +230,76 @@ class ReviewTaskQueryServiceImplTest {
     }
 
     @Test
+    void getReviewListSummaryAggregatesThroughSharedFilterQuery() {
+        ReviewTaskMapper.ReviewTaskListSummaryStat stat = new ReviewTaskMapper.ReviewTaskListSummaryStat();
+        stat.setTotal(321L);
+        stat.setHighRisk(12L);
+        stat.setFailed(7L);
+        stat.setAverageDurationSeconds(new BigDecimal("95.5"));
+        when(reviewTaskMapper.selectListSummaryStat(any())).thenReturn(stat);
+
+        var summary = service().getReviewListSummary(new ReviewQuery(1, 1, null, null, null, null, null, null));
+
+        org.assertj.core.api.Assertions.assertThat(summary)
+            .isEqualTo(new ReviewTaskListSummary(321L, 12L, 7L, 96L));
+        verify(reviewTaskMapper).selectListSummaryStat(any());
+        verify(reviewTaskMapper, never()).selectPage(any(), any());
+        verify(reviewTaskMapper, never()).selectCount(any());
+    }
+
+    @Test
+    void getReviewListSummaryReturnsZeroesWhenAggregateRowIsMissing() {
+        when(reviewTaskMapper.selectListSummaryStat(any())).thenReturn(null);
+
+        var summary = service().getReviewListSummary(new ReviewQuery(1, 1, null, null, null, null, null, null));
+
+        org.assertj.core.api.Assertions.assertThat(summary)
+            .isEqualTo(new ReviewTaskListSummary(0L, 0L, 0L, 0L));
+    }
+
+    @Test
+    void getReviewListSummaryUsesSynchronizedFilterKeyedCache() throws Exception {
+        Cacheable cacheable = ReviewTaskQueryServiceImpl.class
+            .getMethod("getReviewListSummary", ReviewQuery.class)
+            .getAnnotation(Cacheable.class);
+
+        org.assertj.core.api.Assertions.assertThat(cacheable).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(cacheable.cacheNames())
+            .containsExactly(CacheNames.REVIEW_TASK_LIST_SUMMARY);
+        org.assertj.core.api.Assertions.assertThat(cacheable.sync()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(cacheable.key()).isEqualTo("#query.listSummaryCacheKey()");
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, " org/repo ", "failed", null, null, null, null).listSummaryCacheKey()
+        ).isEqualTo(new ReviewQuery.ReviewListSummaryCacheKey(
+            "org/repo",
+            "FAILED",
+            null,
+            null,
+            null,
+            null
+        ));
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, "a|b", "c", null, null, null, null).listSummaryCacheKey()
+        ).isNotEqualTo(
+            new ReviewQuery(1, 1, "a", "b|c", null, null, null, null).listSummaryCacheKey()
+        );
+        org.assertj.core.api.Assertions.assertThat(
+            new ReviewQuery(1, 1, " org/repo ", " failed ", null, null, null, " keyword ")
+                .listSummaryCacheKey()
+        ).isEqualTo(
+            new ReviewQuery(1, 1, "org/repo", "FAILED", " ", null, null, "keyword")
+                .listSummaryCacheKey()
+        );
+    }
+
+    @Test
     void listReviewsUsesOffsetPageWhenCursorIsAbsent() {
         ReviewTask task = reviewTask(7L);
         Page<ReviewTask> page = Page.of(1, 20);
         page.setRecords(List.of(task));
         page.setTotal(1);
         ReviewTaskListItem item = listItem(task.getId());
-        when(reviewTaskMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
         when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
         when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
 
@@ -240,17 +307,17 @@ class ReviewTaskQueryServiceImplTest {
 
         org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
         org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(1);
-        verify(reviewTaskMapper).selectPage(any(Page.class), any(Wrapper.class));
-        verify(reviewTaskMapper, never()).selectList(any(Wrapper.class));
-        verify(reviewTaskMapper, never()).selectCount(any(Wrapper.class));
+        verify(reviewTaskMapper).selectPage(any(), any());
+        verify(reviewTaskMapper, never()).selectList(any());
+        verify(reviewTaskMapper, never()).selectCount(any());
     }
 
     @Test
     void listReviewsUsesKeysetQueryAndFilterCountWhenCursorIsPresent() {
         ReviewTask task = reviewTask(8L);
         ReviewTaskListItem item = listItem(task.getId());
-        when(reviewTaskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task));
-        when(reviewTaskMapper.selectCount(any(Wrapper.class))).thenReturn(42L);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task));
+        when(reviewTaskMapper.selectCount(any())).thenReturn(42L);
         when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
         when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
 
@@ -269,16 +336,16 @@ class ReviewTaskQueryServiceImplTest {
 
         org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
         org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(42);
-        verify(reviewTaskMapper).selectList(any(Wrapper.class));
-        verify(reviewTaskMapper).selectCount(any(Wrapper.class));
-        verify(reviewTaskMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
+        verify(reviewTaskMapper).selectList(any());
+        verify(reviewTaskMapper).selectCount(any());
+        verify(reviewTaskMapper, never()).selectPage(any(), any());
     }
 
     @Test
     void listReviewsUsesKeysetTotalHintWithoutCountingAgain() {
         ReviewTask task = reviewTask(8L);
         ReviewTaskListItem item = listItem(task.getId());
-        when(reviewTaskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task));
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task));
         when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
         when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
 
@@ -298,9 +365,9 @@ class ReviewTaskQueryServiceImplTest {
 
         org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
         org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(42);
-        verify(reviewTaskMapper).selectList(any(Wrapper.class));
-        verify(reviewTaskMapper, never()).selectCount(any(Wrapper.class));
-        verify(reviewTaskMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
+        verify(reviewTaskMapper).selectList(any());
+        verify(reviewTaskMapper, never()).selectCount(any());
+        verify(reviewTaskMapper, never()).selectPage(any(), any());
     }
 
     private ReviewTaskQueryServiceImpl service() {

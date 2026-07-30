@@ -8,21 +8,20 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.repoguard.agent.config.CacheEvictionService;
+import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTimeline;
-import com.repoguard.agent.github.GithubChangedFile;
+import com.repoguard.agent.review.PullRequestChangedFile;
 import com.repoguard.agent.github.GithubPullRequestClient;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.PullRequestDiff;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
-import com.repoguard.agent.messaging.ReviewTaskMessage;
-import com.repoguard.agent.notification.NotificationDispatchService;
+import com.repoguard.agent.review.task.ReviewTaskMessage;
+import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PullRequestReviewer;
 import com.repoguard.agent.review.ReviewFindingResult;
@@ -32,6 +31,9 @@ import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.CannotAcquireLockException;
@@ -43,10 +45,14 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 
 class ReviewTaskExecutorImplTest {
 
+    private static final String COMMIT_SHA = "a1b2c3d";
+
     private final ReviewTaskMapper reviewTaskMapper = org.mockito.Mockito.mock(ReviewTaskMapper.class);
     private final ReviewTimelineMapper reviewTimelineMapper = org.mockito.Mockito.mock(ReviewTimelineMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final ChangedFileMapper changedFileMapper = org.mockito.Mockito.mock(ChangedFileMapper.class);
+    private final SqlSessionFactory sqlSessionFactory = org.mockito.Mockito.mock(SqlSessionFactory.class);
+    private final SqlSession batchSqlSession = org.mockito.Mockito.mock(SqlSession.class);
     private final GithubPullRequestClient githubPullRequestClient = org.mockito.Mockito.mock(GithubPullRequestClient.class);
     private final PullRequestReviewer pullRequestReviewer = org.mockito.Mockito.mock(PullRequestReviewer.class);
     private final ReviewTaskStateMachine reviewTaskStateMachine = new ReviewTaskStateMachine();
@@ -66,18 +72,20 @@ class ReviewTaskExecutorImplTest {
     void executeMovesQueuedTaskToCompletedAndWritesTimeline() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         task.setPublishClaimedAt(LocalDateTime.parse("2026-06-05T17:59:00"));
         task.setPublishClaimedBy("stale-publisher");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -97,8 +105,8 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getReviewClaimedBy()).isNull();
         assertThat(task.getPublishClaimedAt()).isNull();
         assertThat(task.getPublishClaimedBy()).isNull();
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
         verify(changedFileMapper).insert(any(ChangedFile.class));
         verify(reviewFindingMapper).insert(any(ReviewFinding.class));
         verify(reviewTimelineMapper, org.mockito.Mockito.times(4)).insert(any(ReviewTimeline.class));
@@ -108,16 +116,18 @@ class ReviewTaskExecutorImplTest {
     void executeMovesMediumRiskTaskToPendingHumanReview() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+Thread.sleep(1000);"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -130,23 +140,26 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
         assertThat(task.getHumanReviewRequired()).isTrue();
         assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
     void executeDeduplicatesFindingsBeforePersisting() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+System.out.println(\"debug\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -172,16 +185,18 @@ class ReviewTaskExecutorImplTest {
     void executeStoresLlmQualityMetadata() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -202,23 +217,26 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getLlmDurationMs()).isEqualTo(1234);
         assertThat(task.getLlmParseStatus()).isEqualTo("parsed");
         assertThat(task.getLlmPromptSummary()).contains("files=1");
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
     }
 
     @Test
     void executeWritesPartialFallbackTimelineWhenChunkedReviewFallsBack() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 3, 1, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed(
@@ -248,6 +266,7 @@ class ReviewTaskExecutorImplTest {
     void executeIgnoresCompletedTask() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("COMPLETED");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
 
@@ -261,12 +280,13 @@ class ReviewTaskExecutorImplTest {
     void executeIgnoresTaskAlreadyInProgress() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("REVIEWING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
 
         executor.execute(message());
 
-        verify(reviewTaskMapper, never()).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, never()).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
@@ -276,13 +296,14 @@ class ReviewTaskExecutorImplTest {
     void executeStopsWhenQueuedTaskWasClaimedByAnotherConsumer() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(0);
+        when(reviewTaskMapper.update(any())).thenReturn(0);
 
         executor.execute(message());
 
-        verify(reviewTaskMapper).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(githubPullRequestClient, never()).fetchPullRequestDiff(any(ReviewTask.class));
         verify(reviewTimelineMapper, never()).insert(any(ReviewTimeline.class));
@@ -292,23 +313,25 @@ class ReviewTaskExecutorImplTest {
     void executeDiscardsResultWhenRecoveryHasReplacedExecutionClaim() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1, 0);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        when(reviewTaskMapper.update(any())).thenReturn(1, 0);
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
 
         executor.execute(message());
 
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
+        verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(any(ReviewTask.class));
         verify(changedFileMapper, never()).insert(any(ChangedFile.class));
         verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
@@ -319,11 +342,12 @@ class ReviewTaskExecutorImplTest {
     void executeMarksTaskFailedWhenDiffFetchFails() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class))).thenReturn(1);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenThrow(new IllegalStateException("github unavailable"));
 
         executor.execute(message());
@@ -331,11 +355,47 @@ class ReviewTaskExecutorImplTest {
         assertThat(task.getStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getRiskLevel()).isEqualTo("HIGH");
-        verify(reviewTaskMapper, times(2)).update(any(UpdateWrapper.class));
-        verify(reviewTaskMapper).updateById(task);
+        verify(reviewTaskMapper, times(2)).update(any());
+        verify(reviewTaskMapper, never()).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
         verify(reviewTimelineMapper, org.mockito.Mockito.times(2)).insert(timelineCaptor.capture());
         assertThat(timelineCaptor.getAllValues().get(1).getLabel()).contains("github unavailable");
+    }
+
+    @Test
+    void executeMarksTaskSupersededWithoutCallingReviewerWhenDiffHeadChanged() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
+        task.setStatus("QUEUED");
+        task.setRiskLevel("INFO");
+        task.setLlmStatus("PENDING");
+        when(reviewTaskMapper.selectById(42L)).thenReturn(task);
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+        PullRequestDiff diff = new PullRequestDiff(
+            "repo-guard-demo",
+            "spring-boot-demo",
+            512,
+            "b2c3d4e",
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"new\");"))
+        );
+        when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
+
+        executor.execute(message());
+
+        assertThat(task.getStatus()).isEqualTo("SUPERSEDED");
+        assertThat(task.getLlmStatus()).isEqualTo("PENDING");
+        assertThat(task.getLlmFallbackReason())
+            .contains("expected=" + COMMIT_SHA)
+            .contains("current=b2c3d4e");
+        assertThat(task.getReviewClaimedAt()).isNull();
+        assertThat(task.getReviewClaimedBy()).isNull();
+        verify(pullRequestReviewer, never()).review(any(ReviewTask.class), any(PullRequestDiff.class));
+        verify(changedFileMapper, never()).insert(any(ChangedFile.class));
+        verify(reviewFindingMapper, never()).insert(any(ReviewFinding.class));
+        ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);
+        verify(reviewTimelineMapper, times(2)).insert(timelineCaptor.capture());
+        assertThat(timelineCaptor.getAllValues().get(1).getLabel()).startsWith("Review superseded:");
     }
 
     @Test
@@ -349,18 +409,20 @@ class ReviewTaskExecutorImplTest {
         );
         ReviewTask task = new ReviewTask();
         task.setId(42L);
+        task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
         task.setRiskLevel("INFO");
         task.setLlmStatus("PENDING");
         when(reviewTaskMapper.selectById(42L)).thenReturn(task);
-        when(reviewTaskMapper.update(any(UpdateWrapper.class)))
+        when(reviewTaskMapper.update(any()))
             .thenThrow(new CannotAcquireLockException("deadlock"))
             .thenReturn(1, 1);
-        GithubPullRequestDiff diff = new GithubPullRequestDiff(
+        PullRequestDiff diff = new PullRequestDiff(
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            List.of(new GithubChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
+            COMMIT_SHA,
+            List.of(new PullRequestChangedFile("src/App.java", "modified", 1, 0, "+logger.info(\"ok\");"))
         );
         when(githubPullRequestClient.fetchPullRequestDiff(task)).thenReturn(diff);
         when(pullRequestReviewer.review(task, diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -384,7 +446,7 @@ class ReviewTaskExecutorImplTest {
             "repo-guard-demo",
             "spring-boot-demo",
             512,
-            "a1b2c3d",
+            COMMIT_SHA,
             LocalDateTime.parse("2026-06-05T18:00:00")
         );
     }
@@ -401,14 +463,20 @@ class ReviewTaskExecutorImplTest {
             new ReviewTimelineAppender(reviewTimelineMapper),
             new ReviewExecutionTimelineLabelFormatter()
         );
+        when(sqlSessionFactory.openSession(ExecutorType.BATCH)).thenReturn(batchSqlSession);
+        when(batchSqlSession.getMapper(ChangedFileMapper.class)).thenReturn(changedFileMapper);
+        when(batchSqlSession.getMapper(ReviewFindingMapper.class)).thenReturn(reviewFindingMapper);
+        MapperBatchInserter batchInserter = new MapperBatchInserter(sqlSessionFactory);
         ChangedFileReplacementService changedFileReplacementService = new ChangedFileReplacementService(
             changedFileMapper,
-            new ChangedFileEntityMapper()
+            new ChangedFileEntityMapper(),
+            batchInserter
         );
         ReviewFindingReplacementService findingReplacementService = new ReviewFindingReplacementService(
             reviewFindingMapper,
             findingDeduplicator,
-            new ReviewFindingEntityMapper()
+            new ReviewFindingEntityMapper(),
+            batchInserter
         );
         ReviewTaskCompletionApplier completionApplier = new ReviewTaskCompletionApplier(
             reviewTaskStateMachine,
@@ -418,7 +486,6 @@ class ReviewTaskExecutorImplTest {
         );
         ReviewTaskClaimService claimService = new ReviewTaskClaimService(reviewTaskMapper, reviewTaskStateMachine);
         ReviewExecutionTaskTerminalWriter taskTerminalWriter = new ReviewExecutionTaskTerminalWriter(
-            reviewTaskMapper,
             claimService,
             completionApplier,
             clock
@@ -436,6 +503,12 @@ class ReviewTaskExecutorImplTest {
             metricsRecorder,
             cacheInvalidator,
             failureClassifier
+        );
+        ReviewExecutionSupersededHandler supersededHandler = new ReviewExecutionSupersededHandler(
+            taskTerminalWriter,
+            timelineRecorder,
+            metricsRecorder,
+            cacheInvalidator
         );
         ReviewExecutionResultWriter resultWriter = new ReviewExecutionResultWriter(
             taskTerminalWriter,
@@ -459,6 +532,7 @@ class ReviewTaskExecutorImplTest {
             timelineRecorder,
             claimService,
             failureHandler,
+            supersededHandler,
             resultWriter,
             new ReviewExecutionNotifier(
                 org.mockito.Mockito.mock(NotificationDispatchService.class),
@@ -473,6 +547,8 @@ class ReviewTaskExecutorImplTest {
     }
 
     private static class RecordingTransactionManager extends AbstractPlatformTransactionManager {
+
+        private static final long serialVersionUID = 1L;
 
         @Override
         protected Object doGetTransaction() {

@@ -2,6 +2,7 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.external.ExternalCallException;
 import org.junit.jupiter.api.Test;
 
 class LlmFallbackReasonClassifierTest {
@@ -10,7 +11,7 @@ class LlmFallbackReasonClassifierTest {
 
     @Test
     void normalizesBlankAndWhitespaceReason() {
-        assertThat(classifier.normalizeReason(null)).isEqualTo(LlmFallbackReasonClassifier.DEFAULT_REASON);
+        assertThat(classifier.normalizeReason((String) null)).isEqualTo(LlmFallbackReasonClassifier.DEFAULT_REASON);
         assertThat(classifier.normalizeReason("  LLM   request \n timed out  "))
             .isEqualTo("LLM request timed out");
     }
@@ -33,7 +34,34 @@ class LlmFallbackReasonClassifierTest {
     void fallsBackToUnavailableCategory() {
         assertThat(classifier.category("upstream connection failed"))
             .isEqualTo(LlmFallbackReasonClassifier.UNAVAILABLE_CATEGORY);
-        assertThat(classifier.category(null))
+        assertThat(classifier.category((String) null))
             .isEqualTo(LlmFallbackReasonClassifier.UNAVAILABLE_CATEGORY);
+    }
+
+    @Test
+    void classifiesExternalCallExceptionByMessageCategory() {
+        ExternalCallException failure = new ExternalCallException(
+            "LLM",
+            "llm_rate_limited",
+            true,
+            429,
+            "operation=chat_completions",
+            null
+        );
+
+        assertThat(classifier.category(failure)).isEqualTo("llm_rate_limited");
+        assertThat(classifier.normalizeReason(failure)).contains("category=llm_rate_limited", "status=429");
+    }
+
+    @Test
+    void classifiesInternalExceptionSeparatelyFromUnavailable() {
+        assertThat(classifier.category(new NullPointerException()))
+            .isEqualTo(LlmFallbackReasonClassifier.INTERNAL_ERROR_CATEGORY);
+        assertThat(classifier.category(new IllegalStateException("chunk merge failed")))
+            .isEqualTo(LlmFallbackReasonClassifier.INTERNAL_ERROR_CATEGORY);
+        assertThat(classifier.normalizeReason(new NullPointerException()))
+            .isEqualTo("internal error: NullPointerException");
+        assertThat(classifier.normalizeReason(new IllegalStateException("chunk merge failed")))
+            .isEqualTo("internal error: IllegalStateException: chunk merge failed");
     }
 }

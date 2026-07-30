@@ -3,10 +3,8 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.config.ReviewRuleProvider;
-import com.repoguard.agent.config.ReviewRuleSettings;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewRuleProvider;
+import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,7 +25,7 @@ class RuleBasedPullRequestReviewerTest {
             List.of()
         );
 
-        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = pluginReviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -58,7 +56,7 @@ class RuleBasedPullRequestReviewerTest {
             )
         );
 
-        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = pluginReviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -77,11 +75,11 @@ class RuleBasedPullRequestReviewerTest {
     void skipsDisabledRulesWhenReviewingPatch() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-JAVA-002", disabledRule("RG-JAVA-002")));
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
-            List.of(new GithubChangedFile(
+            List.of(new PullRequestChangedFile(
                 "src/App.java",
                 "modified",
                 2,
@@ -106,11 +104,11 @@ class RuleBasedPullRequestReviewerTest {
         when(reviewRuleProvider.getRulesById())
             .thenReturn(Map.of("RG-JAVA-002", rule("RG-JAVA-002", "ENABLED", "*.java")));
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
-            List.of(new GithubChangedFile(
+            List.of(new PullRequestChangedFile(
                 "docs/README.md",
                 "modified",
                 1,
@@ -138,11 +136,11 @@ class RuleBasedPullRequestReviewerTest {
             List.of()
         );
 
-        ReviewResult result = pluginReviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = pluginReviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
-            List.of(new GithubChangedFile(
+            List.of(new PullRequestChangedFile(
                 "src/(api)/[v1]/UserController.java",
                 "modified",
                 1,
@@ -163,7 +161,7 @@ class RuleBasedPullRequestReviewerTest {
     void detectsProjectSpecificGovernanceRules() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -240,7 +238,7 @@ class RuleBasedPullRequestReviewerTest {
     void honorsDisabledProjectSpecificRules() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-AUTH-001", disabledRule("RG-AUTH-001")));
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -261,7 +259,7 @@ class RuleBasedPullRequestReviewerTest {
     void detectsMigrationAndGithubWritebackGovernanceRules() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -305,7 +303,7 @@ class RuleBasedPullRequestReviewerTest {
     void allowsCompatibleMigrationWithDefaultValue() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -326,7 +324,7 @@ class RuleBasedPullRequestReviewerTest {
     void detectsControllerApiChangeWithoutTestCoverageInSamePullRequest() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -353,7 +351,7 @@ class RuleBasedPullRequestReviewerTest {
     void detectsIndentedControllerApiChangeWithoutTestCoverage() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -376,7 +374,7 @@ class RuleBasedPullRequestReviewerTest {
     void skipsAuthFindingWhenMutatingControllerHasAuthorizationGuardButStillReportsTestGap() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -401,7 +399,7 @@ class RuleBasedPullRequestReviewerTest {
     void skipsControllerApiTestGapWhenPullRequestContainsTestChange() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
 
-        ReviewResult result = reviewer.review(new GithubPullRequestDiff(
+        ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
             "Hello-World",
             1,
@@ -435,8 +433,8 @@ class RuleBasedPullRequestReviewerTest {
         return new ReviewRuleSettings(id, status, filePatterns);
     }
 
-    private GithubChangedFile file(String filename, String patch) {
-        return new GithubChangedFile(filename, "modified", 1, 0, patch);
+    private PullRequestChangedFile file(String filename, String patch) {
+        return new PullRequestChangedFile(filename, "modified", 1, 0, patch);
     }
 
     private ReviewRule customRulePlugin(ReviewFindingFactory findingFactory) {
@@ -477,7 +475,7 @@ class RuleBasedPullRequestReviewerTest {
 
             @Override
             public List<ReviewFindingResult> evaluate(
-                GithubPullRequestDiff diff,
+                PullRequestDiff diff,
                 Map<String, ReviewRuleSettings> configuredRules
             ) {
                 return List.of(findingFactory.finding(

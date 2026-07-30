@@ -15,23 +15,27 @@ class ReviewFindingReplacementService {
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewFindingDeduplicator findingDeduplicator;
     private final ReviewFindingEntityMapper findingEntityMapper;
+    private final MapperBatchInserter batchInserter;
 
     ReviewFindingReplacementService(
         ReviewFindingMapper reviewFindingMapper,
         ReviewFindingDeduplicator findingDeduplicator,
-        ReviewFindingEntityMapper findingEntityMapper
+        ReviewFindingEntityMapper findingEntityMapper,
+        MapperBatchInserter batchInserter
     ) {
         this.reviewFindingMapper = reviewFindingMapper;
         this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
         this.findingEntityMapper = Objects.requireNonNull(findingEntityMapper, "findingEntityMapper");
+        this.batchInserter = Objects.requireNonNull(batchInserter, "batchInserter");
     }
 
     int replace(Long taskId, ReviewResult reviewResult) {
         reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
         List<ReviewFindingResult> findings = findingDeduplicator.deduplicate(reviewResult.findings());
-        for (ReviewFindingResult findingResult : findings) {
-            reviewFindingMapper.insert(findingEntityMapper.toEntity(taskId, findingResult));
-        }
+        List<ReviewFinding> entities = findings.stream()
+            .map(findingResult -> findingEntityMapper.toEntity(taskId, findingResult))
+            .toList();
+        batchInserter.insertAll(ReviewFindingMapper.class, entities);
         return findings.size();
     }
 }

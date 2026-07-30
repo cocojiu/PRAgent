@@ -11,6 +11,7 @@ import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidati
 import com.repoguard.agent.identity.IdentitySessionLifecycle;
 import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -37,6 +38,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
     private final PasswordHasher passwordHasher;
     private final IdentitySessionLifecycle sessionLifecycle;
     private final AuthProperties authProperties;
+    private final AuthAccountCache authAccountCache;
     private final TransactionTemplate accountWriteTransaction;
 
     @Autowired
@@ -46,6 +48,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
         AuthProperties authProperties,
+        AuthAccountCache authAccountCache,
         PlatformTransactionManager transactionManager
     ) {
         this(
@@ -54,6 +57,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             passwordHasher,
             sessionLifecycle,
             authProperties,
+            authAccountCache,
             buildWriteTransaction(transactionManager)
         );
     }
@@ -63,7 +67,8 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         IdentityAuditRecorder auditRecorder,
         PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
-        AuthProperties authProperties
+        AuthProperties authProperties,
+        AuthAccountCache authAccountCache
     ) {
         this(
             userAccountMapper,
@@ -71,6 +76,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             passwordHasher,
             sessionLifecycle,
             authProperties,
+            authAccountCache,
             (TransactionTemplate) null
         );
     }
@@ -81,6 +87,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         PasswordHasher passwordHasher,
         IdentitySessionLifecycle sessionLifecycle,
         AuthProperties authProperties,
+        AuthAccountCache authAccountCache,
         TransactionTemplate accountWriteTransaction
     ) {
         this.userAccountMapper = Objects.requireNonNull(userAccountMapper, "userAccountMapper must not be null");
@@ -88,6 +95,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
         this.passwordHasher = Objects.requireNonNull(passwordHasher, "passwordHasher must not be null");
         this.sessionLifecycle = Objects.requireNonNull(sessionLifecycle, "sessionLifecycle must not be null");
         this.authProperties = Objects.requireNonNull(authProperties, "authProperties must not be null");
+        this.authAccountCache = Objects.requireNonNull(authAccountCache, "authAccountCache must not be null");
         this.accountWriteTransaction = accountWriteTransaction;
     }
 
@@ -192,6 +200,7 @@ public final class DefaultIdentityAccountLifecycle implements IdentityAccountLif
             if (updated != 1) {
                 throw new BusinessException(ErrorCode.UNAUTHORIZED, "Password changed concurrently; sign in again");
             }
+            authAccountCache.invalidateAfterCommit(user.getId());
             sessionLifecycle.invalidateAccountSessions(
                 user.getId(),
                 SessionInvalidationMode.REFRESH_TOKENS_ONLY,

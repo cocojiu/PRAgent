@@ -24,6 +24,12 @@ class ApplicationProfileConfigurationTest {
             .isEqualTo("${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}");
         assertThat(base.getProperty("repoguard.auth.token-secret"))
             .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET}");
+        assertThat(base.getProperty("repoguard.auth.token-secret-id"))
+            .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET_ID:k1}");
+        assertThat(base.getProperty("repoguard.auth.token-secret-previous"))
+            .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:}");
+        assertThat(base.getProperty("repoguard.auth.token-secret-previous-id"))
+            .isEqualTo("${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:}");
         assertThat(base.getProperty("repoguard.auth.registration-enabled"))
             .isEqualTo("${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}");
         assertThat(base.getProperty("repoguard.auth.refresh-concurrency-grace-seconds"))

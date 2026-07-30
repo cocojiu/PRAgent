@@ -50,6 +50,11 @@ jobs:
             -f config/observability/docker-compose.production.yml
           )
           docker compose "${compose_args[@]}" config --quiet
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose "${compose_args[@]}" \
+              -f config/observability/docker-compose.metrics.yml config --quiet
 
           services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
           test "${services}" = "alloy,docker-proxy,grafana,loki" || {
@@ -89,6 +94,16 @@ jobs:
             -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
             'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
             validate /etc/alloy/config.alloy
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -e METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+            -e METRICS_REMOTE_WRITE_USERNAME=validation \
+            -e METRICS_REMOTE_WRITE_PASSWORD=validation \
+            -v "${PWD}/config/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            -v "${PWD}/config/observability/alloy/metrics.alloy:/etc/alloy/metrics.alloy:ro" \
+            'grafana/alloy:v1.18.0@sha256:491b0578c04983fd54fe99b587b6fab4404dc46d0dc16677bd6b00cc1140b308' \
+            validate /etc/alloy
 
       - name: Prepare SSH key
         shell: bash
@@ -603,6 +618,8 @@ jobs:
           esac
           test -s "${STAGE_PATH}/config/observability/loki.yml"
           test -s "${STAGE_PATH}/config/observability/alloy/config.alloy"
+          test -s "${STAGE_PATH}/config/observability/alloy/metrics.alloy"
+          test -s "${STAGE_PATH}/config/observability/docker-compose.metrics.yml"
           test -S /var/run/docker.sock
           docker_socket_gid="$(stat -c '%g' /var/run/docker.sock)"
           case "${docker_socket_gid}" in
@@ -901,8 +918,15 @@ jobs:
           upgrade_verified=false
 
           compose_final() {
-            docker compose -p "${project}" --env-file "${env_file}" \
-              -f "${final_base}" -f "${final_override}" "$@"
+            metrics_override="${final_config}/docker-compose.metrics.yml"
+            if [ -s "${metrics_override}" ] \
+              && grep -q '^METRICS_REMOTE_WRITE_URL=.' "${env_file}"; then
+              docker compose -p "${project}" --env-file "${env_file}" \
+                -f "${final_base}" -f "${final_override}" -f "${metrics_override}" "$@"
+            else
+              docker compose -p "${project}" --env-file "${env_file}" \
+                -f "${final_base}" -f "${final_override}" "$@"
+            fi
           }
 
           wait_http() {
@@ -978,8 +1002,10 @@ jobs:
           esac
           test -s "${stage_base}"
           test -s "${stage_config}/docker-compose.production.yml"
+          test -s "${stage_config}/docker-compose.metrics.yml"
           test -s "${stage_config}/loki.yml"
           test -s "${stage_config}/alloy/config.alloy"
+          test -s "${stage_config}/alloy/metrics.alloy"
           test -s "${final_base}"
           test -d "${final_config}"
           test -s "${env_file}"
@@ -1021,6 +1047,15 @@ jobs:
             --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             -v "${stage_config}/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
             "${alloy_image}" validate /etc/alloy/config.alloy
+          docker run --rm --network none --read-only \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -e METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+            -e METRICS_REMOTE_WRITE_USERNAME=validation \
+            -e METRICS_REMOTE_WRITE_PASSWORD=validation \
+            -v "${stage_config}/alloy/config.alloy:/etc/alloy/config.alloy:ro" \
+            -v "${stage_config}/alloy/metrics.alloy:/etc/alloy/metrics.alloy:ro" \
+            "${alloy_image}" validate /etc/alloy
 
           previous_backup="$(find "${DEPLOY_PATH}/backups/observability" \
             -mindepth 2 -maxdepth 2 -type f -name 'loki-data.tar.gz' | sort | tail -n 1)"

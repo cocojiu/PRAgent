@@ -11,12 +11,13 @@ class ReviewTaskStateMachineTest {
     private final ReviewTaskStateMachine stateMachine = new ReviewTaskStateMachine();
 
     @Test
-    void ensureRetryAllowedAcceptsOnlyFailedTasks() {
+    void ensureRetryAllowedAcceptsFailedAndSupersededTasks() {
         stateMachine.ensureRetryAllowed("FAILED");
+        stateMachine.ensureRetryAllowed("superseded");
 
         assertThatThrownBy(() -> stateMachine.ensureRetryAllowed("COMPLETED"))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("Only failed review tasks can be retried");
+            .hasMessageContaining("Only failed or superseded review tasks can be retried");
     }
 
     @Test
@@ -34,6 +35,8 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.statusWhenExecutionTimeout()).isEqualTo("EXECUTION_TIMEOUT");
         assertThat(stateMachine.statusWhenRequeuePending()).isEqualTo("REQUEUE_PENDING");
         assertThat(stateMachine.statusWhenFailed()).isEqualTo("FAILED");
+        assertThat(stateMachine.statusWhenSuperseded()).isEqualTo("SUPERSEDED");
+        assertThat(stateMachine.isSuperseded("superseded")).isTrue();
         assertThat(stateMachine.statusAfterReviewCompleted(false)).isEqualTo("COMPLETED");
         assertThat(stateMachine.statusAfterReviewCompleted(true)).isEqualTo("PENDING_HUMAN_REVIEW");
     }
@@ -95,6 +98,7 @@ class ReviewTaskStateMachineTest {
         assertThat(stateMachine.dataRetentionCandidateStatuses()).containsExactly(
             "COMPLETED",
             "FAILED",
+            "SUPERSEDED",
             "APPROVED",
             "CHANGES_REQUESTED",
             "REJECTED"

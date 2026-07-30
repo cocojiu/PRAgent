@@ -2,9 +2,7 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.config.ReviewPolicySettings;
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
+import com.repoguard.agent.review.ReviewPolicySettings;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -15,7 +13,7 @@ class PullRequestDiffChunkerTest {
 
     @Test
     void chunkPrioritizesSensitiveFilesAndSplitsLargePullRequest() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("octocat", "Hello-World", 9, List.of(
+        PullRequestDiff diff = new PullRequestDiff("octocat", "Hello-World", 9, List.of(
             file("src/main/java/com/example/UserController.java", 40, 10),
             file("README.md", 5, 1),
             file("src/main/resources/db/migration/V22__user_token.sql", 160, 20),
@@ -30,18 +28,18 @@ class PullRequestDiffChunkerTest {
 
         assertThat(chunks).hasSizeGreaterThan(1);
         assertThat(chunks.getFirst().diff().files())
-            .extracting(GithubChangedFile::filename)
+            .extracting(PullRequestChangedFile::filename)
             .contains("src/main/resources/db/migration/V22__user_token.sql");
         assertThat(chunks.getFirst().reasons()).contains("database_migration");
         assertThat(chunks)
             .flatExtracting(chunk -> chunk.diff().files())
-            .extracting(GithubChangedFile::filename)
-            .containsExactlyInAnyOrderElementsOf(diff.files().stream().map(GithubChangedFile::filename).toList());
+            .extracting(PullRequestChangedFile::filename)
+            .containsExactlyInAnyOrderElementsOf(diff.files().stream().map(PullRequestChangedFile::filename).toList());
     }
 
     @Test
     void chunkKeepsSmallStandardPullRequestTogether() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("octocat", "Hello-World", 10, List.of(
+        PullRequestDiff diff = new PullRequestDiff("octocat", "Hello-World", 10, List.of(
             file("src/main/java/com/example/UserController.java", 20, 4),
             file("README.md", 5, 1)
         ));
@@ -55,7 +53,7 @@ class PullRequestDiffChunkerTest {
 
     @Test
     void chunkSplitsLargeJavaFileBySemanticHunks() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("octocat", "Hello-World", 11, List.of(
+        PullRequestDiff diff = new PullRequestDiff("octocat", "Hello-World", 11, List.of(
             file("src/main/java/com/example/order/OrderService.java", 760, 10, """
                 @@ -10,6 +10,10 @@ public void approveOrder(Order order) {
                  public void approveOrder(Order order) {
@@ -93,7 +91,7 @@ class PullRequestDiffChunkerTest {
 
     @Test
     void chunkGroupsSameBusinessModuleBeforeStartingAnotherSemanticScope() {
-        GithubPullRequestDiff diff = new GithubPullRequestDiff("octocat", "Hello-World", 12, List.of(
+        PullRequestDiff diff = new PullRequestDiff("octocat", "Hello-World", 12, List.of(
             file("src/main/java/com/example/order/OrderController.java", 25, 2, javaPatch("createOrder")),
             file("src/main/java/com/example/order/OrderService.java", 28, 4, javaPatch("createOrder")),
             file("src/main/java/com/example/order/OrderRepository.java", 20, 3, javaPatch("createOrder")),
@@ -116,7 +114,7 @@ class PullRequestDiffChunkerTest {
         assertThat(chunks)
             .anySatisfy(chunk -> {
                 assertThat(chunk.diff().files())
-                    .extracting(GithubChangedFile::filename)
+                    .extracting(PullRequestChangedFile::filename)
                     .containsExactlyInAnyOrder(
                         "src/main/java/com/example/order/OrderController.java",
                         "src/main/java/com/example/order/OrderService.java",
@@ -126,19 +124,19 @@ class PullRequestDiffChunkerTest {
             });
         assertThat(chunks)
             .anySatisfy(chunk -> assertThat(chunk.diff().files())
-                .extracting(GithubChangedFile::filename)
+                .extracting(PullRequestChangedFile::filename)
                 .containsExactlyInAnyOrder(
                     "src/main/java/com/example/payment/PaymentClient.java",
                     "src/main/java/com/example/payment/PaymentService.java"
                 ));
     }
 
-    private GithubChangedFile file(String path, int additions, int deletions) {
-        return new GithubChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
+    private PullRequestChangedFile file(String path, int additions, int deletions) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, "@@ patch for " + path);
     }
 
-    private GithubChangedFile file(String path, int additions, int deletions, String patch) {
-        return new GithubChangedFile(path, "modified", additions, deletions, patch);
+    private PullRequestChangedFile file(String path, int additions, int deletions, String patch) {
+        return new PullRequestChangedFile(path, "modified", additions, deletions, patch);
     }
 
     private String javaPatch(String methodName) {

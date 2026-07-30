@@ -57,6 +57,7 @@ describe("frontend performance observation", () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("/api/v1/observability/frontend/performance");
     expect(init.method).toBe("POST");
+    expect(init.keepalive).toBe(true);
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer access-token");
     expect(JSON.parse(String(init.body))).toMatchObject({
       route: "overview",

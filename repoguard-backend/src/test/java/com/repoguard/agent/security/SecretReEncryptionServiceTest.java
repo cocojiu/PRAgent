@@ -16,8 +16,16 @@ import com.repoguard.agent.mapper.IntegrationConfigMapper;
 import com.repoguard.agent.mapper.NotificationChannelBindingMapper;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -28,14 +36,17 @@ class SecretReEncryptionServiceTest {
     private static final String NEW_KEY = "New-Encryption-Key-2026!Rotate-Primary";
     private static final String OLD_KEY_ID = "old-2026";
     private static final String NEW_KEY_ID = "new-2026";
+    private static final String TEST_SALT = "Re-Encryption-Salt-2026!Primary";
 
     private final IntegrationConfigMapper integrationConfigMapper = Mockito.mock(IntegrationConfigMapper.class);
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper = Mockito.mock(ReviewPolicyConfigMapper.class);
     private final NotificationChannelBindingMapper notificationChannelBindingMapper = Mockito.mock(NotificationChannelBindingMapper.class);
+    private final SecretCryptoService activeCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, TEST_SALT, false);
     private final SecretReEncryptionService service = new SecretReEncryptionService(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
-        notificationChannelBindingMapper
+        notificationChannelBindingMapper,
+        activeCrypto
     );
 
     @BeforeEach
@@ -47,7 +58,7 @@ class SecretReEncryptionServiceTest {
 
     @Test
     void dryRunReportsReEncryptableSecretsWithoutUpdatingRows() {
-        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, TEST_SALT, false);
         IntegrationConfig integration = integrationConfig(1L, "GITHUB", oldCrypto.encrypt("ghp_old_secret"));
         ReviewPolicyConfig reviewPolicy = reviewPolicyConfig(1L, "dashscope", "plaintext-api-key");
         when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of(integration));
@@ -66,7 +77,7 @@ class SecretReEncryptionServiceTest {
 
     @Test
     void dryRunReportsNotificationBindingSecretsWithoutUpdatingRows() {
-        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, TEST_SALT, false);
         NotificationChannelBinding binding = notificationBinding(
             1L,
             "DINGTALK",
@@ -89,8 +100,8 @@ class SecretReEncryptionServiceTest {
 
     @Test
     void executeReEncryptsNotificationBindingSecretsWithTargetKey() {
-        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
-        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, false);
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, TEST_SALT, false);
+        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, TEST_SALT, false);
         NotificationChannelBinding binding = notificationBinding(
             1L,
             "WECOM",
@@ -104,8 +115,8 @@ class SecretReEncryptionServiceTest {
         assertThat(result.executed()).isTrue();
         assertThat(result.scannedCount()).isEqualTo(2);
         assertThat(result.reEncryptedCount()).isEqualTo(2);
-        assertThat(binding.getWebhookUrlValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
-        assertThat(binding.getSecretValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
+        assertThat(binding.getWebhookUrlValue()).startsWith("enc:v3:" + NEW_KEY_ID + ":");
+        assertThat(binding.getSecretValue()).startsWith("enc:v3:" + NEW_KEY_ID + ":");
         assertThat(newCrypto.decrypt(binding.getWebhookUrlValue())).isEqualTo("https://example.com/wecom");
         assertThat(newCrypto.decrypt(binding.getSecretValue())).isEqualTo("wecom-secret");
         assertThat(binding.getUpdatedAt()).isNotNull();
@@ -135,8 +146,8 @@ class SecretReEncryptionServiceTest {
 
     @Test
     void executeReEncryptsSecretsWithTargetKey() {
-        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, false);
-        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, false);
+        SecretCryptoService oldCrypto = new SecretCryptoService(OLD_KEY, OLD_KEY_ID, TEST_SALT, false);
+        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, TEST_SALT, false);
         IntegrationConfig integration = integrationConfig(1L, "GITHUB", oldCrypto.encrypt("ghp_old_secret"));
         ReviewPolicyConfig reviewPolicy = reviewPolicyConfig(1L, "dashscope", "plaintext-api-key");
         when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of(integration));
@@ -147,12 +158,31 @@ class SecretReEncryptionServiceTest {
         assertThat(result.executed()).isTrue();
         assertThat(result.reEncryptedCount()).isEqualTo(2);
         assertThat(result.failedCount()).isZero();
-        assertThat(integration.getTokenValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
-        assertThat(reviewPolicy.getApiKeyValue()).startsWith("enc:v2:" + NEW_KEY_ID + ":");
+        assertThat(integration.getTokenValue()).startsWith("enc:v3:" + NEW_KEY_ID + ":");
+        assertThat(reviewPolicy.getApiKeyValue()).startsWith("enc:v3:" + NEW_KEY_ID + ":");
         assertThat(newCrypto.decrypt(integration.getTokenValue())).isEqualTo("ghp_old_secret");
         assertThat(newCrypto.decrypt(reviewPolicy.getApiKeyValue())).isEqualTo("plaintext-api-key");
         verify(integrationConfigMapper).updateById(integration);
         verify(reviewPolicyConfigMapper).updateById(reviewPolicy);
+    }
+
+    @Test
+    void executeReEncryptsLegacySha256CiphertextToKdfFormat() throws Exception {
+        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, TEST_SALT, false);
+        IntegrationConfig integration = integrationConfig(
+            1L,
+            "GITHUB",
+            "enc:v2:" + OLD_KEY_ID + ":" + legacySha256Encrypt(OLD_KEY, "ghp_legacy_secret")
+        );
+        when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of(integration));
+
+        var result = service.reEncrypt(request(true, "RE-ENCRYPT"));
+
+        assertThat(result.reEncryptedCount()).isEqualTo(1);
+        assertThat(result.failedCount()).isZero();
+        assertThat(integration.getTokenValue()).startsWith("enc:v3:" + NEW_KEY_ID + ":");
+        assertThat(newCrypto.decrypt(integration.getTokenValue())).isEqualTo("ghp_legacy_secret");
+        verify(integrationConfigMapper).updateById(integration);
     }
 
     @Test
@@ -164,7 +194,7 @@ class SecretReEncryptionServiceTest {
 
     @Test
     void skipsSecretsAlreadyEncryptedWithTargetKey() {
-        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, false);
+        SecretCryptoService newCrypto = new SecretCryptoService(NEW_KEY, NEW_KEY_ID, TEST_SALT, false);
         IntegrationConfig integration = integrationConfig(1L, "GITHUB", newCrypto.encrypt("ghp_current_secret"));
         when(integrationConfigMapper.selectList(isNull())).thenReturn(List.of(integration));
         when(reviewPolicyConfigMapper.selectList(isNull())).thenReturn(List.of());
@@ -210,6 +240,22 @@ class SecretReEncryptionServiceTest {
             execute,
             confirmText
         );
+    }
+
+    private String legacySha256Encrypt(String encryptionKey, String value) throws Exception {
+        byte[] iv = new byte[12];
+        new SecureRandom().nextBytes(iv);
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(
+            Cipher.ENCRYPT_MODE,
+            new SecretKeySpec(MessageDigest.getInstance("SHA-256").digest(encryptionKey.getBytes(StandardCharsets.UTF_8)), "AES"),
+            new GCMParameterSpec(128, iv)
+        );
+        byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+        ByteBuffer payload = ByteBuffer.allocate(iv.length + encrypted.length);
+        payload.put(iv);
+        payload.put(encrypted);
+        return Base64.getEncoder().encodeToString(payload.array());
     }
 
     private IntegrationConfig integrationConfig(Long id, String provider, String tokenValue) {

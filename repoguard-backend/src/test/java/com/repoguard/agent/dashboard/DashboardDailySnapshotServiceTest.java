@@ -9,6 +9,8 @@ import com.repoguard.agent.dto.DashboardMetricStat;
 import com.repoguard.agent.dto.DashboardRiskLevelCount;
 import com.repoguard.agent.mapper.DashboardDailySnapshotMapper;
 import com.repoguard.agent.mapper.DashboardMapper;
+import com.repoguard.agent.mapper.projection.DashboardProjections.MetricStat;
+import com.repoguard.agent.mapper.projection.DashboardProjections.RiskLevelCount;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -89,19 +91,11 @@ class DashboardDailySnapshotServiceTest {
         verify(snapshotMapper).insertLlmQualityDailyStatsFromTasks(LocalDate.of(2026, 3, 22));
     }
 
-    private DashboardMetricStat metricStat(Long total) {
-        DashboardMetricStat stat = new DashboardMetricStat();
-        stat.setTotal(total);
-        stat.setHighRisk(1L);
-        stat.setFailed(0L);
-        stat.setAverageDurationSeconds(BigDecimal.TEN);
-        return stat;
+    private MetricStat metricStat(Long total) {
+        return new MetricStat(total, 1L, 0L, BigDecimal.TEN);
     }
 
-    private DashboardRiskLevelCount riskLevelCount(String riskLevel, Long total) {
-        DashboardRiskLevelCount count = new DashboardRiskLevelCount();
-        count.setRiskLevel(riskLevel);
-        count.setTotal(total);
-        return count;
+    private RiskLevelCount riskLevelCount(String riskLevel, Long total) {
+        return new RiskLevelCount(riskLevel, total);
     }
 }

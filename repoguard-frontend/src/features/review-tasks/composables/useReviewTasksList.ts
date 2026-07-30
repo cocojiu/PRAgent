@@ -1,14 +1,9 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
-import { fetchReviewRepositories, fetchReviews } from "@/api/reviews";
+import { fetchReviewListSummary, fetchReviewRepositories, fetchReviews } from "@/api/reviews";
 import type { MetricGridItem } from "@/components/MetricGrid.vue";
-import type { ReviewStatus, ReviewTask, ReviewTaskTriggerSource, RiskLevel } from "@/types";
+import type { ReviewStatus, ReviewTask, ReviewTaskListSummary, ReviewTaskTriggerSource, RiskLevel } from "@/types";
 import { getErrorMessage } from "@/utils/errors";
-
-const parseDurationSeconds = (duration: string) => {
-  const [minutes = 0, seconds = 0] = duration.match(/\d+/g)?.map(Number) ?? [];
-  return minutes * 60 + seconds;
-};
 
 const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -26,6 +21,7 @@ export const useReviewTasksList = () => {
   const errorMessage = ref("");
   const reviewTasks = ref<ReviewTask[]>([]);
   const allRepositories = ref<string[]>([]);
+  const taskSummary = ref<ReviewTaskListSummary | null>(null);
   const totalTasks = ref(0);
   const repoFilter = ref("");
   const statusFilter = ref<ReviewStatus | "">("");
@@ -37,20 +33,27 @@ export const useReviewTasksList = () => {
   const pageCursors = new Map<number, ReviewTaskCursor>();
   let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let taskRequestSeq = 0;
+  let summaryRequestSeq = 0;
 
   const repositories = computed(() => allRepositories.value);
 
   const taskSummaryMetrics = computed<MetricGridItem[]>(() => {
-    const tasks = reviewTasks.value;
-    const total = tasks.length;
-    const highRiskCount = tasks.filter((task) => task.riskLevel === "high" || task.riskLevel === "critical").length;
-    const failedCount = tasks.filter((task) => task.status === "failed").length;
-    const avgSeconds = total
-      ? Math.round(tasks.reduce((sum, task) => sum + parseDurationSeconds(task.duration), 0) / total)
-      : 0;
+    const summary = taskSummary.value;
+    if (!summary) {
+      return [
+        { label: "任务总数", value: "—", note: "数据暂不可用", noteClass: "trend", color: "blue" },
+        { label: "高风险 PR", value: "—", note: "数据暂不可用", noteClass: "trend danger", color: "red" },
+        { label: "失败任务", value: "—", note: "数据暂不可用", noteClass: "trend danger", color: "orange" },
+        { label: "平均耗时", value: "—", note: "数据暂不可用", noteClass: "trend", color: "green" }
+      ];
+    }
+    const total = summary.total;
+    const highRiskCount = summary.highRisk;
+    const failedCount = summary.failed;
+    const avgSeconds = summary.averageDurationSeconds;
 
     return [
-      { label: "本周审查", value: String(total), note: "当前筛选结果", noteClass: "trend", color: "blue" },
+      { label: "任务总数", value: String(total), note: "当前筛选结果", noteClass: "trend", color: "blue" },
       {
         label: "高风险 PR",
         value: String(highRiskCount),
@@ -65,7 +68,7 @@ export const useReviewTasksList = () => {
         noteClass: "trend danger",
         color: "orange"
       },
-      { label: "平均耗时", value: formatDuration(avgSeconds), note: "按当前结果计算", noteClass: "trend", color: "green" }
+      { label: "平均耗时", value: formatDuration(avgSeconds), note: "按当前筛选计算", noteClass: "trend", color: "green" }
     ];
   });
 
@@ -107,6 +110,25 @@ export const useReviewTasksList = () => {
     }
   };
 
+  const loadSummary = async () => {
+    const requestSeq = ++summaryRequestSeq;
+    try {
+      const summary = await fetchReviewListSummary({
+        repository: repoFilter.value,
+        status: statusFilter.value,
+        riskLevel: riskFilter.value,
+        triggerSource: sourceFilter.value,
+        keyword: keyword.value.trim()
+      });
+      if (requestSeq !== summaryRequestSeq) {
+        return;
+      }
+      taskSummary.value = summary;
+    } catch {
+      // Keep the last successful summary. An unavailable value must never be presented as a real zero.
+    }
+  };
+
   const loadRepositories = async () => {
     try {
       allRepositories.value = await fetchReviewRepositories();
@@ -141,6 +163,7 @@ export const useReviewTasksList = () => {
       clearTimeout(filterDebounceTimer);
     }
     filterDebounceTimer = setTimeout(() => {
+      void loadSummary();
       if (currentPage.value === 1) {
         void loadTasks();
       } else {
@@ -155,10 +178,12 @@ export const useReviewTasksList = () => {
     }
     clearPageCursors();
     void loadTasks();
+    void loadSummary();
   };
 
   const initializeReviewTasksList = () => {
     void loadTasks();
+    void loadSummary();
     void loadRepositories();
   };
 

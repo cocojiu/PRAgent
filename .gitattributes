@@ -18,6 +18,7 @@
 *.md text eol=lf working-tree-encoding=UTF-8
 *.txt text eol=lf working-tree-encoding=UTF-8
 *.sh text eol=lf
+repoguard-backend/mvnw text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
 *.ps1 text eol=crlf working-tree-encoding=UTF-8

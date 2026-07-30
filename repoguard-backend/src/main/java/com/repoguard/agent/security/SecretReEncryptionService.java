@@ -36,15 +36,18 @@ public class SecretReEncryptionService {
     private final IntegrationConfigMapper integrationConfigMapper;
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final NotificationChannelBindingMapper notificationChannelBindingMapper;
+    private final SecretCryptoService secretCryptoService;
 
     public SecretReEncryptionService(
         IntegrationConfigMapper integrationConfigMapper,
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
-        NotificationChannelBindingMapper notificationChannelBindingMapper
+        NotificationChannelBindingMapper notificationChannelBindingMapper,
+        SecretCryptoService secretCryptoService
     ) {
         this.integrationConfigMapper = integrationConfigMapper;
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.notificationChannelBindingMapper = notificationChannelBindingMapper;
+        this.secretCryptoService = secretCryptoService;
     }
 
     @Transactional
@@ -57,8 +60,11 @@ public class SecretReEncryptionService {
         String sourceKeyId = StringUtils.hasText(request.sourceKeyId())
             ? request.sourceKeyId().trim()
             : DEFAULT_SOURCE_KEY_ID;
-        SecretCryptoService sourceCrypto = new SecretCryptoService(request.sourceEncryptionKey(), sourceKeyId, false);
-        SecretCryptoService targetCrypto = new SecretCryptoService(request.targetEncryptionKey(), request.targetKeyId(), true);
+        SecretCryptoService sourceCrypto = secretCryptoService.migrationSource(request.sourceEncryptionKey(), sourceKeyId);
+        SecretCryptoService targetCrypto = secretCryptoService.migrationTarget(
+            request.targetEncryptionKey(),
+            request.targetKeyId()
+        );
         List<SecretReEncryptionItemDto> items = new ArrayList<>();
 
         for (IntegrationConfig config : integrationConfigMapper.selectList(null)) {
@@ -194,11 +200,10 @@ public class SecretReEncryptionService {
             return item(tableName, recordId, fieldName, provider, "empty", null, targetCrypto, STATUS_SKIPPED_EMPTY, null, "No secret value configured");
         }
         String sourceKeyId = null;
-        String sourceFormat = "unknown";
+        String sourceFormat = sourceCrypto.ciphertextFormat(value);
         try {
             sourceKeyId = sourceCrypto.encryptedKeyId(value);
-            sourceFormat = resolveSourceFormat(value, sourceKeyId);
-            if (targetCrypto.isVersionedCiphertext(value) && targetCrypto.activeKeyId().equals(targetCrypto.encryptedKeyId(value))) {
+            if (targetCrypto.isActiveCiphertext(value)) {
                 return item(
                     tableName,
                     recordId,
@@ -263,16 +268,6 @@ public class SecretReEncryptionService {
         return STATUS_FAILED.equals(status)
             || STATUS_KEY_MISMATCH.equals(status)
             || STATUS_DECRYPT_FAILED.equals(status);
-    }
-
-    private String resolveSourceFormat(String value, String sourceKeyId) {
-        if (!StringUtils.hasText(sourceKeyId)) {
-            return "plaintext";
-        }
-        if ("v1".equals(sourceKeyId)) {
-            return "enc:v1";
-        }
-        return "enc:v2";
     }
 
     private SecretReEncryptionItemDto item(

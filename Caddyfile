@@ -4,13 +4,23 @@
         format json
     }
     encode zstd gzip
-    reverse_proxy frontend:8080
+    @health path /healthz
+    handle @health {
+        respond "ok" 200
+    }
+    handle {
+        reverse_proxy frontend:8080
+    }
 }
 
 :80 {
     log {
         output stdout
         format json
+    }
+    @containerHealth path /healthz
+    handle @containerHealth {
+        respond "ok" 200
     }
     @health path /actuator/health
     handle @health {

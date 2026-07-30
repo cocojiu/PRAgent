@@ -20,7 +20,7 @@ public class GithubWebhookProperties {
     private int maxRequestsPerMinutePerRepository = 60;
     private List<String> allowedActions = new ArrayList<>(List.of("opened", "reopened", "synchronize", "ready_for_review"));
     private List<String> allowedRepositories = new ArrayList<>();
-    private List<String> allowedHeadBranches = new ArrayList<>(List.of("PRAgent-test"));
+    private List<String> allowedHeadBranches = new ArrayList<>();
 
     public boolean isEnabled() {
         return enabled;
@@ -121,6 +121,9 @@ public class GithubWebhookProperties {
         }
         if (allowedRepositories.stream().noneMatch(StringUtils::hasText)) {
             throw new IllegalStateException("app.github.webhook.allowed-repositories must not be empty in a production-like profile");
+        }
+        if (allowedHeadBranches.stream().noneMatch(StringUtils::hasText)) {
+            throw new IllegalStateException("app.github.webhook.allowed-head-branches must not be empty in a production-like profile");
         }
     }
 }

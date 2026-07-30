@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import org.junit.jupiter.api.Test;
 
 class DiffRiskClassifierTest {
@@ -11,7 +10,7 @@ class DiffRiskClassifierTest {
 
     @Test
     void classifiesDatabaseMigrationsAsHighestPriority() {
-        GithubChangedFile file = file("repoguard-backend/src/main/resources/db/migration/V37__add_index.sql");
+        PullRequestChangedFile file = file("repoguard-backend/src/main/resources/db/migration/V37__add_index.sql");
 
         assertThat(classifier.reasons(file)).containsExactly("database_migration");
         assertThat(classifier.priority(file)).isZero();
@@ -32,7 +31,7 @@ class DiffRiskClassifierTest {
         assertThat(classifier.priority(file("package.json"))).isEqualTo(3);
     }
 
-    private GithubChangedFile file(String filename) {
-        return new GithubChangedFile(filename, "MODIFY", 1, 1, null);
+    private PullRequestChangedFile file(String filename) {
+        return new PullRequestChangedFile(filename, "MODIFY", 1, 1, null);
     }
 }

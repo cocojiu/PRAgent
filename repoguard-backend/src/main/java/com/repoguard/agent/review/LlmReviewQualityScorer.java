@@ -1,7 +1,5 @@
 package com.repoguard.agent.review;
 
-import com.repoguard.agent.github.GithubChangedFile;
-import com.repoguard.agent.github.GithubPullRequestDiff;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -19,7 +17,7 @@ class LlmReviewQualityScorer {
 
     private static final Pattern HUNK_HEADER = Pattern.compile("^@@\\s+-\\d+(?:,\\d+)?\\s+\\+(\\d+)(?:,\\d+)?\\s+@@.*$");
 
-    ReviewResult score(ReviewResult review, GithubPullRequestDiff diff) {
+    ReviewResult score(ReviewResult review, PullRequestDiff diff) {
         if (review == null || review.findings() == null || review.findings().isEmpty()) {
             return review;
         }
@@ -146,10 +144,10 @@ class LlmReviewQualityScorer {
             this.addedLinesByFile = addedLinesByFile;
         }
 
-        static DiffLineIndex from(GithubPullRequestDiff diff) {
+        static DiffLineIndex from(PullRequestDiff diff) {
             Map<String, Set<Integer>> addedLinesByFile = new LinkedHashMap<>();
-            List<GithubChangedFile> files = diff == null || diff.files() == null ? List.of() : diff.files();
-            for (GithubChangedFile file : files) {
+            List<PullRequestChangedFile> files = diff == null || diff.files() == null ? List.of() : diff.files();
+            for (PullRequestChangedFile file : files) {
                 addedLinesByFile.put(normalized(file.filename()), parseAddedLines(file.patch()));
             }
             return new DiffLineIndex(addedLinesByFile);

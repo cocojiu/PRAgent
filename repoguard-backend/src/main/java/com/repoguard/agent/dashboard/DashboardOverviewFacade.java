@@ -99,7 +99,9 @@ public class DashboardOverviewFacade {
         return snapshotStore.getOrLoad(
             CacheNames.DASHBOARD_HIGH_RISK_REVIEWS + ":highRiskReviews",
             () -> highRiskReviewAssembler.assemble(
-                dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate())
+                DashboardMapperProjectionAssembler.toHighRiskReviewDtos(
+                    dashboardMapper.selectRecentHighRiskReviews(reviewTrendStartDate())
+                )
             )
         );
     }

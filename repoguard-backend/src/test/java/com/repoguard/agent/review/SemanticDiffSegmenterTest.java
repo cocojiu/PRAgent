@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.repoguard.agent.github.GithubChangedFile;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +11,7 @@ class SemanticDiffSegmenterTest {
 
     @Test
     void splitsJavaPatchByHunkAndAllocatesSourceLineCounts() {
-        GithubChangedFile file = new GithubChangedFile(
+        PullRequestChangedFile file = new PullRequestChangedFile(
             "src/main/java/com/example/order/OrderService.java",
             "modified",
             10,
@@ -48,7 +47,7 @@ class SemanticDiffSegmenterTest {
 
     @Test
     void resolvesSqlAndConfigScopes() {
-        SemanticDiffSegment sql = segmenter.segments(new GithubChangedFile(
+        SemanticDiffSegment sql = segmenter.segments(new PullRequestChangedFile(
             "src/main/resources/db/migration/V99__drop_legacy_table.sql",
             "modified",
             1,
@@ -58,7 +57,7 @@ class SemanticDiffSegmenterTest {
                 +DROP TABLE legacy_token;
                 """
         )).getFirst();
-        SemanticDiffSegment config = segmenter.segments(new GithubChangedFile(
+        SemanticDiffSegment config = segmenter.segments(new PullRequestChangedFile(
             "src/main/resources/application-prod.yml",
             "modified",
             1,

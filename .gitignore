@@ -11,6 +11,7 @@ target/
 .vscode/
 *.log
 logs/
+secrets/
 performance/
 .deploy/
 .deploy-runtime/
@@ -37,3 +38,9 @@ repoguard-backend/config/application-dev-local.yml
 .rabbitmq-dev/
 .rabbitmq-rabbitdev/
 erl_crash.dump
+
+# Personal documents must never enter this repository
+*.docx
+*.doc
+*.pdf
+*.xlsx

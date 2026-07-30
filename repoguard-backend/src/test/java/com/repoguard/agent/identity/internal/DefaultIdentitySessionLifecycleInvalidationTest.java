@@ -15,6 +15,7 @@ import com.repoguard.agent.identity.IdentitySessionInvalidator.SessionInvalidati
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import java.time.LocalDateTime;
@@ -26,6 +27,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
 
     private final UserAccountMapper userAccountMapper = Mockito.mock(UserAccountMapper.class);
     private final UserRefreshTokenMapper userRefreshTokenMapper = Mockito.mock(UserRefreshTokenMapper.class);
+    private final AuthAccountCache authAccountCache = Mockito.mock(AuthAccountCache.class);
     private final DefaultIdentitySessionLifecycle lifecycle = new DefaultIdentitySessionLifecycle(
         userAccountMapper,
         userRefreshTokenMapper,
@@ -33,7 +35,8 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         Mockito.mock(IdentityCredentialAuthenticator.class),
         new AuthProperties(),
         Mockito.mock(AuthTokenService.class),
-        Mockito.mock(RepoGuardMetrics.class)
+        Mockito.mock(RepoGuardMetrics.class),
+        authAccountCache
     );
 
     @Test
@@ -43,6 +46,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.REFRESH_TOKENS_ONLY, now);
 
         verify(userAccountMapper, never()).rotateSessionVersion(42L, now);
+        verify(authAccountCache, never()).invalidateAfterCommit(42L);
         assertRefreshTokensRevoked();
     }
 
@@ -54,6 +58,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.SESSION_VERSION_ONLY, now);
 
         verify(userAccountMapper).rotateSessionVersion(42L, now);
+        verify(authAccountCache).invalidateAfterCommit(42L);
         verify(userRefreshTokenMapper, never()).update(isNull(), Mockito.<Wrapper<UserRefreshToken>>any());
     }
 
@@ -65,6 +70,7 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         lifecycle.invalidateAccountSessions(42L, SessionInvalidationMode.ALL_SESSIONS, now);
 
         verify(userAccountMapper).rotateSessionVersion(42L, now);
+        verify(authAccountCache).invalidateAfterCommit(42L);
         assertRefreshTokensRevoked();
     }
 
@@ -79,10 +85,11 @@ class DefaultIdentitySessionLifecycleInvalidationTest {
         ))
             .isInstanceOf(IllegalStateException.class)
             .hasMessage("Account session version rotation affected 0 rows");
+        verify(authAccountCache, never()).invalidateAfterCommit(42L);
     }
 
     private void assertRefreshTokensRevoked() {
-        ArgumentCaptor<Wrapper<UserRefreshToken>> wrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
+        ArgumentCaptor<Wrapper<UserRefreshToken>> wrapperCaptor = ArgumentCaptor.captor();
         verify(userRefreshTokenMapper).update(isNull(), wrapperCaptor.capture());
         assertThat(wrapperCaptor.getValue()).isInstanceOf(UpdateWrapper.class);
         UpdateWrapper<UserRefreshToken> wrapper = (UpdateWrapper<UserRefreshToken>) wrapperCaptor.getValue();

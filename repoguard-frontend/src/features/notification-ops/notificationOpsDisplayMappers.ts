@@ -22,7 +22,7 @@ export const notificationStatusClass = (status: string) => {
   if (["DELIVERED", "SUCCESS", "PUBLISHED"].includes(normalized)) {
     return "success";
   }
-  if (["PENDING", "DELIVERING"].includes(normalized)) {
+  if (["PENDING", "PUBLISHING", "DELIVERING"].includes(normalized)) {
     return "processing";
   }
   if (FAILED_EVENT_STATUSES.includes(normalized)) {
@@ -36,6 +36,9 @@ export const notificationStatusClass = (status: string) => {
 
 export const notificationStatusText = (status: string) => {
   const normalized = normalizeStatus(status);
+  if (normalized === "PUBLISHING") {
+    return "发布中";
+  }
   if (["DELIVERED", "SUCCESS"].includes(normalized)) {
     return "已送达";
   }

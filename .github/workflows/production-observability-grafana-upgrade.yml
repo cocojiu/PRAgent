@@ -56,6 +56,11 @@ jobs:
           )
 
           docker compose "${compose_args[@]}" config --quiet
+          METRICS_REMOTE_WRITE_URL=https://metrics-validation.invalid/api/v1/write \
+          METRICS_REMOTE_WRITE_USERNAME=validation \
+          METRICS_REMOTE_WRITE_PASSWORD=validation \
+            docker compose "${compose_args[@]}" \
+              -f config/observability/docker-compose.metrics.yml config --quiet
           services="$(docker compose "${compose_args[@]}" config --services | sort | paste -sd, -)"
           test "${services}" = "alloy,docker-proxy,grafana,loki"
           configured_grafana_image="$(
@@ -524,6 +529,9 @@ jobs:
               ;;
           esac
           test -s "${STAGE_PATH}/docker-compose.observability.yml"
+          test -s "${STAGE_PATH}/config/observability/docker-compose.production.yml"
+          test -s "${STAGE_PATH}/config/observability/docker-compose.metrics.yml"
+          test -s "${STAGE_PATH}/config/observability/alloy/metrics.alloy"
           test -s "${STAGE_PATH}/config/observability/grafana/provisioning/datasources/loki.yml"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}"
           test "$(docker inspect \
@@ -679,8 +687,15 @@ jobs:
           rollback_assets_ready=false
 
           compose_final() {
-            docker compose -p "${project}" --env-file "${env_file}" \
-              -f "${final_base}" -f "${final_override}" "$@"
+            metrics_override="${final_config}/docker-compose.metrics.yml"
+            if [ -s "${metrics_override}" ] \
+              && grep -q '^METRICS_REMOTE_WRITE_URL=.' "${env_file}"; then
+              docker compose -p "${project}" --env-file "${env_file}" \
+                -f "${final_base}" -f "${final_override}" -f "${metrics_override}" "$@"
+            else
+              docker compose -p "${project}" --env-file "${env_file}" \
+                -f "${final_base}" -f "${final_override}" "$@"
+            fi
           }
 
           wait_host_grafana() {
@@ -858,6 +873,8 @@ jobs:
           esac
           test -s "${STAGE_PATH}/docker-compose.observability.yml"
           test -s "${STAGE_PATH}/config/observability/docker-compose.production.yml"
+          test -s "${STAGE_PATH}/config/observability/docker-compose.metrics.yml"
+          test -s "${STAGE_PATH}/config/observability/alloy/metrics.alloy"
           test -s "${STAGE_PATH}/config/observability/grafana/provisioning/datasources/loki.yml"
           test "$(docker inspect --format '{{.Config.Image}}' repoguard-grafana)" = "${old_image}"
           test "$(docker inspect \
@@ -1079,9 +1096,17 @@ jobs:
           cp -a "${backup_dir}/config-observability/." "${final_config}/"
           cp -a "${backup_dir}/production.env" "${env_file}"
           chmod 600 "${env_file}"
-          docker compose -p "${project}" --env-file "${env_file}" \
-            -f "${final_base}" -f "${final_override}" \
-            up -d --no-deps grafana
+          metrics_override="${final_config}/docker-compose.metrics.yml"
+          if [ -s "${metrics_override}" ] \
+            && grep -q '^METRICS_REMOTE_WRITE_URL=.' "${env_file}"; then
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${final_base}" -f "${final_override}" -f "${metrics_override}" \
+              up -d --no-deps grafana
+          else
+            docker compose -p "${project}" --env-file "${env_file}" \
+              -f "${final_base}" -f "${final_override}" \
+              up -d --no-deps grafana
+          fi
 
           attempt=1
           while [ "${attempt}" -le 120 ]; do

@@ -4,6 +4,7 @@ export type ReviewStatus =
   | "completed"
   | "reviewing"
   | "failed"
+  | "superseded"
   | "queued"
   | "fallback"
   | "pending"
@@ -352,6 +353,22 @@ export interface ReviewQuery {
   cursorCreatedAt?: string;
   cursorId?: number;
   totalHint?: number;
+}
+
+export interface ReviewTaskListSummaryQuery {
+  repository?: string;
+  status?: ReviewStatus | "";
+  riskLevel?: RiskLevel | "";
+  source?: ReviewTaskSource | "";
+  triggerSource?: ReviewTaskTriggerSource | "";
+  keyword?: string;
+}
+
+export interface ReviewTaskListSummary {
+  total: number;
+  highRisk: number;
+  failed: number;
+  averageDurationSeconds: number;
 }
 
 export interface ManualReviewRequest {

@@ -9,6 +9,8 @@ public final class CacheNames {
     public static final String DASHBOARD_RULES = "dashboardRules";
     public static final String DASHBOARD_HIGH_RISK_REVIEWS = "dashboardHighRiskReviews";
     public static final String DASHBOARD_LLM_QUALITY = "dashboardLlmQuality";
+    public static final String MESSAGE_QUEUE_HEALTH = "messageQueueHealth";
+    public static final String REVIEW_TASK_LIST_SUMMARY = "reviewTaskListSummary";
     public static final String GITHUB_OPEN_PULL_REQUESTS = "githubOpenPullRequests";
     public static final String REVIEW_RULES = "reviewRules";
 

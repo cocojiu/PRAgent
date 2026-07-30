@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationBinding } from "@/types";
-import { notificationBindingSecretDisplay } from "./notificationOpsDisplayMappers";
+import {
+  canRetryNotificationEvent,
+  isRetryPendingNotificationEvent,
+  notificationBindingSecretDisplay,
+  notificationStatusClass,
+  notificationStatusText
+} from "./notificationOpsDisplayMappers";
 
 const binding = (patch: Partial<NotificationBinding>): NotificationBinding => ({
   id: 1,
@@ -18,6 +24,13 @@ const binding = (patch: Partial<NotificationBinding>): NotificationBinding => ({
 });
 
 describe("notification ops display mappers", () => {
+  it("shows an in-flight outbox publish without offering a duplicate retry", () => {
+    expect(notificationStatusClass("PUBLISHING")).toBe("processing");
+    expect(notificationStatusText("PUBLISHING")).toBe("发布中");
+    expect(canRetryNotificationEvent("PUBLISHING")).toBe(false);
+    expect(isRetryPendingNotificationEvent("PUBLISHING")).toBe(false);
+  });
+
   it("shows a healthy webhook without treating optional signing secret as an issue", () => {
     const display = notificationBindingSecretDisplay(binding({
       webhookUrlStatus: "configured",

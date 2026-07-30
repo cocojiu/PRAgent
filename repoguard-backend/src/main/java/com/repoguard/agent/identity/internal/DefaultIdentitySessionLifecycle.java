@@ -1,7 +1,6 @@
 package com.repoguard.agent.identity.internal;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.entity.UserAccount;
 import com.repoguard.agent.entity.UserRefreshToken;
 import com.repoguard.agent.identity.IdentityAccount;
@@ -13,6 +12,7 @@ import com.repoguard.agent.identity.IdentitySessionTokens;
 import com.repoguard.agent.mapper.UserAccountMapper;
 import com.repoguard.agent.mapper.UserRefreshTokenMapper;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.security.AuthTokenService;
 import java.time.LocalDateTime;
@@ -42,6 +42,8 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
     private final AuthProperties authProperties;
     private final AuthTokenService authTokenService;
     private final RepoGuardMetrics metrics;
+    private final IdentitySessionVersionPersistence sessionVersionPersistence;
+    private final IdentityRefreshTokenRevoker refreshTokenRevoker;
     private final TransactionTemplate sessionWriteTransaction;
     private final TransactionTemplate isolatedSessionWriteTransaction;
 
@@ -54,6 +56,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache,
         PlatformTransactionManager transactionManager
     ) {
         this(
@@ -64,6 +67,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRED),
             buildWriteTransaction(transactionManager, TransactionDefinition.PROPAGATION_REQUIRES_NEW)
         );
@@ -76,7 +80,8 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         IdentityCredentialAuthenticator credentialAuthenticator,
         AuthProperties authProperties,
         AuthTokenService authTokenService,
-        RepoGuardMetrics metrics
+        RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache
     ) {
         this(
             userAccountMapper,
@@ -86,6 +91,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             authProperties,
             authTokenService,
             metrics,
+            authAccountCache,
             null,
             null
         );
@@ -99,6 +105,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         AuthProperties authProperties,
         AuthTokenService authTokenService,
         RepoGuardMetrics metrics,
+        AuthAccountCache authAccountCache,
         TransactionTemplate sessionWriteTransaction,
         TransactionTemplate isolatedSessionWriteTransaction
     ) {
@@ -115,6 +122,8 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         this.authProperties = Objects.requireNonNull(authProperties, "authProperties must not be null");
         this.authTokenService = Objects.requireNonNull(authTokenService, "authTokenService must not be null");
         this.metrics = Objects.requireNonNull(metrics, "metrics must not be null");
+        this.sessionVersionPersistence = new IdentitySessionVersionPersistence(userAccountMapper, authAccountCache);
+        this.refreshTokenRevoker = new IdentityRefreshTokenRevoker(userRefreshTokenMapper);
         this.sessionWriteTransaction = sessionWriteTransaction;
         this.isolatedSessionWriteTransaction = isolatedSessionWriteTransaction;
     }
@@ -152,8 +161,8 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         Objects.requireNonNull(account, "account must not be null");
         return inIsolatedWriteTransaction(() -> {
             LocalDateTime now = LocalDateTime.now();
-            revokeActiveRefreshTokens(account.id(), now);
-            IdentityAccount rotatedAccount = rotateSessionVersionAndPersist(account, now);
+            refreshTokenRevoker.revokeActiveForAccount(account.id(), now);
+            IdentityAccount rotatedAccount = sessionVersionPersistence.rotateAndPersist(account, now);
             credentialAuthenticator.recordSuccess(
                 rotatedAccount,
                 presentedAccount,
@@ -197,11 +206,11 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         Objects.requireNonNull(occurredAt, "occurredAt must not be null");
         inWriteTransaction(() -> {
             switch (mode) {
-                case REFRESH_TOKENS_ONLY -> revokeActiveRefreshTokens(userId, occurredAt);
-                case SESSION_VERSION_ONLY -> rotatePersistedSessionVersion(userId, occurredAt);
+                case REFRESH_TOKENS_ONLY -> refreshTokenRevoker.revokeActiveForAccount(userId, occurredAt);
+                case SESSION_VERSION_ONLY -> sessionVersionPersistence.rotatePersisted(userId, occurredAt);
                 case ALL_SESSIONS -> {
-                    rotatePersistedSessionVersion(userId, occurredAt);
-                    revokeActiveRefreshTokens(userId, occurredAt);
+                    sessionVersionPersistence.rotatePersisted(userId, occurredAt);
+                    refreshTokenRevoker.revokeActiveForAccount(userId, occurredAt);
                 }
             }
             return null;
@@ -225,7 +234,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             return RefreshResult.failure(EXPIRED_SESSION_MESSAGE);
         }
         if (!storedToken.getExpiresAt().isAfter(now)) {
-            revokeIfPresent(storedToken, now);
+            refreshTokenRevoker.revokeIfPresent(storedToken, now);
             recordAudit(
                 storedToken.getUserId(),
                 null,
@@ -238,12 +247,12 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
 
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user == null || !STATUS_ACTIVE.equals(user.getStatus())) {
-            revokeIfPresent(storedToken, now);
+            refreshTokenRevoker.revokeIfPresent(storedToken, now);
             recordAudit(storedToken.getUserId(), null, "TOKEN_REFRESH", AUDIT_FAILURE, "account unavailable");
             return RefreshResult.failure("账号不可用，请重新登录");
         }
         if (safeSessionVersion(storedToken) != safeSessionVersion(user)) {
-            revokeIfPresent(storedToken, now);
+            refreshTokenRevoker.revokeIfPresent(storedToken, now);
             recordAudit(
                 storedToken.getUserId(),
                 user.getUsername(),
@@ -254,7 +263,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             return RefreshResult.failure(EXPIRED_SESSION_MESSAGE);
         }
 
-        if (!revokeActiveRefreshToken(storedToken, now)) {
+        if (!refreshTokenRevoker.revokeActive(storedToken, now)) {
             recordAudit(
                 storedToken.getUserId(),
                 user.getUsername(),
@@ -318,27 +327,17 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             .eq(UserRefreshToken::getTokenHash, authTokenService.hashRefreshToken(refreshToken)));
     }
 
-    private void revokeIfPresent(UserRefreshToken storedToken, LocalDateTime now) {
-        if (storedToken == null) {
-            return;
-        }
-        storedToken.setStatus(STATUS_REVOKED);
-        storedToken.setRevokedAt(now);
-        storedToken.setUpdatedAt(now);
-        userRefreshTokenMapper.updateById(storedToken);
-    }
-
     private void invalidateLogoutSession(UserRefreshToken storedToken, LocalDateTime now) {
         if (storedToken == null) {
             return;
         }
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user == null || safeSessionVersion(storedToken) != safeSessionVersion(user)) {
-            revokeIfPresent(storedToken, now);
+            refreshTokenRevoker.revokeIfPresent(storedToken, now);
             return;
         }
-        rotateSessionVersionAndPersist(user, now);
-        revokeActiveRefreshTokens(user.getId(), now);
+        sessionVersionPersistence.rotateAndPersist(user, now);
+        refreshTokenRevoker.revokeActiveForAccount(user.getId(), now);
         storedToken.setStatus(STATUS_REVOKED);
         storedToken.setRevokedAt(now);
         storedToken.setUpdatedAt(now);
@@ -348,15 +347,10 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
         metrics.refreshTokenReuseDetected();
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         if (user != null && safeSessionVersion(storedToken) == safeSessionVersion(user)) {
-            rotateSessionVersionAndPersist(user, now);
+            sessionVersionPersistence.rotateAndPersist(user, now);
         }
-        revokeActiveRefreshTokens(storedToken.getUserId(), now);
-        storedToken.setLastUsedAt(now);
-        storedToken.setUpdatedAt(now);
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("id", storedToken.getId())
-            .set("last_used_at", now)
-            .set("updated_at", now));
+        refreshTokenRevoker.revokeActiveForAccount(storedToken.getUserId(), now);
+        refreshTokenRevoker.recordReuse(storedToken, now);
         recordAudit(
             storedToken.getUserId(),
             user == null ? null : user.getUsername(),
@@ -375,10 +369,7 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
 
     private void handleRefreshConcurrencyReplay(UserRefreshToken storedToken, LocalDateTime now) {
         metrics.refreshTokenConcurrentReplay();
-        storedToken.setUpdatedAt(now);
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("id", storedToken.getId())
-            .set("updated_at", now));
+        refreshTokenRevoker.recordConcurrentReplay(storedToken, now);
         UserAccount user = userAccountMapper.selectById(storedToken.getUserId());
         recordAudit(
             storedToken.getUserId(),
@@ -387,60 +378,6 @@ public final class DefaultIdentitySessionLifecycle implements IdentitySessionLif
             AUDIT_FAILURE,
             "refresh token replay within concurrency grace"
         );
-    }
-
-    private boolean revokeActiveRefreshToken(UserRefreshToken storedToken, LocalDateTime now) {
-        int updated = userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("id", storedToken.getId())
-            .eq("status", STATUS_ACTIVE)
-            .set("status", STATUS_REVOKED)
-            .set("revoked_at", now)
-            .set("last_used_at", now)
-            .set("updated_at", now));
-        if (updated <= 0) {
-            return false;
-        }
-        storedToken.setStatus(STATUS_REVOKED);
-        storedToken.setRevokedAt(now);
-        storedToken.setLastUsedAt(now);
-        storedToken.setUpdatedAt(now);
-        return true;
-    }
-
-    private IdentityAccount rotateSessionVersionAndPersist(IdentityAccount account, LocalDateTime now) {
-        IdentityAccount rotated = account.withSessionVersion(account.sessionVersion() + 1);
-        UserAccount update = new UserAccount();
-        update.setId(rotated.id());
-        update.setSessionVersion(rotated.sessionVersion());
-        update.setUpdatedAt(now);
-        userAccountMapper.updateById(update);
-        return rotated;
-    }
-
-    private void rotateSessionVersionAndPersist(UserAccount user, LocalDateTime now) {
-        rotateSessionVersion(user, now);
-        userAccountMapper.updateById(user);
-    }
-
-    private void rotateSessionVersion(UserAccount user, LocalDateTime now) {
-        user.setSessionVersion(safeSessionVersion(user) + 1);
-        user.setUpdatedAt(now);
-    }
-
-    private void rotatePersistedSessionVersion(Long userId, LocalDateTime now) {
-        int updated = userAccountMapper.rotateSessionVersion(userId, now);
-        if (updated != 1) {
-            throw new IllegalStateException("Account session version rotation affected " + updated + " rows");
-        }
-    }
-
-    private void revokeActiveRefreshTokens(Long userId, LocalDateTime now) {
-        userRefreshTokenMapper.update(null, new UpdateWrapper<UserRefreshToken>()
-            .eq("user_id", userId)
-            .eq("status", STATUS_ACTIVE)
-            .set("status", STATUS_REVOKED)
-            .set("revoked_at", now)
-            .set("updated_at", now));
     }
 
     private IdentityAccount toIdentityAccount(UserAccount user) {

@@ -8,6 +8,14 @@ server:
 spring:
   application:
     name: repoguard-backend
+  task:
+    scheduling:
+      pool:
+        size: ${REPOGUARD_SCHEDULER_POOL_SIZE:4}
+      thread-name-prefix: repoguard-scheduler-
+      shutdown:
+        await-termination: true
+        await-termination-period: ${REPOGUARD_SCHEDULER_SHUTDOWN_WAIT:10s}
   jackson:
     time-zone: Asia/Shanghai
     default-property-inclusion: non_null
@@ -48,22 +56,42 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       probes:
         enabled: true
 
 repoguard:
+  review:
+    pipeline:
+      # Total wall-clock budget for one LLM review. Layering (each backstops the
+      # previous): this < RabbitMQ consumer_timeout < app.rabbit.review
+      # .review-execution-timeout-ms. ReviewTimeoutLayeringValidator enforces the
+      # two application-side bounds at startup.
+      budget-ms: ${REPOGUARD_REVIEW_PIPELINE_BUDGET_MS:600000}
+      max-total-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_TOTAL_CHUNKS:64}
+      max-in-flight-chunks: ${REPOGUARD_REVIEW_PIPELINE_MAX_IN_FLIGHT_CHUNKS:3}
+  schema:
+    # Roles that do not own Flyway migrations refuse to start below this version.
+    # Keep in sync with the highest version under db/migration; the production
+    # readiness check enforces the match.
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:56}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
     review-publish-threads: ${REPOGUARD_ASYNC_REVIEW_PUBLISH_THREADS:2}
     review-publish-queue-capacity: ${REPOGUARD_ASYNC_REVIEW_PUBLISH_QUEUE_CAPACITY:100}
+    notification-publish-threads: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_THREADS:2}
+    notification-publish-queue-capacity: ${REPOGUARD_ASYNC_NOTIFICATION_PUBLISH_QUEUE_CAPACITY:100}
+    recovery-threads: ${REPOGUARD_ASYNC_RECOVERY_THREADS:3}
+    recovery-queue-capacity: ${REPOGUARD_ASYNC_RECOVERY_QUEUE_CAPACITY:100}
     dashboard-threads: ${REPOGUARD_ASYNC_DASHBOARD_THREADS:1}
     dashboard-queue-capacity: ${REPOGUARD_ASYNC_DASHBOARD_QUEUE_CAPACITY:16}
     rabbit-health-threads: ${REPOGUARD_ASYNC_RABBIT_HEALTH_THREADS:1}
     rabbit-health-queue-capacity: ${REPOGUARD_ASYNC_RABBIT_HEALTH_QUEUE_CAPACITY:4}
+    llm-chunk-threads: ${REPOGUARD_ASYNC_LLM_CHUNK_THREADS:3}
+    llm-chunk-queue-capacity: ${REPOGUARD_ASYNC_LLM_CHUNK_QUEUE_CAPACITY:100}
     shutdown-wait-seconds: ${REPOGUARD_ASYNC_SHUTDOWN_WAIT_SECONDS:10}
     rabbit-health-cache-millis: ${REPOGUARD_ASYNC_RABBIT_HEALTH_CACHE_MILLIS:5000}
     rabbit-health-failure-backoff-millis: ${REPOGUARD_ASYNC_RABBIT_HEALTH_FAILURE_BACKOFF_MILLIS:10000}
@@ -162,13 +190,19 @@ repoguard:
   security:
     encryption-key: ${REPOGUARD_SECURITY_ENCRYPTION_KEY}
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
+    encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:}
+    allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
   auth:
     token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET}
+    token-secret-id: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:k1}
+    token-secret-previous: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS:}
+    token-secret-previous-id: ${REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID:}
     access-token-ttl-seconds: ${REPOGUARD_AUTH_ACCESS_TOKEN_TTL_SECONDS:900}
     refresh-token-ttl-seconds: ${REPOGUARD_AUTH_REFRESH_TOKEN_TTL_SECONDS:7200}
     remember-token-ttl-seconds: ${REPOGUARD_AUTH_REMEMBER_TOKEN_TTL_SECONDS:2592000}
     refresh-concurrency-grace-seconds: ${REPOGUARD_AUTH_REFRESH_CONCURRENCY_GRACE_SECONDS:5}
     registration-enabled: ${REPOGUARD_AUTH_REGISTRATION_ENABLED:false}
+    secure-cookies: ${REPOGUARD_AUTH_SECURE_COOKIES:true}
     public-auth-requests-per-minute-per-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP:30}
     public-auth-requests-per-minute-per-account-ip: ${REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP:10}
 
@@ -183,6 +217,11 @@ app:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
       header-name: ${REPOGUARD_ADMIN_API_KEY_HEADER:X-RepoGuard-Admin-Key}
+      min-key-length: ${REPOGUARD_ADMIN_API_KEY_MIN_LENGTH:32}
+      failed-requests-per-minute-per-ip: ${REPOGUARD_ADMIN_API_KEY_FAILED_REQUESTS_PER_MINUTE_PER_IP:30}
+      max-tracked-clients: ${REPOGUARD_ADMIN_API_KEY_MAX_TRACKED_CLIENTS:10000}
+    trusted-proxy:
+      networks: ${REPOGUARD_TRUSTED_PROXY_NETWORKS:127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
     outbound:
       github-allowed-hosts: ${REPOGUARD_OUTBOUND_GITHUB_ALLOWED_HOSTS:api.github.com}
       llm-allowed-hosts: ${REPOGUARD_OUTBOUND_LLM_ALLOWED_HOSTS:dashscope.aliyuncs.com,api.openai.com}
@@ -195,6 +234,12 @@ app:
       mysql-allowed-ports: ${REPOGUARD_OUTBOUND_MYSQL_ALLOWED_PORTS:3306}
       rabbit-mq-allowed-ports: ${REPOGUARD_OUTBOUND_RABBITMQ_ALLOWED_PORTS:5671,5672}
   github:
+    diff-budget:
+      max-pages: ${REPOGUARD_GITHUB_DIFF_MAX_PAGES:10}
+      max-files: ${REPOGUARD_GITHUB_DIFF_MAX_FILES:1000}
+      max-total-bytes: ${REPOGUARD_GITHUB_DIFF_MAX_TOTAL_BYTES:33554432}
+      max-patch-bytes: ${REPOGUARD_GITHUB_DIFF_MAX_PATCH_BYTES:524288}
+      total-timeout-ms: ${REPOGUARD_GITHUB_DIFF_TOTAL_TIMEOUT_MS:90000}
     comment-publish:
       recovery-interval-ms: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_INTERVAL_MS:60000}
       recovery-batch-size: ${REPOGUARD_GITHUB_COMMENT_PUBLISH_RECOVERY_BATCH_SIZE:20}
@@ -212,7 +257,7 @@ app:
         - synchronize
         - ready_for_review
       allowed-repositories: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_REPOSITORIES:}
-      allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:PRAgent-test}
+      allowed-head-branches: ${REPOGUARD_GITHUB_WEBHOOK_ALLOWED_HEAD_BRANCHES:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:}
   external-call:
@@ -238,7 +283,7 @@ app:
         rate-limit-refresh-millis: ${REPOGUARD_LLM_RATE_LIMIT_REFRESH_MILLIS:1000}
         rate-limit-timeout-millis: ${REPOGUARD_LLM_RATE_LIMIT_TIMEOUT_MILLIS:0}
         bulkhead-max-concurrent-calls: ${REPOGUARD_LLM_BULKHEAD_MAX_CONCURRENT_CALLS:4}
-        bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:0}
+        bulkhead-max-wait-millis: ${REPOGUARD_LLM_BULKHEAD_MAX_WAIT_MILLIS:250}
   rabbit:
     review:
       exchange: ${REPOGUARD_REVIEW_EXCHANGE:repoguard.review.exchange.v2}
@@ -260,6 +305,7 @@ app:
       review-recovery-batch-size: ${REPOGUARD_REVIEW_RECOVERY_BATCH_SIZE:20}
       worker-concurrency: ${REPOGUARD_REVIEW_WORKER_CONCURRENCY:1}
       health-check-timeout-ms: ${REPOGUARD_REVIEW_HEALTH_CHECK_TIMEOUT_MS:1500}
+      health-query-window-days: ${REPOGUARD_REVIEW_HEALTH_QUERY_WINDOW_DAYS:30}
     notification:
       exchange: ${REPOGUARD_NOTIFICATION_EXCHANGE:repoguard.notification.exchange}
       queue: ${REPOGUARD_NOTIFICATION_QUEUE:repoguard.notification.queue}

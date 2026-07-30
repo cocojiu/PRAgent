@@ -36,11 +36,14 @@ export const useReviewDetailRetry = ({
 
     try {
       const failureText = failureReason.value ? `\n\n失败原因：${failureReason.value}` : "";
+      const superseded = selectedTask.value.status === "superseded";
       await ElMessageBox.confirm(
-        `确认将 PR #${prNumber} 重新加入审查队列？${failureText}`,
-        "确认重试审查任务",
+        superseded
+          ? `确认读取 PR #${prNumber} 的最新提交并重新审查？${failureText}`
+          : `确认将 PR #${prNumber} 重新加入审查队列？${failureText}`,
+        superseded ? "确认按最新提交重评" : "确认重试审查任务",
         {
-          confirmButtonText: "确认重试",
+          confirmButtonText: superseded ? "确认重评" : "确认重试",
           cancelButtonText: "取消",
           type: "warning"
         }
