@@ -259,12 +259,9 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
       - /var/cache/nginx:rw,noexec,nosuid,size=16m
-      - /etc/nginx/conf.d:rw,noexec,nosuid,size=4m
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      REPOGUARD_FRONTEND_SERVER_NAME: "${REPOGUARD_FRONTEND_SERVER_NAME:?REPOGUARD_FRONTEND_SERVER_NAME is required}"
     expose:
       - "8080"
     healthcheck:

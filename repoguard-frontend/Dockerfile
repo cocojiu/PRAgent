@@ -8,6 +8,6 @@ LABEL org.opencontainers.image.version="${OCI_VERSION}" \
 
 COPY dist/ /usr/share/nginx/html/
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY nginx.ip.conf /etc/nginx/templates/default.conf.template
+COPY nginx.ip.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080

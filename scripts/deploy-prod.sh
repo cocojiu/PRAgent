@@ -339,6 +339,18 @@ print_backend_logs() {
   compose logs --tail=120 backend >&2 || true
 }
 
+print_service_diagnostics() {
+  service="$1"
+  container_id="$(compose ps -q "$service" 2>/dev/null || true)"
+  echo "Recent $service logs:" >&2
+  compose logs --tail=120 "$service" >&2 || true
+  if [ -n "$container_id" ]; then
+    echo "$service container state:" >&2
+    docker inspect "$container_id" \
+      --format '{{json .State}}' >&2 || true
+  fi
+}
+
 wait_service_health() {
   service="$1"
   attempts="${2:-30}"
@@ -353,6 +365,7 @@ wait_service_health() {
   done
   echo "Service health check failed after $attempts attempts: $service" >&2
   compose ps "$service" >&2 || true
+  print_service_diagnostics "$service"
   return 1
 }
 

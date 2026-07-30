@@ -141,7 +141,6 @@ services:
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
       - /var/cache/nginx:rw,noexec,nosuid,size=16m
-      - /etc/nginx/conf.d:rw,noexec,nosuid,size=4m
     depends_on:
       backend:
         condition: service_healthy
