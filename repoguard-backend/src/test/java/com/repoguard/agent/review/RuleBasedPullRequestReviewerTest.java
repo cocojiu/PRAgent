@@ -302,8 +302,8 @@ class RuleBasedPullRequestReviewerTest {
                     "src/main/java/com/example/SecurityConfig.java",
                     """
                         @@ -50,0 +51,1 @@
-                        +String githubToken = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
-                        """
+                        +String githubToken = "%s";
+                        """.formatted(SyntheticCredentialFixtures.githubToken())
                 ),
                 file(
                     "src/main/java/com/example/AuditLogger.java",

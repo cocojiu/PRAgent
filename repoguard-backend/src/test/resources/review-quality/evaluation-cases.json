@@ -114,7 +114,7 @@
         "status": "modified",
         "additions": 1,
         "deletions": 0,
-      "patch": "@@ -10,0 +11,1 @@\n+private static final String SECRET = \"client-secret-value-123456\";"
+        "patch": "@@ -10,0 +11,1 @@\n+private static final String SECRET = \"{{CLIENT_SECRET_FIXTURE}}\";"
       }
     ],
     "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/security/TokenSigner.java\",\"lineNumber\":11,\"message\":\"Secret is hardcoded\",\"recommendation\":\"Load it from encrypted configuration\"}]}",

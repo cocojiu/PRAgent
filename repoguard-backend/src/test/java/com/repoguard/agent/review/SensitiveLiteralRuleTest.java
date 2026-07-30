@@ -14,7 +14,7 @@ class SensitiveLiteralRuleTest {
     void evaluatesSensitiveLiteral() {
         var finding = rule.evaluate(context(
             "src/App.java",
-            "String githubToken = \"ghp_1234567890abcdefghijklmnopqrstuvwxyz\";",
+            "String githubToken = \"%s\";".formatted(SyntheticCredentialFixtures.githubToken()),
             Map.of()
         ));
 
@@ -27,25 +27,24 @@ class SensitiveLiteralRuleTest {
 
     @Test
     void evaluatesSupportedSensitiveKeywords() {
-        String credentialValue = "CorrectHorseBatteryStaple42";
         assertThat(rule.evaluate(context(
             "src/App.java",
-            "String password = '" + credentialValue + "';",
+            "String password = '%s';".formatted(SyntheticCredentialFixtures.password()),
             Map.of()
         ))).isPresent();
         assertThat(rule.evaluate(context(
             "src/App.java",
-            "String webhookSecret = \"whsec_1234567890abcdef\";",
+            "String webhookSecret = \"%s\";".formatted(SyntheticCredentialFixtures.webhookSecret()),
             Map.of()
         ))).isPresent();
         assertThat(rule.evaluate(context(
             "src/App.java",
-            "String api_key = \"sk-live-1234567890abcdef\";",
+            "String api_key = \"%s\";".formatted(SyntheticCredentialFixtures.apiKey()),
             Map.of()
         ))).isPresent();
         assertThat(rule.evaluate(context(
             "src/App.java",
-            "String accessKey = \"AKIAIOSFODNN7EXAMPLE\";",
+            "String accessKey = \"%s\";".formatted(SyntheticCredentialFixtures.awsAccessKey()),
             Map.of()
         ))).isPresent();
         assertThat(rule.evaluate(context(
@@ -73,7 +72,7 @@ class SensitiveLiteralRuleTest {
     void skipsCredentialLookingFixturesInTestPaths() {
         assertThat(rule.evaluate(context(
             "src/test/java/com/example/CredentialFixture.java",
-            "String token = \"ghp_1234567890abcdefghijklmnopqrstuvwxyz\";",
+            "String token = \"%s\";".formatted(SyntheticCredentialFixtures.githubToken()),
             Map.of()
         ))).isEmpty();
     }

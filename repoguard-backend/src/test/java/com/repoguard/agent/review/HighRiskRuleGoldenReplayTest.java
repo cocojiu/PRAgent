@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -137,7 +138,8 @@ class HighRiskRuleGoldenReplayTest {
     private List<GoldenCase> loadCases() throws IOException {
         try (InputStream stream = getClass().getClassLoader().getResourceAsStream(GOLDEN_CASES)) {
             assertThat(stream).as(GOLDEN_CASES).isNotNull();
-            return objectMapper.readValue(stream, new TypeReference<>() {
+            String source = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            return objectMapper.readValue(SyntheticCredentialFixtures.expandPlaceholders(source), new TypeReference<>() {
             });
         }
     }

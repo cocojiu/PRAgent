@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 
@@ -36,7 +37,8 @@ final class ReviewQualityEvaluationRunner {
             if (input == null) {
                 throw new IllegalStateException("Review quality evaluation dataset is missing: " + DATASET);
             }
-            return objectMapper.readValue(input, new TypeReference<>() {
+            String source = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            return objectMapper.readValue(SyntheticCredentialFixtures.expandPlaceholders(source), new TypeReference<>() {
             });
         } catch (IOException ex) {
             throw new IllegalStateException("Unable to load review quality evaluation dataset", ex);
