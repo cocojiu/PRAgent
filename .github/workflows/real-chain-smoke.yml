@@ -247,6 +247,14 @@ jobs:
           smoke_run_id="$7"
           smoke_run_attempt="$8"
           production_env="${deploy_path}/.env"
+          docker_compat_dir=""
+
+          cleanup_runtime_compatibility() {
+            if [ -n "${docker_compat_dir}" ]; then
+              rm -rf -- "${docker_compat_dir}"
+            fi
+          }
+          trap cleanup_runtime_compatibility EXIT
 
           read_production_secret() {
             secret_name="$1"
@@ -282,10 +290,19 @@ jobs:
           }
           encryption_key="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_KEY)"
           encryption_salt="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_SALT)"
-          test -n "${encryption_key}" && test -n "${encryption_salt}" || {
-            echo "Production encryption material must not be empty." >&2
+          production_mysql_password="$(read_production_secret MYSQL_PASSWORD)"
+          test -n "${encryption_key}" \
+            && test -n "${encryption_salt}" \
+            && test -n "${production_mysql_password}" || {
+            echo "Production encryption and MySQL compatibility material must not be empty." >&2
             exit 1
           }
+          case "${production_mysql_password}" in
+            *$'\n'*|*$'\r'*)
+              echo "Production MySQL password cannot contain line breaks." >&2
+              exit 1
+              ;;
+          esac
           export REPOGUARD_SECURITY_ENCRYPTION_KEY="${encryption_key}"
           export REPOGUARD_SECURITY_ENCRYPTION_SALT="${encryption_salt}"
           export REPOGUARD_GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
@@ -325,6 +342,50 @@ jobs:
             }
             echo "smoke_backend_revision=${actual_revision}"
           fi
+
+          production_mysql_container="$(
+            cd "${deploy_path}"
+            docker compose --env-file "${production_env}" \
+              -f docker-compose.prod.yml ps -q mysql
+          )"
+          test -n "${production_mysql_container}" || {
+            echo "Production MySQL container is unavailable for compatibility injection." >&2
+            exit 1
+          }
+          real_docker_bin="$(command -v docker)"
+          test -x "${real_docker_bin}" || {
+            echo "Docker executable is unavailable." >&2
+            exit 1
+          }
+          "${real_docker_bin}" exec --help | grep -q -- '--env-file' || {
+            echo "Docker exec does not support --env-file compatibility injection." >&2
+            exit 1
+          }
+          docker_compat_dir="$(
+            mktemp -d "${deploy_path}/.smoke-docker-compat.XXXXXX"
+          )"
+          chmod 0700 "${docker_compat_dir}"
+          printf 'MYSQL_PASSWORD=%s\n' "${production_mysql_password}" \
+            >"${docker_compat_dir}/production-mysql.env"
+          chmod 0600 "${docker_compat_dir}/production-mysql.env"
+          unset production_mysql_password
+          cat >"${docker_compat_dir}/docker" <<'DOCKER_COMPATIBILITY'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [ "${1:-}" = "exec" ] \
+              && [ "${2:-}" = "${PRODUCTION_MYSQL_CONTAINER:-}" ]; then
+            shift
+            exec "${REAL_DOCKER_BIN}" exec \
+              --env-file "${PRODUCTION_MYSQL_ENV_FILE}" "$@"
+          fi
+          exec "${REAL_DOCKER_BIN}" "$@"
+          DOCKER_COMPATIBILITY
+          chmod 0700 "${docker_compat_dir}/docker"
+          export PRODUCTION_MYSQL_CONTAINER="${production_mysql_container}"
+          export PRODUCTION_MYSQL_ENV_FILE="${docker_compat_dir}/production-mysql.env"
+          export REAL_DOCKER_BIN="${real_docker_bin}"
+          export PATH="${docker_compat_dir}:${PATH}"
+          hash -r
 
           "${deploy_path}/performance/remote/run-isolated-real-chain-smoke.sh" \
             "${backup_path}" "${max_total_tokens}" "${backend_image}" \

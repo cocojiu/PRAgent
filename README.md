@@ -415,6 +415,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 23:45:32（Asia/Shanghai）：完成首轮 OBSERVE 隔离验证故障收敛。Real Chain Smoke Run `30556752112` 已通过生产前置健康、ACR 精确镜像拉取及 OCI revision 校验，隔离 MySQL/RabbitMQ 也正常启动；随后确认远端旧隔离 Compose 仍读取直传加密环境变量，而生产凭据已经迁移为文件挂载，导致隔离后端因加密键为空而按预期拒绝启动。失败链路已完整删除临时容器、网络和卷，生产后置健康检查继续通过。工作流现兼容从生产 `.env` 的直传值或 `_FILE` 路径只在远端隔离进程内加载加密键与盐，以便解密复制的生产策略行；Webhook 改用每次运行生成的临时随机密钥，不复用生产 Webhook 凭据。另增加并行只读策略探针，要求活动快照精确为 strategy 1、`review-prompt-v2/review-context-v2/review-schema-v2/high-risk-verifier-v1/server-risk-v2`、`OBSERVE`、已 replay 且唯一激活，并显式输出镜像 revision。Workflow YAML 与完整 Bash 块语法校验通过，JDK 25 定向 20 项契约测试及干净全量 `clean verify` 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过）；下一步推送修复后重跑同一精确业务镜像。
 
+- 2026-07-30 23:56:04（Asia/Shanghai）：完成第二轮 OBSERVE 隔离验证兼容收敛。Real Chain Smoke Run `30558613271` 已直接输出并验证业务镜像 revision `6958f55efe151e009a10b85eec4828b92617d492`，成功加载文件化加密键与盐、恢复预 D1 数据、执行至 V58、启动隔离后端，并由只读探针确认唯一活动策略为 strategy 1、完整 Q3 运行版本、`OBSERVE`、replay 已通过；随后远端旧 Smoke 生命周期脚本在复制生产策略行时仍从生产 MySQL 容器内读取已迁移掉的 `MYSQL_PASSWORD`，因此被数据库拒绝。隔离资源再次完整清理且生产后置健康通过。工作流现从生产 `MYSQL_PASSWORD` 或 `MYSQL_PASSWORD_FILE` 取得兼容值，运行期在部署目录创建权限为 0700/0600 的临时 Docker 垫片与 env-file，只对精确生产 MySQL 容器的两个只读/导出 `docker exec` 注入旧变量，其他 Docker 调用原样转发；生命周期结束自动删除垫片，不修改生产容器和远端 Smoke 脚本。Workflow YAML、完整 Bash 块语法、JDK 25 定向 20 项契约测试及干净全量 `clean verify` 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过）；下一步推送后第三次运行同一精确业务镜像。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
