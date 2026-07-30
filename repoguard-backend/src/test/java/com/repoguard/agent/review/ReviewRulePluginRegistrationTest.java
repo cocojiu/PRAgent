@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.ReviewContextProperties;
 import com.repoguard.agent.review.ReviewRuleProvider;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,8 @@ class ReviewRulePluginRegistrationTest {
             context.registerBean(ReviewRuleProvider.class, () -> reviewRuleProvider);
             context.register(
                 RuleMatchFactory.class,
+                ReviewContextProperties.class,
+                ReviewFilePolicy.class,
                 BroadExceptionCatchRule.class,
                 StandardOutputLoggingRule.class,
                 FixedSleepRule.class,

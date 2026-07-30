@@ -34,6 +34,58 @@ class SensitiveLoggingRuleTest {
     void skipsWhenLineIsNotSensitiveLogging() {
         assertThat(rule.evaluate(context("src/App.java", "log.info(\"review completed\");", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("src/App.java", "String token = \"plain-token\";", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context("src/App.java", "log.info(\"token invalid\");", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.info(\"token {}\", SecretMasker.mask(token));",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.info(\"webhook configured={}\", webhookConfigured);",
+            Map.of()
+        ))).isEmpty();
+    }
+
+    @Test
+    void detectsSensitiveGetterPassedAsStructuredValue() {
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.trace(\"webhook secret {}\", config.getWebhookSecret());",
+            Map.of()
+        ))).isPresent();
+    }
+
+    @Test
+    void parsesMultilineLoggingCallFromPatchStatement() {
+        String line = "log.info(";
+        ReviewRuleLineContext context = new ReviewRuleLineContext(
+            "src/App.java",
+            22,
+            line,
+            line,
+            ReviewRuleTestFixtures.settingsFor(rule.id()),
+            false,
+            ChangedFileContext.notRequested("src/App.java"),
+            """
+                @@ -21,0 +22,4 @@
+                +log.info(
+                +    "access token {}",
+                +    accessToken
+                +);
+                """
+        );
+
+        assertThat(rule.evaluate(context)).isPresent();
+    }
+
+    @Test
+    void skipsTestFixturesThroughCentralPathPolicy() {
+        assertThat(rule.evaluate(context(
+            "src/test/java/com/example/AuditLoggerTest.java",
+            "log.info(\"token {}\", token);",
+            Map.of()
+        ))).isEmpty();
     }
 
     @Test

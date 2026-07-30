@@ -109,6 +109,40 @@ class RuleBasedPullRequestReviewerTest {
     }
 
     @Test
+    void downgradesContextDependentCandidateWhenExactHeadContentIsUnavailable() {
+        when(reviewRuleProvider.getRulesById())
+            .thenReturn(ReviewRuleTestFixtures.settingsFor(ControllerAuthorizationGuardRule.RULE_ID));
+        String path = "src/main/java/com/example/AdminController.java";
+        ReviewResult result = reviewer.review(new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            "reviewed-head",
+            List.of(new PullRequestChangedFile(
+                path,
+                "modified",
+                1,
+                0,
+                "@@ -10,0 +11,1 @@\n+@DeleteMapping(\"/users/{id}\")",
+                ChangedFileContext.status(
+                    path,
+                    "reviewed-head",
+                    ChangedFileContext.Status.UNAVAILABLE,
+                    "fetch_failed"
+                )
+            ))
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.severity()).isEqualTo("HIGH");
+            assertThat(finding.confidence()).isEqualTo("MEDIUM");
+            assertThat(finding.isBlocking()).isFalse();
+            assertThat(finding.policyReason()).isEqualTo("evidence_not_verified");
+        });
+    }
+
+    @Test
     void usesInjectedPullRequestRulePluginsInStableOrder() {
         when(reviewRuleProvider.getRulesById()).thenReturn(Map.of(
             "RG-PR-001", rule("RG-PR-001", "ENABLED", "*"),
@@ -268,7 +302,7 @@ class RuleBasedPullRequestReviewerTest {
                     "src/main/java/com/example/SecurityConfig.java",
                     """
                         @@ -50,0 +51,1 @@
-                        +String githubToken = "ghp_demo";
+                        +String githubToken = "ghp_1234567890abcdefghijklmnopqrstuvwxyz";
                         """
                 ),
                 file(

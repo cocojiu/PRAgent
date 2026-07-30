@@ -77,11 +77,71 @@ class ControllerAuthorizationGuardRuleTest {
         assertThat(finding).isEmpty();
     }
 
+    @Test
+    void usesClassLevelAuthorizationFromExactHeadContext() {
+        var finding = rule.evaluate(context(
+            "src/main/java/com/example/AdminController.java",
+            "@PostMapping(\"/users\")",
+            Map.of(),
+            false,
+            ChangedFileContext.available(
+                "src/main/java/com/example/AdminController.java",
+                "head",
+                """
+                    @RequireRole("ADMIN")
+                    @RestController
+                    class AdminController {
+                        @PostMapping("/users")
+                        void create() {}
+                    }
+                    """
+            )
+        ));
+
+        assertThat(finding).isEmpty();
+    }
+
+    @Test
+    void keepsCandidateButMarksEvidenceUnverifiedWhenContextFetchFailed() {
+        var finding = rule.evaluate(context(
+            "src/main/java/com/example/AdminController.java",
+            "@DeleteMapping(\"/users/{id}\")",
+            Map.of(),
+            false,
+            ChangedFileContext.status(
+                "src/main/java/com/example/AdminController.java",
+                "head",
+                ChangedFileContext.Status.UNAVAILABLE,
+                "fetch_failed"
+            )
+        ));
+
+        assertThat(finding).isPresent();
+        assertThat(finding.get().evidenceVerified()).isFalse();
+        assertThat(finding.get().evidence()).contains("待确认");
+    }
+
     private ReviewRuleLineContext context(
         String filePath,
         String line,
         Map<String, ReviewRuleSettings> configuredRules,
         boolean patchHasAuthorizationGuard
+    ) {
+        return context(
+            filePath,
+            line,
+            configuredRules,
+            patchHasAuthorizationGuard,
+            ChangedFileContext.notRequested(filePath)
+        );
+    }
+
+    private ReviewRuleLineContext context(
+        String filePath,
+        String line,
+        Map<String, ReviewRuleSettings> configuredRules,
+        boolean patchHasAuthorizationGuard,
+        ChangedFileContext changedFileContext
     ) {
         return new ReviewRuleLineContext(
             filePath,
@@ -89,7 +149,9 @@ class ControllerAuthorizationGuardRuleTest {
             line,
             line.trim(),
             ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules),
-            patchHasAuthorizationGuard
+            patchHasAuthorizationGuard,
+            changedFileContext,
+            "@@ -27,0 +27,1 @@\n+" + line
         );
     }
 }

@@ -12,7 +12,11 @@ class SensitiveLiteralRuleTest {
 
     @Test
     void evaluatesSensitiveLiteral() {
-        var finding = rule.evaluate(context("src/App.java", "String githubToken = \"plain-token\";", Map.of()));
+        var finding = rule.evaluate(context(
+            "src/App.java",
+            "String githubToken = \"ghp_1234567890abcdefghijklmnopqrstuvwxyz\";",
+            Map.of()
+        ));
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-SECRET-001");
@@ -23,11 +27,32 @@ class SensitiveLiteralRuleTest {
 
     @Test
     void evaluatesSupportedSensitiveKeywords() {
-        assertThat(rule.evaluate(context("src/App.java", "String password = '123456';", Map.of()))).isPresent();
-        assertThat(rule.evaluate(context("src/App.java", "String webhookSecret = \"secret\";", Map.of()))).isPresent();
-        assertThat(rule.evaluate(context("src/App.java", "String api_key = \"key\";", Map.of()))).isPresent();
-        assertThat(rule.evaluate(context("src/App.java", "String accessKey = \"key\";", Map.of()))).isPresent();
-        assertThat(rule.evaluate(context("src/App.java", "String access_key = \"key\";", Map.of()))).isPresent();
+        String credentialValue = "CorrectHorseBatteryStaple42";
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "String password = '" + credentialValue + "';",
+            Map.of()
+        ))).isPresent();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "String webhookSecret = \"whsec_1234567890abcdef\";",
+            Map.of()
+        ))).isPresent();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "String api_key = \"sk-live-1234567890abcdef\";",
+            Map.of()
+        ))).isPresent();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "String accessKey = \"AKIAIOSFODNN7EXAMPLE\";",
+            Map.of()
+        ))).isPresent();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "String access_key = \"cloud-access-value-987654\";",
+            Map.of()
+        ))).isPresent();
     }
 
     @Test
@@ -35,6 +60,22 @@ class SensitiveLiteralRuleTest {
         assertThat(rule.evaluate(context("src/App.java", "String token = tokenProvider.current();", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("src/App.java", "return token;", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("src/App.java", "String value = \"public\";", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context("src/App.java", "String token = \"${TOKEN}\";", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context("src/App.java", "String password = \"******\";", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "static final String TOKEN_KEY = \"github.token\";",
+            Map.of()
+        ))).isEmpty();
+    }
+
+    @Test
+    void skipsCredentialLookingFixturesInTestPaths() {
+        assertThat(rule.evaluate(context(
+            "src/test/java/com/example/CredentialFixture.java",
+            "String token = \"ghp_1234567890abcdefghijklmnopqrstuvwxyz\";",
+            Map.of()
+        ))).isEmpty();
     }
 
     @Test

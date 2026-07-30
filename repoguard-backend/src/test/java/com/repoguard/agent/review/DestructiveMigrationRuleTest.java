@@ -35,6 +35,49 @@ class DestructiveMigrationRuleTest {
     void skipsWhenFileIsNotSqlOrDdlIsNotDestructive() {
         assertThat(rule.evaluate(context("src/App.java", "drop table legacy_review_task;", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("db/V1.sql", "create table review_task(id bigint);", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context("db/V1.sql", "-- drop table review_task;", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "db/V1.sql",
+            "select 'drop table review_task' as example;",
+            Map.of()
+        ))).isEmpty();
+    }
+
+    @Test
+    void skipsObjectsCreatedAndRemovedWithinTheSameMigration() {
+        String patch = """
+            @@ -1,0 +1,2 @@
+            +create table rollout_stage (id bigint);
+            +drop table rollout_stage;
+            """;
+        var finding = rule.evaluate(context(
+            "src/main/resources/db/migration/V2__stage.sql",
+            "drop table rollout_stage;",
+            Map.of(),
+            ChangedFileContext.notRequested("src/main/resources/db/migration/V2__stage.sql"),
+            patch
+        ));
+
+        assertThat(finding).isEmpty();
+    }
+
+    @Test
+    void marksDestructiveCandidateUnverifiedWhenMigrationContextIsUnavailable() {
+        var finding = rule.evaluate(context(
+            "src/main/resources/db/migration/V3__drop.sql",
+            "drop table review_task;",
+            Map.of(),
+            ChangedFileContext.status(
+                "src/main/resources/db/migration/V3__drop.sql",
+                "head",
+                ChangedFileContext.Status.TOO_LARGE,
+                "max_file_bytes"
+            ),
+            "@@ -1,0 +1,1 @@\n+drop table review_task;"
+        ));
+
+        assertThat(finding).isPresent();
+        assertThat(finding.get().evidenceVerified()).isFalse();
     }
 
     @Test
@@ -58,12 +101,31 @@ class DestructiveMigrationRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
+        return context(
+            filePath,
+            line,
+            configuredRules,
+            ChangedFileContext.notRequested(filePath),
+            line
+        );
+    }
+
+    private ReviewRuleLineContext context(
+        String filePath,
+        String line,
+        Map<String, ReviewRuleSettings> configuredRules,
+        ChangedFileContext changedFileContext,
+        String patch
+    ) {
         return new ReviewRuleLineContext(
             filePath,
             3,
             line,
             line.trim(),
-            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules),
+            false,
+            changedFileContext,
+            patch
         );
     }
 }

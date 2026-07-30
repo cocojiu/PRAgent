@@ -12,16 +12,39 @@ class RuleMatchFactory {
         String message,
         String recommendation
     ) {
-        return new RuleMatch(
+        return contextualMatch(
             ruleId,
             filePath,
             lineNumber,
             message,
             recommendation,
             "规则 " + ruleId + " 命中新增代码行 " + (lineNumber == null ? "unknown" : lineNumber),
+            lineNumber != null && lineNumber > 0
+        );
+    }
+
+    RuleMatch contextualMatch(
+        String ruleId,
+        String filePath,
+        Integer lineNumber,
+        String message,
+        String recommendation,
+        String evidence,
+        boolean evidenceVerified
+    ) {
+        String normalizedEvidence = ruleId != null && evidence != null && evidence.contains(ruleId)
+            ? evidence
+            : "规则 " + ruleId + "：" + (evidence == null ? "未提供证据说明" : evidence);
+        return new RuleMatch(
+            ruleId,
+            filePath,
+            lineNumber,
+            message,
+            recommendation,
+            normalizedEvidence,
             impactFor(ruleId),
             reviewDimensionFor(ruleId),
-            lineNumber != null && lineNumber > 0
+            evidenceVerified && lineNumber != null && lineNumber > 0
         );
     }
 

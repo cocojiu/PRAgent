@@ -64,7 +64,7 @@ public class RuleBasedPullRequestReviewer {
             if (patch == null || patch.isBlank()) {
                 continue;
             }
-            scanPatch(file.filename(), patch, configuredRules, matches);
+            scanPatch(file, configuredRules, matches);
         }
         scanPullRequestLevelRules(diff, configuredRules, matches);
         List<ReviewFindingResult> findings = matches.stream()
@@ -86,11 +86,12 @@ public class RuleBasedPullRequestReviewer {
     }
 
     private void scanPatch(
-        String filePath,
-        String patch,
+        PullRequestChangedFile file,
         Map<String, ReviewRuleSettings> configuredRules,
         List<RuleMatch> matches
     ) {
+        String filePath = file.filename();
+        String patch = file.patch();
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         boolean hasAuthorizationGuard = patchHasAuthorizationGuard(lines);
@@ -101,7 +102,16 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                evaluateLineRules(filePath, currentLine, added, configuredRules, matches, hasAuthorizationGuard);
+                evaluateLineRules(
+                    filePath,
+                    currentLine,
+                    added,
+                    configuredRules,
+                    matches,
+                    hasAuthorizationGuard,
+                    file.context(),
+                    patch
+                );
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -115,7 +125,9 @@ public class RuleBasedPullRequestReviewer {
         String line,
         Map<String, ReviewRuleSettings> configuredRules,
         List<RuleMatch> matches,
-        boolean hasAuthorizationGuard
+        boolean hasAuthorizationGuard,
+        ChangedFileContext changedFileContext,
+        String patch
     ) {
         ReviewRuleLineContext context = new ReviewRuleLineContext(
             filePath,
@@ -123,7 +135,9 @@ public class RuleBasedPullRequestReviewer {
             line,
             line.trim(),
             configuredRules,
-            hasAuthorizationGuard
+            hasAuthorizationGuard,
+            changedFileContext,
+            patch
         );
         for (ReviewRule rule : lineRules) {
             rule.evaluate(context).ifPresent(matches::add);

@@ -34,7 +34,7 @@ class HighRiskRuleGoldenReplayTest {
     void goldenCatalogKeepsBalancedExplicitContractsForEveryHighRiskRule() throws IOException {
         List<GoldenCase> cases = loadCases();
 
-        assertThat(cases).hasSize(140);
+        assertThat(cases).hasSize(168);
         assertThat(cases).extracting(GoldenCase::id).doesNotHaveDuplicates();
         assertThat(cases).allSatisfy(sample -> {
             assertThat(sample.id()).isNotBlank();
@@ -66,14 +66,14 @@ class HighRiskRuleGoldenReplayTest {
             assertThat(ruleCases)
                 .as(ruleId + " positive golden cases")
                 .filteredOn(GoldenCase::expectedFinding)
-                .hasSize(10);
+                .hasSize(12);
             assertThat(ruleCases)
                 .as(ruleId + " negative golden cases")
                 .filteredOn(sample -> !sample.expectedFinding())
-                .hasSize(10);
+                .hasSize(12);
         });
 
-        assertThat(cases).filteredOn(GoldenCase::knownGap).hasSize(35);
+        assertThat(cases).filteredOn(GoldenCase::knownGap).hasSize(44);
         assertThat(cases)
             .filteredOn(sample -> sample.knownGap() && !sample.headFileContent().isBlank())
             .extracting(GoldenCase::ruleId)
@@ -81,8 +81,11 @@ class HighRiskRuleGoldenReplayTest {
     }
 
     @TestFactory
-    Stream<DynamicTest> capturedBaselineCanBeReplayedOffline() throws IOException {
+    Stream<DynamicTest> calibratedRulesMatchGoldenContractsOffline() throws IOException {
         return loadCases().stream().map(sample -> DynamicTest.dynamicTest(sample.id(), () -> {
+            ChangedFileContext context = sample.headFileContent().isBlank()
+                ? ChangedFileContext.notRequested(sample.filePath())
+                : ChangedFileContext.available(sample.filePath(), "golden-head", sample.headFileContent());
             ReviewResult result = reviewerFor(sample.ruleId()).review(new PullRequestDiff(
                 "golden",
                 "offline-replay",
@@ -92,7 +95,8 @@ class HighRiskRuleGoldenReplayTest {
                     "modified",
                     1,
                     0,
-                    sample.patch()
+                    sample.patch(),
+                    context
                 ))
             ));
 
@@ -101,13 +105,13 @@ class HighRiskRuleGoldenReplayTest {
                 .toList();
             assertThat(targetFindings)
                 .as(sample.rationale())
-                .hasSize(sample.baselineFinding() ? 1 : 0);
-            assertThat(result.riskLevel()).isEqualTo(sample.baselineRisk());
-            if (sample.baselineFinding()) {
+                .hasSize(sample.expectedFinding() ? 1 : 0);
+            assertThat(result.riskLevel()).isEqualTo(sample.expectedRisk());
+            if (sample.expectedFinding()) {
                 ReviewFindingResult finding = targetFindings.getFirst();
-                assertThat(finding.severity()).isEqualTo(sample.baselineSeverity());
-                assertThat(finding.confidence()).isEqualTo(sample.baselineConfidence());
-                assertThat(finding.isBlocking()).isEqualTo(sample.baselineBlocking());
+                assertThat(finding.severity()).isEqualTo(sample.expectedSeverity());
+                assertThat(finding.confidence()).isEqualTo(sample.expectedConfidence());
+                assertThat(finding.isBlocking()).isEqualTo(sample.expectedBlocking());
                 assertThat(finding.lineNumber()).isPositive();
             }
         }));

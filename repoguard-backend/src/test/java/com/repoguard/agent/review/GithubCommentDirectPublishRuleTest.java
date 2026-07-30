@@ -40,6 +40,51 @@ class GithubCommentDirectPublishRuleTest {
     }
 
     @Test
+    void skipsApprovedPublicationGatewayAndVisibleIdempotencyFence() {
+        assertThat(rule.evaluate(context(
+            "src/main/java/com/repoguard/agent/github/comment/GithubReviewBatchPublisher.java",
+            "githubClient.publishPullRequestComments(task, drafts);",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/main/java/com/example/review/ReviewService.java",
+            "githubClient.publishPullRequestComments(task, drafts);",
+            Map.of(),
+            ChangedFileContext.available(
+                "src/main/java/com/example/review/ReviewService.java",
+                "head",
+                """
+                    class ReviewService {
+                        PublicationStore publicationStore;
+                        void publish() {
+                            publicationStore.findPublishedFindingIds(task.id());
+                            githubClient.publishPullRequestComments(task, drafts);
+                        }
+                    }
+                    """
+            )
+        ))).isEmpty();
+    }
+
+    @Test
+    void marksDirectCommentCandidateUnverifiedWhenFullContextIsUnavailable() {
+        var finding = rule.evaluate(context(
+            "src/main/java/com/example/review/ReviewService.java",
+            "githubClient.publishPullRequestComments(task, drafts);",
+            Map.of(),
+            ChangedFileContext.status(
+                "src/main/java/com/example/review/ReviewService.java",
+                "head",
+                ChangedFileContext.Status.UNAVAILABLE,
+                "fetch_failed"
+            )
+        ));
+
+        assertThat(finding).isPresent();
+        assertThat(finding.get().evidenceVerified()).isFalse();
+    }
+
+    @Test
     void skipsWhenRuleIsDisabled() {
         Map<String, ReviewRuleSettings> rules = Map.of(
             GithubCommentDirectPublishRule.RULE_ID,
@@ -60,12 +105,24 @@ class GithubCommentDirectPublishRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
+        return context(filePath, line, configuredRules, ChangedFileContext.notRequested(filePath));
+    }
+
+    private ReviewRuleLineContext context(
+        String filePath,
+        String line,
+        Map<String, ReviewRuleSettings> configuredRules,
+        ChangedFileContext changedFileContext
+    ) {
         return new ReviewRuleLineContext(
             filePath,
             21,
             line,
             line.trim(),
-            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules),
+            false,
+            changedFileContext,
+            "@@ -21,0 +21,1 @@\n+" + line
         );
     }
 }

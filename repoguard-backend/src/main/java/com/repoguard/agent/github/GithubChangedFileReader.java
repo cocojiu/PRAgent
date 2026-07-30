@@ -13,18 +13,23 @@ public class GithubChangedFileReader {
 
     private final GithubPaginator paginator;
     private final GithubDiffBudgetProperties budgetProperties;
+    private final GithubChangedFileContextLoader contextLoader;
 
     @Autowired
     public GithubChangedFileReader(
         GithubPaginator paginator,
-        GithubDiffBudgetProperties budgetProperties
+        GithubDiffBudgetProperties budgetProperties,
+        GithubChangedFileContextLoader contextLoader
     ) {
         this.paginator = paginator;
         this.budgetProperties = budgetProperties;
+        this.contextLoader = contextLoader;
     }
 
     GithubChangedFileReader(GithubPaginator paginator) {
-        this(paginator, new GithubDiffBudgetProperties());
+        this.paginator = paginator;
+        this.budgetProperties = new GithubDiffBudgetProperties();
+        this.contextLoader = null;
     }
 
     public GithubChangedFileFetch fetchChangedFiles(
@@ -33,6 +38,26 @@ public class GithubChangedFileReader {
         String owner,
         String repository,
         Integer pullNumber,
+        ExternalCallResilience resilience
+    ) {
+        return fetchChangedFiles(
+            settings,
+            baseUrl,
+            owner,
+            repository,
+            pullNumber,
+            null,
+            resilience
+        );
+    }
+
+    public GithubChangedFileFetch fetchChangedFiles(
+        GithubIntegrationSettings settings,
+        String baseUrl,
+        String owner,
+        String repository,
+        Integer pullNumber,
+        String headSha,
         ExternalCallResilience resilience
     ) {
         GithubChangedFileBudgetAccumulator accumulator =
@@ -52,6 +77,21 @@ public class GithubChangedFileReader {
             budgetProperties.getMaxPages(),
             accumulator::acceptPage
         );
-        return accumulator.finish(traversal);
+        GithubChangedFileFetch fetch = accumulator.finish(traversal);
+        if (contextLoader == null) {
+            return fetch;
+        }
+        return new GithubChangedFileFetch(
+            contextLoader.load(
+                settings,
+                baseUrl,
+                owner,
+                repository,
+                headSha,
+                fetch.files(),
+                resilience
+            ),
+            fetch.truncation()
+        );
     }
 }

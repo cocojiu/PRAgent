@@ -64,6 +64,14 @@ management:
 
 repoguard:
   review:
+    changed-file-context:
+      max-files: ${REPOGUARD_REVIEW_CONTEXT_MAX_FILES:100}
+      max-file-bytes: ${REPOGUARD_REVIEW_CONTEXT_MAX_FILE_BYTES:524288}
+      max-total-bytes: ${REPOGUARD_REVIEW_CONTEXT_MAX_TOTAL_BYTES:8388608}
+      total-timeout-ms: ${REPOGUARD_REVIEW_CONTEXT_TOTAL_TIMEOUT_MS:15000}
+      cache-maximum-size: ${REPOGUARD_REVIEW_CONTEXT_CACHE_MAXIMUM_SIZE:2000}
+      cache-maximum-bytes: ${REPOGUARD_REVIEW_CONTEXT_CACHE_MAXIMUM_BYTES:67108864}
+      cache-ttl-seconds: ${REPOGUARD_REVIEW_CONTEXT_CACHE_TTL_SECONDS:600}
     human-review:
       minimum-severity: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_SEVERITY:HIGH}
       minimum-confidence: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_CONFIDENCE:HIGH}
