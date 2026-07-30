@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 class ReviewTaskFailureOutcomePolicy {
 
     String failedRiskLevel() {
-        return "HIGH";
+        return "INFO";
     }
 
     String failedLlmStatus() {

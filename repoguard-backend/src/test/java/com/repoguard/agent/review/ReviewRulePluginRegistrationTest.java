@@ -14,12 +14,12 @@ class ReviewRulePluginRegistrationTest {
     @Test
     void springCollectsReviewRulePluginsForRuleBasedReviewer() {
         ReviewRuleProvider reviewRuleProvider = org.mockito.Mockito.mock(ReviewRuleProvider.class);
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.registerBean(ReviewRuleProvider.class, () -> reviewRuleProvider);
             context.register(
-                ReviewFindingFactory.class,
+                RuleMatchFactory.class,
                 BroadExceptionCatchRule.class,
                 StandardOutputLoggingRule.class,
                 FixedSleepRule.class,
@@ -34,6 +34,11 @@ class ReviewRulePluginRegistrationTest {
                 GithubCommentDirectPublishRule.class,
                 ControllerAuthorizationGuardRule.class,
                 ControllerApiTestCoverageRule.class,
+                ReviewRuleRegistry.class,
+                FindingPolicyResolver.class,
+                ReviewFindingFactory.class,
+                ReviewFindingSemanticDeduplicator.class,
+                ServerRiskAggregator.class,
                 RuleBasedPullRequestReviewer.class
             );
             context.refresh();

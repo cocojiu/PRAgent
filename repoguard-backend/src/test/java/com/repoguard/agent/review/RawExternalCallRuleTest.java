@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class RawExternalCallRuleTest {
 
-    private final RawExternalCallRule rule = new RawExternalCallRule(new ReviewFindingFactory());
+    private final RawExternalCallRule rule = new RawExternalCallRule(new RuleMatchFactory());
 
     @Test
     void evaluatesRestClientRetrieveCall() {
@@ -20,7 +20,6 @@ class RawExternalCallRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-EXT-001");
-        assertThat(finding.get().severity()).isEqualTo("MEDIUM");
         assertThat(finding.get().filePath()).isEqualTo("src/ProfileClient.java");
         assertThat(finding.get().lineNumber()).isEqualTo(51);
         assertThat(finding.get().reviewDimension()).isEqualTo("EXTERNAL_CALL_RULE");
@@ -69,6 +68,12 @@ class RawExternalCallRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 51, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            51,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

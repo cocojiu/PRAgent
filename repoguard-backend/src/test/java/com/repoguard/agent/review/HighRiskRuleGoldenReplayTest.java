@@ -115,16 +115,16 @@ class HighRiskRuleGoldenReplayTest {
 
     private RuleBasedPullRequestReviewer reviewerFor(String ruleId) {
         ReviewRuleProvider provider = org.mockito.Mockito.mock(ReviewRuleProvider.class);
-        org.mockito.Mockito.when(provider.getRulesById()).thenReturn(Map.of());
-        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        org.mockito.Mockito.when(provider.getRulesById()).thenReturn(ReviewRuleTestFixtures.settingsFor(ruleId));
+        RuleMatchFactory matchFactory = new RuleMatchFactory();
         ReviewRule rule = switch (ruleId) {
-            case "RG-AUTH-001" -> new ControllerAuthorizationGuardRule(findingFactory);
-            case "RG-SECRET-001" -> new SensitiveLiteralRule(findingFactory);
-            case "RG-LOG-001" -> new SensitiveLoggingRule(findingFactory);
-            case "RG-MQ-001" -> new RabbitMessagePublishRule(findingFactory);
-            case "RG-GH-001" -> new GithubCommentDirectPublishRule(findingFactory);
-            case "RG-DB-002" -> new DestructiveMigrationRule(findingFactory);
-            case "RG-DB-003" -> new RequiredColumnWithoutDefaultRule(findingFactory);
+            case "RG-AUTH-001" -> new ControllerAuthorizationGuardRule(matchFactory);
+            case "RG-SECRET-001" -> new SensitiveLiteralRule(matchFactory);
+            case "RG-LOG-001" -> new SensitiveLoggingRule(matchFactory);
+            case "RG-MQ-001" -> new RabbitMessagePublishRule(matchFactory);
+            case "RG-GH-001" -> new GithubCommentDirectPublishRule(matchFactory);
+            case "RG-DB-002" -> new DestructiveMigrationRule(matchFactory);
+            case "RG-DB-003" -> new RequiredColumnWithoutDefaultRule(matchFactory);
             default -> throw new IllegalArgumentException("Unsupported golden rule: " + ruleId);
         };
         return new RuleBasedPullRequestReviewer(provider, List.of(rule), List.of());

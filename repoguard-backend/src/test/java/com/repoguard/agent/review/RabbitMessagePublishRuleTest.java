@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class RabbitMessagePublishRuleTest {
 
-    private final RabbitMessagePublishRule rule = new RabbitMessagePublishRule(new ReviewFindingFactory());
+    private final RabbitMessagePublishRule rule = new RabbitMessagePublishRule(new RuleMatchFactory());
 
     @Test
     void evaluatesRabbitTemplatePublishCall() {
@@ -20,7 +20,6 @@ class RabbitMessagePublishRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-MQ-001");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/RabbitPublisher.java");
         assertThat(finding.get().lineNumber()).isEqualTo(44);
         assertThat(finding.get().reviewDimension()).isEqualTo("MESSAGE_RELIABILITY_RULE");
@@ -70,6 +69,12 @@ class RabbitMessagePublishRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 44, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            44,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

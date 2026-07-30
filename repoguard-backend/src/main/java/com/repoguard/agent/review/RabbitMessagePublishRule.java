@@ -8,10 +8,10 @@ class RabbitMessagePublishRule implements ReviewRule {
 
     static final String RULE_ID = "RG-MQ-001";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    RabbitMessagePublishRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    RabbitMessagePublishRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -20,12 +20,11 @@ class RabbitMessagePublishRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !publishesRabbitMessage(context.trimmedLine())) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "HIGH",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

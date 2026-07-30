@@ -35,9 +35,13 @@ final class LlmChunkReviewResultAggregator {
                 Objects.requireNonNull(outcome, "chunk outcome")
             );
         }
+        ReviewResult finalized = reviewMerger.mergeWithRuleReview(
+            ReviewResult.completed("INFO", aggregation.findings()),
+            null
+        );
         return ReviewResult.completed(
-            aggregation.riskLevel(),
-            aggregation.findings(),
+            finalized.riskLevel(),
+            finalized.findings(),
             null,
             null,
             null,
@@ -45,8 +49,8 @@ final class LlmChunkReviewResultAggregator {
             promptBuilder.chunkedPromptSummary(
                 fullDiff,
                 chunks,
-                aggregation.findings().size(),
-                aggregation.riskLevel(),
+                finalized.findings().size(),
+                finalized.riskLevel(),
                 aggregation.failedChunks()
             ),
             zeroToNull(aggregation.promptTokens()),

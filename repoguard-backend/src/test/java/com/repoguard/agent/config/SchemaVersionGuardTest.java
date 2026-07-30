@@ -14,7 +14,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 class SchemaVersionGuardTest {
 
-    private static final int EXPECTED_VERSION = 56;
+    private static final int EXPECTED_VERSION = 57;
 
     private final SchemaVersionGuard guard = new SchemaVersionGuard(null, EXPECTED_VERSION);
 

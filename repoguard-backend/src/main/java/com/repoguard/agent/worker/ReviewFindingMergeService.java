@@ -32,7 +32,9 @@ class ReviewFindingMergeService {
             mergeText(first.impact(), second.impact()),
             mergeText(first.fixExample(), second.fixExample()),
             first.isBlocking() || second.isBlocking(),
-            mergeText(first.reviewDimension(), second.reviewDimension())
+            mergeText(first.reviewDimension(), second.reviewDimension()),
+            stronger.enforcementMode(),
+            mergeText(first.policyReason(), second.policyReason())
         );
     }
 

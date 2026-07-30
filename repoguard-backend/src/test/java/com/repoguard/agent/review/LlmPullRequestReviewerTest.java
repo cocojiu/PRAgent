@@ -189,10 +189,10 @@ class LlmPullRequestReviewerTest {
         assertThat(reviewedChunks).hasSizeGreaterThan(1);
         assertThat(reviewedChunks)
             .allSatisfy(chunk -> assertThat(chunk.files()).hasSizeLessThanOrEqualTo(4));
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
         assertThat(result.findings()).hasSize(reviewedChunks.size());
         assertThat(result.llmParseStatus()).isEqualTo("parsed");
-        assertThat(result.llmPromptSummary()).contains("chunked=true", "aggregateRisk=HIGH");
+        assertThat(result.llmPromptSummary()).contains("chunked=true", "aggregateRisk=INFO");
         assertThat(result.llmPromptSummary()).contains("rulesApplied=true", "ruleFindings=0");
         assertThat(result.llmPromptTokens()).isEqualTo(reviewedChunks.size() * 100);
         assertThat(result.llmCompletionTokens()).isEqualTo(reviewedChunks.size() * 20);
@@ -231,7 +231,7 @@ class LlmPullRequestReviewerTest {
         ).review(new ReviewTask(), diff);
 
         assertThat(result.llmStatus()).isEqualTo("COMPLETED");
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "RULE");
         assertThat(result.llmPromptSummary()).contains("rulesApplied=true", "ruleFindings=1", "mergedFindings=2");
     }
@@ -417,7 +417,7 @@ class LlmPullRequestReviewerTest {
 
         assertThat(result.llmStatus()).isEqualTo("COMPLETED");
         assertThat(result.llmParseStatus()).isEqualTo("partial_fallback");
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.findings()).extracting(ReviewFindingResult::source).contains("LLM", "RULE");
         assertThat(result.llmPromptSummary()).contains("chunked=true", "failedChunks=1", "rulesApplied=true");
         assertThat(result.llmPromptTokens()).isEqualTo((reviewedChunks.size() - 1) * 100);

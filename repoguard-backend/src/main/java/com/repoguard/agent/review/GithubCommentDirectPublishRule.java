@@ -8,10 +8,10 @@ class GithubCommentDirectPublishRule implements ReviewRule {
 
     static final String RULE_ID = "RG-GH-001";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    GithubCommentDirectPublishRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    GithubCommentDirectPublishRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -20,12 +20,11 @@ class GithubCommentDirectPublishRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !publishesGithubCommentDirectly(context.trimmedLine())) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "HIGH",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

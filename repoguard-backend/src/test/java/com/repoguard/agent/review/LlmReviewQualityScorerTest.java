@@ -30,6 +30,7 @@ class LlmReviewQualityScorerTest {
         );
 
         ReviewFindingResult finding = result.findings().getFirst();
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(finding.lineNumber()).isEqualTo(12);
         assertThat(finding.confidence()).isEqualTo("HIGH");
         assertThat(finding.evidence()).contains(

@@ -4,6 +4,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.AssessmentStatus;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
@@ -37,9 +38,10 @@ class ReviewTaskCompletionApplier {
         LocalDateTime startedAt,
         LocalDateTime finishedAt
     ) {
-        boolean humanReviewRequired = humanReviewDecisionPolicy.requiresHumanReview(reviewResult.riskLevel());
+        boolean humanReviewRequired = humanReviewDecisionPolicy.requiresHumanReview(reviewResult);
         task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
         task.setRiskLevel(reviewResult.riskLevel());
+        task.setAssessmentStatus(AssessmentStatus.forCompletedReview(reviewResult).name());
         task.setLlmStatus(reviewResult.llmStatus());
         task.setLlmProvider(reviewResult.llmProvider());
         task.setLlmModel(reviewResult.llmModel());
@@ -64,6 +66,7 @@ class ReviewTaskCompletionApplier {
     void applyFailed(ReviewTask task, LocalDateTime startedAt, LocalDateTime failedAt) {
         task.setStatus(reviewTaskStateMachine.statusWhenFailed());
         task.setRiskLevel(failureOutcomePolicy.failedRiskLevel());
+        task.setAssessmentStatus(AssessmentStatus.FAILED.name());
         task.setLlmStatus(failureOutcomePolicy.failedLlmStatus());
         task.setFinishedAt(failedAt);
         task.setDurationSeconds(durationPolicy.durationSeconds(startedAt, failedAt));
@@ -77,6 +80,7 @@ class ReviewTaskCompletionApplier {
     ) {
         task.setStatus(reviewTaskStateMachine.statusWhenSuperseded());
         task.setRiskLevel("INFO");
+        task.setAssessmentStatus(AssessmentStatus.SUPERSEDED.name());
         task.setLlmStatus(LlmStatus.PENDING.code());
         task.setLlmProvider(null);
         task.setLlmModel(null);

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class DestructiveMigrationRuleTest {
 
-    private final DestructiveMigrationRule rule = new DestructiveMigrationRule(new ReviewFindingFactory());
+    private final DestructiveMigrationRule rule = new DestructiveMigrationRule(new RuleMatchFactory());
 
     @Test
     void evaluatesDropTableMigration() {
@@ -20,7 +20,6 @@ class DestructiveMigrationRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-DB-002");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/main/resources/db/migration/V31__drop_legacy_table.sql");
         assertThat(finding.get().lineNumber()).isEqualTo(3);
         assertThat(finding.get().reviewDimension()).isEqualTo("DATABASE_COMPATIBILITY_RULE");
@@ -59,6 +58,12 @@ class DestructiveMigrationRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 3, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            3,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

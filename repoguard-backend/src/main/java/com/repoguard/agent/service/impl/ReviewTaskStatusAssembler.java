@@ -33,7 +33,8 @@ public class ReviewTaskStatusAssembler {
             item.humanReviewStatus(),
             item.humanReviewNote(),
             item.humanReviewBy(),
-            item.humanReviewedAt()
+            item.humanReviewedAt(),
+            item.assessmentStatus()
         );
     }
 

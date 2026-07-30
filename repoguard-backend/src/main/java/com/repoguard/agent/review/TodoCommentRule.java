@@ -8,10 +8,10 @@ class TodoCommentRule implements ReviewRule {
 
     static final String RULE_ID = "RG-GEN-001";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    TodoCommentRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    TodoCommentRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -20,13 +20,12 @@ class TodoCommentRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id())
             || !(context.trimmedLine().contains("TODO") || context.trimmedLine().contains("FIXME"))) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "LOW",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

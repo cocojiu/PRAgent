@@ -63,10 +63,10 @@ public interface DashboardDailySnapshotMapper {
         select
             created_date as stat_date,
             count(*) as task_count,
-            sum(case when risk_bucket_norm = 'HIGH' then 1 else 0 end) as high_risk_count,
-            sum(case when risk_bucket_norm = 'MEDIUM' then 1 else 0 end) as medium_risk_count,
-            sum(case when risk_bucket_norm = 'LOW' then 1 else 0 end) as low_risk_count,
-            sum(case when risk_bucket_norm = 'INFO' then 1 else 0 end) as info_risk_count,
+            sum(case when assessment_status = 'COMPLETE' and risk_bucket_norm = 'HIGH' then 1 else 0 end) as high_risk_count,
+            sum(case when assessment_status = 'COMPLETE' and risk_bucket_norm = 'MEDIUM' then 1 else 0 end) as medium_risk_count,
+            sum(case when assessment_status = 'COMPLETE' and risk_bucket_norm = 'LOW' then 1 else 0 end) as low_risk_count,
+            sum(case when assessment_status = 'COMPLETE' and risk_bucket_norm = 'INFO' then 1 else 0 end) as info_risk_count,
             sum(case when status_norm = 'FAILED' then 1 else 0 end) as failed_count,
             sum(case when finished_at is not null then duration_seconds else 0 end) as duration_seconds_sum,
             sum(case when finished_at is not null then 1 else 0 end) as duration_sample_count

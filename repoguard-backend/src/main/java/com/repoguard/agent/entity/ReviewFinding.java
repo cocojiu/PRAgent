@@ -23,6 +23,8 @@ public class ReviewFinding {
     private String impact;
     private String fixExample;
     private Boolean isBlocking;
+    private String enforcementMode;
+    private String policyReason;
     private String reviewDimension;
     private String methodName;
     private String testType;
@@ -149,6 +151,22 @@ public class ReviewFinding {
 
     public void setIsBlocking(Boolean isBlocking) {
         this.isBlocking = isBlocking;
+    }
+
+    public String getEnforcementMode() {
+        return enforcementMode;
+    }
+
+    public void setEnforcementMode(String enforcementMode) {
+        this.enforcementMode = enforcementMode;
+    }
+
+    public String getPolicyReason() {
+        return policyReason;
+    }
+
+    public void setPolicyReason(String policyReason) {
+        this.policyReason = policyReason;
     }
 
     public String getReviewDimension() {

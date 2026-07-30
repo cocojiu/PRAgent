@@ -35,7 +35,7 @@ class LlmReviewSchemaRepairerTest {
         assertThat(repaired.path("findings").get(0).path("severity").asText()).isEqualTo("HIGH");
         assertThat(repaired.path("findings").get(0).path("lineNumber").isNull()).isTrue();
         assertThat(repaired.path("findings").get(0).path("confidence").asText()).isEqualTo("HIGH");
-        assertThat(repaired.path("findings").get(0).path("isBlocking").asBoolean()).isTrue();
+        assertThat(repaired.path("findings").get(0).path("isBlocking").asBoolean()).isFalse();
         assertThat(repaired.path("findings").get(0).path("reviewDimension").asText()).isEqualTo("access_control");
     }
 

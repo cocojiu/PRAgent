@@ -14,6 +14,7 @@ import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
+import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.service.ReviewRuleConfigService;
@@ -39,6 +40,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final ReviewRuleConfigPolicy reviewRuleConfigPolicy;
     private final ReviewRuleMetricAssembler reviewRuleMetricAssembler;
     private final ReviewQualityBaselineService reviewQualityBaselineService;
+    private final ReviewRuleRegistry reviewRuleRegistry;
 
     public ReviewRuleConfigServiceImpl(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
@@ -46,7 +48,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         CacheEvictionService cacheEvictionService,
         ReviewRuleConfigPolicy reviewRuleConfigPolicy,
         ReviewRuleMetricAssembler reviewRuleMetricAssembler,
-        ReviewQualityBaselineService reviewQualityBaselineService
+        ReviewQualityBaselineService reviewQualityBaselineService,
+        ReviewRuleRegistry reviewRuleRegistry
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(
             reviewRuleConfigMapper,
@@ -60,6 +63,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             Objects.requireNonNull(reviewRuleMetricAssembler, "reviewRuleMetricAssembler must not be null");
         this.reviewQualityBaselineService =
             Objects.requireNonNull(reviewQualityBaselineService, "reviewQualityBaselineService must not be null");
+        this.reviewRuleRegistry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry must not be null");
     }
 
     @Override
@@ -74,6 +78,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         ReviewRuleFeedbackStat feedbackStat = loadRuleFeedbackStat();
         ReviewQualityBaseline qualityBaseline = reviewQualityBaselineService.loadBaseline();
         List<ReviewRuleConfigDto> ruleDtos = rules.stream()
+            .filter(rule -> reviewRuleRegistry.contains(rule.getId()))
             .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
             .toList();
         return new ReviewRulesResponse(
@@ -85,25 +90,17 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     @Override
     @Transactional
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
-        String id = reviewRuleConfigPolicy.normalizeRuleId(request.id());
-        if (reviewRuleConfigMapper.selectById(id) != null) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Review rule already exists: " + id);
-        }
-        ReviewRuleConfig rule = new ReviewRuleConfig();
-        applyReviewRuleRequest(rule, id, request);
-        rule.setSortOrder(nextRuleSortOrder());
-        LocalDateTime now = LocalDateTime.now();
-        rule.setCreatedAt(now);
-        rule.setUpdatedAt(now);
-        reviewRuleConfigMapper.insert(rule);
-        evictRuleCaches();
-        return toReviewRuleDto(rule, 0);
+        throw new BusinessException(
+            ErrorCode.BAD_REQUEST,
+            "Dynamic review rule creation is disabled; only registered built-in rules can be edited"
+        );
     }
 
     @Override
     @Transactional
     public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
+        ensureRegistered(normalizedId);
         if (!normalizedId.equals(reviewRuleConfigPolicy.normalizeRuleId(request.id()))) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review rule id in path and body must match");
         }
@@ -118,7 +115,9 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     @Override
     @Transactional
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
-        ReviewRuleConfig rule = loadReviewRule(reviewRuleConfigPolicy.normalizeRuleId(id));
+        String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
+        ensureRegistered(normalizedId);
+        ReviewRuleConfig rule = loadReviewRule(normalizedId);
         rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(status));
         rule.setUpdatedAt(LocalDateTime.now());
         reviewRuleConfigMapper.updateById(rule);
@@ -148,6 +147,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         rule.setSeverity(reviewRuleConfigPolicy.normalizeSeverity(request.severity()));
         rule.setStatus(reviewRuleConfigPolicy.normalizeStatus(request.status()));
         rule.setConfidence(request.confidence() == null ? 90 : request.confidence());
+        rule.setEnforcementMode(reviewRuleConfigPolicy.normalizeEnforcementMode(request.enforcementMode()));
         rule.setDescription(request.description().trim());
         rule.setPositiveExample(cleanOptional(request.positiveExample()));
         rule.setFalsePositiveGuidance(cleanOptional(request.falsePositiveGuidance()));
@@ -200,8 +200,18 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             format(rule.getUpdatedAt()),
             rule.getDescription(),
             defaultString(rule.getPositiveExample()),
-            defaultString(rule.getFalsePositiveGuidance())
+            defaultString(rule.getFalsePositiveGuidance()),
+            lower(rule.getEnforcementMode())
         );
+    }
+
+    private void ensureRegistered(String id) {
+        if (!reviewRuleRegistry.contains(id)) {
+            throw new BusinessException(
+                ErrorCode.BAD_REQUEST,
+                "Review rule has no registered detector implementation: " + id
+            );
+        }
     }
 
     private String cleanOptional(String value) {

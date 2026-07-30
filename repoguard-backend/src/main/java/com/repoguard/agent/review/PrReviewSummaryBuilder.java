@@ -24,13 +24,17 @@ public class PrReviewSummaryBuilder {
         List<ChangedFileDto> changedFiles,
         PrRiskProfileDto riskProfile
     ) {
+        List<ReviewFindingDto> effectiveFindings = findings.stream()
+            .filter(finding -> !"false_positive".equalsIgnoreCase(finding.feedbackStatus()))
+            .filter(finding -> !"observe".equalsIgnoreCase(finding.enforcementMode()))
+            .toList();
         return build(
             task,
             findings,
             missingTests,
             changedFiles,
             riskProfile,
-            FindingSeverityCountsDto.fromFindings(findings),
+            FindingSeverityCountsDto.fromFindings(effectiveFindings),
             findings.size(),
             missingTests.size(),
             changedFiles.size()

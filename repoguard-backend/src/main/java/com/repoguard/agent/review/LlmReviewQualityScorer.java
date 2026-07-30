@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -16,10 +17,28 @@ import org.springframework.util.StringUtils;
 class LlmReviewQualityScorer {
 
     private static final Pattern HUNK_HEADER = Pattern.compile("^@@\\s+-\\d+(?:,\\d+)?\\s+\\+(\\d+)(?:,\\d+)?\\s+@@.*$");
+    private final ReviewFindingSemanticDeduplicator findingDeduplicator;
+    private final ServerRiskAggregator riskAggregator;
+
+    LlmReviewQualityScorer() {
+        this(new ReviewFindingSemanticDeduplicator(), new ServerRiskAggregator());
+    }
+
+    @Autowired
+    LlmReviewQualityScorer(
+        ReviewFindingSemanticDeduplicator findingDeduplicator,
+        ServerRiskAggregator riskAggregator
+    ) {
+        this.findingDeduplicator = findingDeduplicator;
+        this.riskAggregator = riskAggregator;
+    }
 
     ReviewResult score(ReviewResult review, PullRequestDiff diff) {
-        if (review == null || review.findings() == null || review.findings().isEmpty()) {
+        if (review == null) {
             return review;
+        }
+        if (review.findings() == null || review.findings().isEmpty()) {
+            return ReviewResult.completed("INFO", List.of());
         }
 
         DiffLineIndex diffLineIndex = DiffLineIndex.from(diff);
@@ -31,7 +50,8 @@ class LlmReviewQualityScorer {
             }
             scoredFindings.add(scoreFinding(finding, diffLineIndex));
         }
-        return ReviewResult.completed(review.riskLevel(), scoredFindings);
+        List<ReviewFindingResult> uniqueFindings = findingDeduplicator.deduplicate(scoredFindings);
+        return ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
     }
 
     private ReviewFindingResult scoreFinding(ReviewFindingResult finding, DiffLineIndex diffLineIndex) {
@@ -41,9 +61,15 @@ class LlmReviewQualityScorer {
         int score = qualityScore(finding, fileExists, lineCheck);
         String evidence = appendQualityEvidence(finding.evidence(), score, fileExists, lineCheck);
         Integer lineNumber = lineCheck.validAddedLine() ? finding.lineNumber() : null;
+        boolean strongEvidence = lineCheck.validAddedLine() && score >= 80;
+        String severity = effectiveSeverity(finding.severity(), strongEvidence);
+        String enforcementMode = strongEvidence ? EnforcementMode.COMMENT.name() : EnforcementMode.OBSERVE.name();
+        String policyReason = strongEvidence
+            ? "llm_candidate_requires_server_verification"
+            : "llm_evidence_below_high_risk_threshold:" + lineCheck.reason();
 
         return new ReviewFindingResult(
-            finding.severity(),
+            severity,
             finding.source(),
             finding.ruleId(),
             finding.filePath(),
@@ -54,9 +80,21 @@ class LlmReviewQualityScorer {
             evidence,
             finding.impact(),
             finding.fixExample(),
-            finding.isBlocking(),
-            finding.reviewDimension()
+            false,
+            finding.reviewDimension(),
+            enforcementMode,
+            policyReason
         );
+    }
+
+    private String effectiveSeverity(String severity, boolean strongEvidence) {
+        if (strongEvidence || severity == null) {
+            return severity;
+        }
+        return switch (severity.trim().toUpperCase(Locale.ROOT)) {
+            case "CRITICAL", "HIGH" -> "MEDIUM";
+            default -> severity;
+        };
     }
 
     private LineCheck checkLine(

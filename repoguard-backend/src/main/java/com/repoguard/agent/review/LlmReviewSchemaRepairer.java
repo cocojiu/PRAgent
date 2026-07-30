@@ -86,7 +86,7 @@ public class LlmReviewSchemaRepairer {
         repaired.put("evidence", defaultText(readText(finding, "evidence"), ""));
         repaired.put("impact", defaultText(readText(finding, "impact"), ""));
         repaired.put("fixExample", defaultText(readText(finding, "fixExample", "fix_example"), recommendation));
-        repaired.put("isBlocking", readBoolean(finding, "isBlocking", "is_blocking", "blocking") || defaultBlocking(severity));
+        repaired.put("isBlocking", readBoolean(finding, "isBlocking", "is_blocking", "blocking"));
         repaired.put("reviewDimension", defaultText(readText(finding, "reviewDimension", "review_dimension"), "LLM"));
         validateFindingSchema(repaired);
         return repaired;
@@ -134,10 +134,6 @@ public class LlmReviewSchemaRepairer {
             case "MEDIUM" -> "MEDIUM";
             default -> "LOW";
         };
-    }
-
-    private boolean defaultBlocking(String severity) {
-        return "CRITICAL".equals(severity) || "HIGH".equals(severity);
     }
 
     private String readText(JsonNode node, String... fields) {

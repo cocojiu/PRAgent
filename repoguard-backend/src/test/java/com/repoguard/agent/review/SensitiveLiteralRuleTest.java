@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class SensitiveLiteralRuleTest {
 
-    private final SensitiveLiteralRule rule = new SensitiveLiteralRule(new ReviewFindingFactory());
+    private final SensitiveLiteralRule rule = new SensitiveLiteralRule(new RuleMatchFactory());
 
     @Test
     void evaluatesSensitiveLiteral() {
@@ -16,7 +16,6 @@ class SensitiveLiteralRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-SECRET-001");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/App.java");
         assertThat(finding.get().lineNumber()).isEqualTo(18);
         assertThat(finding.get().reviewDimension()).isEqualTo("SECURITY_RULE");
@@ -59,6 +58,12 @@ class SensitiveLiteralRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 18, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            18,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

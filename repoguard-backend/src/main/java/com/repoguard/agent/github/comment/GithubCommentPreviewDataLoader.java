@@ -178,6 +178,8 @@ public class GithubCommentPreviewDataLoader {
     }
 
     private ReviewFindingDto toFindingDto(ReviewFinding finding) {
+        boolean falsePositive = FindingFeedbackStatus.fromFinding(finding)
+            == FindingFeedbackStatus.FALSE_POSITIVE;
         return new ReviewFindingDto(
             finding.getId(),
             lower(finding.getSeverity()),
@@ -189,12 +191,14 @@ public class GithubCommentPreviewDataLoader {
             defaultString(finding.getEvidence()),
             defaultString(finding.getImpact()),
             defaultString(finding.getFixExample()),
-            Boolean.TRUE.equals(finding.getIsBlocking()),
+            !falsePositive && Boolean.TRUE.equals(finding.getIsBlocking()),
             defaultString(finding.getReviewDimension()),
             FindingFeedbackStatus.fromFinding(finding).dtoCode(),
             finding.getFeedbackNote(),
             finding.getFeedbackBy(),
-            formatDateTimeOrNull(finding.getFeedbackAt())
+            formatDateTimeOrNull(finding.getFeedbackAt()),
+            defaultString(finding.getEnforcementMode()),
+            defaultString(finding.getPolicyReason())
         );
     }
 

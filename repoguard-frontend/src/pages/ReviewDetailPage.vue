@@ -22,6 +22,11 @@
             <h1>PR #{{ selectedTask.prNumber }} - {{ selectedTask.title }}</h1>
             <span :class="`status-pill ${statusClass(selectedTask.status)}`">{{ statusText(selectedTask.status) }}</span>
             <span :class="`risk-pill ${selectedTask.riskLevel}`">{{ riskText(selectedTask.riskLevel) }}</span>
+            <el-tooltip :content="assessmentStatusDescription(selectedTask.assessmentStatus)" placement="top">
+              <span :class="`status-pill ${assessmentStatusClass(selectedTask.assessmentStatus)}`">
+                {{ assessmentStatusText(selectedTask.assessmentStatus) }}
+              </span>
+            </el-tooltip>
           </div>
           <p class="detail-meta">
             <Github :size="20" />
@@ -277,6 +282,11 @@ import {
   writebackCheckStatusText as mapWritebackCheckStatusText
 } from "@/features/review-detail";
 import type { ReviewStatus } from "@/types";
+import {
+  assessmentStatusClass,
+  assessmentStatusDescription,
+  assessmentStatusText
+} from "@/utils/assessment";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 

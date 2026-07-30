@@ -30,6 +30,7 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
             .contains("count(*) as total")
+            .contains("assessment_status = 'complete'")
             .contains("risk_level_norm in ('high', 'critical')")
             .contains("status_norm = 'failed'")
             .contains("avg(case when finished_at is not null then duration_seconds end) as averagedurationseconds");
@@ -70,6 +71,7 @@ class DashboardMapperSqlContractTest {
             .contains("from review_task")
             .contains("created_at >= #{startdate}")
             .contains("risk_bucket_norm as risklevel")
+            .contains("assessment_status = 'complete'")
             .contains("count(*) as total")
             .contains("group by risk_bucket_norm");
         assertRiskLevelBucketNormalization(sql);
@@ -85,6 +87,7 @@ class DashboardMapperSqlContractTest {
             .contains("left join review_finding f on f.task_id = t.id and f.category = 'finding'")
             .contains("t.risk_level_norm as risklevel")
             .contains("where t.risk_level_norm in ('high', 'critical')")
+            .contains("t.assessment_status = 'complete'")
             .contains("t.created_at >= #{startdate}")
             .contains("order by t.created_at desc")
             .contains("limit 5");

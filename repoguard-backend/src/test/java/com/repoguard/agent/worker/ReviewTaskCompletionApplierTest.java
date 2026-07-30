@@ -3,6 +3,8 @@ package com.repoguard.agent.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.EnforcementMode;
+import com.repoguard.agent.review.ReviewFindingResult;
 import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.RiskLevelRanker;
@@ -49,6 +51,7 @@ class ReviewTaskCompletionApplierTest {
         assertThat(humanReviewRequired).isFalse();
         assertThat(task.getStatus()).isEqualTo("COMPLETED");
         assertThat(task.getRiskLevel()).isEqualTo("LOW");
+        assertThat(task.getAssessmentStatus()).isEqualTo("COMPLETE");
         assertThat(task.getLlmStatus()).isEqualTo("COMPLETED");
         assertThat(task.getLlmProvider()).isEqualTo("openai");
         assertThat(task.getLlmModel()).isEqualTo("gpt-test");
@@ -74,13 +77,30 @@ class ReviewTaskCompletionApplierTest {
 
         boolean humanReviewRequired = applier.applyCompleted(
             task,
-            ReviewResult.completed("MEDIUM", List.of()),
+            ReviewResult.completed("HIGH", List.of(new ReviewFindingResult(
+                "HIGH",
+                "RULE",
+                "RG-AUTH-001",
+                "src/AdminController.java",
+                12,
+                "Administrative endpoint has no authorization guard",
+                "Require an administrator role",
+                "HIGH",
+                "Verified added-line evidence",
+                "Unauthorized configuration changes",
+                "Add an authorization annotation",
+                true,
+                "ACCESS_CONTROL",
+                EnforcementMode.BLOCK.name(),
+                "verified_blocking_rule"
+            ))),
             LocalDateTime.of(2026, 6, 20, 10, 0),
             LocalDateTime.of(2026, 6, 20, 10, 1)
         );
 
         assertThat(humanReviewRequired).isTrue();
         assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
+        assertThat(task.getAssessmentStatus()).isEqualTo("COMPLETE");
         assertThat(task.getHumanReviewRequired()).isTrue();
         assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
         assertThat(task.getHumanReviewNote()).isNull();
@@ -97,7 +117,8 @@ class ReviewTaskCompletionApplierTest {
         applier.applyFailed(task, startedAt, failedAt);
 
         assertThat(task.getStatus()).isEqualTo("FAILED");
-        assertThat(task.getRiskLevel()).isEqualTo("HIGH");
+        assertThat(task.getRiskLevel()).isEqualTo("INFO");
+        assertThat(task.getAssessmentStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getFinishedAt()).isEqualTo(failedAt);
         assertThat(task.getDurationSeconds()).isEqualTo(31);

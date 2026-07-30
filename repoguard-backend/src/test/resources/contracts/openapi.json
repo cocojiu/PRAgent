@@ -6722,6 +6722,12 @@
           },
           "feedbackAt" : {
             "type" : "string"
+          },
+          "enforcementMode" : {
+            "type" : "string"
+          },
+          "policyReason" : {
+            "type" : "string"
           }
         }
       },
@@ -6998,6 +7004,9 @@
           },
           "falsePositiveGuidance" : {
             "type" : "string"
+          },
+          "enforcementMode" : {
+            "type" : "string"
           }
         },
         "required" : [ "hitCount" ]
@@ -7058,9 +7067,14 @@
           "falsePositiveGuidance" : {
             "type" : "string",
             "maxLength" : 1024
+          },
+          "enforcementMode" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)observe|comment|block"
           }
         },
-        "required" : [ "id", "name", "scope", "severity", "status", "description" ]
+        "required" : [ "id", "name", "scope", "severity", "status", "description", "enforcementMode" ]
       },
       "ReviewRuleMetricDto" : {
         "type" : "object",
@@ -7185,6 +7199,9 @@
           },
           "humanReviewedAt" : {
             "type" : "string"
+          },
+          "assessmentStatus" : {
+            "type" : "string"
           }
         }
       },
@@ -7259,6 +7276,9 @@
             "type" : "string"
           },
           "humanReviewedAt" : {
+            "type" : "string"
+          },
+          "assessmentStatus" : {
             "type" : "string"
           }
         }

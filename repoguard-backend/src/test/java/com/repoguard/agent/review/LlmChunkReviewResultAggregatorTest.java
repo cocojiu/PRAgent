@@ -57,7 +57,7 @@ class LlmChunkReviewResultAggregatorTest {
 
         ReviewResult result = aggregator.aggregate(settings(), fullDiff, chunks, outcomes);
 
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.findings())
             .extracting(ReviewFindingResult::source)
             .containsExactly("LLM", "RULE");
@@ -65,7 +65,7 @@ class LlmChunkReviewResultAggregatorTest {
         assertThat(result.llmPromptSummary()).contains(
             "chunked=true",
             "chunks=2",
-            "aggregateRisk=HIGH",
+            "aggregateRisk=MEDIUM",
             "aggregateFindings=2",
             "failedChunks=1"
         );
@@ -88,7 +88,7 @@ class LlmChunkReviewResultAggregatorTest {
             List.of(LlmChunkReviewOutcome.fallback(fallbackReview))
         );
 
-        assertThat(result.riskLevel()).isEqualTo("LOW");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
         assertThat(result.findings()).isEmpty();
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
         assertThat(result.llmPromptTokens()).isNull();

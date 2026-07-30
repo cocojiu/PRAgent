@@ -10,6 +10,8 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.FindingFeedbackStatus;
+import com.repoguard.agent.review.ReviewFindingRiskRecalibrator;
+import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.timeline.ReviewTimelineAppender;
 import com.repoguard.agent.timeline.ReviewTimelineStatus;
@@ -30,18 +32,24 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
     private final ReviewFindingMapper reviewFindingMapper;
     private final ReviewTimelineAppender reviewTimelineAppender;
     private final CacheEvictionService cacheEvictionService;
+    private final ReviewFindingRiskRecalibrator riskRecalibrator;
+    private final ReviewTaskTransitionStore transitionStore;
 
     @Autowired
     public FindingFeedbackServiceImpl(
         ReviewTaskMapper reviewTaskMapper,
         ReviewFindingMapper reviewFindingMapper,
         ReviewTimelineAppender reviewTimelineAppender,
-        CacheEvictionService cacheEvictionService
+        CacheEvictionService cacheEvictionService,
+        ReviewFindingRiskRecalibrator riskRecalibrator,
+        ReviewTaskTransitionStore transitionStore
     ) {
         this.reviewTaskMapper = reviewTaskMapper;
         this.reviewFindingMapper = reviewFindingMapper;
         this.reviewTimelineAppender = reviewTimelineAppender;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
+        this.riskRecalibrator = Objects.requireNonNull(riskRecalibrator, "riskRecalibrator");
+        this.transitionStore = Objects.requireNonNull(transitionStore, "transitionStore");
     }
 
     @Override
@@ -68,6 +76,12 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         finding.setFeedbackBy(cleanOperator(operator));
         finding.setFeedbackAt(feedbackAt);
         reviewFindingMapper.updateById(finding);
+        ReviewFindingRiskRecalibrator.Outcome recalibrated = riskRecalibrator.recalculate(taskId);
+        transitionStore.recalibrateAfterFindingFeedback(
+            task,
+            recalibrated.riskLevel(),
+            recalibrated.humanReviewRequired()
+        );
         reviewTimelineAppender.completeCurrentAndAppend(
             task.getId(),
             findingFeedbackTimelineLabel(finding, status),
@@ -104,6 +118,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
 
     private void evictDashboardFeedbackQuality() {
         cacheEvictionService.evictDashboardFeedbackQuality();
+        cacheEvictionService.evictDashboardReviewActivity();
         cacheEvictionService.evictReviewRules();
     }
 

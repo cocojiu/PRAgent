@@ -16,6 +16,7 @@ public class ReviewRuleConfig {
     private String severity;
     private String status;
     private Integer confidence;
+    private String enforcementMode;
     private String description;
     private String positiveExample;
     private String falsePositiveGuidance;
@@ -85,6 +86,14 @@ public class ReviewRuleConfig {
 
     public void setConfidence(Integer confidence) {
         this.confidence = confidence;
+    }
+
+    public String getEnforcementMode() {
+        return enforcementMode;
+    }
+
+    public void setEnforcementMode(String enforcementMode) {
+        this.enforcementMode = enforcementMode;
     }
 
     public String getDescription() {

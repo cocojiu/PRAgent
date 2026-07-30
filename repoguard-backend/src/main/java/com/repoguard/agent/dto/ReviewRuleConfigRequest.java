@@ -17,6 +17,35 @@ public record ReviewRuleConfigRequest(
     @Min(0) @Max(100) Integer confidence,
     @NotBlank @Size(max = 1024) String description,
     @Size(max = 1024) String positiveExample,
-    @Size(max = 1024) String falsePositiveGuidance
+    @Size(max = 1024) String falsePositiveGuidance,
+    @NotBlank @Pattern(regexp = "(?i)observe|comment|block") String enforcementMode
 ) {
+    public ReviewRuleConfigRequest(
+        String id,
+        String name,
+        String scope,
+        String applicableLanguages,
+        String filePatterns,
+        String severity,
+        String status,
+        Integer confidence,
+        String description,
+        String positiveExample,
+        String falsePositiveGuidance
+    ) {
+        this(
+            id,
+            name,
+            scope,
+            applicableLanguages,
+            filePatterns,
+            severity,
+            status,
+            confidence,
+            description,
+            positiveExample,
+            falsePositiveGuidance,
+            "COMMENT"
+        );
+    }
 }

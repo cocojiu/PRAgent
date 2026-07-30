@@ -10,7 +10,7 @@ class LlmRuleReviewMergerTest {
     private final LlmRuleReviewMerger merger = new LlmRuleReviewMerger(new RiskLevelRanker());
 
     @Test
-    void mergeReturnsLlmReviewWhenRuleReviewHasNoFindings() {
+    void mergeReaggregatesLlmReviewWhenRuleReviewHasNoFindings() {
         ReviewResult llmReview = ReviewResult.completed(
             "LOW",
             List.of(new ReviewFindingResult("LOW", "LLM", null, "src/App.java", 10, "LLM finding", "Fix it"))
@@ -18,11 +18,11 @@ class LlmRuleReviewMergerTest {
 
         ReviewResult merged = merger.mergeWithRuleReview(llmReview, ReviewResult.completed("HIGH", List.of()));
 
-        assertThat(merged).isSameAs(llmReview);
+        assertThat(merged).isEqualTo(llmReview);
     }
 
     @Test
-    void mergeAppendsRuleFindingsAndKeepsHighestRisk() {
+    void mergeAppendsRuleFindingsAndIgnoresUnverifiedRootRisk() {
         ReviewResult llmReview = ReviewResult.completed(
             "LOW",
             List.of(new ReviewFindingResult("LOW", "LLM", null, "src/App.java", 10, "LLM finding", "Fix it"))
@@ -34,7 +34,7 @@ class LlmRuleReviewMergerTest {
 
         ReviewResult merged = merger.mergeWithRuleReview(llmReview, ruleReview);
 
-        assertThat(merged.riskLevel()).isEqualTo("HIGH");
+        assertThat(merged.riskLevel()).isEqualTo("MEDIUM");
         assertThat(merged.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "RULE");
     }
 

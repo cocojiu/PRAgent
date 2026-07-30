@@ -565,7 +565,8 @@ describe("apiRequest", () => {
       confidence: 0.8,
       description: "Detect risky Java changes",
       positiveExample: "Use parameterized SQL",
-      falsePositiveGuidance: "Ignore generated code"
+      falsePositiveGuidance: "Ignore generated code",
+      enforcementMode: "comment"
     });
     await apiRequest("updateReviewRule", {
       id: "RG-JAVA-001",
@@ -580,7 +581,8 @@ describe("apiRequest", () => {
         confidence: 0.8,
         description: "Detect risky Java changes",
         positiveExample: "Use parameterized SQL",
-        falsePositiveGuidance: "Ignore generated code"
+        falsePositiveGuidance: "Ignore generated code",
+        enforcementMode: "comment"
       }
     });
     await apiRequest("updateReviewRuleStatus", {

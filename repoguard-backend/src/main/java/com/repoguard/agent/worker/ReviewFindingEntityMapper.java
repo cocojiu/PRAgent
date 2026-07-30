@@ -23,6 +23,8 @@ class ReviewFindingEntityMapper {
         finding.setImpact(findingResult.impact());
         finding.setFixExample(findingResult.fixExample());
         finding.setIsBlocking(findingResult.isBlocking());
+        finding.setEnforcementMode(findingResult.enforcementMode());
+        finding.setPolicyReason(findingResult.policyReason());
         finding.setReviewDimension(findingResult.reviewDimension());
         return finding;
     }

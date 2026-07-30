@@ -14,7 +14,7 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
         insert into review_task_archive_summary (
             task_id, cleanup_batch_id,
             organization, repository, pr_number, title, commit_sha, branch_name,
-            status, risk_level, source, trigger_source,
+            status, risk_level, assessment_status, source, trigger_source,
             created_at, finished_at, duration_seconds,
             finding_count, missing_test_count, changed_file_count, timeline_count, publication_count,
             backup_reference, archived_at
@@ -30,6 +30,7 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
             task.branch_name,
             task.status,
             task.risk_level,
+            task.assessment_status,
             task.source,
             task.trigger_source,
             task.created_at,
@@ -104,6 +105,7 @@ public interface ReviewTaskArchiveSummaryMapper extends BaseMapper<ReviewTaskArc
             branch_name = values(branch_name),
             status = values(status),
             risk_level = values(risk_level),
+            assessment_status = values(assessment_status),
             source = values(source),
             trigger_source = values(trigger_source),
             created_at = values(created_at),

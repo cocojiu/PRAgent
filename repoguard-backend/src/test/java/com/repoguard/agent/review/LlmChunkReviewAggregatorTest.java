@@ -147,7 +147,7 @@ class LlmChunkReviewAggregatorTest {
 
         ReviewResult result = aggregator.aggregate(context, fullDiff, chunks, parser, budget());
 
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
         assertThat(result.findings()).extracting(ReviewFindingResult::source).containsExactly("LLM", "RULE", "LLM");
         assertThat(result.llmPromptTokens()).isEqualTo(200);

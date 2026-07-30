@@ -5,7 +5,7 @@
         <h1>规则配置</h1>
         <p>管理代码审查规则、严重级别和启用状态</p>
       </div>
-      <el-button type="primary" size="large" :disabled="!canManage" @click="openCreateDialog">新增规则</el-button>
+      <el-tag type="info" size="large">仅支持已注册内置规则</el-tag>
     </div>
 
     <el-alert v-if="errorMessage" class="page-alert" type="error" :title="errorMessage" show-icon :closable="false" />
@@ -57,6 +57,13 @@
           </el-table-column>
           <el-table-column prop="hitCount" label="命中次数" width="110" />
           <el-table-column prop="confidence" label="置信度" width="100" />
+          <el-table-column label="处置模式" width="110">
+            <template #default="{ row }">
+              <el-tag :type="row.enforcementMode === 'block' ? 'danger' : row.enforcementMode === 'comment' ? 'warning' : 'info'">
+                {{ enforcementModeText(row.enforcementMode) }}
+              </el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="updatedAt" label="最近更新" min-width="160" />
           <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
@@ -80,7 +87,7 @@
       </aside>
     </section>
 
-    <el-dialog v-model="dialogVisible" :title="editingRuleId ? '编辑规则' : '新增规则'" width="560px">
+    <el-dialog v-model="dialogVisible" title="编辑内置规则" width="560px">
       <el-form label-position="top" class="rule-form">
         <el-form-item label="规则 ID">
           <el-input v-model="ruleForm.id" :disabled="Boolean(editingRuleId)" placeholder="例如 RG-JAVA-004" />
@@ -116,6 +123,13 @@
         <el-form-item label="置信度">
           <el-input-number v-model="ruleForm.confidence" :min="0" :max="100" />
         </el-form-item>
+        <el-form-item label="处置模式">
+          <el-select v-model="ruleForm.enforcementMode">
+            <el-option label="仅观察（不评论、不阻断）" value="observe" />
+            <el-option label="评论（不阻断）" value="comment" />
+            <el-option label="阻断候选" value="block" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="规则说明">
           <el-input v-model="ruleForm.description" type="textarea" :rows="4" placeholder="描述规则命中的场景和建议" />
         </el-form-item>
@@ -140,12 +154,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
-import {
-  createReviewRule,
-  fetchReviewRules,
-  updateReviewRule,
-  updateReviewRuleStatus
-} from "@/api/config";
+import { fetchReviewRules, updateReviewRule, updateReviewRuleStatus } from "@/api/config";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import type { ReviewRuleConfig, ReviewRuleConfigRequest, RuleStatus, SimpleMetric } from "@/types";
@@ -175,7 +184,8 @@ const ruleForm = reactive<ReviewRuleConfigRequest>({
   confidence: 90,
   description: "",
   positiveExample: "",
-  falsePositiveGuidance: ""
+  falsePositiveGuidance: "",
+  enforcementMode: "comment"
 });
 
 const metricIconMap = {
@@ -241,15 +251,7 @@ const resetForm = (rule?: ReviewRuleConfig) => {
   ruleForm.description = rule?.description ?? "";
   ruleForm.positiveExample = rule?.positiveExample ?? "";
   ruleForm.falsePositiveGuidance = rule?.falsePositiveGuidance ?? "";
-};
-
-const openCreateDialog = () => {
-  if (!canManage.value || saving.value) {
-    return;
-  }
-  editingRuleId.value = "";
-  resetForm();
-  dialogVisible.value = true;
+  ruleForm.enforcementMode = rule?.enforcementMode ?? "comment";
 };
 
 const openEditDialog = (rule: ReviewRuleConfig) => {
@@ -273,13 +275,8 @@ const saveRule = async () => {
   saving.value = true;
   try {
     const payload = normalizedPayload();
-    if (editingRuleId.value) {
-      await updateReviewRule(editingRuleId.value, payload);
-      ElMessage.success("规则已更新");
-    } else {
-      await createReviewRule(payload);
-      ElMessage.success("规则已创建");
-    }
+    await updateReviewRule(editingRuleId.value, payload);
+    ElMessage.success("规则已更新");
     dialogVisible.value = false;
     await loadRules();
   } catch (error) {
@@ -346,8 +343,15 @@ const normalizedPayload = (): ReviewRuleConfigRequest => ({
   confidence: ruleForm.confidence,
   description: ruleForm.description.trim(),
   positiveExample: ruleForm.positiveExample.trim(),
-  falsePositiveGuidance: ruleForm.falsePositiveGuidance.trim()
+  falsePositiveGuidance: ruleForm.falsePositiveGuidance.trim(),
+  enforcementMode: ruleForm.enforcementMode
 });
+
+const enforcementModeText = (mode: ReviewRuleConfig["enforcementMode"]) => {
+  if (mode === "block") return "阻断";
+  if (mode === "comment") return "评论";
+  return "观察";
+};
 
 onMounted(loadRules);
 </script>

@@ -9,10 +9,10 @@ class RequiredColumnWithoutDefaultRule implements ReviewRule {
 
     static final String RULE_ID = "RG-DB-003";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    RequiredColumnWithoutDefaultRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    RequiredColumnWithoutDefaultRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -21,12 +21,11 @@ class RequiredColumnWithoutDefaultRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !addsRequiredColumnWithoutDefault(context)) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "HIGH",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

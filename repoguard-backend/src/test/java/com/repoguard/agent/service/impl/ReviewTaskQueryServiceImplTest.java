@@ -411,6 +411,7 @@ class ReviewTaskQueryServiceImplTest {
         archive.setBranchName("main");
         archive.setStatus("COMPLETED");
         archive.setRiskLevel("LOW");
+        archive.setAssessmentStatus("COMPLETE");
         archive.setSource("manual_input");
         archive.setTriggerSource("manual_input");
         archive.setCreatedAt(LocalDateTime.of(2026, 6, 8, 12, 0));

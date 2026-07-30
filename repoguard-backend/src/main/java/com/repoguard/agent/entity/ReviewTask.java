@@ -18,6 +18,7 @@ public class ReviewTask {
     private String branchName;
     private String status;
     private String riskLevel;
+    private String assessmentStatus;
     private Integer mqRetries;
     private Integer publishAttempts;
     private LocalDateTime nextPublishRetryAt;
@@ -122,6 +123,14 @@ public class ReviewTask {
 
     public void setRiskLevel(String riskLevel) {
         this.riskLevel = riskLevel;
+    }
+
+    public String getAssessmentStatus() {
+        return assessmentStatus;
+    }
+
+    public void setAssessmentStatus(String assessmentStatus) {
+        this.assessmentStatus = assessmentStatus;
     }
 
     public Integer getMqRetries() {

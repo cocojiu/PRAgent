@@ -19,6 +19,7 @@ public class ReviewTaskArchiveSummary {
     private String branchName;
     private String status;
     private String riskLevel;
+    private String assessmentStatus;
     private String source;
     private String triggerSource;
     private LocalDateTime createdAt;
@@ -118,6 +119,14 @@ public class ReviewTaskArchiveSummary {
 
     public void setRiskLevel(String riskLevel) {
         this.riskLevel = riskLevel;
+    }
+
+    public String getAssessmentStatus() {
+        return assessmentStatus;
+    }
+
+    public void setAssessmentStatus(String assessmentStatus) {
+        this.assessmentStatus = assessmentStatus;
     }
 
     public String getSource() {

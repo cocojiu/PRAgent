@@ -42,7 +42,7 @@ class LlmReviewResultParserSchemaTest {
         assertThat(finding.message()).isEqualTo("Admin endpoint is public");
         assertThat(finding.recommendation()).isEqualTo("Require an admin role");
         assertThat(finding.confidence()).isEqualTo("HIGH");
-        assertThat(finding.isBlocking()).isTrue();
+        assertThat(finding.isBlocking()).isFalse();
         assertThat(finding.reviewDimension()).isEqualTo("access_control");
     }
 

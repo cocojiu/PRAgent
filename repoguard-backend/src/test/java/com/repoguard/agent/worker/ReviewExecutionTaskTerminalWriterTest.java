@@ -95,7 +95,8 @@ class ReviewExecutionTaskTerminalWriterTest {
         assertThat(result.applied()).isTrue();
         assertThat(result.failedAt()).isNotNull();
         assertThat(task.getStatus()).isEqualTo("FAILED");
-        assertThat(task.getRiskLevel()).isEqualTo("HIGH");
+        assertThat(task.getRiskLevel()).isEqualTo("INFO");
+        assertThat(task.getAssessmentStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
         assertThat(task.getReviewClaimedAt()).isNull();
         assertThat(task.getReviewClaimedBy()).isNull();

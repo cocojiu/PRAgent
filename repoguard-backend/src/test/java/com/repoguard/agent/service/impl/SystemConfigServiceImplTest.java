@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,6 +42,7 @@ import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
 import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.review.LlmReviewSchemaRepairer;
+import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.config.ReviewRuleConfigPolicy;
 import com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl;
 import com.repoguard.agent.review.config.ReviewRuleMetricAssembler;
@@ -56,6 +58,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.ArgumentCaptor;
 
 class SystemConfigServiceImplTest {
@@ -72,6 +75,7 @@ class SystemConfigServiceImplTest {
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
     private final ReviewQualityBaselineService reviewQualityBaselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
+    private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
     private final ConnectionTestServiceImpl connectionTestService = ConnectionTestServiceTestFactory.create(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -97,7 +101,8 @@ class SystemConfigServiceImplTest {
         cacheEvictionService,
         new ReviewRuleConfigPolicy(),
         new ReviewRuleMetricAssembler(),
-        reviewQualityBaselineService
+        reviewQualityBaselineService,
+        reviewRuleRegistry
     );
     private final SystemSettingsApplicationServiceImpl systemSettingsApplicationService =
         new SystemSettingsApplicationServiceImpl(
@@ -113,6 +118,11 @@ class SystemConfigServiceImplTest {
         reviewRuleConfigService,
         systemSettingsApplicationService
     );
+
+    @BeforeEach
+    void registerConfiguredRuleDetectors() {
+        when(reviewRuleRegistry.contains(anyString())).thenReturn(true);
+    }
 
     @Test
     void constructorRejectsMissingReviewRuleConfigService() {

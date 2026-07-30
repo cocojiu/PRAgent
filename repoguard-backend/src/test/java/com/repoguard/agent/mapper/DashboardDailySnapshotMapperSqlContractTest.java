@@ -52,7 +52,8 @@ class DashboardDailySnapshotMapperSqlContractTest {
             .contains("from review_task")
             .contains("created_date as stat_date")
             .contains("risk_bucket_norm")
-            .contains("status_norm");
+            .contains("status_norm")
+            .contains("assessment_status = 'complete'");
         assertThat(ruleRefresh)
             .contains("insert into dashboard_rule_daily_stat")
             .contains("from review_finding f")

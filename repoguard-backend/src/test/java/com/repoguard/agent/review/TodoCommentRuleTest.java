@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class TodoCommentRuleTest {
 
-    private final TodoCommentRule rule = new TodoCommentRule(new ReviewFindingFactory());
+    private final TodoCommentRule rule = new TodoCommentRule(new RuleMatchFactory());
 
     @Test
     void evaluatesTodoComment() {
@@ -16,7 +16,6 @@ class TodoCommentRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-GEN-001");
-        assertThat(finding.get().severity()).isEqualTo("LOW");
         assertThat(finding.get().filePath()).isEqualTo("src/App.java");
         assertThat(finding.get().lineNumber()).isEqualTo(33);
     }
@@ -50,6 +49,12 @@ class TodoCommentRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 33, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            33,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

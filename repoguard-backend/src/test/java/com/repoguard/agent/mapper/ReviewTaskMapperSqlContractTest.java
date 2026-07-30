@@ -18,7 +18,10 @@ class ReviewTaskMapperSqlContractTest {
         assertThat(sql)
             .contains("from review_task")
             .contains("count(*) as total")
-            .contains("sum(case when risk_level_norm in ('high', 'critical') then 1 else 0 end) as highrisk")
+            .contains(
+                "sum(case when assessment_status = 'complete' "
+                    + "and risk_level_norm in ('high', 'critical') then 1 else 0 end) as highrisk"
+            )
             .contains("sum(case when status_norm = 'failed' then 1 else 0 end) as failed")
             .contains("avg(case when finished_at is not null then duration_seconds end) as averagedurationseconds")
             .contains("${ew.customsqlsegment}")

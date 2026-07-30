@@ -5,8 +5,10 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.review.AssessmentStatus;
 import com.repoguard.agent.review.HumanReviewStatus;
 import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import java.time.LocalDateTime;
 import java.util.Objects;
@@ -106,10 +108,56 @@ public class ReviewTaskTransitionStore {
         applyQueuedExecutionState(task);
     }
 
+    public void recalibrateAfterFindingFeedback(
+        ReviewTask task,
+        String recalculatedRiskLevel,
+        boolean recalculatedHumanReviewRequired
+    ) {
+        Objects.requireNonNull(task, "task");
+        ReviewTaskStatus observedStatus = ReviewTaskStatus.from(task.getStatus());
+        boolean invalidAssessment = observedStatus == ReviewTaskStatus.FAILED
+            || observedStatus == ReviewTaskStatus.SUPERSEDED
+            || AssessmentStatus.FAILED.name().equalsIgnoreCase(task.getAssessmentStatus())
+            || AssessmentStatus.SUPERSEDED.name().equalsIgnoreCase(task.getAssessmentStatus());
+        String riskLevel = invalidAssessment ? "INFO" : recalculatedRiskLevel;
+        boolean humanReviewRequired = !invalidAssessment && recalculatedHumanReviewRequired;
+
+        UpdateWrapper<ReviewTask> update = new UpdateWrapper<ReviewTask>()
+            .eq("id", task.getId())
+            .eq("status", task.getStatus())
+            .set("risk_level", riskLevel);
+        boolean reviewGateCanChange = observedStatus == ReviewTaskStatus.COMPLETED
+            || observedStatus == ReviewTaskStatus.PENDING_HUMAN_REVIEW;
+        if (reviewGateCanChange) {
+            update
+                .set("status", reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired))
+                .set("human_review_required", humanReviewRequired)
+                .set(
+                    "human_review_status",
+                    HumanReviewStatus.defaultForRequired(humanReviewRequired).code()
+                )
+                .set("human_review_note", null)
+                .set("human_review_by", null)
+                .set("human_reviewed_at", null);
+        }
+        ensureTransitioned(reviewTaskMapper.update(update));
+
+        task.setRiskLevel(riskLevel);
+        if (reviewGateCanChange) {
+            task.setStatus(reviewTaskStateMachine.statusAfterReviewCompleted(humanReviewRequired));
+            task.setHumanReviewRequired(humanReviewRequired);
+            task.setHumanReviewStatus(HumanReviewStatus.defaultForRequired(humanReviewRequired).code());
+            task.setHumanReviewNote(null);
+            task.setHumanReviewBy(null);
+            task.setHumanReviewedAt(null);
+        }
+    }
+
     private UpdateWrapper<ReviewTask> resetForQueuedExecution(UpdateWrapper<ReviewTask> update) {
         return update
             .set("status", reviewTaskStateMachine.statusWhenQueued())
             .set("risk_level", "INFO")
+            .set("assessment_status", AssessmentStatus.PARTIAL.name())
             .set("publish_attempts", 0)
             .set("next_publish_retry_at", null)
             .set("last_publish_error", null)
@@ -141,6 +189,7 @@ public class ReviewTaskTransitionStore {
     private void applyQueuedExecutionState(ReviewTask task) {
         task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setRiskLevel("INFO");
+        task.setAssessmentStatus(AssessmentStatus.PARTIAL.name());
         task.setPublishAttempts(0);
         task.setNextPublishRetryAt(null);
         task.setLastPublishError(null);

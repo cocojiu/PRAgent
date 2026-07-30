@@ -4,7 +4,7 @@ import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Map;
 
-interface PullRequestReviewRule {
+public interface PullRequestReviewRule {
 
     String id();
 
@@ -12,7 +12,7 @@ interface PullRequestReviewRule {
         return 1000;
     }
 
-    List<ReviewFindingResult> evaluate(
+    List<RuleMatch> evaluate(
         PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     );

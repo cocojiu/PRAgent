@@ -26,7 +26,7 @@ class ReviewFindingMergeServiceTest {
         assertThat(merged.recommendation()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(merged.confidence()).isEqualTo("HIGH");
         assertThat(merged.fixExample()).isEqualTo("Replace stdout / Use structured logger");
-        assertThat(merged.isBlocking()).isTrue();
+        assertThat(merged.isBlocking()).isFalse();
         assertThat(merged.reviewDimension()).isEqualTo("LLM / PROJECT_RULE");
     }
 

@@ -10,5 +10,5 @@ public interface ReviewRule {
         return 1000;
     }
 
-    Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context);
+    Optional<RuleMatch> evaluate(ReviewRuleLineContext context);
 }

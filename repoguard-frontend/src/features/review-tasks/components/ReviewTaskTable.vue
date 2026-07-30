@@ -42,6 +42,15 @@
         <span :class="`status-pill ${statusClass(row.status)}`">{{ statusText(row.status) }}</span>
       </template>
     </el-table-column>
+    <el-table-column label="评估完整性" width="130">
+      <template #default="{ row }">
+        <el-tooltip :content="assessmentStatusDescription(row.assessmentStatus)" placement="top">
+          <span :class="`status-pill ${assessmentStatusClass(row.assessmentStatus)}`">
+            {{ assessmentStatusText(row.assessmentStatus) }}
+          </span>
+        </el-tooltip>
+      </template>
+    </el-table-column>
     <el-table-column label="失败原因" min-width="210">
       <template #default="{ row }">
         <el-tooltip v-if="row.failureReason && row.failureSuggestion" :content="row.failureSuggestion" placement="top">
@@ -111,6 +120,11 @@ import { RouterLink } from "vue-router";
 import { Copy, ShieldAlert } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import type { ReviewTask } from "@/types";
+import {
+  assessmentStatusClass,
+  assessmentStatusDescription,
+  assessmentStatusText
+} from "@/utils/assessment";
 import { riskText } from "@/utils/risk";
 import { statusClass, statusText } from "@/utils/status";
 import {

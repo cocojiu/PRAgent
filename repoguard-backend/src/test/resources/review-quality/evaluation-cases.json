@@ -120,9 +120,9 @@
     "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/security/TokenSigner.java\",\"lineNumber\":11,\"message\":\"Secret is hardcoded\",\"recommendation\":\"Load it from encrypted configuration\"}]}",
     "expected": {
       "riskLevel": "HIGH",
-      "findingCount": 2,
+      "findingCount": 1,
       "ruleIds": ["RG-SECRET-001"],
-      "sources": ["LLM", "RULE"],
+      "sources": ["LLM+RULE"],
       "chunkReasons": ["security_sensitive"]
     }
   },
@@ -149,9 +149,9 @@
     "llmResponse": "{\"risk_level\":\"high\",\"findings\":[{\"level\":\"high\",\"file\":\"src/main/resources/db/migration/V30__drop_legacy_orders.sql\",\"line\":\"1\",\"description\":\"Destructive migration has no compatibility window\",\"suggestion\":\"Use a phased expand-and-contract migration\"}]}",
     "expected": {
       "riskLevel": "HIGH",
-      "findingCount": 2,
+      "findingCount": 1,
       "ruleIds": ["RG-DB-002"],
-      "sources": ["LLM", "RULE"],
+      "sources": ["LLM+RULE"],
       "chunkReasons": ["database_migration", "multi_file"]
     }
   },
@@ -170,7 +170,7 @@
     ],
     "llmResponse": "```json\n{\"risk\":\"high\",\"findings\":[{\"severity\":\"HIGH\",\"path\":\"src/main/java/com/example/messaging/PaymentConsumer.java\",\"line_number\":24,\"issue\":\"Consumer side effect is not idempotent\",\"fix\":\"Persist and check a message idempotency key\"}]}\n```",
     "expected": {
-      "riskLevel": "HIGH",
+      "riskLevel": "MEDIUM",
       "findingCount": 1,
       "ruleIds": [],
       "sources": ["LLM"],
@@ -214,7 +214,7 @@
     ],
     "llmResponse": "{\"riskLevel\":\"HIGH\",\"findings\":[{\"severity\":\"HIGH\",\"filePath\":\"src/main/java/com/example/client/InventoryClient.java\",\"lineNumber\":33,\"message\":\"Retry can duplicate a non-idempotent reservation\",\"recommendation\":\"Use an idempotency key and bounded retry policy\"}]}",
     "expected": {
-      "riskLevel": "HIGH",
+      "riskLevel": "MEDIUM",
       "findingCount": 2,
       "ruleIds": ["RG-JAVA-003"],
       "sources": ["LLM", "RULE"],

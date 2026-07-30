@@ -1,6 +1,7 @@
 import type { MetricColor, RiskLevel } from "./shared";
 
 export type RuleStatus = "enabled" | "disabled";
+export type EnforcementMode = "observe" | "comment" | "block";
 
 export interface SimpleMetric {
   label: string;
@@ -23,6 +24,7 @@ export interface ReviewRuleConfig {
   description: string;
   positiveExample: string;
   falsePositiveGuidance: string;
+  enforcementMode: EnforcementMode;
 }
 
 export interface ReviewRulesResponse {
@@ -42,6 +44,7 @@ export interface ReviewRuleConfigRequest {
   description: string;
   positiveExample: string;
   falsePositiveGuidance: string;
+  enforcementMode: EnforcementMode;
 }
 
 export interface ReviewRuleStatusRequest {

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class GithubCommentDirectPublishRuleTest {
 
-    private final GithubCommentDirectPublishRule rule = new GithubCommentDirectPublishRule(new ReviewFindingFactory());
+    private final GithubCommentDirectPublishRule rule = new GithubCommentDirectPublishRule(new RuleMatchFactory());
 
     @Test
     void evaluatesDirectPullRequestCommentsPublishCall() {
@@ -20,7 +20,6 @@ class GithubCommentDirectPublishRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-GH-001");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/main/java/com/example/github/CommentPublisher.java");
         assertThat(finding.get().lineNumber()).isEqualTo(21);
         assertThat(finding.get().reviewDimension()).isEqualTo("GITHUB_WRITEBACK_RULE");
@@ -61,6 +60,12 @@ class GithubCommentDirectPublishRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 21, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            21,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class BroadExceptionCatchRuleTest {
 
-    private final BroadExceptionCatchRule rule = new BroadExceptionCatchRule(new ReviewFindingFactory());
+    private final BroadExceptionCatchRule rule = new BroadExceptionCatchRule(new RuleMatchFactory());
 
     @Test
     void evaluatesExceptionCatch() {
@@ -16,7 +16,6 @@ class BroadExceptionCatchRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-JAVA-001");
-        assertThat(finding.get().severity()).isEqualTo("MEDIUM");
         assertThat(finding.get().filePath()).isEqualTo("src/App.java");
         assertThat(finding.get().lineNumber()).isEqualTo(7);
     }
@@ -48,6 +47,12 @@ class BroadExceptionCatchRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 7, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            7,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

@@ -70,7 +70,7 @@ class ReviewExecutionRequiredDependenciesTest {
 
     @Test
     void humanReviewDecisionPolicyRequiresRiskLevelRankerDependency() {
-        assertThatThrownBy(() -> new ReviewHumanReviewDecisionPolicy(null))
+        assertThatThrownBy(() -> new ReviewHumanReviewDecisionPolicy((RiskLevelRanker) null))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("riskLevelRanker");
     }

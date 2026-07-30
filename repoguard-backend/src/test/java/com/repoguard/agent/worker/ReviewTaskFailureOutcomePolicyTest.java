@@ -10,7 +10,7 @@ class ReviewTaskFailureOutcomePolicyTest {
 
     @Test
     void defaultsFailedReviewOutcome() {
-        assertThat(policy.failedRiskLevel()).isEqualTo("HIGH");
+        assertThat(policy.failedRiskLevel()).isEqualTo("INFO");
         assertThat(policy.failedLlmStatus()).isEqualTo("FAILED");
     }
 }

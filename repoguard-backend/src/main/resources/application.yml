@@ -64,6 +64,10 @@ management:
 
 repoguard:
   review:
+    human-review:
+      minimum-severity: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_SEVERITY:HIGH}
+      minimum-confidence: ${REPOGUARD_HUMAN_REVIEW_MINIMUM_CONFIDENCE:HIGH}
+      require-blocking: ${REPOGUARD_HUMAN_REVIEW_REQUIRE_BLOCKING:true}
     pipeline:
       # Total wall-clock budget for one LLM review. Layering (each backstops the
       # previous): this < RabbitMQ consumer_timeout < app.rabbit.review
@@ -76,7 +80,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:56}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:57}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}

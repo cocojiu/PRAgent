@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class ControllerAuthorizationGuardRuleTest {
 
-    private final ControllerAuthorizationGuardRule rule = new ControllerAuthorizationGuardRule(new ReviewFindingFactory());
+    private final ControllerAuthorizationGuardRule rule = new ControllerAuthorizationGuardRule(new RuleMatchFactory());
 
     @Test
     void detectsMutatingControllerMappingWithoutAuthorizationGuard() {
@@ -21,7 +21,6 @@ class ControllerAuthorizationGuardRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo(ControllerAuthorizationGuardRule.RULE_ID);
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().lineNumber()).isEqualTo(27);
     }
 
@@ -84,6 +83,13 @@ class ControllerAuthorizationGuardRuleTest {
         Map<String, ReviewRuleSettings> configuredRules,
         boolean patchHasAuthorizationGuard
     ) {
-        return new ReviewRuleLineContext(filePath, 27, line, line.trim(), configuredRules, patchHasAuthorizationGuard);
+        return new ReviewRuleLineContext(
+            filePath,
+            27,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules),
+            patchHasAuthorizationGuard
+        );
     }
 }

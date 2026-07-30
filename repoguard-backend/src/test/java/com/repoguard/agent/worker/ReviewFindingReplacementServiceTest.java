@@ -88,7 +88,7 @@ class ReviewFindingReplacementServiceTest {
         assertThat(mergedFinding.ruleId()).isEqualTo("LLM / RG-JAVA-002");
         assertThat(mergedFinding.recommendation()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.confidence()).isEqualTo("HIGH");
-        assertThat(mergedFinding.isBlocking()).isTrue();
+        assertThat(mergedFinding.isBlocking()).isFalse();
         assertThat(mergedFinding.fixExample()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.reviewDimension()).contains("LLM").contains("PROJECT_RULE");
         InOrder inOrder = org.mockito.Mockito.inOrder(reviewFindingMapper, sqlSession);

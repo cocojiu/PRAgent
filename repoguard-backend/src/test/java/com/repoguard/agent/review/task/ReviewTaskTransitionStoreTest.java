@@ -148,6 +148,37 @@ class ReviewTaskTransitionStoreTest {
     }
 
     @Test
+    void falsePositiveRecalibrationReleasesPendingHumanReviewGate() {
+        ReviewTask task = new ReviewTask();
+        task.setId(42L);
+        task.setStatus("PENDING_HUMAN_REVIEW");
+        task.setAssessmentStatus("COMPLETE");
+        task.setRiskLevel("HIGH");
+        task.setHumanReviewRequired(true);
+        task.setHumanReviewStatus("PENDING");
+        task.setHumanReviewNote("pending");
+        when(reviewTaskMapper.update(any())).thenReturn(1);
+
+        store.recalibrateAfterFindingFeedback(task, "LOW", false);
+
+        ArgumentCaptor<UpdateWrapper<ReviewTask>> wrapperCaptor = ArgumentCaptor.captor();
+        verify(reviewTaskMapper).update(wrapperCaptor.capture());
+        assertThat(wrapperCaptor.getValue().getSqlSegment()).contains("id", "status");
+        assertThat(wrapperCaptor.getValue().getSqlSet()).contains(
+            "risk_level",
+            "human_review_required",
+            "human_review_status"
+        );
+        assertThat(wrapperCaptor.getValue().getParamNameValuePairs().values())
+            .contains("PENDING_HUMAN_REVIEW", "COMPLETED", "LOW", "NOT_REQUIRED");
+        assertThat(task.getStatus()).isEqualTo("COMPLETED");
+        assertThat(task.getRiskLevel()).isEqualTo("LOW");
+        assertThat(task.getHumanReviewRequired()).isFalse();
+        assertThat(task.getHumanReviewStatus()).isEqualTo("NOT_REQUIRED");
+        assertThat(task.getHumanReviewNote()).isNull();
+    }
+
+    @Test
     void constructorRequiresMapperAndStateMachine() {
         assertThatThrownBy(() -> new ReviewTaskTransitionStore(null, new ReviewTaskStateMachine()))
             .isInstanceOf(NullPointerException.class)

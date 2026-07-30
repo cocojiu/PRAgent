@@ -10,10 +10,10 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
 
     static final String RULE_ID = "RG-API-001";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    ControllerApiTestCoverageRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    ControllerApiTestCoverageRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -22,7 +22,7 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
     }
 
     @Override
-    public List<ReviewFindingResult> evaluate(
+    public List<RuleMatch> evaluate(
         PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     ) {
@@ -33,8 +33,7 @@ class ControllerApiTestCoverageRule implements PullRequestReviewRule {
             .filter(file -> isControllerApiChange(file)
                 && ReviewRuleApplicability.isApplicable(RULE_ID, file.filename(), configuredRules))
             .findFirst()
-            .map(file -> findingFactory.finding(
-                "MEDIUM",
+            .map(file -> matchFactory.match(
                 RULE_ID,
                 file.filename(),
                 firstAddedLine(file.patch()),

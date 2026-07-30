@@ -15,8 +15,46 @@ public record ReviewTaskStatusResponse(
     String humanReviewStatus,
     String humanReviewNote,
     String humanReviewBy,
-    String humanReviewedAt
+    String humanReviewedAt,
+    String assessmentStatus
 ) {
+    public ReviewTaskStatusResponse(
+        Long id,
+        String status,
+        String riskLevel,
+        String llmStatus,
+        String duration,
+        String updatedAt,
+        String failureCategory,
+        String failureReason,
+        String failureSuggestion,
+        ReviewTimelineItem latestTimeline,
+        Boolean humanReviewRequired,
+        String humanReviewStatus,
+        String humanReviewNote,
+        String humanReviewBy,
+        String humanReviewedAt
+    ) {
+        this(
+            id,
+            status,
+            riskLevel,
+            llmStatus,
+            duration,
+            updatedAt,
+            failureCategory,
+            failureReason,
+            failureSuggestion,
+            latestTimeline,
+            humanReviewRequired,
+            humanReviewStatus,
+            humanReviewNote,
+            humanReviewBy,
+            humanReviewedAt,
+            "partial"
+        );
+    }
+
     public ReviewTaskStatusResponse(
         Long id,
         String status,
@@ -44,7 +82,8 @@ public record ReviewTaskStatusResponse(
             "not_required",
             null,
             null,
-            null
+            null,
+            "partial"
         );
     }
 }

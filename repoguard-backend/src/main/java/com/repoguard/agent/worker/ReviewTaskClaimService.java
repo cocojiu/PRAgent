@@ -67,6 +67,7 @@ public class ReviewTaskClaimService {
                 .eq("review_claimed_by", claimId)
                 .set("status", task.getStatus())
                 .set("risk_level", task.getRiskLevel())
+                .set("assessment_status", task.getAssessmentStatus())
                 .set("llm_status", task.getLlmStatus())
                 .set("llm_provider", task.getLlmProvider())
                 .set("llm_model", task.getLlmModel())

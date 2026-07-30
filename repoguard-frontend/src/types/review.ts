@@ -13,6 +13,7 @@ export type ReviewStatus =
   | "changes_requested"
   | "rejected";
 export type HumanReviewStatus = "not_required" | "pending" | "approved" | "changes_requested" | "rejected";
+export type AssessmentStatus = "complete" | "partial" | "failed" | "superseded";
 export type FindingFeedbackStatus = "unreviewed" | "valid" | "false_positive" | "fixed" | "ignored";
 export type ReviewTaskSource = "manual_input" | "github_pr_picker" | "github_webhook";
 export type ReviewTaskTriggerSource = ReviewTaskSource | "existing_reused";
@@ -27,6 +28,7 @@ export interface ReviewTask {
   branch: string;
   status: ReviewStatus;
   riskLevel: RiskLevel;
+  assessmentStatus?: AssessmentStatus | string;
   mqRetries: number;
   llmStatus: ReviewStatus;
   source: ReviewTaskSource | string;
@@ -77,6 +79,7 @@ export interface ReviewTaskStatus {
   id: number;
   status: ReviewStatus;
   riskLevel: RiskLevel;
+  assessmentStatus?: AssessmentStatus | string;
   llmStatus: ReviewStatus;
   duration: string;
   updatedAt?: string;
@@ -245,6 +248,8 @@ export interface ReviewFinding {
   fixExample?: string;
   isBlocking?: boolean;
   reviewDimension?: string;
+  enforcementMode?: "OBSERVE" | "COMMENT" | "BLOCK" | string;
+  policyReason?: string;
   feedbackStatus: FindingFeedbackStatus | string;
   feedbackNote?: string;
   feedbackBy?: string;

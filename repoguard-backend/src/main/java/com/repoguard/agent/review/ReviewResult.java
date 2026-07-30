@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Locale;
 
 public record ReviewResult(
     String riskLevel,
@@ -105,12 +104,11 @@ public record ReviewResult(
     }
 
     public ReviewResult withIncompleteInput(String reason, String promptMarker) {
-        String adjustedRisk = riskRank(riskLevel) < riskRank("MEDIUM") ? "MEDIUM" : riskLevel;
         String adjustedParseStatus = LlmStatus.from(llmStatus) == LlmStatus.FALLBACK
             ? LlmParseStatus.FALLBACK.code()
             : LlmParseStatus.PARTIAL_FALLBACK.code();
         return new ReviewResult(
-            adjustedRisk,
+            riskLevel,
             llmStatus,
             appendLimited(statusDetail, reason, 512),
             findings,
@@ -150,17 +148,4 @@ public record ReviewResult(
         return combined.substring(0, maxLength);
     }
 
-    private static int riskRank(String value) {
-        if (value == null) {
-            return 0;
-        }
-        return switch (value.trim().toUpperCase(Locale.ROOT)) {
-            case "CRITICAL" -> 5;
-            case "HIGH" -> 4;
-            case "MEDIUM" -> 3;
-            case "LOW" -> 2;
-            case "INFO" -> 1;
-            default -> 0;
-        };
-    }
 }

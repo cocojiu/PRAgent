@@ -113,7 +113,7 @@ class ReviewTaskExecutorImplTest {
     }
 
     @Test
-    void executeMovesMediumRiskTaskToPendingHumanReview() {
+    void executeCompletesMediumRiskTaskWithoutHumanReview() {
         ReviewTask task = new ReviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
@@ -137,9 +137,10 @@ class ReviewTaskExecutorImplTest {
 
         executor.execute(message());
 
-        assertThat(task.getStatus()).isEqualTo("PENDING_HUMAN_REVIEW");
-        assertThat(task.getHumanReviewRequired()).isTrue();
-        assertThat(task.getHumanReviewStatus()).isEqualTo("PENDING");
+        assertThat(task.getStatus()).isEqualTo("COMPLETED");
+        assertThat(task.getAssessmentStatus()).isEqualTo("COMPLETE");
+        assertThat(task.getHumanReviewRequired()).isFalse();
+        assertThat(task.getHumanReviewStatus()).isEqualTo("NOT_REQUIRED");
         verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
     }
@@ -354,7 +355,8 @@ class ReviewTaskExecutorImplTest {
 
         assertThat(task.getStatus()).isEqualTo("FAILED");
         assertThat(task.getLlmStatus()).isEqualTo("FAILED");
-        assertThat(task.getRiskLevel()).isEqualTo("HIGH");
+        assertThat(task.getRiskLevel()).isEqualTo("INFO");
+        assertThat(task.getAssessmentStatus()).isEqualTo("FAILED");
         verify(reviewTaskMapper, times(2)).update(any());
         verify(reviewTaskMapper, never()).updateById(task);
         ArgumentCaptor<ReviewTimeline> timelineCaptor = ArgumentCaptor.forClass(ReviewTimeline.class);

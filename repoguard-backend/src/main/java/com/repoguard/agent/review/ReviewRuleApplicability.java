@@ -16,7 +16,7 @@ final class ReviewRuleApplicability {
         Map<String, ReviewRuleSettings> rules = configuredRules == null ? Map.of() : configuredRules;
         ReviewRuleSettings rule = rules.get(ruleId);
         if (rule == null) {
-            return true;
+            return false;
         }
         if (rule.disabled()) {
             return false;

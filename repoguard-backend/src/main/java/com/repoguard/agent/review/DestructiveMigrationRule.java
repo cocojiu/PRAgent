@@ -9,10 +9,10 @@ class DestructiveMigrationRule implements ReviewRule {
 
     static final String RULE_ID = "RG-DB-002";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    DestructiveMigrationRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    DestructiveMigrationRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -21,12 +21,11 @@ class DestructiveMigrationRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !containsDestructiveMigration(context)) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "HIGH",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

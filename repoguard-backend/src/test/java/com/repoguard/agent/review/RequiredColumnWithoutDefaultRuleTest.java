@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class RequiredColumnWithoutDefaultRuleTest {
 
-    private final RequiredColumnWithoutDefaultRule rule = new RequiredColumnWithoutDefaultRule(new ReviewFindingFactory());
+    private final RequiredColumnWithoutDefaultRule rule = new RequiredColumnWithoutDefaultRule(new RuleMatchFactory());
 
     @Test
     void evaluatesRequiredColumnWithoutDefault() {
@@ -20,7 +20,6 @@ class RequiredColumnWithoutDefaultRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-DB-003");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/main/resources/db/migration/V32__add_required_column.sql");
         assertThat(finding.get().lineNumber()).isEqualTo(9);
         assertThat(finding.get().reviewDimension()).isEqualTo("DATABASE_COMPATIBILITY_RULE");
@@ -74,6 +73,12 @@ class RequiredColumnWithoutDefaultRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 9, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            9,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }
