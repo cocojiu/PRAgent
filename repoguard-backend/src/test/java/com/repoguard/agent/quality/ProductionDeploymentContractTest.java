@@ -58,6 +58,20 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void applicationImagesAlwaysImportComposeConfigtreeForRollbackCompatibility() throws IOException {
+        Map<String, Object> services = services();
+        Map<String, Object> backendEnvironment =
+            map(map(services.get("backend")).get("environment"));
+        Map<String, Object> workerEnvironment =
+            map(map(services.get("backend-worker")).get("environment"));
+
+        assertThat(backendEnvironment)
+            .containsEntry("SPRING_CONFIG_IMPORT", "optional:configtree:/run/secrets/");
+        assertThat(workerEnvironment)
+            .containsEntry("SPRING_CONFIG_IMPORT", "optional:configtree:/run/secrets/");
+    }
+
+    @Test
     void brokerTimeoutStaysBetweenPipelineBudgetAndRecoveryThreshold() throws IOException {
         Map<String, Object> services = services();
         Map<String, Object> backendEnvironment =
@@ -134,6 +148,14 @@ class ProductionDeploymentContractTest {
         assertThat(secretMountPreflight).isLessThan(rollbackArmed);
         assertThat(script)
             .contains("compose up -d --no-deps --force-recreate rabbitmq")
+            .contains("compose up -d --no-deps --force-recreate frontend")
+            .contains("wait_service_health frontend 30")
+            .contains("compose up -d --no-deps --force-recreate caddy")
+            .contains("wait_service_health caddy 30")
+            .contains("restore_deployment_assets false")
+            .contains(
+                "Keeping the validated candidate Compose model for backward-compatible image rollback."
+            )
             .contains("$DEPLOY_STATE_DIR/rabbitmq.conf.sha256")
             .contains("record_rabbitmq_config_digest")
             .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE")
