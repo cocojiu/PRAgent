@@ -37,6 +37,8 @@ class LlmReviewPipeline {
     private final Duration pipelineBudget;
     private final Executor llmChunkExecutor;
     private final LlmHighRiskVerificationService verificationService;
+    private final ReviewStrategyEnforcementGate strategyEnforcementGate =
+        new ReviewStrategyEnforcementGate();
 
     LlmReviewPipeline(
         RuleBasedPullRequestReviewer ruleBasedReviewer,
@@ -121,18 +123,24 @@ class LlmReviewPipeline {
         try {
             for (ReviewPipelineStage stage : stages) {
                 if (state.completed()) {
-                    return state.result();
+                    return applyStrategyEnforcement(context, state.result());
                 }
                 state = stage.apply(state);
             }
-            return state.result();
+            return applyStrategyEnforcement(context, state.result());
         } catch (RuntimeException ex) {
             ReviewPolicySettings settings = context.settings();
             if (settings != null && Boolean.TRUE.equals(settings.fallbackToRules())) {
-                return fallbackReview(context, ex);
+                return applyStrategyEnforcement(context, fallbackReview(context, ex));
             }
             throw ex;
         }
+    }
+
+    private ReviewResult applyStrategyEnforcement(ReviewPipelineContext context, ReviewResult result) {
+        ReviewPolicySettings settings = context.settings();
+        ReviewStrategyRelease release = settings == null ? null : settings.strategyRelease();
+        return strategyEnforcementGate.apply(result, release);
     }
 
     private class LlmReadinessStage implements ReviewPipelineStage {

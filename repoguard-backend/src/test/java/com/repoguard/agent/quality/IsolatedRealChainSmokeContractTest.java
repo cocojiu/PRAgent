@@ -106,6 +106,7 @@ class IsolatedRealChainSmokeContractTest {
             .contains("c8bcd39760bf8ce75128873b61acf7793fe0b372")
             .doesNotContain("3393f487dcec9cb914e5fbe9be0364dd54ea4c78")
             .contains("smoke_finding=")
+            .contains("smoke_observe_violations=")
             .contains("f.feedback_status_norm")
             .doesNotContain("f.message")
             .doesNotContain("f.file_path")

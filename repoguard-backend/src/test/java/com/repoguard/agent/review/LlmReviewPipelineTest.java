@@ -92,6 +92,69 @@ class LlmReviewPipelineTest {
     }
 
     @Test
+    void observeStrategyCapsMergedRuleFindingBeforeCompletion() {
+        PullRequestDiff diff = diff();
+        when(ruleBasedReviewer.review(diff)).thenReturn(
+            ReviewResult.completed("HIGH", List.of(blockingRuleFinding()))
+        );
+        ReviewStrategyRelease observeRelease = release(EnforcementMode.OBSERVE, true);
+        LlmReviewCaller caller = (settings, task, callDiff) -> new LlmCallResult(
+            emptyReviewJson(),
+            20,
+            5,
+            25
+        );
+
+        ReviewResult result = pipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            fallbackReasonClassifier,
+            diffChunker
+        ).execute(context(diff, settings(true, observeRelease), caller));
+
+        assertThat(result.riskLevel()).isEqualTo("INFO");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+            assertThat(finding.isBlocking()).isFalse();
+            assertThat(finding.blockingCandidate()).isTrue();
+            assertThat(finding.policyReason()).contains("strategy_enforcement_cap_observe");
+        });
+    }
+
+    @Test
+    void observeStrategyAlsoCapsEarlyRulesFallback() {
+        PullRequestDiff diff = diff();
+        when(ruleBasedReviewer.review(diff)).thenReturn(
+            ReviewResult.completed("HIGH", List.of(blockingRuleFinding()))
+        );
+        LlmReviewCaller caller = (settings, task, callDiff) -> {
+            throw new AssertionError("LLM must not be called when settings are empty");
+        };
+
+        ReviewResult result = pipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            fallbackReasonClassifier,
+            diffChunker
+        ).execute(context(diff, ReviewPolicySettings.empty(), caller));
+
+        assertThat(result.llmStatus()).isEqualTo("FALLBACK");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+            assertThat(finding.isBlocking()).isFalse();
+        });
+    }
+
+    @Test
     void executeClassifiesInternalFailureAndLogsErrorWithStackTrace() {
         PullRequestDiff diff = diff();
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("LOW", List.of()));
@@ -470,6 +533,13 @@ class LlmReviewPipelineTest {
     }
 
     private ReviewPolicySettings settings(boolean fallbackToRules) {
+        return settings(fallbackToRules, ReviewStrategyRelease.legacyRuntimeDefaults());
+    }
+
+    private ReviewPolicySettings settings(
+        boolean fallbackToRules,
+        ReviewStrategyRelease release
+    ) {
         return new ReviewPolicySettings(
             true,
             true,
@@ -487,8 +557,53 @@ class LlmReviewPipelineTest {
             4,
             450,
             BigDecimal.ONE,
-            BigDecimal.valueOf(4)
+            BigDecimal.valueOf(4),
+            release
         );
+    }
+
+    private ReviewStrategyRelease release(EnforcementMode mode, boolean replayVerified) {
+        return new ReviewStrategyRelease(
+            17,
+            1,
+            LlmReviewVersions.PROMPT,
+            LlmReviewVersions.CONTEXT,
+            LlmReviewVersions.SCHEMA,
+            LlmReviewVersions.VERIFIER,
+            ServerRiskAggregator.VERSION,
+            mode,
+            replayVerified
+        );
+    }
+
+    private ReviewFindingResult blockingRuleFinding() {
+        return new ReviewFindingResult(
+            "HIGH",
+            "RULE",
+            "RG-AUTH-001",
+            "src/AController.java",
+            1,
+            "missing authorization",
+            "add authorization",
+            "HIGH",
+            "the added write endpoint has no guard",
+            "unauthorized state change",
+            "add @RequireRole",
+            true,
+            "SECURITY",
+            "BLOCK",
+            "block_policy_satisfied"
+        );
+    }
+
+    private String emptyReviewJson() {
+        return """
+            {
+              "schemaVersion": "review-schema-v2",
+              "riskLevel": "INFO",
+              "findings": []
+            }
+            """;
     }
 
     private LlmReviewResultParser parser() {

@@ -152,7 +152,7 @@ class LlmPullRequestReviewerTest {
 
         assertThat(result.llmStatus()).isEqualTo("FALLBACK");
         assertThat(result.statusDetail()).contains("llm_circuit_open");
-        assertThat(result.riskLevel()).isEqualTo("LOW");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
         assertThat(result.llmProvider()).isEqualTo("openai");
         assertThat(result.llmModel()).isEqualTo("gpt-test");
         assertThat(result.llmDurationMs()).isNotNull();
@@ -331,7 +331,7 @@ class LlmPullRequestReviewerTest {
 
             assertThat(result.llmStatus()).isEqualTo("FALLBACK");
             assertThat(result.statusDetail()).contains("llm_rate_limited", "status=429");
-            assertThat(result.riskLevel()).isEqualTo("LOW");
+            assertThat(result.riskLevel()).isEqualTo("INFO");
         } finally {
             server.stop(0);
         }

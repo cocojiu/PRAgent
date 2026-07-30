@@ -6,7 +6,7 @@ on:
       max_total_tokens:
         description: Stop before starting another task after this cumulative token budget is reached
         required: true
-        default: "15000"
+        default: "25000"
         type: string
       backup_path:
         description: Optional absolute pre-D1 database backup path
@@ -265,7 +265,7 @@ jobs:
               printf 'smoke_exit_status=%s\n' "${smoke_exit_status}"
               printf 'policy_probe_exit_status=%s\n' "${policy_probe_exit_status}"
               LC_ALL=C grep -E \
-                '^smoke_(backend_revision=|review_policy_source=|stale_tasks_neutralized=|created |result=|progress |summary |stop=|finding=|finding_count=|cleanup )' \
+                '^smoke_(backend_revision=|review_policy_source=|stale_tasks_neutralized=|created |result=|progress |summary |stop=|finding=|finding_count=|observe_violations=|cleanup )' \
                 "${smoke_output_log}" \
                 | LC_ALL=C grep -E '^[a-zA-Z0-9_.+ =|:/-]+$' || true
               LC_ALL=C grep -E '^smoke_strategy_policy=[a-zA-Z0-9_.|/-]+$' \
@@ -512,6 +512,14 @@ jobs:
               printf '%s\n' "${finding_metadata}" | awk 'NF { count++ } END { print count + 0 }'
             )"
             echo "smoke_finding_count=${finding_count}"
+            observe_violations="$(
+              printf '%s\n' "${finding_metadata}" \
+                | awk -F'|' 'NF && ($7 != "0" || toupper($8) != "OBSERVE") { count++ } END { print count + 0 }'
+            )"
+            echo "smoke_observe_violations=${observe_violations}"
+            if [ "${observe_violations}" -gt 0 ]; then
+              task_status=1
+            fi
             exit "${task_status}"
           fi
           exec "${REAL_BASH_BIN}" "$@"
