@@ -351,7 +351,7 @@ class ProductionConfigurationContractTest {
                 .contains("encryption_key=\"CI!1-$(openssl rand -hex 32)\"")
                 .contains("install -d -m 700 \"${secret_dir}\"")
                 .contains("printf '%s' \"${value}\" > \"${path}\"")
-                .contains("chmod 600 \"${path}\"")
+                .contains("chmod 444 \"${path}\"")
                 .contains("write_secret MYSQL_ROOT_PASSWORD_FILE mysql.root-password")
                 .contains("write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret")
                 .contains("write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret")
@@ -360,6 +360,10 @@ class ProductionConfigurationContractTest {
                 .doesNotContain("Validation-Admin-Key-2026")
                 .doesNotContain("Validation-Webhook-Secret-2026");
         }
+        assertThat(release)
+            .contains("name: Verify non-root backend secret mount access")
+            .contains("test \"$(id -u)\" != \"0\"")
+            .contains("/run/secrets/app.security.admin-api-key.key");
         assertThat(prQuality)
             .contains("Generate ephemeral integration secrets")
             .contains("REPOGUARD_AUTH_TOKEN_SECRET=$(openssl rand -hex 32)")
@@ -405,7 +409,7 @@ class ProductionConfigurationContractTest {
             .contains("openssl rand -base64 48")
             .contains("/dev/urandom")
             .contains("printf '%s' \"$value\" > \"$target\"")
-            .contains("chmod 600 \"$target\"")
+            .contains("chmod 444 \"$target\"")
             .contains("MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password")
             .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE=./secrets/repoguard.security.encryption-key")
             .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret")

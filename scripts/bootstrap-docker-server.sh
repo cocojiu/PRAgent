@@ -121,7 +121,10 @@ write_secret_if_missing() {
   else
     printf '%s' "$value" > "$target"
   fi
-  chmod 600 "$target"
+  # Compose bind-mounts local secrets without remapping ownership. Keep the
+  # parent directory private and make the file readable by the image's
+  # non-root runtime user.
+  chmod 444 "$target"
 }
 
 write_initial_secret_files() {

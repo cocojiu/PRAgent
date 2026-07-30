@@ -50,6 +50,7 @@ parse_compose_file="${work_directory}/compose.yml"
 parsed_environment_file="${work_directory}/environment"
 reference_file="${work_directory}/references"
 move_plan_file="${work_directory}/move-plan"
+mode_plan_file="${work_directory}/mode-plan"
 state_directory="$DEPLOY_STATE_DIR"
 case "$state_directory" in
   /*) ;;
@@ -142,9 +143,9 @@ validate_secret_file() {
 
   validation_file_mode="$(stat -c '%a' "$validation_secret_path")"
   case "$validation_file_mode" in
-    400|600) ;;
+    400|444|600) ;;
     *)
-      echo "$validation_setting must use mode 0400 or 0600; found $validation_file_mode on $validation_secret_path" >&2
+      echo "$validation_setting must use mode 0400, 0444, or 0600 during migration; found $validation_file_mode on $validation_secret_path" >&2
       return 1
       ;;
   esac
@@ -167,6 +168,27 @@ validate_secret_file() {
       return 1
       ;;
   esac
+}
+
+schedule_compose_secret_mode() {
+  mode_schedule_setting="$1"
+  mode_schedule_path="$2"
+  if [ "$(stat -c '%a' "$mode_schedule_path")" != "444" ]; then
+    printf '%s|%s\n' "$mode_schedule_path" "$mode_schedule_setting" >> "$mode_plan_file"
+    permission_changes_present=true
+  fi
+}
+
+apply_compose_secret_modes() {
+  while IFS='|' read -r mode_target_path mode_target_setting; do
+    [ -n "$mode_target_path" ] || continue
+    # Docker Compose implements local file-backed secrets as bind mounts. The
+    # non-root application user therefore needs the source file to be
+    # world-readable; the private 0500/0700 parent directory remains the host
+    # confidentiality boundary.
+    chmod 444 "$mode_target_path"
+    validate_secret_file "$mode_target_setting" "$mode_target_path"
+  done < "$mode_plan_file"
 }
 
 ensure_private_directory() {
@@ -224,8 +246,10 @@ rewrite_env() {
 }
 
 migration_changes_present=false
+permission_changes_present=false
 : > "$reference_file"
 : > "$move_plan_file"
+: > "$mode_plan_file"
 
 while IFS='|' read -r legacy_key file_key default_reference; do
   legacy_value=""
@@ -258,11 +282,13 @@ while IFS='|' read -r legacy_key file_key default_reference; do
       migration_changes_present=true
       if [ -e "$secret_path" ] || [ -L "$secret_path" ]; then
         validate_secret_file "$file_key" "$secret_path"
+        schedule_compose_secret_mode "$file_key" "$secret_path"
         continue
       fi
       generate_missing_salt=true
     else
       validate_secret_file "$file_key" "$secret_path"
+      schedule_compose_secret_mode "$file_key" "$secret_path"
       continue
     fi
   fi
@@ -287,6 +313,7 @@ while IFS='|' read -r legacy_key file_key default_reference; do
       echo "Existing secret file does not match the active legacy value: $file_key" >&2
       exit 1
     fi
+    schedule_compose_secret_mode "$file_key" "$secret_path"
     rm -f "$candidate"
     continue
   fi
@@ -303,25 +330,42 @@ while IFS='|' read -r legacy_key file_key default_reference; do
   printf '%s|%s|%s\n' "$candidate" "$secret_path" "$file_key" >> "$move_plan_file"
 done < "$mapping_file"
 
-if [ "$migration_changes_present" = "false" ]; then
+if [ "$migration_changes_present" = "false" ] \
+  && [ "$permission_changes_present" = "false" ]; then
   rm -f "$state_marker"
   echo "Production secret-file migration is already complete."
   exit 0
 fi
 
 if [ "$MODE" = "prepare" ]; then
+  if [ "$migration_changes_present" = "false" ]; then
+    apply_compose_secret_modes
+    rm -f "$state_marker"
+    echo "Normalized production secret files for non-root Compose bind mounts."
+    exit 0
+  fi
+
   backup_directory="$(create_env_backup)"
   while IFS='|' read -r candidate secret_path file_key; do
     mv "$candidate" "$secret_path"
-    chmod 600 "$secret_path"
+    chmod 444 "$secret_path"
     validate_secret_file "$file_key" "$secret_path"
   done < "$move_plan_file"
+  apply_compose_secret_modes
   rewrite_env true "$backup_directory"
   echo "Prepared production secret files without removing legacy fallback keys."
   echo "Legacy fallback keys will be removed only after deployment health verification."
   exit 0
 fi
 
+if [ "$migration_changes_present" = "false" ]; then
+  apply_compose_secret_modes
+  rm -f "$state_marker"
+  echo "Normalized production secret files for non-root Compose bind mounts."
+  exit 0
+fi
+
+apply_compose_secret_modes
 backup_directory=""
 if [ -f "$state_marker" ]; then
   backup_directory="$(sed -n 's/^backup_directory=//p' "$state_marker" | tail -n 1)"

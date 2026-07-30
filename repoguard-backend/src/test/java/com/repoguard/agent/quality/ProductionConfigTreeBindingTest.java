@@ -49,17 +49,10 @@ class ProductionConfigTreeBindingTest {
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(EmptyConfiguration.class)
             .web(WebApplicationType.NONE)
             .environment(isolatedEnvironment)
-            .properties(
-                "spring.profiles.active=test",
-                "spring.config.import=" + configTree,
-                "spring.datasource.password=test-fallback-value",
-                "repoguard.security.encryption-key=test-fallback-value",
-                "repoguard.security.encryption-salt=test-fallback-value",
-                "repoguard.auth.token-secret=test-fallback-value",
-                "app.security.admin-api-key.key=test-fallback-value",
-                "app.github.webhook.secret=test-fallback-value"
-            )
-            .run()) {
+            .run(
+                "--spring.profiles.active=prod",
+                "--spring.config.import=" + configTree
+            )) {
             secrets.forEach((property, expected) -> assertThat(context.getEnvironment().getProperty(property))
                 .as("configtree property %s", property)
                 .isEqualTo(expected));
