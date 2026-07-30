@@ -33,6 +33,11 @@ on:
         required: true
         default: false
         type: boolean
+      initialize_missing_encryption_salt:
+        description: Initialize the salt introduced after the currently deployed legacy release
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -122,7 +127,6 @@ jobs:
           mysql_root_password="$(openssl rand -hex 32)"
           mysql_password="$(openssl rand -hex 32)"
           encryption_key="CI!1-$(openssl rand -hex 32)"
-          encryption_salt="$(openssl rand -hex 32)"
           auth_token_secret="$(openssl rand -hex 32)"
           admin_api_key="$(openssl rand -hex 32)"
           webhook_secret="$(openssl rand -hex 32)"
@@ -130,7 +134,6 @@ jobs:
             "${mysql_root_password}" \
             "${mysql_password}" \
             "${encryption_key}" \
-            "${encryption_salt}" \
             "${auth_token_secret}" \
             "${admin_api_key}" \
             "${webhook_secret}"; do
@@ -141,16 +144,27 @@ jobs:
             printf 'MYSQL_ROOT_PASSWORD=%s\n' "${mysql_root_password}"
             printf 'MYSQL_PASSWORD=%s\n' "${mysql_password}"
             printf 'REPOGUARD_SECURITY_ENCRYPTION_KEY=%s\n' "${encryption_key}"
-            printf 'REPOGUARD_SECURITY_ENCRYPTION_SALT=%s\n' "${encryption_salt}"
             printf 'REPOGUARD_AUTH_TOKEN_SECRET=%s\n' "${auth_token_secret}"
             printf 'REPOGUARD_ADMIN_API_KEY=%s\n' "${admin_api_key}"
             printf 'REPOGUARD_GITHUB_WEBHOOK_SECRET=%s\n' "${webhook_secret}"
           } > "${legacy_env}"
           chmod 600 "${legacy_env}"
 
+          if ENV_FILE="${legacy_env}" \
+            DEPLOY_STATE_DIR="${state_dir}" \
+            sh scripts/migrate-prod-secret-files.sh prepare \
+              > "${migration_dir}/expected-failure.log" 2>&1; then
+            echo "Missing encryption salt unexpectedly passed without explicit initialization." >&2
+            exit 1
+          fi
+          grep -q \
+            'Neither REPOGUARD_SECURITY_ENCRYPTION_SALT nor REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE is configured.' \
+            "${migration_dir}/expected-failure.log"
+
           MYSQL_ROOT_PASSWORD=ambient-value-must-not-win \
             ENV_FILE="${legacy_env}" \
             DEPLOY_STATE_DIR="${state_dir}" \
+            INITIALIZE_MISSING_ENCRYPTION_SALT=true \
             sh scripts/migrate-prod-secret-files.sh prepare
 
           assert_secret() {
@@ -163,7 +177,8 @@ jobs:
           assert_secret "${mysql_root_password}" "${migration_dir}/secrets/mysql.root-password"
           assert_secret "${mysql_password}" "${migration_dir}/secrets/spring.datasource.password"
           assert_secret "${encryption_key}" "${migration_dir}/secrets/repoguard.security.encryption-key"
-          assert_secret "${encryption_salt}" "${migration_dir}/secrets/repoguard.security.encryption-salt"
+          test "$(stat -c '%a' "${migration_dir}/secrets/repoguard.security.encryption-salt")" = "600"
+          grep -Eq '^[0-9a-f]{64}$' "${migration_dir}/secrets/repoguard.security.encryption-salt"
           assert_secret "${auth_token_secret}" "${migration_dir}/secrets/repoguard.auth.token-secret"
           assert_secret "${admin_api_key}" "${migration_dir}/secrets/app.security.admin-api-key.key"
           assert_secret "${webhook_secret}" "${migration_dir}/secrets/app.github.webhook.secret"
@@ -173,6 +188,7 @@ jobs:
 
           ENV_FILE="${legacy_env}" \
             DEPLOY_STATE_DIR="${state_dir}" \
+            INITIALIZE_MISSING_ENCRYPTION_SALT=true \
             sh scripts/migrate-prod-secret-files.sh finalize
           ! grep -Eq '^(MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|REPOGUARD_SECURITY_ENCRYPTION_KEY|REPOGUARD_SECURITY_ENCRYPTION_SALT|REPOGUARD_AUTH_TOKEN_SECRET|REPOGUARD_ADMIN_API_KEY|REPOGUARD_GITHUB_WEBHOOK_SECRET)=' "${legacy_env}"
           grep -q '^REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret$' "${legacy_env}"
@@ -487,6 +503,7 @@ jobs:
           HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL }}
           IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
           MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}
+          INITIALIZE_MISSING_ENCRYPTION_SALT: ${{ inputs.initialize_missing_encryption_salt }}
           REPOGUARD_FRONTEND_SERVER_NAME: ${{ secrets.REPOGUARD_FRONTEND_SERVER_NAME || vars.REPOGUARD_FRONTEND_SERVER_NAME }}
         run: |
           test -n "${ALIYUN_REGISTRY_PASSWORD}" || { echo "Missing ALIYUN_REGISTRY_PASSWORD secret"; exit 1; }
@@ -524,4 +541,5 @@ jobs:
              HEALTH_URL='${health_url}' \
              DEPLOY_ASSET_BACKUP_DIR='${DEPLOY_ASSET_BACKUP_DIR}' \
              MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}' \
+             INITIALIZE_MISSING_ENCRYPTION_SALT='${INITIALIZE_MISSING_ENCRYPTION_SALT}' \
              sh scripts/deploy-prod.sh"

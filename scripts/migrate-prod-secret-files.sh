@@ -5,11 +5,20 @@ umask 077
 MODE="${1:-prepare}"
 ENV_FILE="${ENV_FILE:-.env}"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
+INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
 
 case "$MODE" in
   prepare|finalize) ;;
   *)
     echo "Usage: $0 prepare|finalize" >&2
+    exit 1
+    ;;
+esac
+
+case "$INITIALIZE_MISSING_ENCRYPTION_SALT" in
+  true|false) ;;
+  *)
+    echo "INITIALIZE_MISSING_ENCRYPTION_SALT must be true or false." >&2
     exit 1
     ;;
 esac
@@ -20,6 +29,12 @@ for required_command in awk basename cat chmod cmp cp date dirname docker grep i
     exit 1
   fi
 done
+
+if [ "$INITIALIZE_MISSING_ENCRYPTION_SALT" = "true" ] \
+  && ! command -v openssl >/dev/null 2>&1; then
+  echo "Missing required command for encryption salt initialization: openssl" >&2
+  exit 1
+fi
 
 if [ ! -f "$ENV_FILE" ] || [ ! -r "$ENV_FILE" ] || [ -L "$ENV_FILE" ]; then
   echo "ENV_FILE must be a readable regular file, not a symlink: $ENV_FILE" >&2
@@ -208,13 +223,14 @@ rewrite_env() {
   fi
 }
 
-legacy_values_present=false
+migration_changes_present=false
 : > "$reference_file"
 : > "$move_plan_file"
 
 while IFS='|' read -r legacy_key file_key default_reference; do
   legacy_value=""
   legacy_value_is_present=false
+  generate_missing_salt=false
   if parsed_key_exists "$legacy_key"; then
     legacy_value="$(parsed_value "$legacy_key")"
     legacy_value_is_present=true
@@ -234,16 +250,34 @@ while IFS='|' read -r legacy_key file_key default_reference; do
 
   if [ "$legacy_value_is_present" = "false" ]; then
     if [ "$reference_was_missing" = "true" ]; then
-      echo "Neither $legacy_key nor $file_key is configured." >&2
-      exit 1
+      if [ "$legacy_key" != "REPOGUARD_SECURITY_ENCRYPTION_SALT" ] \
+        || [ "$INITIALIZE_MISSING_ENCRYPTION_SALT" != "true" ]; then
+        echo "Neither $legacy_key nor $file_key is configured." >&2
+        exit 1
+      fi
+      migration_changes_present=true
+      if [ -e "$secret_path" ] || [ -L "$secret_path" ]; then
+        validate_secret_file "$file_key" "$secret_path"
+        continue
+      fi
+      generate_missing_salt=true
+    else
+      validate_secret_file "$file_key" "$secret_path"
+      continue
     fi
-    validate_secret_file "$file_key" "$secret_path"
-    continue
   fi
 
-  legacy_values_present=true
+  migration_changes_present=true
   candidate="${work_directory}/${file_key}"
-  printf '%s' "$legacy_value" > "$candidate"
+  if [ "$generate_missing_salt" = "true" ]; then
+    openssl rand -hex 32 > "$candidate"
+    # openssl terminates text output with LF; secret files must not.
+    salt_without_newline="${work_directory}/generated-encryption-salt"
+    tr -d '\r\n' < "$candidate" > "$salt_without_newline"
+    mv "$salt_without_newline" "$candidate"
+  else
+    printf '%s' "$legacy_value" > "$candidate"
+  fi
   chmod 600 "$candidate"
   validate_secret_file "$file_key" "$candidate"
 
@@ -269,7 +303,7 @@ while IFS='|' read -r legacy_key file_key default_reference; do
   printf '%s|%s|%s\n' "$candidate" "$secret_path" "$file_key" >> "$move_plan_file"
 done < "$mapping_file"
 
-if [ "$legacy_values_present" = "false" ]; then
+if [ "$migration_changes_present" = "false" ]; then
   rm -f "$state_marker"
   echo "Production secret-file migration is already complete."
   exit 0
