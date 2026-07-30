@@ -405,6 +405,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 20:33:40（Asia/Shanghai）：完成审查能力与风险校准专项 Q3 LLM 审查能力升级批次。Prompt 升级为 `review-prompt-v2`，严格要求只报告本次变更新引入且有证据的问题，固定输出 `review-schema-v2` 的 issueType、severity、confidence、主新增行锚点、关联文件、evidence、preconditions、impact、recommendation、reviewDimension 和 blockingCandidate；模型输出的 `isBlocking` 被 Schema 修复与映射链路显式忽略，缺字段、低置信、无有效新增行或缺少精确 head 上下文的 HIGH/CRITICAL 候选会在服务端预检降为 MEDIUM/OBSERVE。新增 `review-context-v2` 上下文构建器，按数据库迁移、安全、运行配置和交付链路风险优先级分配字符预算，生成带稳定文件路径及行号范围的完整方法/类切片，并在语义分块中保留完整文件上下文，关联本次变更中的接口、直接调用方、测试和关键配置；测试文件仅作为 LLM 佐证上下文读取，既有规则生产路径排除语义不变。启用规则的描述、正例与误报指引被压缩进策略上下文，过期 head、读取失败和预算截断均形成显式限制，Prompt、上下文、Schema 与验证器版本写入审查摘要。新增 `high-risk-verifier-v1` 对抗式二次验证，仅处理通过预检的 HIGH/CRITICAL 或 blockingCandidate，复查证据、前置条件、新增行和已有保护；拒绝、不确定、解析失败、调用不可用、预算耗尽和候选超限均安全降级而不丢失 Finding，验证通过仍由 `FindingPolicyResolver` 应用服务端处置策略，默认 COMMENT 且不能自行阻断，规则与 LLM 共识只提高置信度、不绕过策略。单块与并行分块流水线统一累计生成/验证 token、成本和验证计数，LLM 初始调用不可用时的规则 fallback 与分块局部降级保持有效。Q3 定向 98 项及解析/replay 修复回归 42 项测试通过；JDK 25 + Maven Wrapper 干净全量 `clean verify` 共 2237 项测试通过（0 失败、0 错误、7 跳过，816 个类 JaCoCo 门禁通过），完整 production-readiness 后端切片 80 项、前端 35 个测试文件共 136 项测试、类型检查、Lint、生产构建与原包体预算全部通过；待推送后由精确提交 CI 执行真实 MySQL/RabbitMQ 生产上下文、镜像与安全验证。
 
+- 2026-07-30 20:46:37（Asia/Shanghai）：完成 Q3 云端生产上下文门禁修复。首次精确提交 CI 的真实 MySQL/RabbitMQ 用例暴露 `LlmHighRiskVerificationService` 同时包含生产与测试专用构造路径、但未显式声明 Spring 注入构造器，导致容器回退查找无参构造器；现为生产构造器增加唯一 `@Autowired` 标记，并把该包级服务纳入 `SpringBeanConstructorSelectionTest` 架构守卫。定向 6 项回归、JDK 25 干净全量 `clean verify` 2237 项测试（0 失败、0 错误、7 跳过，816 个类 JaCoCo 门禁）及完整 production-readiness（后端 80 项、前端 136 项、类型检查、Lint、生产构建与包体预算）均通过，待新精确提交 CI 复验生产上下文。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
