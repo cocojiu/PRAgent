@@ -28,6 +28,11 @@ on:
         required: true
         default: false
         type: boolean
+      migrate_legacy_secret_files:
+        description: Preserve active inline values in secret files before the first configtree deployment
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -104,6 +109,78 @@ jobs:
           write_secret REPOGUARD_AUTH_TOKEN_SECRET_FILE repoguard.auth.token-secret "${auth_token_secret}"
           write_secret REPOGUARD_ADMIN_API_KEY_FILE app.security.admin-api-key.key "${admin_api_key}"
           write_secret REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE app.github.webhook.secret "${webhook_secret}"
+
+      - name: Exercise legacy production secret migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration_dir="${RUNNER_TEMP}/repoguard-secret-migration"
+          install -d -m 700 "${migration_dir}"
+          legacy_env="${migration_dir}/.env"
+          state_dir="${migration_dir}/state"
+
+          mysql_root_password="$(openssl rand -hex 32)"
+          mysql_password="$(openssl rand -hex 32)"
+          encryption_key="CI!1-$(openssl rand -hex 32)"
+          encryption_salt="$(openssl rand -hex 32)"
+          auth_token_secret="$(openssl rand -hex 32)"
+          admin_api_key="$(openssl rand -hex 32)"
+          webhook_secret="$(openssl rand -hex 32)"
+          for value in \
+            "${mysql_root_password}" \
+            "${mysql_password}" \
+            "${encryption_key}" \
+            "${encryption_salt}" \
+            "${auth_token_secret}" \
+            "${admin_api_key}" \
+            "${webhook_secret}"; do
+            echo "::add-mask::${value}"
+          done
+
+          {
+            printf 'MYSQL_ROOT_PASSWORD=%s\n' "${mysql_root_password}"
+            printf 'MYSQL_PASSWORD=%s\n' "${mysql_password}"
+            printf 'REPOGUARD_SECURITY_ENCRYPTION_KEY=%s\n' "${encryption_key}"
+            printf 'REPOGUARD_SECURITY_ENCRYPTION_SALT=%s\n' "${encryption_salt}"
+            printf 'REPOGUARD_AUTH_TOKEN_SECRET=%s\n' "${auth_token_secret}"
+            printf 'REPOGUARD_ADMIN_API_KEY=%s\n' "${admin_api_key}"
+            printf 'REPOGUARD_GITHUB_WEBHOOK_SECRET=%s\n' "${webhook_secret}"
+          } > "${legacy_env}"
+          chmod 600 "${legacy_env}"
+
+          MYSQL_ROOT_PASSWORD=ambient-value-must-not-win \
+            ENV_FILE="${legacy_env}" \
+            DEPLOY_STATE_DIR="${state_dir}" \
+            sh scripts/migrate-prod-secret-files.sh prepare
+
+          assert_secret() {
+            expected="$1"
+            path="$2"
+            test "$(stat -c '%a' "${path}")" = "600"
+            printf '%s' "${expected}" | cmp - "${path}"
+          }
+          test "$(stat -c '%a' "${migration_dir}/secrets")" = "700"
+          assert_secret "${mysql_root_password}" "${migration_dir}/secrets/mysql.root-password"
+          assert_secret "${mysql_password}" "${migration_dir}/secrets/spring.datasource.password"
+          assert_secret "${encryption_key}" "${migration_dir}/secrets/repoguard.security.encryption-key"
+          assert_secret "${encryption_salt}" "${migration_dir}/secrets/repoguard.security.encryption-salt"
+          assert_secret "${auth_token_secret}" "${migration_dir}/secrets/repoguard.auth.token-secret"
+          assert_secret "${admin_api_key}" "${migration_dir}/secrets/app.security.admin-api-key.key"
+          assert_secret "${webhook_secret}" "${migration_dir}/secrets/app.github.webhook.secret"
+          grep -q '^MYSQL_ROOT_PASSWORD=' "${legacy_env}"
+          grep -q '^MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password$' "${legacy_env}"
+          test -s "${state_dir}/secret-file-migration.pending"
+
+          ENV_FILE="${legacy_env}" \
+            DEPLOY_STATE_DIR="${state_dir}" \
+            sh scripts/migrate-prod-secret-files.sh finalize
+          ! grep -Eq '^(MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|REPOGUARD_SECURITY_ENCRYPTION_KEY|REPOGUARD_SECURITY_ENCRYPTION_SALT|REPOGUARD_AUTH_TOKEN_SECRET|REPOGUARD_ADMIN_API_KEY|REPOGUARD_GITHUB_WEBHOOK_SECRET)=' "${legacy_env}"
+          grep -q '^REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE=./secrets/app.github.webhook.secret$' "${legacy_env}"
+          test ! -e "${state_dir}/secret-file-migration.pending"
+
+          ENV_FILE="${legacy_env}" \
+            DEPLOY_STATE_DIR="${state_dir}" \
+            sh scripts/migrate-prod-secret-files.sh finalize
 
       - name: Validate production Compose models
         shell: bash
@@ -353,6 +430,7 @@ jobs:
           test -n "${DEPLOY_PATH}" || { echo "Missing DEPLOY_PATH secret or variable"; exit 1; }
           test -s config/rabbitmq/rabbitmq.conf || { echo "Missing RabbitMQ deployment config"; exit 1; }
           test -s docker-compose.metrics-bridge.yml || { echo "Missing metrics bridge overlay"; exit 1; }
+          test -s scripts/migrate-prod-secret-files.sh || { echo "Missing production secret migration script"; exit 1; }
           asset_backup_dir="${DEPLOY_PATH}/.deploy-backup/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
             "set -eu
@@ -382,12 +460,14 @@ jobs:
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" docker-compose.smoke.yml "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/docker-compose.smoke.yml"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" Caddyfile "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/Caddyfile"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/deploy-prod.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/deploy-prod.sh"
+          scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" scripts/migrate-prod-secret-files.sh "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh"
           scp -i ~/.ssh/deploy_key -P "${DEPLOY_PORT:-22}" \
             performance/remote/run-isolated-real-chain-smoke.sh \
             performance/remote/run-real-chain-smoke.sh \
             "${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/performance/remote/"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "chmod 0700 '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
+            "chmod 0700 '${DEPLOY_PATH}/scripts/migrate-prod-secret-files.sh' \
+                        '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
                         '${DEPLOY_PATH}/performance/remote/run-real-chain-smoke.sh'"
 
       - name: Pull and restart
@@ -406,6 +486,7 @@ jobs:
           APP_CORS_ALLOWED_ORIGINS: ${{ secrets.APP_CORS_ALLOWED_ORIGINS || vars.APP_CORS_ALLOWED_ORIGINS }}
           HEALTH_URL: ${{ secrets.HEALTH_URL || vars.HEALTH_URL }}
           IMAGE_TAG_INPUT: ${{ inputs.image_tag }}
+          MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}
           REPOGUARD_FRONTEND_SERVER_NAME: ${{ secrets.REPOGUARD_FRONTEND_SERVER_NAME || vars.REPOGUARD_FRONTEND_SERVER_NAME }}
         run: |
           test -n "${ALIYUN_REGISTRY_PASSWORD}" || { echo "Missing ALIYUN_REGISTRY_PASSWORD secret"; exit 1; }
@@ -442,4 +523,5 @@ jobs:
              APP_CORS_ALLOWED_ORIGINS='${APP_CORS_ALLOWED_ORIGINS}' \
              HEALTH_URL='${health_url}' \
              DEPLOY_ASSET_BACKUP_DIR='${DEPLOY_ASSET_BACKUP_DIR}' \
+             MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}' \
              sh scripts/deploy-prod.sh"

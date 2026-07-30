@@ -151,6 +151,68 @@ class ProductionDeploymentContractTest {
     }
 
     @Test
+    void legacySecretMigrationIsExplicitExactAndFinalizedOnlyAfterHealth() throws IOException {
+        Path root = repositoryRoot();
+        String workflow = read(root.resolve(".github/workflows/release-images.yml"));
+        String deploy = read(root.resolve("scripts/deploy-prod.sh"));
+        String migration = read(root.resolve("scripts/migrate-prod-secret-files.sh"));
+
+        assertThat(workflow)
+            .contains("migrate_legacy_secret_files:")
+            .contains("default: false")
+            .contains("name: Exercise legacy production secret migration")
+            .contains("scripts/migrate-prod-secret-files.sh")
+            .contains("MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}")
+            .contains("MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}'");
+
+        int prepare = deploy.lastIndexOf("sh scripts/migrate-prod-secret-files.sh prepare");
+        int preflight = deploy.lastIndexOf("\nvalidate_required_bind_sources\n");
+        int pull = deploy.lastIndexOf("\ncompose pull $deploy_services\n");
+        int healthVerification = deploy.lastIndexOf("\nverify_deployment 15 30\n");
+        int rollbackDisarmed = deploy.lastIndexOf("\nrollback_needed=false\n");
+        int finalize = deploy.lastIndexOf("sh scripts/migrate-prod-secret-files.sh finalize");
+        assertThat(prepare).isNotNegative().isLessThan(preflight);
+        assertThat(preflight).isLessThan(pull);
+        assertThat(healthVerification).isLessThan(rollbackDisarmed);
+        assertThat(rollbackDisarmed).isLessThan(finalize);
+
+        assertThat(migration)
+            .contains(
+                "MYSQL_ROOT_PASSWORD|MYSQL_ROOT_PASSWORD_FILE|./secrets/mysql.root-password",
+                "MYSQL_PASSWORD|MYSQL_PASSWORD_FILE|./secrets/spring.datasource.password",
+                "REPOGUARD_SECURITY_ENCRYPTION_KEY|REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE"
+                    + "|./secrets/repoguard.security.encryption-key",
+                "REPOGUARD_SECURITY_ENCRYPTION_SALT|REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE"
+                    + "|./secrets/repoguard.security.encryption-salt",
+                "REPOGUARD_AUTH_TOKEN_SECRET|REPOGUARD_AUTH_TOKEN_SECRET_FILE"
+                    + "|./secrets/repoguard.auth.token-secret",
+                "REPOGUARD_ADMIN_API_KEY|REPOGUARD_ADMIN_API_KEY_FILE"
+                    + "|./secrets/app.security.admin-api-key.key",
+                "REPOGUARD_GITHUB_WEBHOOK_SECRET|REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE"
+                    + "|./secrets/app.github.webhook.secret"
+            )
+            .contains("printf '%s' \"$legacy_value\" > \"$candidate\"")
+            .contains("cmp -s \"$candidate\" \"$secret_path\"")
+            .contains("validation_secret_path=\"$2\"")
+            .contains("unset MYSQL_ROOT_PASSWORD MYSQL_ROOT_PASSWORD_FILE")
+            .contains(
+                "unset REPOGUARD_GITHUB_WEBHOOK_SECRET "
+                    + "REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE"
+            )
+            .contains("config --environment")
+            .contains("rewrite_env true \"$backup_directory\"")
+            .contains("rewrite_env false \"$backup_directory\"")
+            .contains("Prepared production secret files without removing legacy fallback keys.")
+            .contains("Removed legacy inline secret keys after successful deployment verification.")
+            .doesNotContain(
+                "\n  secret_path=\"$2\"\n",
+                "openssl rand",
+                "/dev/urandom",
+                "date +%s%N"
+            );
+    }
+
+    @Test
     void mysqlBackupConsumesTheRootPasswordFileWithoutPuttingTheSecretInArguments() throws IOException {
         String script = read(repositoryRoot().resolve("scripts/backup-prod-mysql.sh"));
 

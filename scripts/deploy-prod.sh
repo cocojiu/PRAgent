@@ -13,6 +13,7 @@ DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-.deploy.lock}"
 DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
+MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -39,6 +40,14 @@ case "$PREFLIGHT_ONLY" in
   true|false) ;;
   *)
     echo "PREFLIGHT_ONLY must be true or false." >&2
+    exit 1
+    ;;
+esac
+
+case "$MIGRATE_LEGACY_SECRET_FILES" in
+  true|false) ;;
+  *)
+    echo "MIGRATE_LEGACY_SECRET_FILES must be true or false." >&2
     exit 1
     ;;
 esac
@@ -717,6 +726,11 @@ if ! flock -n 9; then
   exit 1
 fi
 
+if [ "$MIGRATE_LEGACY_SECRET_FILES" = "true" ]; then
+  ENV_FILE="$ENV_FILE" DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+    sh scripts/migrate-prod-secret-files.sh prepare
+fi
+
 echo "Deploying RepoGuard images:"
 echo "  backend:  $BACKEND_IMAGE"
 echo "  frontend: $FRONTEND_IMAGE"
@@ -790,6 +804,9 @@ compose up -d --no-deps caddy
 compose ps
 verify_deployment 15 30
 record_rabbitmq_config_digest
-
 rollback_needed=false
+if [ "$MIGRATE_LEGACY_SECRET_FILES" = "true" ]; then
+  ENV_FILE="$ENV_FILE" DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+    sh scripts/migrate-prod-secret-files.sh finalize
+fi
 echo "RepoGuard deployment is healthy: $HEALTH_URL"
