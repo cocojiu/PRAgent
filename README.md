@@ -395,6 +395,10 @@ RepoGuard / RepoGuard Review Observability
 - 轻量仓库治理可执行 `powershell -ExecutionPolicy Bypass -File scripts/production-readiness-check.ps1 -Mode quick -SkipBackendTests`，用于只检查 tracked 文件治理、Flyway migration、demo data guard 和敏感信息扫描；旧参数 `-IncludeFrontendBuild` 仍兼容并等价于完整模式。
 - 准出门禁、失败处理、回滚与恢复步骤统一维护在本文“生产运维 Runbook”。
 
+## 优化进度
+
+- 2026-07-30 16:57:06（Asia/Shanghai）：完成审查能力与风险校准专项 Q0 质量基线批次。新增按 `rule_id/source/repository/language/severity` 聚合的历史 Finding 质量模型，统一人工反馈口径为 `VALID + FIXED` 确认有效、`FALSE_POSITIVE` 确认误报、其余状态暂不裁定；高危占比、明确标注高危精确率/误报率、有效行锚定率、精确重复率、平均审查耗时与累计 LLM 成本现进入规则配置页既有指标响应，反馈更新会在事务提交后同步失效规则质量缓存。新增 7 条高危规则共 140 个离线黄金样本，每条固定 10 个正例和 10 个反例及预期 Finding、severity、confidence、blocking、PR 风险；当前 35 个已知语义差距被显式记录并由 141 项动态 replay 锁定，覆盖类级权限、脱敏日志、配置占位符、测试 fixture、批准的 MQ/GitHub 发布边界与兼容数据库迁移，后续 Q2 只能通过逐项消除差距更新基线。真实 MySQL 生产上下文集成用例同时验证反馈分母、维度聚合、重复与执行成本口径。定向 222 项测试通过；本机 JDK 26 使用 Maven 3.9.16 并仅跳过精确 JDK 25 Enforcer 后，后端干净全量 `clean verify` 共 2138 项测试通过（0 失败、0 错误、7 跳过，772 个类 JaCoCo 门禁通过），前端 35 个测试文件共 136 项测试、类型检查、Lint、生产构建、原包体预算及完整 production-readiness（后端已独立全量验证）全部通过；待推送后由 JDK 25 CI 执行真实 MySQL/RabbitMQ 生产上下文验证。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.

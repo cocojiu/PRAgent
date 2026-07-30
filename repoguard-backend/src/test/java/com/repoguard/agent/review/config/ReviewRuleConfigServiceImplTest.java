@@ -14,6 +14,9 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
+import com.repoguard.agent.review.quality.ReviewQualityBaseline;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -24,12 +27,15 @@ class ReviewRuleConfigServiceImplTest {
     private final ReviewRuleConfigMapper reviewRuleConfigMapper = org.mockito.Mockito.mock(ReviewRuleConfigMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+    private final ReviewQualityBaselineService reviewQualityBaselineService =
+        org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         reviewRuleConfigMapper,
         reviewFindingMapper,
         cacheEvictionService,
         new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler()
+        new ReviewRuleMetricAssembler(),
+        reviewQualityBaselineService
     );
 
     @Test
@@ -43,6 +49,7 @@ class ReviewRuleConfigServiceImplTest {
             ruleHitCount("RG-SECRET-001", 1L)
         ));
         when(reviewFindingMapper.selectReviewRuleFeedbackStat()).thenReturn(ruleFeedbackStat(3L, 1L, 1L, 2L));
+        when(reviewQualityBaselineService.loadBaseline()).thenReturn(qualityBaseline());
 
         var result = service.getReviewRules();
 
@@ -53,10 +60,11 @@ class ReviewRuleConfigServiceImplTest {
         assertThat(result.rules().getFirst().applicableLanguages()).isEqualTo("Java");
         assertThat(result.rules().getFirst().filePatterns()).isEqualTo("*.java");
         assertThat(result.rules().getFirst().falsePositiveGuidance()).contains("false positive");
-        assertThat(result.metrics()).hasSize(6);
+        assertThat(result.metrics()).hasSize(13);
         assertThat(result.metrics().get(4).value()).isEqualTo("50%");
         assertThat(result.metrics().get(5).value()).isEqualTo("50%");
-        assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
+        assertThat(result.metrics()).extracting("label")
+            .contains("启用规则", "累计命中", "高危精确率", "证据锚定率", "累计 LLM 成本");
     }
 
     @Test
@@ -122,7 +130,8 @@ class ReviewRuleConfigServiceImplTest {
             reviewFindingMapper,
             cacheEvictionService,
             new ReviewRuleConfigPolicy(),
-            null
+            null,
+            reviewQualityBaselineService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewRuleMetricAssembler");
@@ -135,10 +144,25 @@ class ReviewRuleConfigServiceImplTest {
             reviewFindingMapper,
             null,
             new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler()
+            new ReviewRuleMetricAssembler(),
+            reviewQualityBaselineService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
+    }
+
+    @Test
+    void constructorRejectsMissingReviewQualityBaselineService() {
+        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            cacheEvictionService,
+            new ReviewRuleConfigPolicy(),
+            new ReviewRuleMetricAssembler(),
+            null
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("reviewQualityBaselineService");
     }
 
     private ReviewRuleConfigRequest request(String id, String name, String severity, String status) {
@@ -187,5 +211,26 @@ class ReviewRuleConfigServiceImplTest {
         Long reviewedCount
     ) {
         return new RuleFeedbackStat(totalHits, validCount, falsePositiveCount, reviewedCount);
+    }
+
+    private ReviewQualityBaseline qualityBaseline() {
+        return new ReviewQualityBaseline(
+            10,
+            4,
+            new BigDecimal("40.00"),
+            3,
+            2,
+            1,
+            new BigDecimal("66.67"),
+            new BigDecimal("33.33"),
+            9,
+            new BigDecimal("90.00"),
+            1,
+            new BigDecimal("10.00"),
+            5,
+            new BigDecimal("12.40"),
+            new BigDecimal("1.2345"),
+            List.of()
+        );
     }
 }

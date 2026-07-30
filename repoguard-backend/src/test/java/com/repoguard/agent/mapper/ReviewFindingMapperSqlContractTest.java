@@ -107,9 +107,10 @@ class ReviewFindingMapperSqlContractTest {
 
     private void assertFeedbackStatusNormColumn(String sql) {
         assertThat(sql)
-            .contains("feedback_status_norm = 'valid'")
+            .contains("feedback_status_norm in ('valid', 'fixed')")
             .contains("feedback_status_norm = 'false_positive'")
-            .contains("feedback_status_norm <> 'unreviewed'")
+            .contains("feedback_status_norm in ('valid', 'fixed', 'false_positive')")
+            .doesNotContain("feedback_status_norm <> 'unreviewed'")
             .doesNotContain("upper(coalesce(nullif(trim(feedback_status)");
     }
 

@@ -104,6 +104,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
 
     private void evictDashboardFeedbackQuality() {
         cacheEvictionService.evictDashboardFeedbackQuality();
+        cacheEvictionService.evictReviewRules();
     }
 
     private String cleanNote(String note) {

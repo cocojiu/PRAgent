@@ -14,6 +14,8 @@ import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
+import com.repoguard.agent.review.quality.ReviewQualityBaseline;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -36,13 +38,15 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final CacheEvictionService cacheEvictionService;
     private final ReviewRuleConfigPolicy reviewRuleConfigPolicy;
     private final ReviewRuleMetricAssembler reviewRuleMetricAssembler;
+    private final ReviewQualityBaselineService reviewQualityBaselineService;
 
     public ReviewRuleConfigServiceImpl(
         ReviewRuleConfigMapper reviewRuleConfigMapper,
         ReviewFindingMapper reviewFindingMapper,
         CacheEvictionService cacheEvictionService,
         ReviewRuleConfigPolicy reviewRuleConfigPolicy,
-        ReviewRuleMetricAssembler reviewRuleMetricAssembler
+        ReviewRuleMetricAssembler reviewRuleMetricAssembler,
+        ReviewQualityBaselineService reviewQualityBaselineService
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(
             reviewRuleConfigMapper,
@@ -54,6 +58,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             Objects.requireNonNull(reviewRuleConfigPolicy, "reviewRuleConfigPolicy must not be null");
         this.reviewRuleMetricAssembler =
             Objects.requireNonNull(reviewRuleMetricAssembler, "reviewRuleMetricAssembler must not be null");
+        this.reviewQualityBaselineService =
+            Objects.requireNonNull(reviewQualityBaselineService, "reviewQualityBaselineService must not be null");
     }
 
     @Override
@@ -66,10 +72,14 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         );
         Map<String, Long> hitCountByRule = loadRuleHitCounts();
         ReviewRuleFeedbackStat feedbackStat = loadRuleFeedbackStat();
+        ReviewQualityBaseline qualityBaseline = reviewQualityBaselineService.loadBaseline();
         List<ReviewRuleConfigDto> ruleDtos = rules.stream()
             .map(rule -> toReviewRuleDto(rule, hitCountByRule.getOrDefault(rule.getId(), 0L)))
             .toList();
-        return new ReviewRulesResponse(reviewRuleMetricAssembler.buildRuleMetrics(rules, feedbackStat), ruleDtos);
+        return new ReviewRulesResponse(
+            reviewRuleMetricAssembler.buildRuleMetrics(rules, feedbackStat, qualityBaseline),
+            ruleDtos
+        );
     }
 
     @Override

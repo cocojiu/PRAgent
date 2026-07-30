@@ -597,6 +597,8 @@ class ReviewServiceImplTest {
         assertThat(finding.getFeedbackAt()).isNotNull();
         verify(reviewFindingMapper).updateById(finding);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
+        verify(cacheEvictionService).evictDashboardFeedbackQuality();
+        verify(cacheEvictionService).evictReviewRules();
     }
 
     @Test

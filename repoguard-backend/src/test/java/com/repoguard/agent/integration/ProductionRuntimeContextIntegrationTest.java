@@ -14,6 +14,8 @@ import com.repoguard.agent.notification.publish.NotificationEventPublishCompensa
 import com.repoguard.agent.security.AuthTokenService;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
+import com.repoguard.agent.review.quality.ReviewQualityBaseline;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
@@ -330,6 +332,79 @@ class ProductionRuntimeContextIntegrationTest {
     }
 
     @Test
+    void reviewQualityBaselineUsesRealMysqlAndExplicitFeedbackSemantics() {
+        try (ConfigurableApplicationContext context = start("api")) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            ReviewQualityBaselineService baselineService = context.getBean(ReviewQualityBaselineService.class);
+            String suffix = Long.toUnsignedString(System.nanoTime());
+            String organization = "quality-baseline-" + suffix;
+            String repository = "quality-baseline-repository-" + suffix;
+            String ruleId = "RG-GOLDEN-" + suffix;
+            Long taskId = null;
+
+            ReviewQualityBaseline before = baselineService.loadBaseline();
+            try {
+                taskId = insertReviewTask(
+                    jdbcTemplate,
+                    organization,
+                    9150,
+                    "COMPLETED",
+                    false,
+                    "NOT_REQUIRED"
+                );
+                jdbcTemplate.update("""
+                    update review_task
+                    set repository = ?,
+                        finished_at = ?,
+                        duration_seconds = 17,
+                        llm_estimated_cost = 0.123400
+                    where id = ?
+                    """, repository, LocalDateTime.now(), taskId);
+
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", 10, "VALID", "duplicate");
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", 10, "VALID", "duplicate");
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", 20, "FIXED", "fixed");
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", 30, "FALSE_POSITIVE", "false-positive");
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", null, "IGNORED", "ignored");
+                insertQualityFinding(jdbcTemplate, taskId, ruleId, "LOW", 50, "UNREVIEWED", "pending");
+
+                ReviewQualityBaseline after = baselineService.loadBaseline();
+
+                assertThat(after.totalFindings() - before.totalFindings()).isEqualTo(6);
+                assertThat(after.highRiskFindings() - before.highRiskFindings()).isEqualTo(5);
+                assertThat(after.labeledHighRiskFindings() - before.labeledHighRiskFindings()).isEqualTo(4);
+                assertThat(after.confirmedHighRiskFindings() - before.confirmedHighRiskFindings()).isEqualTo(3);
+                assertThat(after.falsePositiveHighRiskFindings() - before.falsePositiveHighRiskFindings()).isOne();
+                assertThat(after.anchoredFindings() - before.anchoredFindings()).isEqualTo(5);
+                assertThat(after.duplicateFindings() - before.duplicateFindings()).isOne();
+                assertThat(after.completedTasks() - before.completedTasks()).isOne();
+                assertThat(after.totalLlmEstimatedCost().subtract(before.totalLlmEstimatedCost()))
+                    .isEqualByComparingTo("0.123400");
+                assertThat(after.groups())
+                    .filteredOn(group -> ruleId.equals(group.ruleId())
+                        && repository.equals(group.repository())
+                        && "HIGH".equals(group.severity()))
+                    .singleElement()
+                    .satisfies(group -> {
+                        assertThat(group.source()).isEqualTo("RULE");
+                        assertThat(group.language()).isEqualTo("JAVA");
+                        assertThat(group.totalFindings()).isEqualTo(5);
+                        assertThat(group.confirmedValidCount()).isEqualTo(3);
+                        assertThat(group.falsePositiveCount()).isOne();
+                        assertThat(group.pendingCount()).isOne();
+                        assertThat(group.anchoredCount()).isEqualTo(4);
+                        assertThat(group.labeledPrecision()).isEqualByComparingTo("75.00");
+                    });
+            } finally {
+                if (taskId != null) {
+                    jdbcTemplate.update("delete from review_finding where task_id = ?", taskId);
+                }
+                jdbcTemplate.update("delete from review_task where organization = ?", organization);
+            }
+        }
+    }
+
+    @Test
     void terminalStateAndNotificationOutboxCommitOrRollBackAtomically() throws Exception {
         RabbitTopology topology = RabbitTopology.unique("atomic");
         try (ConfigurableApplicationContext context = start("api", topology.arguments())) {
@@ -582,6 +657,24 @@ class ProductionRuntimeContextIntegrationTest {
             residueAt.plusMinutes(2),
             taskId
         );
+    }
+
+    private void insertQualityFinding(
+        JdbcTemplate jdbcTemplate,
+        Long taskId,
+        String ruleId,
+        String severity,
+        Integer lineNumber,
+        String feedbackStatus,
+        String message
+    ) {
+        jdbcTemplate.update("""
+            insert into review_finding (
+                task_id, category, severity, source, rule_id, file_path,
+                line_number, message, recommendation, feedback_status
+            ) values (?, 'FINDING', ?, 'RULE', ?, 'src/main/java/example/Quality.java',
+                      ?, ?, 'quality baseline recommendation', ?)
+            """, taskId, severity, ruleId, lineNumber, message, feedbackStatus);
     }
 
     private void assertRetryStateWasCleared(JdbcTemplate jdbcTemplate, Long taskId) {

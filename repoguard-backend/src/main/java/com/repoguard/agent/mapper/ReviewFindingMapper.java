@@ -26,13 +26,13 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         select
             count(*) as totalHits,
             sum(case
-                when feedback_status_norm = 'VALID'
+                when feedback_status_norm in ('VALID', 'FIXED')
                 then 1 else 0 end) as validCount,
             sum(case
                 when feedback_status_norm = 'FALSE_POSITIVE'
                 then 1 else 0 end) as falsePositiveCount,
             sum(case
-                when feedback_status_norm <> 'UNREVIEWED'
+                when feedback_status_norm in ('VALID', 'FIXED', 'FALSE_POSITIVE')
                 then 1 else 0 end) as reviewedCount
         from review_finding
         where category = 'FINDING'
