@@ -4,9 +4,7 @@ import com.repoguard.agent.external.ExternalCallException;
 import com.repoguard.agent.external.ExternalFailureSignals;
 import com.repoguard.agent.github.GithubPullRequestHeadChangedException;
 import com.repoguard.agent.observability.ReviewFailureCategoryResolver;
-import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DeadlockLoserDataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -83,9 +81,7 @@ public class ReviewExecutionFailureClassifier implements ReviewFailureCategoryRe
     }
 
     private boolean isStateConflict(RuntimeException ex) {
-        return ex instanceof CannotAcquireLockException
-            || ex instanceof DeadlockLoserDataAccessException
-            || ex instanceof DuplicateKeyException
+        return ex instanceof DuplicateKeyException
             || ex instanceof OptimisticLockingFailureException
             || ex instanceof PessimisticLockingFailureException;
     }

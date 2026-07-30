@@ -113,6 +113,9 @@ class IsolatedRealChainSmokeContractTest {
             .contains("distributionSha256Sum=5af3b743dd8b876b5c45da33b676251e5f1687712644abb4ee519ca56e1d89ce")
             .doesNotContain("maven.aliyun.com");
         assertThat(pom)
+            .contains("<artifactId>maven-compiler-plugin</artifactId>")
+            .contains("<showDeprecation>true</showDeprecation>")
+            .contains("<failOnWarning>true</failOnWarning>")
             .contains("<propertyName>jacoco.agent.argLine</propertyName>")
             .contains("@{jacoco.agent.argLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar");
         assertThat(readiness)
