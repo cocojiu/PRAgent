@@ -53,6 +53,7 @@ import type {
   ReviewPolicyConfigRequest,
   ReviewQuery,
   ReviewFinding,
+  ReviewCalibrationQueue,
   ReviewRetryResponse,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
@@ -218,6 +219,10 @@ export type ApiContract = {
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
   reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionResponse>;
   fetchReviewRules: ApiOperation<undefined, ReviewRulesResponse>;
+  fetchReviewCalibrationQueue: ApiOperation<
+    { ruleId: string; limit?: number; includeIgnored?: boolean },
+    ReviewCalibrationQueue
+  >;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<{ id: string; payload: ReviewRuleConfigRequest }, ReviewRuleConfig>;
   updateReviewRuleStatus: ApiOperation<{ id: string; payload: ReviewRuleStatusRequest }, ReviewRuleConfig>;
@@ -503,6 +508,14 @@ const apiEndpoints: ApiEndpointMap = {
   },
   fetchReviewRules: {
     path: () => "/api/v1/config/review-rules"
+  },
+  fetchReviewCalibrationQueue: {
+    path: () => "/api/v1/config/review-calibration/queue",
+    query: input => ({
+      ruleId: input.ruleId,
+      limit: input.limit ?? 30,
+      includeIgnored: input.includeIgnored ? "true" : "false"
+    })
   },
   createReviewRule: {
     method: "POST",

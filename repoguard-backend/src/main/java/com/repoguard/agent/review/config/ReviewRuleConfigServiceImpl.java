@@ -22,6 +22,7 @@ import com.repoguard.agent.review.EnforcementMode;
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -51,6 +52,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final ReviewRulePolicySnapshotStore policySnapshotStore;
     private final ReviewRuleLifecycleGate lifecycleGate;
     private final ReviewStrategyPolicyService strategyPolicyService;
+    private final ReviewCalibrationService reviewCalibrationService;
 
     @Autowired
     public ReviewRuleConfigServiceImpl(
@@ -63,7 +65,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         ReviewRuleRegistry reviewRuleRegistry,
         ReviewRulePolicySnapshotStore policySnapshotStore,
         ReviewRuleLifecycleGate lifecycleGate,
-        ReviewStrategyPolicyService strategyPolicyService
+        ReviewStrategyPolicyService strategyPolicyService,
+        ReviewCalibrationService reviewCalibrationService
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(
             reviewRuleConfigMapper,
@@ -81,6 +84,10 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.policySnapshotStore = Objects.requireNonNull(policySnapshotStore, "policySnapshotStore");
         this.lifecycleGate = Objects.requireNonNull(lifecycleGate, "lifecycleGate");
         this.strategyPolicyService = Objects.requireNonNull(strategyPolicyService, "strategyPolicyService");
+        this.reviewCalibrationService = Objects.requireNonNull(
+            reviewCalibrationService,
+            "reviewCalibrationService"
+        );
     }
 
     public ReviewRuleConfigServiceImpl(
@@ -114,6 +121,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.policySnapshotStore = null;
         this.lifecycleGate = new ReviewRuleLifecycleGate();
         this.strategyPolicyService = null;
+        this.reviewCalibrationService = null;
     }
 
     @Override
@@ -183,11 +191,9 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
                 rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
                 changeType = enabling ? "ENABLE_OBSERVE" : "DISABLE";
             } else {
-                ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(
+                ReviewRuleQualityGateDto qualityGate = promotionQualityGate(
                     normalizedId,
-                    reviewRuleRegistry.detectorVersion(normalizedId),
-                    previousConfigVersion,
-                    reviewQualityBaselineService.loadBaseline().groups()
+                    previousConfigVersion
                 );
                 validateTransition(previousMode, targetMode, qualityGate);
                 changeType = rank(targetMode) > rank(previousMode) ? "PROMOTION" : "POLICY_UPDATE";
@@ -452,6 +458,18 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
                 "Review rule has no registered detector implementation: " + id
             );
         }
+    }
+
+    private ReviewRuleQualityGateDto promotionQualityGate(String ruleId, long configVersion) {
+        if (reviewCalibrationService != null) {
+            return reviewCalibrationService.getQueue(ruleId, 1, false).qualityGate();
+        }
+        return lifecycleGate.evaluate(
+            ruleId,
+            reviewRuleRegistry.detectorVersion(ruleId),
+            configVersion,
+            reviewQualityBaselineService.loadBaseline().groups()
+        );
     }
 
     private String cleanOptional(String value) {

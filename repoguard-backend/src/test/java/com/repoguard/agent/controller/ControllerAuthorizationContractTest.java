@@ -26,6 +26,7 @@ class ControllerAuthorizationContractTest {
         "SystemConfigController#getReviewRuleVersions",
         "SystemConfigController#getReviewStrategyPolicy",
         "SystemConfigController#getReviewStrategyVersions",
+        "ReviewCalibrationController#getReviewCalibrationQueue",
         "NotificationIntegrationController#listBindings",
         "NotificationIntegrationController#listEvents",
         "NotificationIntegrationController#listDeliveries",

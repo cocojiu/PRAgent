@@ -8,7 +8,10 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.controller.ReviewController;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
+import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Sample;
+import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Summary;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
 import com.repoguard.agent.security.AuthTokenService;
@@ -336,6 +339,8 @@ class ProductionRuntimeContextIntegrationTest {
         try (ConfigurableApplicationContext context = start("api")) {
             JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
             ReviewQualityBaselineService baselineService = context.getBean(ReviewQualityBaselineService.class);
+            ReviewCalibrationQueueMapper calibrationQueueMapper =
+                context.getBean(ReviewCalibrationQueueMapper.class);
             String suffix = Long.toUnsignedString(System.nanoTime());
             String organization = "quality-baseline-" + suffix;
             String repository = "quality-baseline-repository-" + suffix;
@@ -355,6 +360,7 @@ class ProductionRuntimeContextIntegrationTest {
                 jdbcTemplate.update("""
                     update review_task
                     set repository = ?,
+                        assessment_status = 'COMPLETE',
                         finished_at = ?,
                         duration_seconds = 17,
                         llm_estimated_cost = 0.123400
@@ -394,6 +400,46 @@ class ProductionRuntimeContextIntegrationTest {
                         assertThat(group.pendingCount()).isOne();
                         assertThat(group.anchoredCount()).isEqualTo(4);
                         assertThat(group.labeledPrecision()).isEqualByComparingTo("75.00");
+                    });
+
+                Summary calibrationSummary = calibrationQueueMapper.selectVersionSummary(
+                    ruleId,
+                    "legacy-detector-v1",
+                    1,
+                    "review-prompt-v2",
+                    "review-context-v2",
+                    "review-schema-v2",
+                    "high-risk-verifier-v1",
+                    "server-risk-v2"
+                );
+                assertThat(calibrationSummary).isNotNull();
+                assertThat(calibrationSummary.totalFindings()).isEqualTo(5);
+                assertThat(calibrationSummary.labeledCount()).isEqualTo(4);
+                assertThat(calibrationSummary.confirmedValidCount()).isEqualTo(3);
+                assertThat(calibrationSummary.falsePositiveCount()).isOne();
+                assertThat(calibrationSummary.pendingCount()).isOne();
+                assertThat(calibrationSummary.anchoredCount()).isEqualTo(4);
+                assertThat(calibrationSummary.duplicateCount()).isOne();
+
+                List<Sample> calibrationSamples = calibrationQueueMapper.selectPendingSamples(
+                    ruleId,
+                    "legacy-detector-v1",
+                    1,
+                    "review-prompt-v2",
+                    "review-context-v2",
+                    "review-schema-v2",
+                    "high-risk-verifier-v1",
+                    "server-risk-v2",
+                    true,
+                    30
+                );
+                Long calibrationTaskId = taskId;
+                assertThat(calibrationSamples)
+                    .singleElement()
+                    .satisfies(sample -> {
+                        assertThat(sample.taskId()).isEqualTo(calibrationTaskId);
+                        assertThat(sample.feedbackStatus()).isEqualTo("IGNORED");
+                        assertThat(sample.message()).isEqualTo("ignored");
                     });
             } finally {
                 if (taskId != null) {

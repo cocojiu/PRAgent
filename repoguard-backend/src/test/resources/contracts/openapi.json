@@ -1375,6 +1375,75 @@
         }
       }
     },
+    "/api/v1/config/review-calibration/queue" : {
+      "get" : {
+        "tags" : [ "ReviewCalibration" ],
+        "operationId" : "reviewCalibrationControllerGetReviewCalibrationQueue",
+        "x-controller-operation" : "ReviewCalibrationController#getReviewCalibrationQueue",
+        "parameters" : [ {
+          "name" : "ruleId",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        }, {
+          "name" : "limit",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 30
+          }
+        }, {
+          "name" : "includeIgnored",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "boolean",
+            "default" : false
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewCalibrationQueueDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewCalibrationQueueDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/review-policy" : {
       "get" : {
         "tags" : [ "SystemConfig" ],
@@ -6971,6 +7040,201 @@
             "type" : "string"
           }
         }
+      },
+      "ReviewCalibrationQueueDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewCalibrationQueueDto",
+        "properties" : {
+          "version" : {
+            "$ref" : "#/components/schemas/ReviewCalibrationVersionDto"
+          },
+          "targetLabeledSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "totalHighRiskFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "labeledHighRiskSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "confirmedValidSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "falsePositiveSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "pendingHighRiskSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "remainingToTarget" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "qualityGate" : {
+            "$ref" : "#/components/schemas/ReviewRuleQualityGateDto"
+          },
+          "samples" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewCalibrationSampleDto"
+            }
+          }
+        },
+        "required" : [ "targetLabeledSamples", "totalHighRiskFindings", "labeledHighRiskSamples", "confirmedValidSamples", "falsePositiveSamples", "pendingHighRiskSamples", "remainingToTarget" ]
+      },
+      "ReviewCalibrationSampleDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewCalibrationSampleDto",
+        "properties" : {
+          "findingId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "taskId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "prNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "organization" : {
+            "type" : "string"
+          },
+          "commitSha" : {
+            "type" : "string"
+          },
+          "prUrl" : {
+            "type" : "string"
+          },
+          "taskCreatedAt" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "ruleId" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "confidence" : {
+            "type" : "string"
+          },
+          "filePath" : {
+            "type" : "string"
+          },
+          "lineNumber" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "message" : {
+            "type" : "string"
+          },
+          "evidence" : {
+            "type" : "string"
+          },
+          "impact" : {
+            "type" : "string"
+          },
+          "recommendation" : {
+            "type" : "string"
+          },
+          "preconditions" : {
+            "type" : "string"
+          },
+          "issueType" : {
+            "type" : "string"
+          },
+          "verificationStatus" : {
+            "type" : "string"
+          },
+          "blockingCandidate" : {
+            "type" : "boolean"
+          },
+          "enforcementMode" : {
+            "type" : "string"
+          },
+          "feedbackStatus" : {
+            "type" : "string"
+          },
+          "versionKey" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "findingId", "taskId", "blockingCandidate" ]
+      },
+      "ReviewCalibrationVersionDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewCalibrationVersionDto",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "ruleName" : {
+            "type" : "string"
+          },
+          "detectorVersion" : {
+            "type" : "string"
+          },
+          "ruleConfigVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "rulePolicyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "strategySnapshotId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "strategyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "ruleEnforcementMode" : {
+            "type" : "string"
+          },
+          "strategyEnforcementMode" : {
+            "type" : "string"
+          },
+          "replayVerified" : {
+            "type" : "boolean"
+          },
+          "versionKey" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "ruleConfigVersion", "rulePolicyVersion", "strategySnapshotId", "strategyVersion", "replayVerified" ]
       },
       "ReviewEnforcementModeRequest" : {
         "type" : "object",

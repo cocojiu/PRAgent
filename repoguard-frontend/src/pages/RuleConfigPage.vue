@@ -59,6 +59,8 @@
       />
     </section>
 
+    <ReviewCalibrationQueueCard :rules="rules" />
+
     <section class="rule-layout">
       <article class="rule-panel">
         <div class="filter-bar rule-filter">
@@ -309,6 +311,7 @@ import {
 } from "@/api/config";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
+import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
 import type {
   EnforcementMode,
   ReviewQualityGroup,

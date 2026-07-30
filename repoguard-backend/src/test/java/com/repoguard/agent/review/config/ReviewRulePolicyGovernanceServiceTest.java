@@ -9,7 +9,9 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
@@ -18,6 +20,7 @@ import com.repoguard.agent.mapper.ReviewRulePolicySnapshotMapper;
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -40,6 +43,8 @@ class ReviewRulePolicyGovernanceServiceTest {
     private final ReviewRulePolicySnapshotStore snapshotStore = new ReviewRulePolicySnapshotStore(snapshotMapper);
     private final ReviewStrategyPolicyService strategyPolicyService =
         org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
+    private final ReviewCalibrationService calibrationService =
+        org.mockito.Mockito.mock(ReviewCalibrationService.class);
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         ruleMapper,
         findingMapper,
@@ -50,7 +55,8 @@ class ReviewRulePolicyGovernanceServiceTest {
         registry,
         snapshotStore,
         new ReviewRuleLifecycleGate(),
-        strategyPolicyService
+        strategyPolicyService,
+        calibrationService
     );
 
     @Test
@@ -83,7 +89,20 @@ class ReviewRulePolicyGovernanceServiceTest {
         when(registry.contains(RULE_ID)).thenReturn(true);
         when(registry.detectorVersion(RULE_ID)).thenReturn(DETECTOR_VERSION);
         when(ruleMapper.selectById(RULE_ID)).thenReturn(rule);
-        when(baselineService.loadBaseline()).thenReturn(emptyBaseline());
+        when(calibrationService.getQueue(RULE_ID, 1, false)).thenReturn(queueWithGate(
+            new ReviewRuleQualityGateDto(
+                0,
+                0,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                false,
+                false,
+                "INSUFFICIENT_SAMPLE",
+                List.of("labeled_high_risk_samples_below_30")
+            )
+        ));
 
         assertThatThrownBy(() -> service.updateReviewRule(RULE_ID, request(rule.getDescription(), "COMMENT")))
             .isInstanceOf(BusinessException.class)
@@ -91,6 +110,7 @@ class ReviewRulePolicyGovernanceServiceTest {
 
         verify(ruleMapper, never()).updateById(any(ReviewRuleConfig.class));
         verify(snapshotMapper, never()).insert(any(ReviewRulePolicySnapshot.class));
+        verify(calibrationService).getQueue(RULE_ID, 1, false);
     }
 
     @Test
@@ -197,6 +217,21 @@ class ReviewRulePolicyGovernanceServiceTest {
             0,
             BigDecimal.ZERO,
             BigDecimal.ZERO,
+            List.of()
+        );
+    }
+
+    private ReviewCalibrationQueueDto queueWithGate(ReviewRuleQualityGateDto gate) {
+        return new ReviewCalibrationQueueDto(
+            null,
+            30,
+            0,
+            gate.labeledHighRiskSamples(),
+            0,
+            0,
+            0,
+            Math.max(0, 30 - gate.labeledHighRiskSamples()),
+            gate,
             List.of()
         );
     }

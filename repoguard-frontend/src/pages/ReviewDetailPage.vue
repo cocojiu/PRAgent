@@ -240,6 +240,7 @@ import { ArrowLeft, ExternalLink, RefreshCw, ShieldAlert } from "@lucide/vue";
 import Github from "@/components/icons/GithubIcon.vue";
 import { canManage } from "@/stores/authState";
 import { useRoute, useRouter } from "vue-router";
+import { routeNames } from "@/router/names";
 import {
   DETAIL_SECTION_PAGE_SIZE,
   ReviewDetailFilesSection,
@@ -588,7 +589,16 @@ const { confirmPublishGithubComments } = useReviewDetailGithubCommentPublishConf
 });
 
 const goBack = () => {
-  router.push({ name: "tasks" });
+  if (route.query.from === "calibration") {
+    void router.push({
+      name: routeNames.rules,
+      query: typeof route.query.calibrationRule === "string"
+        ? { calibrationRule: route.query.calibrationRule }
+        : {}
+    });
+    return;
+  }
+  void router.push({ name: routeNames.tasks });
 };
 
 const openPrUrl = () => {

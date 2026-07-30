@@ -6,6 +6,7 @@ GET /api/v1/config/integrations/github query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/mysql query=[] body=- bodyRequired=false
 GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
+GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules/{id}/versions query=[] body=- bodyRequired=false

@@ -140,3 +140,64 @@ export interface ReviewRuleConfigRequest {
 export interface ReviewRuleStatusRequest {
   status: RuleStatus;
 }
+
+export interface ReviewCalibrationVersion {
+  ruleId: string;
+  ruleName: string;
+  detectorVersion: string;
+  ruleConfigVersion: number;
+  rulePolicyVersion: number;
+  strategySnapshotId: number;
+  strategyVersion: number;
+  promptVersion: string;
+  contextVersion: string;
+  schemaVersion: string;
+  verifierVersion: string;
+  aggregationVersion: string;
+  ruleEnforcementMode: EnforcementMode;
+  strategyEnforcementMode: EnforcementMode;
+  replayVerified: boolean;
+  versionKey: string;
+}
+
+export interface ReviewCalibrationSample {
+  findingId: number;
+  taskId: number;
+  prNumber?: number | null;
+  title: string;
+  repository: string;
+  organization: string;
+  commitSha: string;
+  prUrl: string;
+  taskCreatedAt: string;
+  source: string;
+  ruleId: string;
+  severity: string;
+  confidence: string;
+  filePath: string;
+  lineNumber?: number | null;
+  message: string;
+  evidence: string;
+  impact: string;
+  recommendation: string;
+  preconditions: string;
+  issueType: string;
+  verificationStatus: string;
+  blockingCandidate: boolean;
+  enforcementMode: EnforcementMode;
+  feedbackStatus: string;
+  versionKey: string;
+}
+
+export interface ReviewCalibrationQueue {
+  version: ReviewCalibrationVersion;
+  targetLabeledSamples: number;
+  totalHighRiskFindings: number;
+  labeledHighRiskSamples: number;
+  confirmedValidSamples: number;
+  falsePositiveSamples: number;
+  pendingHighRiskSamples: number;
+  remainingToTarget: number;
+  qualityGate: ReviewRuleQualityGate;
+  samples: ReviewCalibrationSample[];
+}

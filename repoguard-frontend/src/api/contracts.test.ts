@@ -91,6 +91,28 @@ describe("apiRequest", () => {
     expect(init.method).toBeUndefined();
   });
 
+  it("pins OBSERVE calibration queue requests to an explicit rule and bounded window", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      version: { ruleId: "RG-AUTH-001" },
+      targetLabeledSamples: 30,
+      samples: []
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewCalibrationQueue", {
+      ruleId: "RG-AUTH-001",
+      limit: 30,
+      includeIgnored: false
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/config/review-calibration/queue");
+    expect(url).toContain("ruleId=RG-AUTH-001");
+    expect(url).toContain("limit=30");
+    expect(url).toContain("includeIgnored=false");
+    expect(init.method).toBeUndefined();
+  });
+
   it("forwards cancellation signals through the typed API contract", async () => {
     let fetchSignal: AbortSignal | undefined;
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {

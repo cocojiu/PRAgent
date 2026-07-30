@@ -24,6 +24,7 @@ fetchNotificationDeliveries -> notificationIntegrationControllerListDeliveries /
 fetchNotificationEvents -> notificationIntegrationControllerListEvents // GET /api/v1/notification-events
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
+fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail // GET /api/v1/reviews/{id}
 fetchReviewFindings -> reviewControllerListReviewFindings // GET /api/v1/reviews/{id}/findings

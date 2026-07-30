@@ -63,6 +63,11 @@ export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
 
 export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
 
+export const fetchReviewCalibrationQueue = (
+  ruleId: string,
+  options: { limit?: number; includeIgnored?: boolean } = {}
+) => apiRequest("fetchReviewCalibrationQueue", { ruleId, ...options });
+
 export const createReviewRule = (payload: ReviewRuleConfigRequest) =>
   apiRequest("createReviewRule", payload);
 

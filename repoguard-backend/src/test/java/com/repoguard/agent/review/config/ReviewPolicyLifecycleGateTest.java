@@ -78,6 +78,36 @@ class ReviewPolicyLifecycleGateTest {
     }
 
     @Test
+    void ruleGateIncludesMergedLlmAndRuleDetectorProvenance() {
+        var gate = ruleGate.evaluate(
+            "RG-JAVA-001",
+            "rg-java-001-detector-v2",
+            3,
+            List.of(group(
+                "LLM / RG-JAVA-001",
+                "LLM+RULE",
+                "HIGH",
+                "llm-review-v2+rg-java-001-detector-v2",
+                3,
+                LlmReviewVersions.PROMPT,
+                LlmReviewVersions.CONTEXT,
+                LlmReviewVersions.SCHEMA,
+                LlmReviewVersions.VERIFIER,
+                30,
+                30,
+                30,
+                0,
+                30,
+                0
+            ))
+        );
+
+        assertThat(gate.labeledHighRiskSamples()).isEqualTo(30);
+        assertThat(gate.blockEligible()).isTrue();
+        assertThat(gate.status()).isEqualTo("PASS");
+    }
+
+    @Test
     void ruleGatePassesOnlyWhenAllHighRiskThresholdsPass() {
         var gate = ruleGate.evaluate(
             "RG-JAVA-001",

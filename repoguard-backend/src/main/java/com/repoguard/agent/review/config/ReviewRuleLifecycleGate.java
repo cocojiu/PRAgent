@@ -33,8 +33,8 @@ public class ReviewRuleLifecycleGate {
             ? List.of()
             : groups.stream()
                 .filter(group -> group.ruleConfigVersion() == configVersion)
-                .filter(group -> containsRule(group.ruleId(), ruleId))
-                .filter(group -> detectorVersion == null || detectorVersion.equals(group.detectorVersion()))
+                .filter(group -> containsComponent(group.ruleId(), ruleId))
+                .filter(group -> detectorVersion == null || containsComponent(group.detectorVersion(), detectorVersion))
                 .toList();
         long labeled = matching.stream().mapToLong(ReviewQualityGroupBaseline::labeledCount).sum();
         List<ReviewQualityGroupBaseline> highRisk = matching.stream()
@@ -84,12 +84,12 @@ public class ReviewRuleLifecycleGate {
         );
     }
 
-    private boolean containsRule(String groupedRuleId, String ruleId) {
-        if (groupedRuleId == null || ruleId == null) {
+    private boolean containsComponent(String compositeValue, String expectedValue) {
+        if (compositeValue == null || expectedValue == null) {
             return false;
         }
-        String expected = ruleId.trim().toUpperCase(Locale.ROOT);
-        for (String part : groupedRuleId.toUpperCase(Locale.ROOT).split("[+/]")) {
+        String expected = expectedValue.trim().toUpperCase(Locale.ROOT);
+        for (String part : compositeValue.toUpperCase(Locale.ROOT).split("[+/]")) {
             if (expected.equals(part.trim())) {
                 return true;
             }
