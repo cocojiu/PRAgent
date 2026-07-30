@@ -46,7 +46,7 @@ jobs:
             value="$3"
             path="${secret_dir}/${filename}"
             printf '%s' "${value}" > "${path}"
-            chmod 600 "${path}"
+            chmod 444 "${path}"
             echo "${setting}=${path}" >> "$GITHUB_ENV"
           }
           encryption_key="CI!1-$(openssl rand -hex 32)"

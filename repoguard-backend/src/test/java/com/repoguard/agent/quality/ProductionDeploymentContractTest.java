@@ -120,6 +120,7 @@ class ProductionDeploymentContractTest {
         int rollbackArmed = script.lastIndexOf("\nrollback_needed=true\n");
         int preflightOnlyExit = script.indexOf("if [ \"$PREFLIGHT_ONLY\" = \"true\" ]; then");
         int imagePull = script.indexOf("\ncompose pull $deploy_services\n");
+        int secretMountPreflight = script.lastIndexOf("\nvalidate_backend_secret_mounts\n");
 
         assertThat(bindPreflight).isNotNegative().isLessThan(stopWorker);
         assertThat(secretPreflight).isNotNegative().isLessThan(stopWorker);
@@ -129,16 +130,20 @@ class ProductionDeploymentContractTest {
         assertThat(rollbackArmed).isNotNegative().isLessThan(stopWorker);
         assertThat(stopWorker).isLessThan(infrastructureMutation);
         assertThat(preflightOnlyExit).isNotNegative().isLessThan(imagePull);
+        assertThat(imagePull).isLessThan(secretMountPreflight);
+        assertThat(secretMountPreflight).isLessThan(rollbackArmed);
         assertThat(script)
             .contains("compose up -d --no-deps --force-recreate rabbitmq")
             .contains("$DEPLOY_STATE_DIR/rabbitmq.conf.sha256")
             .contains("record_rabbitmq_config_digest")
             .contains("REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE")
             .contains("REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE")
-            .contains("400|600")
+            .contains("444) ;;")
             .contains("500|700")
             .contains("tail -c 1")
             .contains("contains a trailing newline")
+            .contains("compose run --rm --no-deps --entrypoint sh")
+            .contains("Backend image user cannot read every required Compose secret bind mount.")
             .contains("Production edge configuration must not route to observability services")
             .contains("Production deployment preflight passed; no image was pulled and no service was changed.");
 
@@ -214,6 +219,9 @@ class ProductionDeploymentContractTest {
             .contains("config --environment")
             .contains("rewrite_env true \"$backup_directory\"")
             .contains("rewrite_env false \"$backup_directory\"")
+            .contains("chmod 444 \"$secret_path\"")
+            .contains("schedule_compose_secret_mode \"$file_key\" \"$secret_path\"")
+            .contains("Normalized production secret files for non-root Compose bind mounts.")
             .contains("Prepared production secret files without removing legacy fallback keys.")
             .contains("Removed legacy inline secret keys after successful deployment verification.")
             .doesNotContain(

@@ -179,9 +179,9 @@ REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE
 
     file_mode="$(stat -c '%a' "$secret_path")"
     case "$file_mode" in
-      400|600) ;;
+      444) ;;
       *)
-        echo "$key must use mode 0400 or 0600; found $file_mode on $secret_path" >&2
+        echo "$key must use mode 0444 inside a private secret directory; found $file_mode on $secret_path" >&2
         echo "No running service has been changed." >&2
         return 1
         ;;
@@ -462,6 +462,31 @@ preflight_release_images() {
     echo "Backend and frontend release identities do not match" >&2
     echo "  backend:  version=$backend_version revision=$backend_revision" >&2
     echo "  frontend: version=$frontend_version revision=$frontend_revision" >&2
+    return 1
+  fi
+}
+
+validate_backend_secret_mounts() {
+  if ! compose run --rm --no-deps --entrypoint sh "$BACKEND_SERVICE" -ec '
+    if [ "$(id -u)" = "0" ]; then
+      echo "Backend image must retain its non-root runtime user." >&2
+      exit 1
+    fi
+    for secret_path in \
+      /run/secrets/spring.datasource.password \
+      /run/secrets/repoguard.security.encryption-key \
+      /run/secrets/repoguard.security.encryption-salt \
+      /run/secrets/repoguard.auth.token-secret \
+      /run/secrets/app.security.admin-api-key.key \
+      /run/secrets/app.github.webhook.secret; do
+      if [ ! -r "$secret_path" ] || [ ! -s "$secret_path" ]; then
+        echo "Unreadable or empty backend secret mount: $secret_path" >&2
+        exit 1
+      fi
+    done
+  '; then
+    echo "Backend image user cannot read every required Compose secret bind mount." >&2
+    echo "No running service has been changed." >&2
     return 1
   fi
 }
@@ -769,6 +794,7 @@ if has_compose_service backend-worker; then
 fi
 compose pull $deploy_services
 preflight_release_images
+validate_backend_secret_mounts
 
 previous_backend_image="$(running_service_image_id backend)"
 previous_frontend_image="$(running_service_image_id frontend)"

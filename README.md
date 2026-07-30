@@ -230,7 +230,7 @@ RepoGuard 通过 GitHub `pull_request` webhook 自动创建审查任务。当前
 
 ### 部署前检查与密钥文件迁移
 
-生产 Compose 使用服务器本地文件提供 MySQL 密码和 5 个应用密钥；RabbitMQ 口令暂时保留在 `.env`。密钥目录必须为 `0700`，文件必须为 `0400` 或 `0600`、非空、非符号链接，且末尾不能带 CR/LF。部署脚本在拉取镜像或停止容器前检查这些条件，并拒绝包含 Grafana/Loki/Alloy 上游的边缘配置。
+生产 Compose 使用服务器本地文件提供 MySQL 密码和 5 个应用密钥；RabbitMQ 口令暂时保留在 `.env`。密钥目录必须为 `0700`，文件必须为 `0444`、非空、非符号链接，且末尾不能带 CR/LF。这里的 `0444` 是 Docker Compose 本地 file secret 的运行约束：Compose 以 bind mount 提供文件且不会把宿主所有权映射给镜像内的 `repoguard` 非 root 用户；宿主侧仍由不可遍历的 `0700` 父目录提供保密边界。部署脚本会在拉取镜像或停止容器前检查目录/文件权限，并在拉取后用镜像默认非 root 用户实际验证全部 `/run/secrets/*` 可读，再拒绝包含 Grafana/Loki/Alloy 上游的边缘配置。
 
 从旧版明文 `.env` 迁移时，不要生成新值；必须把当前正在使用的原值逐字节写入对应文件，否则已有数据库、Token 和加密业务配置会失效：
 
@@ -245,7 +245,7 @@ printf '%s' '<原 REPOGUARD_SECURITY_ENCRYPTION_SALT>' > secrets/repoguard.secur
 printf '%s' '<原 REPOGUARD_AUTH_TOKEN_SECRET>' > secrets/repoguard.auth.token-secret
 printf '%s' '<原 REPOGUARD_ADMIN_API_KEY>' > secrets/app.security.admin-api-key.key
 printf '%s' '<原 REPOGUARD_GITHUB_WEBHOOK_SECRET>' > secrets/app.github.webhook.secret
-chmod 600 secrets/*
+chmod 444 secrets/*
 ```
 
 唯一例外是从 2026-07-25 及更早、尚未引入 `REPOGUARD_SECURITY_ENCRYPTION_SALT` 的生产版本首次升级：此时没有可保留的旧 salt。必须在 `Release Images` 同时显式启用 `migrate_legacy_secret_files` 与 `initialize_missing_encryption_salt`，迁移脚本才会只为该缺失项生成 32 字节随机 salt；任一 salt 键或默认目标文件已经存在时都会复用并校验原值，不会轮换。该开关默认关闭，不能脱离明文密钥迁移单独使用；旧版 `enc:v1`/`enc:v2` 数据继续使用原加密密钥兼容解密，新写入才使用 salt 派生的 `enc:v3` 密钥。

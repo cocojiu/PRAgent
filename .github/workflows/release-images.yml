@@ -91,7 +91,7 @@ jobs:
             value="$3"
             path="${secret_dir}/${filename}"
             printf '%s' "${value}" > "${path}"
-            chmod 600 "${path}"
+            chmod 444 "${path}"
             echo "${setting}=${path}" >> "$GITHUB_ENV"
           }
           encryption_key="CI!1-$(openssl rand -hex 32)"
@@ -170,21 +170,37 @@ jobs:
           assert_secret() {
             expected="$1"
             path="$2"
-            test "$(stat -c '%a' "${path}")" = "600"
+            test "$(stat -c '%a' "${path}")" = "444"
             printf '%s' "${expected}" | cmp - "${path}"
           }
           test "$(stat -c '%a' "${migration_dir}/secrets")" = "700"
           assert_secret "${mysql_root_password}" "${migration_dir}/secrets/mysql.root-password"
           assert_secret "${mysql_password}" "${migration_dir}/secrets/spring.datasource.password"
           assert_secret "${encryption_key}" "${migration_dir}/secrets/repoguard.security.encryption-key"
-          test "$(stat -c '%a' "${migration_dir}/secrets/repoguard.security.encryption-salt")" = "600"
-          grep -Eq '^[0-9a-f]{64}$' "${migration_dir}/secrets/repoguard.security.encryption-salt"
+          generated_salt="$(cat "${migration_dir}/secrets/repoguard.security.encryption-salt")"
+          echo "::add-mask::${generated_salt}"
+          test "${#generated_salt}" = "64"
+          printf '%s' "${generated_salt}" | grep -Eq '^[0-9a-f]{64}$'
+          assert_secret "${generated_salt}" "${migration_dir}/secrets/repoguard.security.encryption-salt"
           assert_secret "${auth_token_secret}" "${migration_dir}/secrets/repoguard.auth.token-secret"
           assert_secret "${admin_api_key}" "${migration_dir}/secrets/app.security.admin-api-key.key"
           assert_secret "${webhook_secret}" "${migration_dir}/secrets/app.github.webhook.secret"
           grep -q '^MYSQL_ROOT_PASSWORD=' "${legacy_env}"
           grep -q '^MYSQL_ROOT_PASSWORD_FILE=./secrets/mysql.root-password$' "${legacy_env}"
           test -s "${state_dir}/secret-file-migration.pending"
+
+          chmod 600 "${migration_dir}/secrets/"*
+          ENV_FILE="${legacy_env}" \
+            DEPLOY_STATE_DIR="${state_dir}" \
+            INITIALIZE_MISSING_ENCRYPTION_SALT=true \
+            sh scripts/migrate-prod-secret-files.sh prepare
+          assert_secret "${mysql_root_password}" "${migration_dir}/secrets/mysql.root-password"
+          assert_secret "${mysql_password}" "${migration_dir}/secrets/spring.datasource.password"
+          assert_secret "${encryption_key}" "${migration_dir}/secrets/repoguard.security.encryption-key"
+          assert_secret "${generated_salt}" "${migration_dir}/secrets/repoguard.security.encryption-salt"
+          assert_secret "${auth_token_secret}" "${migration_dir}/secrets/repoguard.auth.token-secret"
+          assert_secret "${admin_api_key}" "${migration_dir}/secrets/app.security.admin-api-key.key"
+          assert_secret "${webhook_secret}" "${migration_dir}/secrets/app.github.webhook.secret"
 
           ENV_FILE="${legacy_env}" \
             DEPLOY_STATE_DIR="${state_dir}" \
@@ -349,6 +365,26 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
           tags: ${{ env.BACKEND_IMAGE_TAGS }}
+
+      - name: Verify non-root backend secret mount access
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint sh \
+            --mount "type=bind,src=${MYSQL_PASSWORD_FILE},dst=/run/secrets/spring.datasource.password,readonly" \
+            --mount "type=bind,src=${REPOGUARD_SECURITY_ENCRYPTION_KEY_FILE},dst=/run/secrets/repoguard.security.encryption-key,readonly" \
+            --mount "type=bind,src=${REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE},dst=/run/secrets/repoguard.security.encryption-salt,readonly" \
+            --mount "type=bind,src=${REPOGUARD_AUTH_TOKEN_SECRET_FILE},dst=/run/secrets/repoguard.auth.token-secret,readonly" \
+            --mount "type=bind,src=${REPOGUARD_ADMIN_API_KEY_FILE},dst=/run/secrets/app.security.admin-api-key.key,readonly" \
+            --mount "type=bind,src=${REPOGUARD_GITHUB_WEBHOOK_SECRET_FILE},dst=/run/secrets/app.github.webhook.secret,readonly" \
+            "${ALIYUN_BACKEND_IMAGE}@${{ steps.backend_image.outputs.digest }}" \
+            -ec '
+              test "$(id -u)" != "0"
+              for secret_path in /run/secrets/*; do
+                test -r "${secret_path}"
+                test -s "${secret_path}"
+              done
+            '
 
       - name: Build and push frontend image
         id: frontend_image
