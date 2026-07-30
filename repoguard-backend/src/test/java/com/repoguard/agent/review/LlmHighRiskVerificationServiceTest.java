@@ -58,6 +58,36 @@ class LlmHighRiskVerificationServiceTest {
     }
 
     @Test
+    void observeStrategySnapshotCapsADeploymentConfiguredForBlock() {
+        LlmVerificationProperties properties = new LlmVerificationProperties();
+        properties.setEnforcementMode("BLOCK");
+        StubCaller caller = new StubCaller(true, result(verifiedJson(), 1, 1, 2));
+        ReviewStrategyRelease observeRelease = new ReviewStrategyRelease(
+            17,
+            1,
+            LlmReviewVersions.PROMPT,
+            LlmReviewVersions.CONTEXT,
+            LlmReviewVersions.SCHEMA,
+            LlmReviewVersions.VERIFIER,
+            ServerRiskAggregator.VERSION,
+            EnforcementMode.OBSERVE,
+            true
+        );
+
+        LlmHighRiskVerificationOutcome outcome = service(properties).verify(
+            context(caller, settings(observeRelease)),
+            diff(),
+            ReviewResult.completed("HIGH", List.of(candidate("HIGH"))),
+            activeBudget()
+        );
+
+        ReviewFindingResult finding = outcome.review().findings().getFirst();
+        assertThat(finding.verificationStatus()).isEqualTo("VERIFIED");
+        assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+        assertThat(finding.isBlocking()).isFalse();
+    }
+
+    @Test
     void rejectedOrProtectedCandidateDegradesToMediumObserve() {
         StubCaller caller = new StubCaller(
             true,
@@ -161,10 +191,14 @@ class LlmHighRiskVerificationServiceTest {
     }
 
     private ReviewPipelineContext context(LlmReviewCaller caller) {
+        return context(caller, settings());
+    }
+
+    private ReviewPipelineContext context(LlmReviewCaller caller, ReviewPolicySettings settings) {
         return new ReviewPipelineContext(
             new ReviewTask(),
             diff(),
-            settings(),
+            settings,
             "prompt",
             System.nanoTime(),
             caller,
@@ -232,6 +266,30 @@ class LlmHighRiskVerificationServiceTest {
             450,
             BigDecimal.ONE,
             BigDecimal.valueOf(4)
+        );
+    }
+
+    private ReviewPolicySettings settings(ReviewStrategyRelease release) {
+        ReviewPolicySettings base = settings();
+        return new ReviewPolicySettings(
+            base.exists(),
+            base.llmEnabled(),
+            base.llmProvider(),
+            base.modelName(),
+            base.baseUrl(),
+            base.apiKey(),
+            base.timeoutSeconds(),
+            base.temperature(),
+            base.maxTokens(),
+            base.fallbackToRules(),
+            base.workerConcurrency(),
+            base.chunkFileThreshold(),
+            base.chunkLineThreshold(),
+            base.chunkMaxFiles(),
+            base.chunkMaxLines(),
+            base.inputTokenPricePerMillion(),
+            base.outputTokenPricePerMillion(),
+            release
         );
     }
 

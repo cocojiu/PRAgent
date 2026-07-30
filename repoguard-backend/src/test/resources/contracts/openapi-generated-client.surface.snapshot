@@ -51,9 +51,15 @@ systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; 
 systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
 systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
 systemConfigControllerGetReviewPolicy(): Promise<ReviewPolicyConfig>; // GET /api/v1/config/review-policy
+systemConfigControllerGetReviewRuleVersions(input: { path: { id: string } }): Promise<ReviewRulePolicyVersion[]>; // GET /api/v1/config/review-rules/{id}/versions
 systemConfigControllerGetReviewRules(): Promise<ReviewRulesResponse>; // GET /api/v1/config/review-rules
+systemConfigControllerGetReviewStrategyPolicy(): Promise<ReviewStrategyPolicy>; // GET /api/v1/config/review-strategy
+systemConfigControllerGetReviewStrategyVersions(): Promise<ReviewStrategyPolicy[]>; // GET /api/v1/config/review-strategy/versions
 systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
+systemConfigControllerPromoteReviewStrategy(input: { body: ReviewEnforcementModeRequest }): Promise<ReviewStrategyPolicy>; // PUT /api/v1/config/review-strategy/enforcement
 systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionResponse>; // POST /api/v1/config/secrets/re-encryption
+systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number } }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
+systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number } }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 systemConfigControllerTestGithubIntegration(input?: { body?: GithubIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/github/test
 systemConfigControllerTestMysqlConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/mysql/test
 systemConfigControllerTestRabbitMqConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/rabbitmq/test

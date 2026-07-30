@@ -49,6 +49,7 @@ class SpringBeanConstructorSelectionTest {
             RabbitReviewTaskPublisher.class,
             ReviewTaskPublishCompensator.class,
             LlmPullRequestReviewer.class,
+            Class.forName("com.repoguard.agent.review.ReviewPolicyProvider"),
             RuleBasedPullRequestReviewer.class,
             AuthTokenService.class,
             SecretCryptoService.class,
@@ -72,6 +73,7 @@ class SpringBeanConstructorSelectionTest {
             ReviewTaskQueryServiceImpl.class,
             ReviewTaskRetryService.class,
             ReviewServiceImpl.class,
+            Class.forName("com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl"),
             ReviewTaskExecutorImpl.class
         );
         List<Class<?>> packagePrivateSpringManagedTypes = List.of(

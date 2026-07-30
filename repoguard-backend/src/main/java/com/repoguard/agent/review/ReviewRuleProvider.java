@@ -45,6 +45,20 @@ public class ReviewRuleProvider {
             if (rule == null || !StringUtils.hasText(rule.getId())) {
                 continue;
             }
+            String normalizedId = rule.getId().trim().toUpperCase(java.util.Locale.ROOT);
+            boolean detectorRegistered = reviewRuleRegistry.contains(normalizedId);
+            if (!"DISABLED".equalsIgnoreCase(rule.getStatus()) && !detectorRegistered) {
+                meterRegistry.counter(
+                    "repoguard.review.rule.configuration_error",
+                    "reason",
+                    "detector_missing",
+                    "rule_id",
+                    normalizedId
+                ).increment();
+                throw new IllegalStateException(
+                    "Enabled review rule has no registered detector implementation: " + normalizedId
+                );
+            }
             ReviewRuleSettings settings = new ReviewRuleSettings(
                 rule.getId(),
                 rule.getStatus(),
@@ -54,20 +68,13 @@ public class ReviewRuleProvider {
                 EnforcementMode.from(rule.getEnforcementMode()),
                 rule.getPositiveExample(),
                 rule.getFalsePositiveGuidance(),
-                rule.getDescription()
+                rule.getDescription(),
+                detectorRegistered
+                    ? reviewRuleRegistry.detectorVersion(normalizedId)
+                    : disabledDetectorVersion(rule, normalizedId),
+                positiveVersion(rule.getConfigVersion()),
+                positiveVersion(rule.getPolicyVersion())
             );
-            if (!settings.disabled() && !reviewRuleRegistry.contains(settings.id())) {
-                meterRegistry.counter(
-                    "repoguard.review.rule.configuration_error",
-                    "reason",
-                    "detector_missing",
-                    "rule_id",
-                    settings.id()
-                ).increment();
-                throw new IllegalStateException(
-                    "Enabled review rule has no registered detector implementation: " + settings.id()
-                );
-            }
             if (rulesById.putIfAbsent(settings.id(), settings) != null) {
                 throw new IllegalStateException("Duplicate review rule configuration id: " + settings.id());
             }
@@ -84,5 +91,15 @@ public class ReviewRuleProvider {
             "rule_id",
             ruleId
         ).increment();
+    }
+
+    private long positiveVersion(Long value) {
+        return value == null || value < 1 ? 1 : value;
+    }
+
+    private String disabledDetectorVersion(ReviewRuleConfig rule, String normalizedId) {
+        return StringUtils.hasText(rule.getDetectorVersion())
+            ? rule.getDetectorVersion().trim()
+            : normalizedId.toLowerCase(java.util.Locale.ROOT) + "-detector-unavailable";
     }
 }

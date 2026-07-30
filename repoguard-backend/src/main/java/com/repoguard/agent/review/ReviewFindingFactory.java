@@ -24,7 +24,13 @@ class ReviewFindingFactory {
             effective.blocking(),
             match.reviewDimension(),
             effective.enforcementMode().name(),
-            effective.policyReason()
+            effective.policyReason(),
+            match.ruleId(),
+            "",
+            java.util.List.of(),
+            false,
+            LlmVerificationStatus.NOT_REQUIRED.name(),
+            effective.provenance()
         );
     }
 }

@@ -8,6 +8,10 @@ public interface PullRequestReviewRule {
 
     String id();
 
+    default String version() {
+        return id().trim().toLowerCase(java.util.Locale.ROOT) + "-detector-v2";
+    }
+
     default int order() {
         return 1000;
     }

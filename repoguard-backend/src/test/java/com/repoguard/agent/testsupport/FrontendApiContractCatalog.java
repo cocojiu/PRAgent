@@ -178,6 +178,8 @@ public final class FrontendApiContractCatalog {
     private static String normalizeTemplatePath(String path) {
         return path
             .replace("${idSegment(input.findingId)}", "{findingId}")
+            .replace("${idSegment(input.policyVersion)}", "{policyVersion}")
+            .replace("${idSegment(input.snapshotId)}", "{snapshotId}")
             .replace("${idSegment(input.taskId)}", "{taskId}")
             .replace("${idSegment(input.id)}", "{id}");
     }

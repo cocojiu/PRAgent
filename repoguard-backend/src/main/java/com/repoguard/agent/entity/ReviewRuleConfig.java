@@ -9,6 +9,9 @@ public class ReviewRuleConfig {
 
     @TableId
     private String id;
+    private String detectorVersion;
+    private Long configVersion;
+    private Long policyVersion;
     private String ruleName;
     private String scope;
     private String applicableLanguages;
@@ -30,6 +33,30 @@ public class ReviewRuleConfig {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public String getDetectorVersion() {
+        return detectorVersion;
+    }
+
+    public void setDetectorVersion(String detectorVersion) {
+        this.detectorVersion = detectorVersion;
+    }
+
+    public Long getConfigVersion() {
+        return configVersion;
+    }
+
+    public void setConfigVersion(Long configVersion) {
+        this.configVersion = configVersion;
+    }
+
+    public Long getPolicyVersion() {
+        return policyVersion;
+    }
+
+    public void setPolicyVersion(Long policyVersion) {
+        this.policyVersion = policyVersion;
     }
 
     public String getRuleName() {

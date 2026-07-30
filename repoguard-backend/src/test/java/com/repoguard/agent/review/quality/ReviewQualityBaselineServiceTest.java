@@ -54,7 +54,33 @@ class ReviewQualityBaselineServiceTest {
             assertThat(group.labeledFalsePositiveRate()).isEqualByComparingTo("25.00");
             assertThat(group.anchorRate()).isEqualByComparingTo("90.00");
             assertThat(group.pendingCount()).isEqualTo(2);
+            assertThat(group.policyVersion()).isEqualTo(1);
+            assertThat(group.contextVersion()).isEqualTo("not-applicable");
+            assertThat(group.thresholdStatus()).isEqualTo("INSUFFICIENT_SAMPLE");
+            assertThat(group.thresholdAlerts()).isEmpty();
         });
+    }
+
+    @Test
+    void emitsThresholdAlertsOnlyAfterThirtyExplicitLabels() {
+        when(mapper.selectSummary()).thenReturn(null);
+        when(mapper.selectExecution()).thenReturn(null);
+        when(mapper.selectGroups()).thenReturn(List.of(
+            group("under-30", 29L, 29L, 20L, 9L, 20L, 3L),
+            group("at-30", 30L, 30L, 20L, 10L, 20L, 3L)
+        ));
+
+        ReviewQualityBaseline baseline = service.loadBaseline();
+
+        assertThat(baseline.groups().get(0).thresholdStatus()).isEqualTo("INSUFFICIENT_SAMPLE");
+        assertThat(baseline.groups().get(0).thresholdAlerts()).isEmpty();
+        assertThat(baseline.groups().get(1).thresholdStatus()).isEqualTo("ALERT");
+        assertThat(baseline.groups().get(1).thresholdAlerts()).containsExactly(
+            "precision_below_90",
+            "false_positive_rate_above_10",
+            "anchor_rate_below_95",
+            "duplicate_rate_above_5"
+        );
     }
 
     @Test
@@ -72,5 +98,42 @@ class ReviewQualityBaselineServiceTest {
         assertThat(baseline.anchorRate()).isEqualByComparingTo("0.00");
         assertThat(baseline.duplicateRate()).isEqualByComparingTo("0.00");
         assertThat(baseline.groups()).isEmpty();
+    }
+
+    private Group group(
+        String versionKey,
+        Long total,
+        Long labeled,
+        Long confirmed,
+        Long falsePositives,
+        Long anchored,
+        Long duplicates
+    ) {
+        return new Group(
+            "RG-JAVA-001",
+            "RULE",
+            "octocat/demo",
+            "JAVA",
+            "HIGH",
+            versionKey,
+            "rg-java-001-detector-v2",
+            2L,
+            5L,
+            "not-applicable",
+            "not-applicable",
+            "not-applicable",
+            "not-applicable",
+            "server-risk-v2",
+            total,
+            labeled,
+            confirmed,
+            falsePositives,
+            total - labeled,
+            total,
+            0L,
+            0L,
+            anchored,
+            duplicates
+        );
     }
 }

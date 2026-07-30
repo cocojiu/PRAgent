@@ -17,6 +17,8 @@ import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.entity.ReviewRepositoryDimension;
 import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
+import com.repoguard.agent.entity.ReviewStrategyPolicySnapshot;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.entity.ReviewTaskArchiveSummary;
 import com.repoguard.agent.entity.ReviewTimeline;
@@ -53,6 +55,8 @@ public final class MybatisPlusTableMetadataExtension implements BeforeAllCallbac
         ReviewPolicyConfig.class,
         ReviewRepositoryDimension.class,
         ReviewRuleConfig.class,
+        ReviewRulePolicySnapshot.class,
+        ReviewStrategyPolicySnapshot.class,
         ReviewTask.class,
         ReviewTaskArchiveSummary.class,
         ReviewTimeline.class,

@@ -23,7 +23,8 @@ public record ReviewFindingResult(
     String preconditions,
     List<String> relatedFiles,
     boolean blockingCandidate,
-    String verificationStatus
+    String verificationStatus,
+    FindingProvenance provenance
 ) {
 
     public ReviewFindingResult {
@@ -37,6 +38,56 @@ public record ReviewFindingResult(
         verificationStatus = StringUtils.hasText(verificationStatus)
             ? verificationStatus.trim()
             : LlmVerificationStatus.NOT_REQUIRED.name();
+        provenance = provenance == null
+            ? FindingProvenance.legacy(source, ruleId, severity, confidence)
+            : provenance;
+    }
+
+    public ReviewFindingResult(
+        String severity,
+        String source,
+        String ruleId,
+        String filePath,
+        Integer lineNumber,
+        String message,
+        String recommendation,
+        String confidence,
+        String evidence,
+        String impact,
+        String fixExample,
+        boolean isBlocking,
+        String reviewDimension,
+        String enforcementMode,
+        String policyReason,
+        String issueType,
+        String preconditions,
+        List<String> relatedFiles,
+        boolean blockingCandidate,
+        String verificationStatus
+    ) {
+        this(
+            severity,
+            source,
+            ruleId,
+            filePath,
+            lineNumber,
+            message,
+            recommendation,
+            confidence,
+            evidence,
+            impact,
+            fixExample,
+            isBlocking,
+            reviewDimension,
+            enforcementMode,
+            policyReason,
+            issueType,
+            preconditions,
+            relatedFiles,
+            blockingCandidate,
+            verificationStatus,
+            FindingProvenance.legacy(source, ruleId, severity, confidence)
+        );
     }
 
     public ReviewFindingResult(

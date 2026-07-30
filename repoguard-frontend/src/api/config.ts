@@ -3,6 +3,7 @@ import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
   ReviewPolicyConfigRequest,
+  ReviewEnforcementModeRequest,
   ReviewRuleConfigRequest,
   ReviewRuleStatusRequest,
   NotificationBindingRequest,
@@ -70,6 +71,23 @@ export const updateReviewRule = (id: string, payload: ReviewRuleConfigRequest) =
 
 export const updateReviewRuleStatus = (id: string, payload: ReviewRuleStatusRequest) =>
   apiRequest("updateReviewRuleStatus", { id, payload });
+
+export const fetchReviewRuleVersions = (id: string) =>
+  apiRequest("fetchReviewRuleVersions", { id });
+
+export const rollbackReviewRule = (id: string, policyVersion: number) =>
+  apiRequest("rollbackReviewRule", { id, policyVersion });
+
+export const fetchReviewStrategy = () => apiRequest("fetchReviewStrategy", undefined);
+
+export const fetchReviewStrategyVersions = () =>
+  apiRequest("fetchReviewStrategyVersions", undefined);
+
+export const updateReviewStrategyEnforcement = (payload: ReviewEnforcementModeRequest) =>
+  apiRequest("updateReviewStrategyEnforcement", payload);
+
+export const rollbackReviewStrategy = (snapshotId: number) =>
+  apiRequest("rollbackReviewStrategy", { snapshotId });
 
 export const testGithubIntegrationConnection = (payload?: GithubIntegrationConfigRequest) =>
   apiRequest("testGithubIntegrationConnection", payload);

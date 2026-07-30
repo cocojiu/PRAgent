@@ -41,7 +41,8 @@ class FindingPolicyResolver {
             confidence,
             settings.enforcementMode(),
             blocking,
-            reason
+            reason,
+            FindingProvenance.rule(settings)
         );
     }
 
@@ -143,7 +144,8 @@ class FindingPolicyResolver {
             candidate.preconditions(),
             candidate.relatedFiles(),
             blockingCandidate,
-            verificationStatus.name()
+            verificationStatus.name(),
+            candidate.provenance()
         );
     }
 

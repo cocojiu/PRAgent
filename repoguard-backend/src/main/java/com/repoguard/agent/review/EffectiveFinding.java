@@ -7,6 +7,7 @@ record EffectiveFinding(
     String confidence,
     EnforcementMode enforcementMode,
     boolean blocking,
-    String policyReason
+    String policyReason,
+    FindingProvenance provenance
 ) {
 }

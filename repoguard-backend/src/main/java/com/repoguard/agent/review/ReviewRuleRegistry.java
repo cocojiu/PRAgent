@@ -14,12 +14,14 @@ public final class ReviewRuleRegistry {
 
     private final List<ReviewRule> lineRules;
     private final List<PullRequestReviewRule> pullRequestRules;
+    private final Map<String, String> detectorVersions;
     private final Set<String> ruleIds;
 
     public ReviewRuleRegistry(List<ReviewRule> lineRules, List<PullRequestReviewRule> pullRequestRules) {
         this.lineRules = sortedLineRules(lineRules);
         this.pullRequestRules = sortedPullRequestRules(pullRequestRules);
-        this.ruleIds = collectUniqueIds(this.lineRules, this.pullRequestRules);
+        this.detectorVersions = collectUniqueDetectors(this.lineRules, this.pullRequestRules);
+        this.ruleIds = Set.copyOf(detectorVersions.keySet());
         if (ruleIds.isEmpty()) {
             throw new IllegalArgumentException("At least one review rule detector must be registered");
         }
@@ -31,6 +33,15 @@ public final class ReviewRuleRegistry {
 
     public Set<String> ruleIds() {
         return ruleIds;
+    }
+
+    public String detectorVersion(String ruleId) {
+        String normalized = normalizeId(ruleId);
+        String version = detectorVersions.get(normalized);
+        if (!StringUtils.hasText(version)) {
+            throw new IllegalArgumentException("Review rule detector is not registered: " + normalized);
+        }
+        return version;
     }
 
     List<ReviewRule> lineRules() {
@@ -59,17 +70,30 @@ public final class ReviewRuleRegistry {
             .toList();
     }
 
-    private static Set<String> collectUniqueIds(
+    private static Map<String, String> collectUniqueDetectors(
         List<ReviewRule> lineRules,
         List<PullRequestReviewRule> pullRequestRules
     ) {
         Map<String, String> detectorTypes = new LinkedHashMap<>();
-        lineRules.forEach(rule -> register(detectorTypes, rule.id(), "line"));
-        pullRequestRules.forEach(rule -> register(detectorTypes, rule.id(), "pull-request"));
-        return Set.copyOf(detectorTypes.keySet());
+        Map<String, String> versions = new LinkedHashMap<>();
+        lineRules.forEach(rule -> register(detectorTypes, versions, rule.id(), rule.version(), "line"));
+        pullRequestRules.forEach(rule -> register(
+            detectorTypes,
+            versions,
+            rule.id(),
+            rule.version(),
+            "pull-request"
+        ));
+        return Map.copyOf(versions);
     }
 
-    private static void register(Map<String, String> detectorTypes, String rawId, String detectorType) {
+    private static void register(
+        Map<String, String> detectorTypes,
+        Map<String, String> versions,
+        String rawId,
+        String rawVersion,
+        String detectorType
+    ) {
         String id = normalizeId(rawId);
         if (!StringUtils.hasText(id)) {
             throw new IllegalStateException("Review rule detector id must not be blank");
@@ -80,6 +104,10 @@ public final class ReviewRuleRegistry {
                 "Duplicate review rule detector id " + id + " (" + existing + ", " + detectorType + ")"
             );
         }
+        if (!StringUtils.hasText(rawVersion)) {
+            throw new IllegalStateException("Review rule detector version must not be blank: " + id);
+        }
+        versions.put(id, rawVersion.trim());
     }
 
     private static String normalizeId(String value) {

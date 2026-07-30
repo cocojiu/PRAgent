@@ -55,7 +55,8 @@ class ReviewFindingSemanticDeduplicator {
             mergeText(first.preconditions(), second.preconditions()),
             mergeRelatedFiles(first.relatedFiles(), second.relatedFiles()),
             first.blockingCandidate() || second.blockingCandidate(),
-            preferredVerificationStatus(first.verificationStatus(), second.verificationStatus())
+            preferredVerificationStatus(first.verificationStatus(), second.verificationStatus()),
+            first.provenance().merge(second.provenance())
         );
     }
 

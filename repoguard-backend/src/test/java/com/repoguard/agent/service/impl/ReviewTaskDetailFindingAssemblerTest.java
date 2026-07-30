@@ -34,6 +34,15 @@ class ReviewTaskDetailFindingAssemblerTest {
         assertThat(findingDtos.getFirst().reviewDimension()).isEqualTo("SECURITY_RULE");
         assertThat(findingDtos.getFirst().feedbackStatus()).isEqualTo("unreviewed");
         assertThat(findingDtos.getFirst().feedbackAt()).isEqualTo("2026-06-19 10:20:00");
+        assertThat(findingDtos.getFirst().source()).isEqualTo("RULE");
+        assertThat(findingDtos.getFirst().ruleId()).isEqualTo("RG-AUTH-001");
+        assertThat(findingDtos.getFirst().relatedFiles()).containsExactly("src/AuthService.java");
+        assertThat(findingDtos.getFirst().trace().detectorVersion()).isEqualTo("rg-auth-001-detector-v2");
+        assertThat(findingDtos.getFirst().trace().ruleConfigVersion()).isEqualTo(3);
+        assertThat(findingDtos.getFirst().trace().policyVersion()).isEqualTo(5);
+        assertThat(findingDtos.getFirst().trace().originalSeverity()).isEqualTo("CRITICAL");
+        assertThat(findingDtos.getFirst().trace().effectiveSeverity()).isEqualTo("HIGH");
+        assertThat(findingDtos.getFirst().trace().downgradeReason()).isEqualTo("verification_downgrade");
         assertThat(missingTestDtos).hasSize(1);
         assertThat(missingTestDtos.getFirst().method()).isEqualTo("authorize");
     }
@@ -86,6 +95,26 @@ class ReviewTaskDetailFindingAssemblerTest {
         finding.setFixExample("@RequireRole");
         finding.setIsBlocking(true);
         finding.setReviewDimension("SECURITY_RULE");
+        finding.setSource("RULE");
+        finding.setRuleId("RG-AUTH-001");
+        finding.setIssueType("AUTHORIZATION");
+        finding.setPreconditions("Caller reaches the endpoint");
+        finding.setRelatedFiles("src/AuthService.java");
+        finding.setBlockingCandidate(true);
+        finding.setVerificationStatus("VERIFIED");
+        finding.setDetectorVersion("rg-auth-001-detector-v2");
+        finding.setRuleConfigVersion(3L);
+        finding.setPromptVersion("not-applicable");
+        finding.setContextVersion("not-applicable");
+        finding.setSchemaVersion("not-applicable");
+        finding.setVerifierVersion("not-applicable");
+        finding.setAggregationVersion("server-risk-v2");
+        finding.setPolicyVersion(5L);
+        finding.setOriginalSeverity("CRITICAL");
+        finding.setOriginalConfidence("HIGH");
+        finding.setDowngradeReason("verification_downgrade");
+        finding.setBlockReason("verified_rule_block");
+        finding.setAnchorType("ADDED_LINE");
         finding.setFeedbackAt(LocalDateTime.of(2026, 6, 19, 10, 20));
         return finding;
     }

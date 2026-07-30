@@ -407,6 +407,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 20:46:37（Asia/Shanghai）：完成 Q3 云端生产上下文门禁修复。首次精确提交 CI 的真实 MySQL/RabbitMQ 用例暴露 `LlmHighRiskVerificationService` 同时包含生产与测试专用构造路径、但未显式声明 Spring 注入构造器，导致容器回退查找无参构造器；现为生产构造器增加唯一 `@Autowired` 标记，并把该包级服务纳入 `SpringBeanConstructorSelectionTest` 架构守卫。定向 6 项回归、JDK 25 干净全量 `clean verify` 2237 项测试（0 失败、0 错误、7 跳过，816 个类 JaCoCo 门禁）及完整 production-readiness（后端 80 项、前端 136 项、类型检查、Lint、生产构建与包体预算）均通过，待新精确提交 CI 复验生产上下文。
 
+- 2026-07-30 22:31:11（Asia/Shanghai）：完成审查能力与风险校准专项 Q4 版本化质量反馈与灰度回滚批次。V58 为规则配置补齐 detector/config/policy 三类版本，为 Prompt、上下文、Schema、高危验证器和服务端风险聚合建立单活动策略快照，并把模型供应商与模型、原始/生效 severity 和 confidence、原始阻断候选、验证状态、降级/阻断原因及锚点类型贯穿审查执行、Finding 持久化、详情 API 和 GitHub 评论预览，保证每条结论可回溯到完整运行版本。质量基线现按 `rule_id/source/repository/language/severity` 与完整版本键分组统计明确标注数及覆盖率、有效/误报、precision/FPR、高危与阻断占比、误报撤销阻断数、锚定率和精确重复率；少于 30 个明确样本仅显示 `INSUFFICIENT_SAMPLE`，不生成阈值告警，达到样本门槛后才按 precision≥90%、FPR≤10%、锚定率≥95%、重复率≤5% 评估。规则语义变更、重新启用和新运行版本默认回到 OBSERVE；OBSERVE→COMMENT 要求人工标注，COMMENT→BLOCK 要求至少 30 个明确高危样本并通过全部质量门禁，禁止直接 OBSERVE→BLOCK，策略提升还必须通过 replay 且运行版本受支持。规则和全局策略均保存不可变历史快照，回滚会创建新版本、只影响新任务且不改写历史 Finding；规则配置页已提供当前版本、质量门禁、分组指标、升降级、历史版本和回滚操作。新增 4 组生命周期/迁移/回滚专项测试并同步 OpenAPI、前后端契约与授权矩阵；JDK 25 + Maven Wrapper 干净全量 `clean verify` 共 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过），完整 production-readiness 后端切片 80 项、前端 35 个测试文件共 137 项测试、类型检查、Lint、生产构建与包体预算全部通过；待推送后由精确提交 CI 执行真实 MySQL 8.0.46、RabbitMQ 3.13.7、镜像与安全验证。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.

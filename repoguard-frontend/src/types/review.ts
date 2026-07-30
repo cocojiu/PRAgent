@@ -235,6 +235,26 @@ export interface GithubCommentPublicationBatch {
 
 export type GithubCommentPublicationHistoryItem = GithubCommentPublishItem;
 
+export interface ReviewFindingTrace {
+  detectorVersion: string;
+  ruleConfigVersion: number;
+  promptVersion: string;
+  contextVersion: string;
+  schemaVersion: string;
+  verifierVersion: string;
+  aggregationVersion: string;
+  policyVersion: number;
+  llmProvider?: string;
+  llmModel?: string;
+  originalSeverity: string;
+  effectiveSeverity: string;
+  originalConfidence: string;
+  effectiveConfidence: string;
+  downgradeReason: string;
+  blockReason: string;
+  anchorType: string;
+}
+
 export interface ReviewFinding {
   id: number;
   severity: RiskLevel;
@@ -250,6 +270,14 @@ export interface ReviewFinding {
   reviewDimension?: string;
   enforcementMode?: "OBSERVE" | "COMMENT" | "BLOCK" | string;
   policyReason?: string;
+  source?: string;
+  ruleId?: string;
+  issueType?: string;
+  preconditions?: string;
+  relatedFiles?: string[];
+  blockingCandidate?: boolean;
+  verificationStatus?: string;
+  trace?: ReviewFindingTrace;
   feedbackStatus: FindingFeedbackStatus | string;
   feedbackNote?: string;
   feedbackBy?: string;

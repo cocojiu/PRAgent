@@ -13,7 +13,10 @@ public record ReviewRuleSettings(
     EnforcementMode enforcementMode,
     String positiveExample,
     String falsePositiveGuidance,
-    String description
+    String description,
+    String detectorVersion,
+    long configVersion,
+    long policyVersion
 ) {
 
     private static final Set<String> STATUSES = Set.of("ENABLED", "DISABLED");
@@ -33,6 +36,37 @@ public record ReviewRuleSettings(
         positiveExample = positiveExample == null ? "" : positiveExample.trim();
         falsePositiveGuidance = falsePositiveGuidance == null ? "" : falsePositiveGuidance.trim();
         description = description == null ? "" : description.trim();
+        detectorVersion = requireText(detectorVersion, "detectorVersion");
+        if (configVersion < 1 || policyVersion < 1) {
+            throw new IllegalArgumentException("Review rule versions must be positive");
+        }
+    }
+
+    public ReviewRuleSettings(
+        String id,
+        String status,
+        String filePatterns,
+        String severity,
+        int confidence,
+        EnforcementMode enforcementMode,
+        String positiveExample,
+        String falsePositiveGuidance,
+        String description
+    ) {
+        this(
+            id,
+            status,
+            filePatterns,
+            severity,
+            confidence,
+            enforcementMode,
+            positiveExample,
+            falsePositiveGuidance,
+            description,
+            id == null ? "legacy-detector-v1" : id.trim().toLowerCase(Locale.ROOT) + "-detector-v2",
+            1,
+            1
+        );
     }
 
     public ReviewRuleSettings(
@@ -54,7 +88,10 @@ public record ReviewRuleSettings(
             enforcementMode,
             positiveExample,
             falsePositiveGuidance,
-            ""
+            "",
+            id == null ? "legacy-detector-v1" : id.trim().toLowerCase(Locale.ROOT) + "-detector-v2",
+            1,
+            1
         );
     }
 

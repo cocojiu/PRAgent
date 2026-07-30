@@ -292,7 +292,8 @@ class LlmReviewPipeline {
                 parsed.llmPromptTokens(),
                 parsed.llmCompletionTokens(),
                 parsed.llmTotalTokens(),
-                parsed.llmEstimatedCost()
+                parsed.llmEstimatedCost(),
+                ReviewExecutionProvenance.from(settings.strategyRelease())
             );
             return state.withRuleReview(ruleReview).complete(completed);
         }
@@ -340,7 +341,8 @@ class LlmReviewPipeline {
             settings == null ? null : settings.llmProvider(),
             settings == null ? null : settings.modelName(),
             elapsedMillis(context.startedAtNanos()),
-            context.promptSummary()
+            context.promptSummary(),
+            ReviewExecutionProvenance.from(settings == null ? null : settings.strategyRelease())
         );
     }
 

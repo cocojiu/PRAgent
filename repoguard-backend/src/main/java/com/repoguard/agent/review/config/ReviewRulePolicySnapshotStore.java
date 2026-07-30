@@ -1,0 +1,83 @@
+package com.repoguard.agent.review.config;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
+import com.repoguard.agent.mapper.ReviewRulePolicySnapshotMapper;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Objects;
+import org.springframework.stereotype.Component;
+
+@Component
+public class ReviewRulePolicySnapshotStore {
+
+    private final ReviewRulePolicySnapshotMapper snapshotMapper;
+
+    public ReviewRulePolicySnapshotStore(ReviewRulePolicySnapshotMapper snapshotMapper) {
+        this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
+    }
+
+    public void save(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
+        ReviewRulePolicySnapshot snapshot = new ReviewRulePolicySnapshot();
+        snapshot.setRuleId(rule.getId());
+        snapshot.setPolicyVersion(rule.getPolicyVersion());
+        snapshot.setConfigVersion(rule.getConfigVersion());
+        snapshot.setDetectorVersion(rule.getDetectorVersion());
+        snapshot.setRuleName(rule.getRuleName());
+        snapshot.setScope(rule.getScope());
+        snapshot.setApplicableLanguages(defaultString(rule.getApplicableLanguages()));
+        snapshot.setFilePatterns(defaultString(rule.getFilePatterns()));
+        snapshot.setSeverity(rule.getSeverity());
+        snapshot.setStatus(rule.getStatus());
+        snapshot.setConfidence(rule.getConfidence());
+        snapshot.setEnforcementMode(rule.getEnforcementMode());
+        snapshot.setDescription(rule.getDescription());
+        snapshot.setPositiveExample(defaultString(rule.getPositiveExample()));
+        snapshot.setFalsePositiveGuidance(defaultString(rule.getFalsePositiveGuidance()));
+        snapshot.setChangeType(changeType);
+        snapshot.setSourcePolicyVersion(sourcePolicyVersion);
+        snapshot.setCreatedAt(LocalDateTime.now());
+        snapshotMapper.insert(snapshot);
+    }
+
+    public List<ReviewRulePolicySnapshot> list(String ruleId) {
+        return snapshotMapper.selectList(
+            new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
+                .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
+                .orderByDesc(ReviewRulePolicySnapshot::getPolicyVersion)
+                .orderByDesc(ReviewRulePolicySnapshot::getId)
+        );
+    }
+
+    public ReviewRulePolicySnapshot find(String ruleId, long policyVersion) {
+        return snapshotMapper.selectOne(
+            new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
+                .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
+                .eq(ReviewRulePolicySnapshot::getPolicyVersion, policyVersion)
+                .last("limit 1")
+        );
+    }
+
+    public void restore(ReviewRuleConfig rule, ReviewRulePolicySnapshot snapshot, long newPolicyVersion) {
+        rule.setDetectorVersion(snapshot.getDetectorVersion());
+        rule.setConfigVersion(snapshot.getConfigVersion());
+        rule.setPolicyVersion(newPolicyVersion);
+        rule.setRuleName(snapshot.getRuleName());
+        rule.setScope(snapshot.getScope());
+        rule.setApplicableLanguages(snapshot.getApplicableLanguages());
+        rule.setFilePatterns(snapshot.getFilePatterns());
+        rule.setSeverity(snapshot.getSeverity());
+        rule.setStatus(snapshot.getStatus());
+        rule.setConfidence(snapshot.getConfidence());
+        rule.setEnforcementMode(snapshot.getEnforcementMode());
+        rule.setDescription(snapshot.getDescription());
+        rule.setPositiveExample(snapshot.getPositiveExample());
+        rule.setFalsePositiveGuidance(snapshot.getFalsePositiveGuidance());
+        rule.setUpdatedAt(LocalDateTime.now());
+    }
+
+    private String defaultString(String value) {
+        return value == null ? "" : value;
+    }
+}

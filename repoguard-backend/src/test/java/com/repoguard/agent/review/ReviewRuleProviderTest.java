@@ -27,6 +27,7 @@ class ReviewRuleProviderTest {
     @Test
     void getRulesByIdReturnsStableRuleSettings() {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
+        when(reviewRuleRegistry.detectorVersion("RG-JAVA-001")).thenReturn("rg-java-001-detector-v2");
         when(reviewRuleRegistry.ruleIds()).thenReturn(Set.of("RG-JAVA-001"));
         when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(
             rule("RG-JAVA-001", "ENABLED", "*.java", "HIGH", 87, "BLOCK"),
@@ -42,6 +43,7 @@ class ReviewRuleProviderTest {
     @Test
     void getRulesByIdReturnsImmutableCompleteSnapshot() {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
+        when(reviewRuleRegistry.detectorVersion("RG-JAVA-001")).thenReturn("rg-java-001-detector-v2");
         when(reviewRuleRegistry.ruleIds()).thenReturn(Set.of("RG-JAVA-001"));
         ReviewRuleConfig configured = rule("RG-JAVA-001", "ENABLED", "*.java", "HIGH", 87, "BLOCK");
         configured.setPositiveExample("catch (IOException ex)");
@@ -56,6 +58,7 @@ class ReviewRuleProviderTest {
         assertThat(settings.enforcementMode()).isEqualTo(EnforcementMode.BLOCK);
         assertThat(settings.positiveExample()).isEqualTo("catch (IOException ex)");
         assertThat(settings.falsePositiveGuidance()).isEqualTo("Generated adapters are excluded");
+        assertThat(settings.detectorVersion()).isEqualTo("rg-java-001-detector-v2");
         assertThatThrownBy(() -> rulesById.put("RG-JAVA-002", settings))
             .isInstanceOf(UnsupportedOperationException.class);
     }

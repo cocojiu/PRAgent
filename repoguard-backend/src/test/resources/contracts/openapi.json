@@ -1736,6 +1736,309 @@
         }
       }
     },
+    "/api/v1/config/review-rules/{id}/versions" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetReviewRuleVersions",
+        "x-controller-operation" : "SystemConfigController#getReviewRuleVersions",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewRulePolicyVersionDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewRulePolicyVersionDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerRollbackReviewRule",
+        "x-controller-operation" : "SystemConfigController#rollbackReviewRule",
+        "parameters" : [ {
+          "name" : "id",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "maxLength" : 64
+          }
+        }, {
+          "name" : "policyVersion",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewRuleConfigDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewRuleConfigDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-strategy" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetReviewStrategyPolicy",
+        "x-controller-operation" : "SystemConfigController#getReviewStrategyPolicy",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewStrategyPolicyDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-strategy/enforcement" : {
+      "put" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerPromoteReviewStrategy",
+        "x-controller-operation" : "SystemConfigController#promoteReviewStrategy",
+        "parameters" : [ ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewEnforcementModeRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewEnforcementModeRequest"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewStrategyPolicyDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-strategy/versions" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetReviewStrategyVersions",
+        "x-controller-operation" : "SystemConfigController#getReviewStrategyVersions",
+        "parameters" : [ ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "List<ReviewStrategyPolicyDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "array",
+                      "items" : {
+                        "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
+                      }
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/review-strategy/versions/{snapshotId}/rollback" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerRollbackReviewStrategy",
+        "x-controller-operation" : "SystemConfigController#rollbackReviewStrategy",
+        "parameters" : [ {
+          "name" : "snapshotId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "ReviewStrategyPolicyDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/config/secrets/re-encryption" : {
       "post" : {
         "tags" : [ "SystemConfig" ],
@@ -6669,6 +6972,18 @@
           }
         }
       },
+      "ReviewEnforcementModeRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewEnforcementModeRequest",
+        "properties" : {
+          "enforcementMode" : {
+            "type" : "string",
+            "minLength" : 1,
+            "pattern" : "(?i)observe|comment|block"
+          }
+        },
+        "required" : [ "enforcementMode" ]
+      },
       "ReviewFindingDto" : {
         "type" : "object",
         "x-java-type" : "ReviewFindingDto",
@@ -6727,6 +7042,92 @@
             "type" : "string"
           },
           "policyReason" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "ruleId" : {
+            "type" : "string"
+          },
+          "issueType" : {
+            "type" : "string"
+          },
+          "preconditions" : {
+            "type" : "string"
+          },
+          "relatedFiles" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "blockingCandidate" : {
+            "type" : "boolean"
+          },
+          "verificationStatus" : {
+            "type" : "string"
+          },
+          "trace" : {
+            "$ref" : "#/components/schemas/ReviewFindingTraceDto"
+          }
+        }
+      },
+      "ReviewFindingTraceDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewFindingTraceDto",
+        "properties" : {
+          "detectorVersion" : {
+            "type" : "string"
+          },
+          "ruleConfigVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "llmProvider" : {
+            "type" : "string"
+          },
+          "llmModel" : {
+            "type" : "string"
+          },
+          "originalSeverity" : {
+            "type" : "string"
+          },
+          "effectiveSeverity" : {
+            "type" : "string"
+          },
+          "originalConfidence" : {
+            "type" : "string"
+          },
+          "effectiveConfidence" : {
+            "type" : "string"
+          },
+          "downgradeReason" : {
+            "type" : "string"
+          },
+          "blockReason" : {
+            "type" : "string"
+          },
+          "anchorType" : {
             "type" : "string"
           }
         }
@@ -6941,6 +7342,127 @@
         },
         "required" : [ "maxDiffLines", "llmTimeoutSeconds", "workerConcurrency", "autoComment", "autoRetry" ]
       },
+      "ReviewQualityGroupDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewQualityGroupDto",
+        "properties" : {
+          "ruleId" : {
+            "type" : "string"
+          },
+          "source" : {
+            "type" : "string"
+          },
+          "repository" : {
+            "type" : "string"
+          },
+          "language" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "versionKey" : {
+            "type" : "string"
+          },
+          "detectorVersion" : {
+            "type" : "string"
+          },
+          "ruleConfigVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "totalFindings" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "labeledCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "labeledCoverage" : {
+            "type" : "number"
+          },
+          "confirmedValidCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "falsePositiveCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "pendingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "labeledPrecision" : {
+            "type" : "number"
+          },
+          "labeledFalsePositiveRate" : {
+            "type" : "number"
+          },
+          "highRiskCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "highRiskRate" : {
+            "type" : "number"
+          },
+          "blockingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "blockingRate" : {
+            "type" : "number"
+          },
+          "revokedBlockingCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "anchoredCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "thresholdStatus" : {
+            "type" : "string"
+          },
+          "thresholdAlerts" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "required" : [ "ruleConfigVersion", "policyVersion", "totalFindings", "labeledCount", "confirmedValidCount", "falsePositiveCount", "pendingCount", "highRiskCount", "blockingCount", "revokedBlockingCount", "anchoredCount", "duplicateCount" ]
+      },
       "ReviewRetryResponse" : {
         "type" : "object",
         "x-java-type" : "ReviewRetryResponse",
@@ -7007,9 +7529,23 @@
           },
           "enforcementMode" : {
             "type" : "string"
+          },
+          "detectorVersion" : {
+            "type" : "string"
+          },
+          "configVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "qualityGate" : {
+            "$ref" : "#/components/schemas/ReviewRuleQualityGateDto"
           }
         },
-        "required" : [ "hitCount" ]
+        "required" : [ "hitCount", "configVersion", "policyVersion" ]
       },
       "ReviewRuleConfigRequest" : {
         "type" : "object",
@@ -7094,6 +7630,91 @@
           }
         }
       },
+      "ReviewRulePolicyVersionDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRulePolicyVersionDto",
+        "properties" : {
+          "policyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "configVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "detectorVersion" : {
+            "type" : "string"
+          },
+          "severity" : {
+            "type" : "string"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "confidence" : {
+            "type" : "string"
+          },
+          "enforcementMode" : {
+            "type" : "string"
+          },
+          "changeType" : {
+            "type" : "string"
+          },
+          "sourcePolicyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "active" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "policyVersion", "configVersion", "active" ]
+      },
+      "ReviewRuleQualityGateDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleQualityGateDto",
+        "properties" : {
+          "labeledSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "labeledHighRiskSamples" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "precision" : {
+            "type" : "number"
+          },
+          "falsePositiveRate" : {
+            "type" : "number"
+          },
+          "anchorRate" : {
+            "type" : "number"
+          },
+          "duplicateRate" : {
+            "type" : "number"
+          },
+          "commentEligible" : {
+            "type" : "boolean"
+          },
+          "blockEligible" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "blockers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          }
+        },
+        "required" : [ "labeledSamples", "labeledHighRiskSamples", "commentEligible", "blockEligible" ]
+      },
       "ReviewRuleStatusRequest" : {
         "type" : "object",
         "x-java-type" : "ReviewRuleStatusRequest",
@@ -7121,8 +7742,69 @@
             "items" : {
               "$ref" : "#/components/schemas/ReviewRuleConfigDto"
             }
+          },
+          "qualityGroups" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ReviewQualityGroupDto"
+            }
+          },
+          "strategyPolicy" : {
+            "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
           }
         }
+      },
+      "ReviewStrategyPolicyDto" : {
+        "type" : "object",
+        "x-java-type" : "ReviewStrategyPolicyDto",
+        "properties" : {
+          "snapshotId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "strategyVersion" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "promptVersion" : {
+            "type" : "string"
+          },
+          "contextVersion" : {
+            "type" : "string"
+          },
+          "schemaVersion" : {
+            "type" : "string"
+          },
+          "verifierVersion" : {
+            "type" : "string"
+          },
+          "aggregationVersion" : {
+            "type" : "string"
+          },
+          "enforcementMode" : {
+            "type" : "string"
+          },
+          "replayVerified" : {
+            "type" : "boolean"
+          },
+          "active" : {
+            "type" : "boolean"
+          },
+          "changeType" : {
+            "type" : "string"
+          },
+          "sourceSnapshotId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "qualityGate" : {
+            "$ref" : "#/components/schemas/ReviewRuleQualityGateDto"
+          }
+        },
+        "required" : [ "snapshotId", "strategyVersion", "replayVerified", "active" ]
       },
       "ReviewTaskListItem" : {
         "type" : "object",

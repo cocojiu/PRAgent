@@ -8,6 +8,9 @@ GET /api/v1/config/integrations/rabbitmq query=[] body=- bodyRequired=false
 GET /api/v1/config/notification-bindings query=[page, pageSize, organization, repository, provider] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
+GET /api/v1/config/review-rules/{id}/versions query=[] body=- bodyRequired=false
+GET /api/v1/config/review-strategy query=[] body=- bodyRequired=false
+GET /api/v1/config/review-strategy/versions query=[] body=- bodyRequired=false
 GET /api/v1/config/system-settings query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/high-risk-reviews query=[] body=- bodyRequired=false
 GET /api/v1/dashboard/llm-quality query=[llmTrendDays] body=- bodyRequired=false
@@ -49,6 +52,8 @@ POST /api/v1/config/notification-bindings query=[] body=NotificationBindingReque
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
 POST /api/v1/config/review-policy/test query=[] body=ReviewPolicyConfigRequest bodyRequired=false
 POST /api/v1/config/review-rules query=[] body=ReviewRuleConfigRequest bodyRequired=true
+POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback query=[] body=- bodyRequired=false
+POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback query=[] body=- bodyRequired=false
 POST /api/v1/config/secrets/re-encryption query=[] body=SecretReEncryptionRequest bodyRequired=true
 POST /api/v1/github/webhooks query=[] body=byte[] bodyRequired=true
 POST /api/v1/message-queue/tasks/{taskId}/requeue query=[] body=- bodyRequired=false
@@ -68,6 +73,7 @@ PUT /api/v1/config/notification-bindings/{id}/status query=[] body=NotificationB
 PUT /api/v1/config/review-policy query=[] body=ReviewPolicyConfigRequest bodyRequired=true
 PUT /api/v1/config/review-rules/{id} query=[] body=ReviewRuleConfigRequest bodyRequired=true
 PUT /api/v1/config/review-rules/{id}/status query=[] body=ReviewRuleStatusRequest bodyRequired=true
+PUT /api/v1/config/review-strategy/enforcement query=[] body=ReviewEnforcementModeRequest bodyRequired=true
 PUT /api/v1/config/system-settings query=[] body=SystemSettingsRequest bodyRequired=true
 PUT /api/v1/users/{id}/role query=[] body=UserRoleUpdateRequest bodyRequired=true
 PUT /api/v1/users/{id}/status query=[] body=UserStatusUpdateRequest bodyRequired=true

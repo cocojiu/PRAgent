@@ -12,6 +12,53 @@
 
     <MetricGrid :metrics="ruleMetricItems" :resolve-icon="getMetricIcon" />
 
+    <section v-if="strategyPolicy" class="dashboard-card policy-governance-card">
+      <div class="policy-governance-heading">
+        <div>
+          <h2>审查策略发布治理</h2>
+          <p>新策略先观察、经回放和人工样本校准后再逐级提升处置模式。</p>
+        </div>
+        <div class="policy-governance-actions">
+          <el-select v-model="strategyTargetMode" :disabled="!canManage" aria-label="策略处置模式">
+            <el-option label="仅观察" value="observe" />
+            <el-option label="评论" value="comment" />
+            <el-option label="阻断" value="block" />
+          </el-select>
+          <el-button
+            type="primary"
+            :disabled="!canManage || strategyTargetMode === strategyPolicy.enforcementMode"
+            :loading="strategySaving"
+            @click="saveStrategyEnforcement"
+          >应用模式</el-button>
+          <el-button @click="openStrategyVersions">版本历史</el-button>
+        </div>
+      </div>
+      <div class="policy-version-grid">
+        <div><span>策略快照</span><strong>#{{ strategyPolicy.snapshotId }}</strong></div>
+        <div><span>Prompt</span><strong>{{ strategyPolicy.promptVersion }}</strong></div>
+        <div><span>上下文</span><strong>{{ strategyPolicy.contextVersion }}</strong></div>
+        <div><span>聚合器</span><strong>{{ strategyPolicy.aggregationVersion }}</strong></div>
+        <div><span>回放验证</span><strong>{{ strategyPolicy.replayVerified ? "已通过" : "未通过" }}</strong></div>
+        <div>
+          <span>当前模式</span>
+          <el-tag :type="strategyPolicy.enforcementMode === 'block' ? 'danger' : strategyPolicy.enforcementMode === 'comment' ? 'warning' : 'info'">
+            {{ enforcementModeText(strategyPolicy.enforcementMode) }}
+          </el-tag>
+        </div>
+        <div>
+          <span>质量门禁</span>
+          <el-tag :type="qualityStatusType(strategyPolicy.qualityGate.status)">{{ strategyPolicy.qualityGate.status }}</el-tag>
+        </div>
+      </div>
+      <el-alert
+        v-if="strategyPolicy.qualityGate.blockers.length"
+        type="warning"
+        :title="strategyPolicy.qualityGate.blockers.join('；')"
+        show-icon
+        :closable="false"
+      />
+    </section>
+
     <section class="rule-layout">
       <article class="rule-panel">
         <div class="filter-bar rule-filter">
@@ -64,10 +111,19 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="版本 / 门禁" min-width="180">
+            <template #default="{ row }">
+              <div class="rule-version-cell">
+                <span>{{ row.detectorVersion }} · C{{ row.configVersion }} / P{{ row.policyVersion }}</span>
+                <el-tag size="small" :type="qualityStatusType(row.qualityGate.status)">{{ row.qualityGate.status }}</el-tag>
+              </div>
+            </template>
+          </el-table-column>
           <el-table-column prop="updatedAt" label="最近更新" min-width="160" />
-          <el-table-column label="操作" width="110" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button size="small" type="primary" plain :disabled="!canManage" @click="openEditDialog(row)">编辑</el-button>
+              <el-button size="small" @click="openRuleVersions(row)">历史</el-button>
             </template>
           </el-table-column>
           <template #empty>
@@ -85,6 +141,42 @@
         </div>
         <el-empty v-if="!topRuleDocs.length" description="暂无规则说明" />
       </aside>
+    </section>
+
+    <section class="dashboard-card quality-groups-card">
+      <div class="policy-governance-heading">
+        <div>
+          <h2>质量反馈分组</h2>
+          <p>按规则、来源、仓库、语言和版本追踪显式标注；少于 30 个样本时只展示数据，不自动评级。</p>
+        </div>
+      </div>
+      <el-table :data="qualityGroups" class="rg-table" size="small" aria-label="审查质量反馈分组">
+        <el-table-column prop="ruleId" label="规则" min-width="130" />
+        <el-table-column prop="source" label="来源" min-width="100" />
+        <el-table-column prop="repository" label="仓库" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="language" label="语言" min-width="90" />
+        <el-table-column prop="versionKey" label="版本" min-width="220" show-overflow-tooltip />
+        <el-table-column label="标注 / 覆盖率" min-width="130">
+          <template #default="{ row }">{{ row.labeledCount }} / {{ percent(row.labeledCoverage) }}</template>
+        </el-table-column>
+        <el-table-column label="准确率 / 误报率" min-width="150">
+          <template #default="{ row }">{{ percent(row.labeledPrecision) }} / {{ percent(row.labeledFalsePositiveRate) }}</template>
+        </el-table-column>
+        <el-table-column label="高危 / 阻断 / 撤销" min-width="170">
+          <template #default="{ row }">{{ row.highRiskCount }} / {{ row.blockingCount }} / {{ row.revokedBlockingCount }}</template>
+        </el-table-column>
+        <el-table-column label="锚点 / 重复" min-width="140">
+          <template #default="{ row }">{{ percent(row.anchorRate) }} / {{ percent(row.duplicateRate) }}</template>
+        </el-table-column>
+        <el-table-column label="阈值状态" min-width="150" fixed="right">
+          <template #default="{ row }">
+            <el-tooltip :content="row.thresholdAlerts.join('；') || '未触发阈值告警'">
+              <el-tag :type="qualityStatusType(row.thresholdStatus)">{{ row.thresholdStatus }}</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <template #empty><el-empty description="暂无显式反馈样本" /></template>
+      </el-table>
     </section>
 
     <el-dialog v-model="dialogVisible" title="编辑内置规则" width="560px">
@@ -145,6 +237,57 @@
         <el-button type="primary" :disabled="!canManage" :loading="saving" @click="saveRule">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="ruleVersionDialogVisible" :title="`${selectedRuleId} 策略版本历史`" width="920px">
+      <el-table v-loading="historyLoading" :data="ruleVersions" class="rg-table" size="small">
+        <el-table-column prop="policyVersion" label="策略版本" width="100" />
+        <el-table-column prop="configVersion" label="配置版本" width="100" />
+        <el-table-column prop="detectorVersion" label="检测器" min-width="140" />
+        <el-table-column prop="enforcementMode" label="模式" width="90" />
+        <el-table-column prop="changeType" label="变更类型" width="110" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.active" type="success">当前</el-tag>
+            <el-button
+              v-else
+              size="small"
+              type="primary"
+              plain
+              :disabled="!canManage"
+              :loading="rollbackSavingId === `rule-${row.policyVersion}`"
+              @click="rollbackRuleVersion(row.policyVersion)"
+            >回滚</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog v-model="strategyVersionDialogVisible" title="审查策略版本历史" width="980px">
+      <el-table v-loading="historyLoading" :data="strategyVersions" class="rg-table" size="small">
+        <el-table-column prop="snapshotId" label="快照" width="80" />
+        <el-table-column prop="strategyVersion" label="策略版本" width="100" />
+        <el-table-column prop="promptVersion" label="Prompt" width="110" />
+        <el-table-column prop="aggregationVersion" label="聚合器" min-width="140" />
+        <el-table-column prop="enforcementMode" label="模式" width="90" />
+        <el-table-column prop="changeType" label="变更类型" width="110" />
+        <el-table-column prop="createdAt" label="创建时间" min-width="170" />
+        <el-table-column label="操作" width="110" fixed="right">
+          <template #default="{ row }">
+            <el-tag v-if="row.active" type="success">当前</el-tag>
+            <el-button
+              v-else
+              size="small"
+              type="primary"
+              plain
+              :disabled="!canManage"
+              :loading="rollbackSavingId === `strategy-${row.snapshotId}`"
+              @click="rollbackStrategyVersion(row.snapshotId)"
+            >回滚</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -154,10 +297,28 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
-import { fetchReviewRules, updateReviewRule, updateReviewRuleStatus } from "@/api/config";
+import {
+  fetchReviewRules,
+  fetchReviewRuleVersions,
+  fetchReviewStrategyVersions,
+  rollbackReviewRule,
+  rollbackReviewStrategy,
+  updateReviewRule,
+  updateReviewRuleStatus,
+  updateReviewStrategyEnforcement
+} from "@/api/config";
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
-import type { ReviewRuleConfig, ReviewRuleConfigRequest, RuleStatus, SimpleMetric } from "@/types";
+import type {
+  EnforcementMode,
+  ReviewQualityGroup,
+  ReviewRuleConfig,
+  ReviewRuleConfigRequest,
+  ReviewRulePolicyVersion,
+  ReviewStrategyPolicy,
+  RuleStatus,
+  SimpleMetric
+} from "@/types";
 import { getErrorMessage } from "@/utils/errors";
 import { riskText } from "@/utils/risk";
 
@@ -169,9 +330,20 @@ const saving = ref(false);
 const statusSavingId = ref("");
 const errorMessage = ref("");
 const dialogVisible = ref(false);
+const ruleVersionDialogVisible = ref(false);
+const strategyVersionDialogVisible = ref(false);
 const editingRuleId = ref("");
 const rules = ref<ReviewRuleConfig[]>([]);
 const metrics = ref<SimpleMetric[]>([]);
+const qualityGroups = ref<ReviewQualityGroup[]>([]);
+const strategyPolicy = ref<ReviewStrategyPolicy | null>(null);
+const strategyTargetMode = ref<EnforcementMode>("observe");
+const strategySaving = ref(false);
+const historyLoading = ref(false);
+const rollbackSavingId = ref("");
+const selectedRuleId = ref("");
+const ruleVersions = ref<ReviewRulePolicyVersion[]>([]);
+const strategyVersions = ref<ReviewStrategyPolicy[]>([]);
 
 const ruleForm = reactive<ReviewRuleConfigRequest>({
   id: "",
@@ -231,6 +403,11 @@ const loadRules = async () => {
     const response = await fetchReviewRules();
     metrics.value = response.metrics;
     rules.value = response.rules;
+    qualityGroups.value = response.qualityGroups ?? [];
+    strategyPolicy.value = response.strategyPolicy ?? null;
+    if (strategyPolicy.value) {
+      strategyTargetMode.value = strategyPolicy.value.enforcementMode;
+    }
   } catch (error) {
     errorMessage.value = getErrorMessage(error, "规则加载失败");
     ElMessage.error(errorMessage.value);
@@ -261,6 +438,86 @@ const openEditDialog = (rule: ReviewRuleConfig) => {
   editingRuleId.value = rule.id;
   resetForm(rule);
   dialogVisible.value = true;
+};
+
+const openRuleVersions = async (rule: ReviewRuleConfig) => {
+  selectedRuleId.value = rule.id;
+  ruleVersionDialogVisible.value = true;
+  historyLoading.value = true;
+  try {
+    ruleVersions.value = await fetchReviewRuleVersions(rule.id);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
+  } finally {
+    historyLoading.value = false;
+  }
+};
+
+const openStrategyVersions = async () => {
+  strategyVersionDialogVisible.value = true;
+  historyLoading.value = true;
+  try {
+    strategyVersions.value = await fetchReviewStrategyVersions();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
+  } finally {
+    historyLoading.value = false;
+  }
+};
+
+const saveStrategyEnforcement = async () => {
+  if (!canManage.value || !strategyPolicy.value) {
+    return;
+  }
+  strategySaving.value = true;
+  try {
+    strategyPolicy.value = await updateReviewStrategyEnforcement({
+      enforcementMode: strategyTargetMode.value
+    });
+    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
+    ElMessage.success("审查策略处置模式已更新");
+    await loadRules();
+  } catch (error) {
+    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
+    ElMessage.error(getErrorMessage(error, "策略处置模式更新失败"));
+  } finally {
+    strategySaving.value = false;
+  }
+};
+
+const rollbackRuleVersion = async (policyVersion: number) => {
+  if (!canManage.value || !selectedRuleId.value) {
+    return;
+  }
+  rollbackSavingId.value = `rule-${policyVersion}`;
+  try {
+    await rollbackReviewRule(selectedRuleId.value, policyVersion);
+    ElMessage.success("规则策略已生成新的回滚版本");
+    await loadRules();
+    ruleVersions.value = await fetchReviewRuleVersions(selectedRuleId.value);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "规则策略回滚失败"));
+  } finally {
+    rollbackSavingId.value = "";
+  }
+};
+
+const rollbackStrategyVersion = async (snapshotId: number) => {
+  if (!canManage.value) {
+    return;
+  }
+  rollbackSavingId.value = `strategy-${snapshotId}`;
+  try {
+    strategyPolicy.value = await rollbackReviewStrategy(snapshotId);
+    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
+    ElMessage.success("审查策略已生成新的回滚快照");
+    await loadRules();
+    strategyVersions.value = await fetchReviewStrategyVersions();
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "审查策略回滚失败"));
+  } finally {
+    rollbackSavingId.value = "";
+  }
 };
 
 const saveRule = async () => {
@@ -351,6 +608,15 @@ const enforcementModeText = (mode: ReviewRuleConfig["enforcementMode"]) => {
   if (mode === "block") return "阻断";
   if (mode === "comment") return "评论";
   return "观察";
+};
+
+const percent = (value: number) => `${Number(value ?? 0).toFixed(1)}%`;
+
+const qualityStatusType = (status: string): "success" | "warning" | "danger" | "info" => {
+  if (status === "PASS") return "success";
+  if (status === "ALERT") return "danger";
+  if (status === "INSUFFICIENT_SAMPLE") return "warning";
+  return "info";
 };
 
 onMounted(loadRules);

@@ -41,7 +41,8 @@ class ReviewFindingMergeService {
             mergeText(first.preconditions(), second.preconditions()),
             mergeRelatedFiles(first.relatedFiles(), second.relatedFiles()),
             first.blockingCandidate() || second.blockingCandidate(),
-            stronger.verificationStatus()
+            stronger.verificationStatus(),
+            first.provenance().merge(second.provenance())
         );
     }
 

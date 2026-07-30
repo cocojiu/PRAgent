@@ -9,6 +9,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class ServerRiskAggregator {
 
+    public static final String VERSION = "server-risk-v2";
+
     public String aggregate(List<ReviewFindingResult> findings) {
         List<ReviewFindingResult> effective = findings == null
             ? List.of()

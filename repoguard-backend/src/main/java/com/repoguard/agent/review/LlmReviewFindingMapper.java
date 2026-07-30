@@ -40,7 +40,11 @@ public class LlmReviewFindingMapper {
             finding.path("preconditions").asText(""),
             mapRelatedFiles(finding.path("relatedFiles")),
             finding.path("blockingCandidate").asBoolean(false),
-            LlmVerificationStatus.NOT_REQUIRED.name()
+            LlmVerificationStatus.NOT_REQUIRED.name(),
+            FindingProvenance.llm(
+                finding.path("severity").asText(),
+                finding.path("confidence").asText()
+            )
         );
     }
 

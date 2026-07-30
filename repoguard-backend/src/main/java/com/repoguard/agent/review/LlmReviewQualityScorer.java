@@ -121,7 +121,8 @@ class LlmReviewQualityScorer {
             finding.preconditions(),
             finding.relatedFiles(),
             verificationPending && finding.blockingCandidate(),
-            verificationStatus
+            verificationStatus,
+            finding.provenance()
         );
     }
 

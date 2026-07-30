@@ -7,6 +7,7 @@ import com.repoguard.agent.mapper.projection.ReviewQualityBaselineProjections.Su
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
@@ -59,23 +60,77 @@ public class ReviewQualityBaselineService {
         long total = count(group.totalFindings());
         long confirmed = count(group.confirmedValidCount());
         long falsePositives = count(group.falsePositiveCount());
-        long labeled = confirmed + falsePositives;
+        long labeled = count(group.labeledCount());
+        long highRisk = count(group.highRiskCount());
+        long blocking = count(group.blockingCount());
         long anchored = count(group.anchoredCount());
+        long duplicates = count(group.duplicateCount());
+        BigDecimal precision = percentage(confirmed, labeled);
+        BigDecimal falsePositiveRate = percentage(falsePositives, labeled);
+        BigDecimal anchorRate = percentage(anchored, total);
+        BigDecimal duplicateRate = percentage(duplicates, total);
+        List<String> alerts = thresholdAlerts(labeled, precision, falsePositiveRate, anchorRate, duplicateRate);
         return new ReviewQualityGroupBaseline(
             group.ruleId(),
             group.source(),
             group.repository(),
             group.language(),
             group.severity(),
+            group.versionKey(),
+            group.detectorVersion(),
+            count(group.ruleConfigVersion()),
+            count(group.policyVersion()),
+            group.promptVersion(),
+            group.contextVersion(),
+            group.schemaVersion(),
+            group.verifierVersion(),
+            group.aggregationVersion(),
             total,
+            labeled,
+            percentage(labeled, total),
             confirmed,
             falsePositives,
             count(group.pendingCount()),
-            percentage(confirmed, labeled),
-            percentage(falsePositives, labeled),
+            precision,
+            falsePositiveRate,
+            highRisk,
+            percentage(highRisk, total),
+            blocking,
+            percentage(blocking, total),
+            count(group.revokedBlockingCount()),
             anchored,
-            percentage(anchored, total)
+            anchorRate,
+            duplicates,
+            duplicateRate,
+            labeled < 30 ? "INSUFFICIENT_SAMPLE" : alerts.isEmpty() ? "PASS" : "ALERT",
+            alerts
         );
+    }
+
+    private List<String> thresholdAlerts(
+        long labeled,
+        BigDecimal precision,
+        BigDecimal falsePositiveRate,
+        BigDecimal anchorRate,
+        BigDecimal duplicateRate
+    ) {
+        if (labeled < 30) {
+            return List.of();
+        }
+        List<String> alerts = new ArrayList<>();
+        if (precision.compareTo(BigDecimal.valueOf(90)) < 0) {
+            alerts.add("precision_below_90");
+        }
+        if (falsePositiveRate.compareTo(BigDecimal.valueOf(10)) > 0) {
+            alerts.add("false_positive_rate_above_10");
+        }
+        if (anchorRate.compareTo(BigDecimal.valueOf(95)) < 0) {
+            alerts.add("anchor_rate_below_95");
+        }
+        if (duplicateRate.compareTo(BigDecimal.valueOf(5)) > 0) {
+            alerts.add("duplicate_rate_above_5");
+        }
+        return List.copyOf(alerts);
     }
 
     private long count(Long value) {

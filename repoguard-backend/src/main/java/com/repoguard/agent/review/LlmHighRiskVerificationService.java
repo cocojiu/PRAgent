@@ -128,7 +128,7 @@ class LlmHighRiskVerificationService {
                 ReviewFindingResult verifiedFinding = policyResolver.resolveVerifiedLlmCandidate(
                     finding,
                     decision,
-                    properties.enforcementMode()
+                    effectiveEnforcementMode(context.settings())
                 );
                 resolved.add(verifiedFinding);
                 if (decision.verified()) {
@@ -158,5 +158,27 @@ class LlmHighRiskVerificationService {
             usage,
             new LlmVerificationSummary(attempted, verified, rejected, unavailable)
         );
+    }
+
+    private EnforcementMode effectiveEnforcementMode(ReviewPolicySettings settings) {
+        EnforcementMode configured = properties.enforcementMode();
+        if (settings == null || settings.strategyRelease() == null) {
+            return configured;
+        }
+        ReviewStrategyRelease release = settings.strategyRelease();
+        if (!release.replayVerified() || !release.supportsRuntimeVersions()) {
+            return EnforcementMode.OBSERVE;
+        }
+        return rank(release.enforcementMode()) <= rank(configured)
+            ? release.enforcementMode()
+            : configured;
+    }
+
+    private int rank(EnforcementMode mode) {
+        return switch (mode) {
+            case OBSERVE -> 1;
+            case COMMENT -> 2;
+            case BLOCK -> 3;
+        };
     }
 }

@@ -623,6 +623,33 @@ describe("apiRequest", () => {
     expect(calls[11][1].method).toBe("PUT");
     expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled" }));
   });
+
+  it("keeps versioned review policy governance endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001" });
+    await apiRequest("rollbackReviewRule", { id: "RG/JAVA 001", policyVersion: 7 });
+    await apiRequest("fetchReviewStrategy", undefined);
+    await apiRequest("fetchReviewStrategyVersions", undefined);
+    await apiRequest("updateReviewStrategyEnforcement", { enforcementMode: "comment" });
+    await apiRequest("rollbackReviewStrategy", { snapshotId: 13 });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions");
+    expect(calls[0][1].method).toBeUndefined();
+    expect(calls[1][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions/7/rollback");
+    expect(calls[1][1].method).toBe("POST");
+    expect(calls[2][0]).toContain("/api/v1/config/review-strategy");
+    expect(calls[2][1].method).toBeUndefined();
+    expect(calls[3][0]).toContain("/api/v1/config/review-strategy/versions");
+    expect(calls[3][1].method).toBeUndefined();
+    expect(calls[4][0]).toContain("/api/v1/config/review-strategy/enforcement");
+    expect(calls[4][1].method).toBe("PUT");
+    expect(calls[4][1].body).toBe(JSON.stringify({ enforcementMode: "comment" }));
+    expect(calls[5][0]).toContain("/api/v1/config/review-strategy/versions/13/rollback");
+    expect(calls[5][1].method).toBe("POST");
+  });
 });
 
 const setCsrfCookie = (token: string) => {
