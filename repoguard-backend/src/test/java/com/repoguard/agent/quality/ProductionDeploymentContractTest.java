@@ -159,11 +159,20 @@ class ProductionDeploymentContractTest {
 
         assertThat(workflow)
             .contains("migrate_legacy_secret_files:")
+            .contains("initialize_missing_encryption_salt:")
             .contains("default: false")
             .contains("name: Exercise legacy production secret migration")
             .contains("scripts/migrate-prod-secret-files.sh")
             .contains("MIGRATE_LEGACY_SECRET_FILES: ${{ inputs.migrate_legacy_secret_files }}")
-            .contains("MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}'");
+            .contains("MIGRATE_LEGACY_SECRET_FILES='${MIGRATE_LEGACY_SECRET_FILES}'")
+            .contains(
+                "INITIALIZE_MISSING_ENCRYPTION_SALT: "
+                    + "${{ inputs.initialize_missing_encryption_salt }}"
+            )
+            .contains(
+                "INITIALIZE_MISSING_ENCRYPTION_SALT="
+                    + "'${INITIALIZE_MISSING_ENCRYPTION_SALT}'"
+            );
 
         int prepare = deploy.lastIndexOf("sh scripts/migrate-prod-secret-files.sh prepare");
         int preflight = deploy.lastIndexOf("\nvalidate_required_bind_sources\n");
@@ -194,6 +203,9 @@ class ProductionDeploymentContractTest {
             .contains("printf '%s' \"$legacy_value\" > \"$candidate\"")
             .contains("cmp -s \"$candidate\" \"$secret_path\"")
             .contains("validation_secret_path=\"$2\"")
+            .contains("INITIALIZE_MISSING_ENCRYPTION_SALT=\"${"
+                + "INITIALIZE_MISSING_ENCRYPTION_SALT:-false}\"")
+            .contains("openssl rand -hex 32 > \"$candidate\"")
             .contains("unset MYSQL_ROOT_PASSWORD MYSQL_ROOT_PASSWORD_FILE")
             .contains(
                 "unset REPOGUARD_GITHUB_WEBHOOK_SECRET "
@@ -206,9 +218,17 @@ class ProductionDeploymentContractTest {
             .contains("Removed legacy inline secret keys after successful deployment verification.")
             .doesNotContain(
                 "\n  secret_path=\"$2\"\n",
-                "openssl rand",
                 "/dev/urandom",
                 "date +%s%N"
+            );
+        assertThat(deploy)
+            .contains(
+                "INITIALIZE_MISSING_ENCRYPTION_SALT requires "
+                    + "MIGRATE_LEGACY_SECRET_FILES=true."
+            )
+            .contains(
+                "INITIALIZE_MISSING_ENCRYPTION_SALT="
+                    + "\"$INITIALIZE_MISSING_ENCRYPTION_SALT\""
             );
     }
 

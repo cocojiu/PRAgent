@@ -14,6 +14,7 @@ DEPLOY_ASSET_BACKUP_DIR="${DEPLOY_ASSET_BACKUP_DIR:-}"
 DEPLOY_STATE_DIR="${DEPLOY_STATE_DIR:-.deploy-state}"
 PREFLIGHT_ONLY="${PREFLIGHT_ONLY:-false}"
 MIGRATE_LEGACY_SECRET_FILES="${MIGRATE_LEGACY_SECRET_FILES:-false}"
+INITIALIZE_MISSING_ENCRYPTION_SALT="${INITIALIZE_MISSING_ENCRYPTION_SALT:-false}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Missing compose file: $COMPOSE_FILE" >&2
@@ -51,6 +52,20 @@ case "$MIGRATE_LEGACY_SECRET_FILES" in
     exit 1
     ;;
 esac
+
+case "$INITIALIZE_MISSING_ENCRYPTION_SALT" in
+  true|false) ;;
+  *)
+    echo "INITIALIZE_MISSING_ENCRYPTION_SALT must be true or false." >&2
+    exit 1
+    ;;
+esac
+
+if [ "$INITIALIZE_MISSING_ENCRYPTION_SALT" = "true" ] \
+  && [ "$MIGRATE_LEGACY_SECRET_FILES" != "true" ]; then
+  echo "INITIALIZE_MISSING_ENCRYPTION_SALT requires MIGRATE_LEGACY_SECRET_FILES=true." >&2
+  exit 1
+fi
 
 read_env_value() {
   key="$1"
@@ -727,7 +742,9 @@ if ! flock -n 9; then
 fi
 
 if [ "$MIGRATE_LEGACY_SECRET_FILES" = "true" ]; then
-  ENV_FILE="$ENV_FILE" DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+  ENV_FILE="$ENV_FILE" \
+    DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+    INITIALIZE_MISSING_ENCRYPTION_SALT="$INITIALIZE_MISSING_ENCRYPTION_SALT" \
     sh scripts/migrate-prod-secret-files.sh prepare
 fi
 
@@ -806,7 +823,9 @@ verify_deployment 15 30
 record_rabbitmq_config_digest
 rollback_needed=false
 if [ "$MIGRATE_LEGACY_SECRET_FILES" = "true" ]; then
-  ENV_FILE="$ENV_FILE" DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+  ENV_FILE="$ENV_FILE" \
+    DEPLOY_STATE_DIR="$DEPLOY_STATE_DIR" \
+    INITIALIZE_MISSING_ENCRYPTION_SALT="$INITIALIZE_MISSING_ENCRYPTION_SALT" \
     sh scripts/migrate-prod-secret-files.sh finalize
 fi
 echo "RepoGuard deployment is healthy: $HEALTH_URL"

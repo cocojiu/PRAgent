@@ -248,6 +248,8 @@ printf '%s' '<原 REPOGUARD_GITHUB_WEBHOOK_SECRET>' > secrets/app.github.webhook
 chmod 600 secrets/*
 ```
 
+唯一例外是从 2026-07-25 及更早、尚未引入 `REPOGUARD_SECURITY_ENCRYPTION_SALT` 的生产版本首次升级：此时没有可保留的旧 salt。必须在 `Release Images` 同时显式启用 `migrate_legacy_secret_files` 与 `initialize_missing_encryption_salt`，迁移脚本才会只为该缺失项生成 32 字节随机 salt；任一 salt 键或默认目标文件已经存在时都会复用并校验原值，不会轮换。该开关默认关闭，不能脱离明文密钥迁移单独使用；旧版 `enc:v1`/`enc:v2` 数据继续使用原加密密钥兼容解密，新写入才使用 salt 派生的 `enc:v3` 密钥。
+
 随后把 `.env` 中上述明文键替换为以下文件路径键；确认新容器健康、登录/Webhook/集成配置解密和一次备份恢复均正常后，再删除服务器上的受限迁移副本：
 
 ```dotenv
