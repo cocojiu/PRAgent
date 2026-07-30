@@ -177,31 +177,175 @@ jobs:
                   "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
           fi
 
+          smoke_project="repoguard-smoke-${SMOKE_RUN_ID}-${SMOKE_RUN_ATTEMPT}"
+          expected_strategy_policy="1|review-prompt-v2|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1"
+          policy_probe_log="$(mktemp)"
+          policy_probe_pid=""
+
+          cleanup_policy_probe() {
+            if [ -n "${policy_probe_pid}" ] && kill -0 "${policy_probe_pid}" 2>/dev/null; then
+              kill "${policy_probe_pid}" 2>/dev/null || true
+              wait "${policy_probe_pid}" 2>/dev/null || true
+            fi
+            rm -f -- "${policy_probe_log}"
+          }
+          trap cleanup_policy_probe EXIT
+
+          printf -v policy_probe_args ' %q' "${smoke_project}" "${expected_strategy_policy}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "backend_image='${backend_image}'; \
-             if [ -z \"\${backend_image}\" ]; then \
-               backend_container=\$(cd '${DEPLOY_PATH}' && docker compose --env-file .env -f docker-compose.prod.yml ps -q backend); \
-               if [ -n \"\${backend_container}\" ]; then \
-                 backend_image=\$(docker inspect \"\${backend_container}\" --format '{{.Config.Image}}'); \
-               fi; \
-             fi; \
-             if [ -z \"\${backend_image}\" ]; then \
-               backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
-             fi; \
-             test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
-             if [ '${pull_requested}' = 'true' ]; then \
-               docker pull \"\${backend_image}\" >/dev/null; \
-             fi; \
-             if [ -n '${EXPECTED_REVISION}' ]; then \
-               actual_revision=\$(docker image inspect \"\${backend_image}\" --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}'); \
-               test \"\${actual_revision}\" = '${EXPECTED_REVISION}' || { \
-                 echo \"Backend image revision mismatch: expected ${EXPECTED_REVISION}, found \${actual_revision:-missing}\" >&2; \
-                 exit 1; \
-               }; \
-             fi; \
-             '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
-             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
-             '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"
+            "bash -s --${policy_probe_args}" >"${policy_probe_log}" 2>&1 <<'POLICY_PROBE' &
+          set -euo pipefail
+          project="$1"
+          expected_policy="$2"
+          for _ in $(seq 1 120); do
+            mysql_container="$(
+              docker ps -q \
+                --filter "label=com.docker.compose.project=${project}" \
+                --filter "label=com.docker.compose.service=mysql"
+            )"
+            if [ -n "${mysql_container}" ]; then
+              strategy_policy="$(
+                docker exec "${mysql_container}" sh -lc \
+                  'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT CONCAT_WS('\''|'\'', strategy_version, prompt_version, context_version, schema_version, verifier_version, aggregation_version, enforcement_mode, replay_verified, active) FROM review_strategy_policy_snapshot WHERE active = 1 ORDER BY id DESC LIMIT 1"' \
+                  2>/dev/null || true
+              )"
+              if [ -n "${strategy_policy}" ]; then
+                echo "smoke_strategy_policy=${strategy_policy}"
+                test "${strategy_policy}" = "${expected_policy}" || {
+                  echo "Active review strategy is not the expected OBSERVE baseline." >&2
+                  exit 1
+                }
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for the isolated OBSERVE strategy snapshot." >&2
+          exit 1
+          POLICY_PROBE
+          policy_probe_pid=$!
+
+          printf -v smoke_args ' %q' \
+            "${DEPLOY_PATH}" \
+            "${backend_image}" \
+            "${pull_requested}" \
+            "${EXPECTED_REVISION}" \
+            "${BACKUP_PATH}" \
+            "${MAX_TOTAL_TOKENS}" \
+            "${SMOKE_RUN_ID}" \
+            "${SMOKE_RUN_ATTEMPT}"
+          smoke_status=0
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash -s --${smoke_args}" <<'ISOLATED_SMOKE' || smoke_status=$?
+          set -euo pipefail
+          deploy_path="$1"
+          backend_image="$2"
+          pull_requested="$3"
+          expected_revision="$4"
+          backup_path="$5"
+          max_total_tokens="$6"
+          smoke_run_id="$7"
+          smoke_run_attempt="$8"
+          production_env="${deploy_path}/.env"
+
+          read_production_secret() {
+            secret_name="$1"
+            direct_value="$(
+              sed -n "s/^${secret_name}=//p" "${production_env}" | tail -n 1
+            )"
+            if [ -n "${direct_value}" ]; then
+              printf '%s' "${direct_value}"
+              return 0
+            fi
+
+            secret_file="$(
+              sed -n "s/^${secret_name}_FILE=//p" "${production_env}" | tail -n 1
+            )"
+            test -n "${secret_file}" || {
+              echo "Missing ${secret_name} and ${secret_name}_FILE in production environment." >&2
+              return 1
+            }
+            case "${secret_file}" in
+              /*) ;;
+              *) secret_file="${deploy_path}/${secret_file#./}" ;;
+            esac
+            test -r "${secret_file}" || {
+              echo "Configured ${secret_name}_FILE is not readable." >&2
+              return 1
+            }
+            cat -- "${secret_file}"
+          }
+
+          test -f "${production_env}" || {
+            echo "Missing production environment file." >&2
+            exit 1
+          }
+          encryption_key="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_KEY)"
+          encryption_salt="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_SALT)"
+          test -n "${encryption_key}" && test -n "${encryption_salt}" || {
+            echo "Production encryption material must not be empty." >&2
+            exit 1
+          }
+          export REPOGUARD_SECURITY_ENCRYPTION_KEY="${encryption_key}"
+          export REPOGUARD_SECURITY_ENCRYPTION_SALT="${encryption_salt}"
+          export REPOGUARD_GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+          unset encryption_key encryption_salt
+
+          if [ -z "${backend_image}" ]; then
+            backend_container="$(
+              cd "${deploy_path}"
+              docker compose --env-file .env -f docker-compose.prod.yml ps -q backend
+            )"
+            if [ -n "${backend_container}" ]; then
+              backend_image="$(
+                docker inspect "${backend_container}" --format '{{.Config.Image}}'
+              )"
+            fi
+          fi
+          if [ -z "${backend_image}" ]; then
+            backend_image="$(
+              sed -n 's/^BACKEND_IMAGE=//p' "${production_env}" | tail -n 1
+            )"
+          fi
+          test -n "${backend_image}" || {
+            echo "Missing deployed BACKEND_IMAGE" >&2
+            exit 1
+          }
+          if [ "${pull_requested}" = "true" ]; then
+            docker pull "${backend_image}" >/dev/null
+          fi
+          if [ -n "${expected_revision}" ]; then
+            actual_revision="$(
+              docker image inspect "${backend_image}" \
+                --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+            )"
+            test "${actual_revision}" = "${expected_revision}" || {
+              echo "Backend image revision mismatch: expected ${expected_revision}, found ${actual_revision:-missing}" >&2
+              exit 1
+            }
+            echo "smoke_backend_revision=${actual_revision}"
+          fi
+
+          "${deploy_path}/performance/remote/run-isolated-real-chain-smoke.sh" \
+            "${backup_path}" "${max_total_tokens}" "${backend_image}" \
+            "${smoke_run_id}" "${smoke_run_attempt}"
+          ISOLATED_SMOKE
+
+          if [ "${smoke_status}" -ne 0 ]; then
+            if kill -0 "${policy_probe_pid}" 2>/dev/null; then
+              kill "${policy_probe_pid}" 2>/dev/null || true
+            fi
+            wait "${policy_probe_pid}" 2>/dev/null || true
+            policy_probe_pid=""
+            cat "${policy_probe_log}" || true
+            exit "${smoke_status}"
+          fi
+
+          policy_probe_status=0
+          wait "${policy_probe_pid}" || policy_probe_status=$?
+          policy_probe_pid=""
+          cat "${policy_probe_log}"
+          test "${policy_probe_status}" -eq 0
 
       - name: Verify production health after isolated smoke
         if: always()

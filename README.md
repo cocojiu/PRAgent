@@ -413,6 +413,8 @@ RepoGuard / RepoGuard Review Observability
 
 - 2026-07-30 23:23:24（Asia/Shanghai）：完成 Q4 OBSERVE 灰度第一步的精确镜像隔离验证入口。仓库当前只配置 production GitHub Environment，`Release Images` 也明确拒绝从 `PRAgent-test` 直接部署，因此不冒险把测试分支覆盖到生产服务；改为扩展既有 Real Chain Smoke，使其可按已发布 ACR tag 拉取后端镜像，并强制同时提供完整 40 位 expected revision，在启动独立 MySQL/RabbitMQ/Backend、临时端口和临时卷之前校验 OCI `org.opencontainers.image.revision`。新入口拒绝同时传入完整镜像与 tag、限制所有镜像坐标字符、显式登录 ACR，生产服务在隔离链路前后继续接受健康检查，Smoke 资源仍由原生命周期脚本自动清理。Workflow/YAML/隔离边界定向 20 项测试通过，JDK 25 干净全量 `clean verify` 共 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁）；下一步使用 `pragent-test-6958f55efe15` 与完整提交 `6958f55efe151e009a10b85eec4828b92617d492` 运行三条真实 GitHub/LLM 样本。
 
+- 2026-07-30 23:45:32（Asia/Shanghai）：完成首轮 OBSERVE 隔离验证故障收敛。Real Chain Smoke Run `30556752112` 已通过生产前置健康、ACR 精确镜像拉取及 OCI revision 校验，隔离 MySQL/RabbitMQ 也正常启动；随后确认远端旧隔离 Compose 仍读取直传加密环境变量，而生产凭据已经迁移为文件挂载，导致隔离后端因加密键为空而按预期拒绝启动。失败链路已完整删除临时容器、网络和卷，生产后置健康检查继续通过。工作流现兼容从生产 `.env` 的直传值或 `_FILE` 路径只在远端隔离进程内加载加密键与盐，以便解密复制的生产策略行；Webhook 改用每次运行生成的临时随机密钥，不复用生产 Webhook 凭据。另增加并行只读策略探针，要求活动快照精确为 strategy 1、`review-prompt-v2/review-context-v2/review-schema-v2/high-risk-verifier-v1/server-risk-v2`、`OBSERVE`、已 replay 且唯一激活，并显式输出镜像 revision。Workflow YAML 与完整 Bash 块语法校验通过，JDK 25 定向 20 项契约测试及干净全量 `clean verify` 2255 项测试通过（0 失败、0 错误、7 跳过，834 个类 JaCoCo 门禁通过）；下一步推送修复后重跑同一精确业务镜像。
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](./LICENSE) for details.
