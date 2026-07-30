@@ -1,5 +1,9 @@
 x-backend-environment: &backend-environment
   SPRING_PROFILES_ACTIVE: prod
+  # Keep the deployment model backward-compatible with images built before
+  # configtree import moved into application configuration. This is required
+  # for an image rollback after secrets have migrated to Compose file mounts.
+  SPRING_CONFIG_IMPORT: "optional:configtree:/run/secrets/"
   SERVER_PORT: 8081
   SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql:3306/${APP_MYSQL_DATABASE:-${MYSQL_DATABASE:-repoguard}}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true}
   SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-repoguard}

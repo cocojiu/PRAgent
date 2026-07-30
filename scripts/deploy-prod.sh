@@ -623,6 +623,7 @@ stop_inactive_split_worker() {
 }
 
 restore_deployment_assets() {
+  restore_compose_file="${1:-true}"
   if [ -z "$DEPLOY_ASSET_BACKUP_DIR" ]; then
     echo "No deployment asset backup was supplied; keeping the uploaded assets." >&2
     return 0
@@ -644,8 +645,12 @@ restore_deployment_assets() {
     fi
   done
   if [ -f "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" ]; then
-    cp -p "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
-    restored_assets=true
+    if [ "$restore_compose_file" = "true" ]; then
+      cp -p "$DEPLOY_ASSET_BACKUP_DIR/docker-compose.prod.yml" "$COMPOSE_FILE"
+      restored_assets=true
+    else
+      echo "Keeping the validated candidate Compose model for backward-compatible image rollback." >&2
+    fi
   fi
 
   if [ "$restored_assets" = "true" ]; then
@@ -653,6 +658,18 @@ restore_deployment_assets() {
   else
     echo "No previous deployment assets existed; keeping the uploaded assets." >&2
   fi
+}
+
+recreate_edge_proxy_chain() {
+  edge_refresh_status=0
+  # Nginx and Caddy resolve their upstream service names when their processes
+  # start. Recreate both in dependency order whenever the backend is recreated
+  # so neither proxy retains an address for a replaced container.
+  compose up -d --no-deps --force-recreate frontend || edge_refresh_status=1
+  wait_service_health frontend 30 || edge_refresh_status=1
+  compose up -d --no-deps --force-recreate caddy || edge_refresh_status=1
+  wait_service_health caddy 30 || edge_refresh_status=1
+  return "$edge_refresh_status"
 }
 
 rollback_deployment() {
@@ -664,15 +681,22 @@ rollback_deployment() {
 
   set +e
   echo "Deployment failed; restoring the previous deployment assets and services..." >&2
-  restore_deployment_assets
+  # Keep the validated candidate Compose model. It pins configtree import and
+  # secret mounts explicitly, allowing a previous application image to start
+  # after the one-way inline-secret migration.
+  restore_deployment_assets false
+  rollback_healthy=true
   compose up -d --no-deps mysql
   # Bind-file contents are not part of Compose's service hash. A forced broker
   # recreation is required to reload the restored consumer_timeout.
   compose up -d --no-deps --force-recreate rabbitmq
-  wait_service_health mysql 45
+  if ! wait_service_health mysql 45; then
+    rollback_healthy=false
+  fi
   if wait_service_health rabbitmq 45; then
     record_rabbitmq_config_digest
   else
+    rollback_healthy=false
     invalidate_rabbitmq_config_digest
     echo "RabbitMQ rollback is unhealthy; the next deployment will force another recreation." >&2
   fi
@@ -686,22 +710,34 @@ rollback_deployment() {
   BACKEND_IMAGE="$previous_backend_image"
   export BACKEND_IMAGE
   if has_compose_service backend-worker; then
-    compose stop backend-worker >/dev/null 2>&1
+    compose stop backend-worker >/dev/null 2>&1 || true
   fi
   compose up -d --no-deps backend
-  wait_backend_health 45
+  if ! wait_backend_health 45; then
+    rollback_healthy=false
+  fi
   if has_compose_service backend-worker; then
     compose up -d --no-deps backend-worker
-    wait_service_health backend-worker 45
+    if ! wait_service_health backend-worker 45; then
+      rollback_healthy=false
+    fi
   fi
   if [ -n "${previous_frontend_image:-}" ]; then
     FRONTEND_IMAGE="$previous_frontend_image"
     export FRONTEND_IMAGE
-    compose up -d --no-deps frontend
-    compose up -d --no-deps caddy
+    if ! recreate_edge_proxy_chain; then
+      rollback_healthy=false
+    fi
+    if ! wait_http_health 30; then
+      rollback_healthy=false
+    fi
   fi
   compose ps >&2
-  echo "Rollback attempt finished; deployment remains failed with status $status." >&2
+  if [ "$rollback_healthy" = "true" ]; then
+    echo "Rollback restored a healthy previous release; deployment remains failed with status $status." >&2
+  else
+    echo "Rollback attempt finished without restoring full health; deployment remains failed with status $status." >&2
+  fi
   exit "$status"
 }
 
@@ -842,8 +878,7 @@ if has_compose_service backend-worker; then
   wait_service_health backend-worker 45
 fi
 
-compose up -d --no-deps frontend
-compose up -d --no-deps caddy
+recreate_edge_proxy_chain
 compose ps
 verify_deployment 15 30
 record_rabbitmq_config_digest
