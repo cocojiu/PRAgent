@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.config;
 
 import com.repoguard.agent.entity.ReviewRuleConfig;
+import com.repoguard.agent.review.EnforcementMode;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,10 @@ public class ReviewRuleConfigPolicy {
 
     public String normalizeStatus(String value) {
         return value == null ? "DISABLED" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    public String normalizeEnforcementMode(String value) {
+        return EnforcementMode.from(value).name();
     }
 
     public int nextSortOrder(List<ReviewRuleConfig> rules) {

@@ -1,21 +1,32 @@
 package com.repoguard.agent.worker;
 
+import com.repoguard.agent.config.ReviewHumanReviewProperties;
+import com.repoguard.agent.review.HumanReviewPolicyEvaluator;
+import com.repoguard.agent.review.ReviewResult;
 import com.repoguard.agent.review.RiskLevelRanker;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 class ReviewHumanReviewDecisionPolicy {
 
-    private static final String HUMAN_REVIEW_THRESHOLD = "MEDIUM";
-
-    private final RiskLevelRanker riskLevelRanker;
+    private final HumanReviewPolicyEvaluator evaluator;
 
     ReviewHumanReviewDecisionPolicy(RiskLevelRanker riskLevelRanker) {
-        this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
+        this(new HumanReviewPolicyEvaluator(riskLevelRanker, new ReviewHumanReviewProperties()));
+    }
+
+    @Autowired
+    ReviewHumanReviewDecisionPolicy(HumanReviewPolicyEvaluator evaluator) {
+        this.evaluator = Objects.requireNonNull(evaluator, "evaluator");
+    }
+
+    boolean requiresHumanReview(ReviewResult reviewResult) {
+        return evaluator.requiresHumanReview(reviewResult);
     }
 
     boolean requiresHumanReview(String riskLevel) {
-        return riskLevelRanker.atLeast(riskLevel, HUMAN_REVIEW_THRESHOLD);
+        return evaluator.requiresHumanReview(riskLevel);
     }
 }

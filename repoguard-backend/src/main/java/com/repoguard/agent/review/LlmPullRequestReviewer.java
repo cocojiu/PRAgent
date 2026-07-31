@@ -91,14 +91,64 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
     public ReviewResult review(ReviewTask task, PullRequestDiff diff) {
         long startedAt = System.nanoTime();
         ReviewPolicySettings settings = reviewPolicyProvider.getSettings();
-        String promptSummary = promptBuilder.promptSummary(diff);
+        LlmReviewContext promptContext = promptBuilder.buildContext(diff);
+        String promptSummary = promptBuilder.promptSummary(diff, promptContext);
         return reviewPipeline.execute(
-            new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this)
+            new ReviewPipelineContext(task, diff, settings, promptSummary, startedAt, this, promptContext)
         );
     }
 
     @Override
     public LlmCallResult callLlm(ReviewPolicySettings settings, ReviewTask task, PullRequestDiff diff) {
+        return callLlm(settings, task, diff, promptBuilder.buildContext(diff));
+    }
+
+    @Override
+    public LlmCallResult callLlm(
+        ReviewPolicySettings settings,
+        ReviewTask task,
+        PullRequestDiff diff,
+        LlmReviewContext context
+    ) {
+        return callChat(
+            settings,
+            promptBuilder.systemPrompt(),
+            promptBuilder.buildPrompt(task, diff, context),
+            "chat_completions",
+            settings.maxTokens()
+        );
+    }
+
+    @Override
+    public boolean supportsHighRiskVerification() {
+        return true;
+    }
+
+    @Override
+    public LlmCallResult verifyHighRisk(
+        ReviewPolicySettings settings,
+        ReviewTask task,
+        PullRequestDiff diff,
+        ReviewFindingResult candidate,
+        LlmReviewContext context
+    ) {
+        int maxTokens = Math.min(1_200, Math.max(256, settings.maxTokens() == null ? 1_200 : settings.maxTokens()));
+        return callChat(
+            settings,
+            promptBuilder.verificationSystemPrompt(),
+            promptBuilder.buildVerificationPrompt(task, diff, candidate, context),
+            "high_risk_verification",
+            maxTokens
+        );
+    }
+
+    private LlmCallResult callChat(
+        ReviewPolicySettings settings,
+        String systemPrompt,
+        String userPrompt,
+        String operation,
+        Integer maxTokens
+    ) {
         long startedAt = System.nanoTime();
         if (endpointPolicy != null) {
             endpointPolicy.validate(OutboundEndpointType.LLM, settings.baseUrl());
@@ -109,15 +159,15 @@ public class LlmPullRequestReviewer implements PullRequestReviewer, LlmReviewCal
         Map<String, Object> payload = Map.of(
             "model", settings.modelName(),
             "temperature", settings.temperature(),
-            "max_tokens", settings.maxTokens(),
+            "max_tokens", maxTokens,
             "messages", List.of(
-                Map.of("role", "system", "content", "你是资深代码审查助手，只输出严格 JSON。"),
-                Map.of("role", "user", "content", promptBuilder.buildPrompt(task, diff))
+                Map.of("role", "system", "content", systemPrompt),
+                Map.of("role", "user", "content", userPrompt)
             )
         );
 
         try {
-            JsonNode response = executeLlm("chat_completions", () -> restClient.post()
+            JsonNode response = executeLlm(operation, () -> restClient.post()
                 .uri("/chat/completions")
                 .header("Authorization", "Bearer " + apiKey.trim())
                 .contentType(MediaType.APPLICATION_JSON)

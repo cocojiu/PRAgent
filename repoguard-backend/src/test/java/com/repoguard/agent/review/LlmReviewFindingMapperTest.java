@@ -23,9 +23,13 @@ class LlmReviewFindingMapperTest {
                 "recommendation": "Add @RequireRole",
                 "confidence": "HIGH",
                 "evidence": "POST /admin",
+                "issueType": "MISSING_AUTHORIZATION",
+                "preconditions": "An unauthenticated caller reaches POST /admin",
                 "impact": "Unauthorized write",
                 "fixExample": "@RequireRole(\\"ADMIN\\")",
                 "isBlocking": true,
+                "blockingCandidate": true,
+                "relatedFiles": ["src/SecurityConfig.java"],
                 "reviewDimension": "ACCESS_CONTROL"
               }
             ]
@@ -43,7 +47,12 @@ class LlmReviewFindingMapperTest {
         assertThat(finding.evidence()).isEqualTo("POST /admin");
         assertThat(finding.impact()).isEqualTo("Unauthorized write");
         assertThat(finding.fixExample()).isEqualTo("@RequireRole(\"ADMIN\")");
-        assertThat(finding.isBlocking()).isTrue();
+        assertThat(finding.isBlocking()).isFalse();
+        assertThat(finding.blockingCandidate()).isTrue();
+        assertThat(finding.issueType()).isEqualTo("MISSING_AUTHORIZATION");
+        assertThat(finding.preconditions()).contains("unauthenticated caller");
+        assertThat(finding.relatedFiles()).containsExactly("src/SecurityConfig.java");
+        assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
         assertThat(finding.reviewDimension()).isEqualTo("ACCESS_CONTROL");
     }
 

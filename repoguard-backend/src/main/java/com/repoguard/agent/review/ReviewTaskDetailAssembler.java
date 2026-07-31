@@ -161,7 +161,8 @@ public class ReviewTaskDetailAssembler {
             findingTotal,
             missingTestTotal,
             changedFileTotal,
-            effectiveSeverityCounts
+            effectiveSeverityCounts,
+            item.assessmentStatus()
         );
     }
 

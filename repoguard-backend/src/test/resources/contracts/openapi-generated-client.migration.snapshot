@@ -24,6 +24,7 @@ fetchNotificationDeliveries -> notificationIntegrationControllerListDeliveries /
 fetchNotificationEvents -> notificationIntegrationControllerListEvents // GET /api/v1/notification-events
 fetchNotifications -> notificationControllerGetNotifications // GET /api/v1/notifications
 fetchRabbitMqIntegrationConfig -> systemConfigControllerGetRabbitMqIntegration // GET /api/v1/config/integrations/rabbitmq
+fetchReviewCalibrationQueue -> reviewCalibrationControllerGetReviewCalibrationQueue // GET /api/v1/config/review-calibration/queue
 fetchReviewChangedFiles -> reviewControllerListChangedFiles // GET /api/v1/reviews/{id}/changed-files
 fetchReviewDetail -> reviewControllerGetReviewDetail // GET /api/v1/reviews/{id}
 fetchReviewFindings -> reviewControllerListReviewFindings // GET /api/v1/reviews/{id}/findings
@@ -31,8 +32,11 @@ fetchReviewListSummary -> reviewControllerGetReviewListSummary // GET /api/v1/re
 fetchReviewMissingTests -> reviewControllerListMissingTests // GET /api/v1/reviews/{id}/missing-tests
 fetchReviewPolicyConfig -> systemConfigControllerGetReviewPolicy // GET /api/v1/config/review-policy
 fetchReviewRepositories -> reviewControllerListRepositories // GET /api/v1/reviews/repositories
+fetchReviewRuleVersions -> systemConfigControllerGetReviewRuleVersions // GET /api/v1/config/review-rules/{id}/versions
 fetchReviewRules -> systemConfigControllerGetReviewRules // GET /api/v1/config/review-rules
 fetchReviewStatus -> reviewControllerGetReviewStatus // GET /api/v1/reviews/{id}/status
+fetchReviewStrategy -> systemConfigControllerGetReviewStrategyPolicy // GET /api/v1/config/review-strategy
+fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions // GET /api/v1/config/review-strategy/versions
 fetchReviewTimeline -> reviewControllerListReviewTimeline // GET /api/v1/reviews/{id}/timeline
 fetchReviews -> reviewControllerListReviews // GET /api/v1/reviews
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary // GET /api/v1/system/health/summary
@@ -50,6 +54,8 @@ requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask // POST /api/
 resetRefreshToken -> authControllerResetRefreshToken // POST /api/v1/auth/refresh-token/reset
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview // POST /api/v1/reviews/{id}/retry
+rollbackReviewRule -> systemConfigControllerRollbackReviewRule // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
+rollbackReviewStrategy -> systemConfigControllerRollbackReviewStrategy // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 submitHumanReview -> reviewControllerSubmitHumanReview // POST /api/v1/reviews/{id}/human-review
 testGithubIntegrationConnection -> systemConfigControllerTestGithubIntegration // POST /api/v1/config/integrations/github/test
 testMysqlConnection -> systemConfigControllerTestMysqlConnection // POST /api/v1/config/integrations/mysql/test
@@ -66,6 +72,7 @@ updateRabbitMqIntegrationConfig -> systemConfigControllerUpdateRabbitMqIntegrati
 updateReviewPolicyConfig -> systemConfigControllerUpdateReviewPolicy // PUT /api/v1/config/review-policy
 updateReviewRule -> systemConfigControllerUpdateReviewRule // PUT /api/v1/config/review-rules/{id}
 updateReviewRuleStatus -> systemConfigControllerUpdateReviewRuleStatus // PUT /api/v1/config/review-rules/{id}/status
+updateReviewStrategyEnforcement -> systemConfigControllerPromoteReviewStrategy // PUT /api/v1/config/review-strategy/enforcement
 updateSystemSettings -> systemConfigControllerUpdateSystemSettings // PUT /api/v1/config/system-settings
 updateUserRole -> userManagementControllerUpdateRole // PUT /api/v1/users/{id}/role
 updateUserStatus -> userManagementControllerUpdateStatus // PUT /api/v1/users/{id}/status

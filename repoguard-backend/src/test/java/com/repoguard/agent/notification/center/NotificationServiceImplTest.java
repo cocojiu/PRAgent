@@ -34,7 +34,9 @@ class NotificationServiceImplTest {
     void getNotificationsBuildsItemsFromTasksAndIntegrationStatus() {
         when(reviewTaskMapper.selectList(any())).thenReturn(List.of(
             task(1L, "FAILED", "HIGH", "FAILED"),
-            task(2L, "COMPLETED", "MEDIUM", "FALLBACK")
+            task(2L, "COMPLETED", "MEDIUM", "FALLBACK"),
+            task(3L, "COMPLETED", "HIGH", "COMPLETED"),
+            task(4L, "COMPLETED", "HIGH", "FALLBACK")
         ));
         when(githubIntegrationProvider.getSettings()).thenReturn(githubSettings("FAILED", "ghp_test", "bad token"));
         when(rabbitRuntimeHealthProbe.connectionStatus()).thenReturn("DISCONNECTED");
@@ -45,12 +47,14 @@ class NotificationServiceImplTest {
         assertThat(result.total()).isGreaterThanOrEqualTo(5);
         assertThat(result.items()).extracting("id").contains(
             "review-failed-1",
-            "review-high-risk-1",
+            "review-high-risk-3",
             "review-llm-fallback-2",
             "integration-github-failed",
             "integration-rabbitmq-failed",
             "llm-missing-secret"
         );
+        assertThat(result.items()).extracting("id")
+            .doesNotContain("review-high-risk-1", "review-high-risk-4");
         assertThat(result.items().getFirst().targetPath()).startsWith("/repoguard/");
     }
 
@@ -65,6 +69,11 @@ class NotificationServiceImplTest {
         task.setBranchName("PRAgent-test");
         task.setStatus(status);
         task.setRiskLevel(riskLevel);
+        task.setAssessmentStatus(
+            "FAILED".equals(status)
+                ? "FAILED"
+                : "FALLBACK".equals(llmStatus) ? "PARTIAL" : "COMPLETE"
+        );
         task.setLlmStatus(llmStatus);
         task.setMqRetries(0);
         task.setCreatedAt(LocalDateTime.now().minusMinutes(id));

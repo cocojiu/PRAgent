@@ -33,7 +33,7 @@ class ReviewFindingReplacementService {
         reviewFindingMapper.delete(new LambdaQueryWrapper<ReviewFinding>().eq(ReviewFinding::getTaskId, taskId));
         List<ReviewFindingResult> findings = findingDeduplicator.deduplicate(reviewResult.findings());
         List<ReviewFinding> entities = findings.stream()
-            .map(findingResult -> findingEntityMapper.toEntity(taskId, findingResult))
+            .map(findingResult -> findingEntityMapper.toEntity(taskId, findingResult, reviewResult))
             .toList();
         batchInserter.insertAll(ReviewFindingMapper.class, entities);
         return findings.size();

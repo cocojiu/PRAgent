@@ -8,10 +8,10 @@ class StandardOutputLoggingRule implements ReviewRule {
 
     static final String RULE_ID = "RG-JAVA-002";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    StandardOutputLoggingRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    StandardOutputLoggingRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -20,12 +20,11 @@ class StandardOutputLoggingRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !context.trimmedLine().contains("System.out.print")) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "LOW",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

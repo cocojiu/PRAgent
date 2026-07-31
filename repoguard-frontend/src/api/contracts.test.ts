@@ -91,6 +91,28 @@ describe("apiRequest", () => {
     expect(init.method).toBeUndefined();
   });
 
+  it("pins OBSERVE calibration queue requests to an explicit rule and bounded window", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      version: { ruleId: "RG-AUTH-001" },
+      targetLabeledSamples: 30,
+      samples: []
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewCalibrationQueue", {
+      ruleId: "RG-AUTH-001",
+      limit: 30,
+      includeIgnored: false
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/api/v1/config/review-calibration/queue");
+    expect(url).toContain("ruleId=RG-AUTH-001");
+    expect(url).toContain("limit=30");
+    expect(url).toContain("includeIgnored=false");
+    expect(init.method).toBeUndefined();
+  });
+
   it("forwards cancellation signals through the typed API contract", async () => {
     let fetchSignal: AbortSignal | undefined;
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
@@ -565,7 +587,8 @@ describe("apiRequest", () => {
       confidence: 0.8,
       description: "Detect risky Java changes",
       positiveExample: "Use parameterized SQL",
-      falsePositiveGuidance: "Ignore generated code"
+      falsePositiveGuidance: "Ignore generated code",
+      enforcementMode: "comment"
     });
     await apiRequest("updateReviewRule", {
       id: "RG-JAVA-001",
@@ -580,7 +603,8 @@ describe("apiRequest", () => {
         confidence: 0.8,
         description: "Detect risky Java changes",
         positiveExample: "Use parameterized SQL",
-        falsePositiveGuidance: "Ignore generated code"
+        falsePositiveGuidance: "Ignore generated code",
+        enforcementMode: "comment"
       }
     });
     await apiRequest("updateReviewRuleStatus", {
@@ -620,6 +644,33 @@ describe("apiRequest", () => {
     expect(calls[11][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001/status");
     expect(calls[11][1].method).toBe("PUT");
     expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled" }));
+  });
+
+  it("keeps versioned review policy governance endpoint contracts", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001" });
+    await apiRequest("rollbackReviewRule", { id: "RG/JAVA 001", policyVersion: 7 });
+    await apiRequest("fetchReviewStrategy", undefined);
+    await apiRequest("fetchReviewStrategyVersions", undefined);
+    await apiRequest("updateReviewStrategyEnforcement", { enforcementMode: "comment" });
+    await apiRequest("rollbackReviewStrategy", { snapshotId: 13 });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions");
+    expect(calls[0][1].method).toBeUndefined();
+    expect(calls[1][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions/7/rollback");
+    expect(calls[1][1].method).toBe("POST");
+    expect(calls[2][0]).toContain("/api/v1/config/review-strategy");
+    expect(calls[2][1].method).toBeUndefined();
+    expect(calls[3][0]).toContain("/api/v1/config/review-strategy/versions");
+    expect(calls[3][1].method).toBeUndefined();
+    expect(calls[4][0]).toContain("/api/v1/config/review-strategy/enforcement");
+    expect(calls[4][1].method).toBe("PUT");
+    expect(calls[4][1].body).toBe(JSON.stringify({ enforcementMode: "comment" }));
+    expect(calls[5][0]).toContain("/api/v1/config/review-strategy/versions/13/rollback");
+    expect(calls[5][1].method).toBe("POST");
   });
 });
 

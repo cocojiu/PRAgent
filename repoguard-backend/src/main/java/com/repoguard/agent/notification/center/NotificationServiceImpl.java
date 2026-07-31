@@ -11,6 +11,7 @@ import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.messaging.RabbitRuntimeHealthProbe;
 import com.repoguard.agent.review.LlmStatus;
+import com.repoguard.agent.review.AssessmentStatus;
 import com.repoguard.agent.review.ReviewTaskStatus;
 import com.repoguard.agent.service.NotificationService;
 import java.time.Duration;
@@ -87,6 +88,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private void addHighRiskNotifications(List<NotificationItemDto> items, List<ReviewTask> tasks) {
         tasks.stream()
+            .filter(task -> AssessmentStatus.COMPLETE.name().equalsIgnoreCase(task.getAssessmentStatus()))
             .filter(task -> isHighRisk(task.getRiskLevel()))
             .limit(4)
             .map(task -> taskNotification(

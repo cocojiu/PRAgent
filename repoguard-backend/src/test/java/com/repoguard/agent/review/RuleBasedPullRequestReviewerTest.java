@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.ReviewHumanReviewProperties;
 import com.repoguard.agent.review.ReviewRuleProvider;
 import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
@@ -17,11 +18,11 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void usesInjectedRulePluginsInsteadOfHardcodedRuleList() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
-        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.settingsFor("RG-CUSTOM-001"));
+        RuleMatchFactory matchFactory = new RuleMatchFactory();
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            List.of(customRulePlugin(findingFactory)),
+            List.of(customRulePlugin(matchFactory)),
             List.of()
         );
 
@@ -44,15 +45,116 @@ class RuleBasedPullRequestReviewerTest {
     }
 
     @Test
-    void usesInjectedPullRequestRulePluginsInStableOrder() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
-        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+    void changingOnlyRuleSeverityRecalculatesFindingRiskAndHumanReview() {
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            ReviewRuleTestFixtures.defaultLineRules(findingFactory),
+            List.of(customRulePlugin(new RuleMatchFactory())),
+            List.of()
+        );
+        PullRequestDiff diff = new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file(
+                "src/main/java/com/example/PluginDemo.java",
+                """
+                    @@ -8,0 +9,1 @@
+                    +dangerousCall();
+                    """
+            ))
+        );
+        HumanReviewPolicyEvaluator humanReviewPolicy = new HumanReviewPolicyEvaluator(
+            new RiskLevelRanker(),
+            new ReviewHumanReviewProperties()
+        );
+
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of(
+            "RG-CUSTOM-001",
+            new ReviewRuleSettings(
+                "RG-CUSTOM-001",
+                "ENABLED",
+                "*.java",
+                "HIGH",
+                95,
+                EnforcementMode.BLOCK,
+                "dangerousCall();",
+                "Ignore generated fixtures"
+            )
+        ));
+        ReviewResult highResult = pluginReviewer.review(diff);
+
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of(
+            "RG-CUSTOM-001",
+            new ReviewRuleSettings(
+                "RG-CUSTOM-001",
+                "ENABLED",
+                "*.java",
+                "LOW",
+                95,
+                EnforcementMode.BLOCK,
+                "dangerousCall();",
+                "Ignore generated fixtures"
+            )
+        ));
+        ReviewResult lowResult = pluginReviewer.review(diff);
+
+        assertThat(highResult.findings().getFirst().severity()).isEqualTo("HIGH");
+        assertThat(highResult.findings().getFirst().isBlocking()).isTrue();
+        assertThat(highResult.riskLevel()).isEqualTo("HIGH");
+        assertThat(humanReviewPolicy.requiresHumanReview(highResult)).isTrue();
+        assertThat(lowResult.findings().getFirst().severity()).isEqualTo("LOW");
+        assertThat(lowResult.findings().getFirst().isBlocking()).isFalse();
+        assertThat(lowResult.riskLevel()).isEqualTo("LOW");
+        assertThat(humanReviewPolicy.requiresHumanReview(lowResult)).isFalse();
+    }
+
+    @Test
+    void downgradesContextDependentCandidateWhenExactHeadContentIsUnavailable() {
+        when(reviewRuleProvider.getRulesById())
+            .thenReturn(ReviewRuleTestFixtures.settingsFor(ControllerAuthorizationGuardRule.RULE_ID));
+        String path = "src/main/java/com/example/AdminController.java";
+        ReviewResult result = reviewer.review(new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            "reviewed-head",
+            List.of(new PullRequestChangedFile(
+                path,
+                "modified",
+                1,
+                0,
+                "@@ -10,0 +11,1 @@\n+@DeleteMapping(\"/users/{id}\")",
+                ChangedFileContext.status(
+                    path,
+                    "reviewed-head",
+                    ChangedFileContext.Status.UNAVAILABLE,
+                    "fetch_failed"
+                )
+            ))
+        ));
+
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.severity()).isEqualTo("HIGH");
+            assertThat(finding.confidence()).isEqualTo("MEDIUM");
+            assertThat(finding.isBlocking()).isFalse();
+            assertThat(finding.policyReason()).isEqualTo("evidence_not_verified");
+        });
+    }
+
+    @Test
+    void usesInjectedPullRequestRulePluginsInStableOrder() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of(
+            "RG-PR-001", rule("RG-PR-001", "ENABLED", "*"),
+            "RG-PR-002", rule("RG-PR-002", "ENABLED", "*")
+        ));
+        RuleMatchFactory matchFactory = new RuleMatchFactory();
+        RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
+            reviewRuleProvider,
+            ReviewRuleTestFixtures.defaultLineRules(matchFactory),
             List.of(
-                customPullRequestRule(findingFactory, "RG-PR-002", 20),
-                customPullRequestRule(findingFactory, "RG-PR-001", 10)
+                customPullRequestRule(matchFactory, "RG-PR-002", 20),
+                customPullRequestRule(matchFactory, "RG-PR-001", 10)
             )
         );
 
@@ -73,7 +175,9 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void skipsDisabledRulesWhenReviewingPatch() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of("RG-JAVA-002", disabledRule("RG-JAVA-002")));
+        when(reviewRuleProvider.getRulesById()).thenReturn(
+            ReviewRuleTestFixtures.defaultSettingsWith(disabledRule("RG-JAVA-002"))
+        );
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -129,10 +233,10 @@ class RuleBasedPullRequestReviewerTest {
     void treatsRegexMetacharactersInFilePatternsAsLiterals() {
         when(reviewRuleProvider.getRulesById())
             .thenReturn(Map.of("RG-CUSTOM-001", rule("RG-CUSTOM-001", "ENABLED", "src/(api)/[v1]/*.java")));
-        ReviewFindingFactory findingFactory = new ReviewFindingFactory();
+        RuleMatchFactory matchFactory = new RuleMatchFactory();
         RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
             reviewRuleProvider,
-            List.of(customRulePlugin(findingFactory)),
+            List.of(customRulePlugin(matchFactory)),
             List.of()
         );
 
@@ -159,7 +263,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void detectsProjectSpecificGovernanceRules() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -198,8 +302,8 @@ class RuleBasedPullRequestReviewerTest {
                     "src/main/java/com/example/SecurityConfig.java",
                     """
                         @@ -50,0 +51,1 @@
-                        +String githubToken = "ghp_demo";
-                        """
+                        +String githubToken = "%s";
+                        """.formatted(SyntheticCredentialFixtures.githubToken())
                 ),
                 file(
                     "src/main/java/com/example/AuditLogger.java",
@@ -257,7 +361,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void detectsMigrationAndGithubWritebackGovernanceRules() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -301,7 +405,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void allowsCompatibleMigrationWithDefaultValue() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -322,7 +426,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void detectsControllerApiChangeWithoutTestCoverageInSamePullRequest() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -342,14 +446,14 @@ class RuleBasedPullRequestReviewerTest {
             .containsExactly("RG-API-001");
         ReviewFindingResult finding = result.findings().getFirst();
         assertThat(finding.lineNumber()).isEqualTo(19);
-        assertThat(finding.confidence()).isEqualTo("MEDIUM");
+        assertThat(finding.confidence()).isEqualTo("HIGH");
         assertThat(finding.isBlocking()).isFalse();
         assertThat(finding.reviewDimension()).isEqualTo("API_CONTRACT_RULE");
     }
 
     @Test
     void detectsIndentedControllerApiChangeWithoutTestCoverage() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -372,7 +476,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void skipsAuthFindingWhenMutatingControllerHasAuthorizationGuardButStillReportsTestGap() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -397,7 +501,7 @@ class RuleBasedPullRequestReviewerTest {
 
     @Test
     void skipsControllerApiTestGapWhenPullRequestContainsTestChange() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         ReviewResult result = reviewer.review(new PullRequestDiff(
             "octocat",
@@ -437,7 +541,7 @@ class RuleBasedPullRequestReviewerTest {
         return new PullRequestChangedFile(filename, "modified", 1, 0, patch);
     }
 
-    private ReviewRule customRulePlugin(ReviewFindingFactory findingFactory) {
+    private ReviewRule customRulePlugin(RuleMatchFactory matchFactory) {
         return new ReviewRule() {
             @Override
             public String id() {
@@ -445,12 +549,11 @@ class RuleBasedPullRequestReviewerTest {
             }
 
             @Override
-            public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+            public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
                 if (!context.trimmedLine().contains("dangerousCall")) {
                     return Optional.empty();
                 }
-                return Optional.of(findingFactory.finding(
-                    "MEDIUM",
+                return Optional.of(matchFactory.match(
                     id(),
                     context.filePath(),
                     context.lineNumber(),
@@ -461,7 +564,7 @@ class RuleBasedPullRequestReviewerTest {
         };
     }
 
-    private PullRequestReviewRule customPullRequestRule(ReviewFindingFactory findingFactory, String ruleId, int order) {
+    private PullRequestReviewRule customPullRequestRule(RuleMatchFactory matchFactory, String ruleId, int order) {
         return new PullRequestReviewRule() {
             @Override
             public String id() {
@@ -474,12 +577,11 @@ class RuleBasedPullRequestReviewerTest {
             }
 
             @Override
-            public List<ReviewFindingResult> evaluate(
+            public List<RuleMatch> evaluate(
                 PullRequestDiff diff,
                 Map<String, ReviewRuleSettings> configuredRules
             ) {
-                return List.of(findingFactory.finding(
-                    "LOW",
+                return List.of(matchFactory.match(
                     ruleId,
                     "docs/README.md",
                     null,

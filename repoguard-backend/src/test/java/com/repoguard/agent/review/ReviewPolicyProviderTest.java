@@ -60,4 +60,36 @@ class ReviewPolicyProviderTest {
         assertThat(settings.enabled()).isFalse();
         assertThat(settings.readyForLlmReview()).isFalse();
     }
+
+    @Test
+    void getSettingsCarriesTheActiveVersionedStrategyRelease() {
+        ReviewPolicyConfig config = new ReviewPolicyConfig();
+        config.setLlmEnabled(true);
+        config.setApiKeyValue(secretCryptoService.encrypt("sk-test"));
+        when(reviewPolicyConfigMapper.selectById(1L)).thenReturn(config);
+        ReviewStrategyReleaseProvider releaseProvider =
+            org.mockito.Mockito.mock(ReviewStrategyReleaseProvider.class);
+        ReviewStrategyRelease release = new ReviewStrategyRelease(
+            23,
+            2,
+            LlmReviewVersions.PROMPT,
+            LlmReviewVersions.CONTEXT,
+            LlmReviewVersions.SCHEMA,
+            LlmReviewVersions.VERIFIER,
+            ServerRiskAggregator.VERSION,
+            EnforcementMode.OBSERVE,
+            true
+        );
+        when(releaseProvider.getActiveRelease()).thenReturn(release);
+        ReviewPolicyProvider versionedProvider = new ReviewPolicyProvider(
+            reviewPolicyConfigMapper,
+            secretCryptoService,
+            releaseProvider
+        );
+
+        ReviewPolicySettings settings = versionedProvider.getSettings();
+
+        assertThat(settings.strategyRelease()).isEqualTo(release);
+        assertThat(settings.strategyRelease().snapshotId()).isEqualTo(23);
+    }
 }

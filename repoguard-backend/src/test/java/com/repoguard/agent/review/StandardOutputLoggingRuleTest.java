@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class StandardOutputLoggingRuleTest {
 
-    private final StandardOutputLoggingRule rule = new StandardOutputLoggingRule(new ReviewFindingFactory());
+    private final StandardOutputLoggingRule rule = new StandardOutputLoggingRule(new RuleMatchFactory());
 
     @Test
     void evaluatesStandardOutputLogging() {
@@ -16,7 +16,6 @@ class StandardOutputLoggingRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-JAVA-002");
-        assertThat(finding.get().severity()).isEqualTo("LOW");
         assertThat(finding.get().filePath()).isEqualTo("src/App.java");
         assertThat(finding.get().lineNumber()).isEqualTo(12);
     }
@@ -42,6 +41,12 @@ class StandardOutputLoggingRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 12, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            12,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

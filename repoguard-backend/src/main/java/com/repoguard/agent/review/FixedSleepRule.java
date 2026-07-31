@@ -8,10 +8,10 @@ class FixedSleepRule implements ReviewRule {
 
     static final String RULE_ID = "RG-JAVA-003";
 
-    private final ReviewFindingFactory findingFactory;
+    private final RuleMatchFactory matchFactory;
 
-    FixedSleepRule(ReviewFindingFactory findingFactory) {
-        this.findingFactory = findingFactory;
+    FixedSleepRule(RuleMatchFactory matchFactory) {
+        this.matchFactory = matchFactory;
     }
 
     @Override
@@ -20,12 +20,11 @@ class FixedSleepRule implements ReviewRule {
     }
 
     @Override
-    public Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context) {
+    public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
         if (!context.isApplicable(id()) || !context.trimmedLine().contains("Thread.sleep(")) {
             return Optional.empty();
         }
-        return Optional.of(findingFactory.finding(
-            "MEDIUM",
+        return Optional.of(matchFactory.match(
             id(),
             context.filePath(),
             context.lineNumber(),

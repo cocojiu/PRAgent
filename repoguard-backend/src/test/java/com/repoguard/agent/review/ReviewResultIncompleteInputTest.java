@@ -8,14 +8,14 @@ import org.junit.jupiter.api.Test;
 class ReviewResultIncompleteInputTest {
 
     @Test
-    void marksTruncatedInputAsPartialFallbackAndRequiresAtLeastMediumRisk() {
+    void marksTruncatedInputAsPartialFallbackWithoutInventingRisk() {
         ReviewResult result = ReviewResult.completed("LOW", List.of())
             .withIncompleteInput(
                 "Pull request diff truncated: reasons=max_total_bytes",
                 "diffTruncated=true"
             );
 
-        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
+        assertThat(result.riskLevel()).isEqualTo("LOW");
         assertThat(result.llmStatus()).isEqualTo("COMPLETED");
         assertThat(result.llmParseStatus()).isEqualTo("partial_fallback");
         assertThat(result.statusDetail()).contains("reasons=max_total_bytes");

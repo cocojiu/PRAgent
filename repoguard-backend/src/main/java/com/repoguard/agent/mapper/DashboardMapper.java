@@ -27,7 +27,8 @@ public interface DashboardMapper {
         select
             count(*) as total,
             sum(case
-                when risk_level_norm in ('HIGH', 'CRITICAL')
+                when assessment_status = 'COMPLETE'
+                  and risk_level_norm in ('HIGH', 'CRITICAL')
                 then 1 else 0 end) as highRisk,
             sum(case
                 when status_norm = 'FAILED'
@@ -42,6 +43,7 @@ public interface DashboardMapper {
         select risk_bucket_norm as riskLevel, count(*) as total
         from review_task
         where created_at >= #{startDate}
+          and assessment_status = 'COMPLETE'
         group by risk_bucket_norm
         """)
     List<RiskLevelCount> selectRiskLevelCounts(@Param("startDate") LocalDate startDate);
@@ -76,6 +78,7 @@ public interface DashboardMapper {
         from review_task t
         left join review_finding f on f.task_id = t.id and f.category = 'FINDING'
         where t.risk_level_norm in ('HIGH', 'CRITICAL')
+          and t.assessment_status = 'COMPLETE'
           and t.created_at >= #{startDate}
         group by t.id, t.title, t.repository, t.risk_level_norm, t.created_at, t.status
         order by t.created_at desc

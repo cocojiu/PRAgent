@@ -200,6 +200,7 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         task.setBranchName(archive.getBranchName());
         task.setStatus(archive.getStatus());
         task.setRiskLevel(archive.getRiskLevel());
+        task.setAssessmentStatus(archive.getAssessmentStatus());
         task.setMqRetries(0);
         task.setLlmStatus(archive.getStatus());
         task.setSource(archive.getSource());
@@ -236,7 +237,8 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             "not_required",
             null,
             null,
-            null
+            null,
+            lower(archive.getAssessmentStatus())
         );
     }
 

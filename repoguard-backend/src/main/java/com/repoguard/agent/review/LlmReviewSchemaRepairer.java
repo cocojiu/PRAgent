@@ -32,6 +32,11 @@ public class LlmReviewSchemaRepairer {
         }
 
         ObjectNode repaired = objectMapper.createObjectNode();
+        String schemaVersion = readText(root, "schemaVersion", "schema_version");
+        repaired.put(
+            "schemaVersion",
+            StringUtils.hasText(schemaVersion) ? schemaVersion : "review-schema-v1-repaired"
+        );
         repaired.put("riskLevel", normalizeEnum(readText(root, "riskLevel", "risk_level", "risk"), RISK_LEVELS, "INFO"));
         repaired.set("findings", repairFindings(root.path("findings")));
         validateRootSchema(repaired);
@@ -72,6 +77,7 @@ public class LlmReviewSchemaRepairer {
         String confidence = readText(finding, "confidence");
         String recommendation = defaultText(readText(finding, "recommendation", "suggestion", "fix"), DEFAULT_RECOMMENDATION);
 
+        repaired.put("issueType", defaultText(readText(finding, "issueType", "issue_type", "category"), "GENERAL"));
         repaired.put("severity", severity);
         repaired.put("filePath", defaultText(readText(finding, "filePath", "file", "path"), "unknown"));
         Integer lineNumber = readLineNumber(finding);
@@ -82,11 +88,13 @@ public class LlmReviewSchemaRepairer {
         }
         repaired.put("message", defaultText(readText(finding, "message", "description", "issue"), DEFAULT_MESSAGE));
         repaired.put("recommendation", recommendation);
-        repaired.put("confidence", normalizeEnum(confidence, CONFIDENCE_LEVELS, StringUtils.hasText(confidence) ? defaultConfidence(severity) : "MEDIUM"));
+        repaired.put("confidence", normalizeEnum(confidence, CONFIDENCE_LEVELS, "MEDIUM"));
         repaired.put("evidence", defaultText(readText(finding, "evidence"), ""));
+        repaired.put("preconditions", defaultText(readText(finding, "preconditions", "precondition"), ""));
         repaired.put("impact", defaultText(readText(finding, "impact"), ""));
         repaired.put("fixExample", defaultText(readText(finding, "fixExample", "fix_example"), recommendation));
-        repaired.put("isBlocking", readBoolean(finding, "isBlocking", "is_blocking", "blocking") || defaultBlocking(severity));
+        repaired.set("relatedFiles", readRelatedFiles(finding));
+        repaired.put("blockingCandidate", readBoolean(finding, "blockingCandidate", "blocking_candidate"));
         repaired.put("reviewDimension", defaultText(readText(finding, "reviewDimension", "review_dimension"), "LLM"));
         validateFindingSchema(repaired);
         return repaired;
@@ -106,6 +114,7 @@ public class LlmReviewSchemaRepairer {
         requireText(finding, "filePath");
         requireText(finding, "message");
         requireText(finding, "recommendation");
+        requireText(finding, "issueType");
         requireEnum(finding, "confidence", CONFIDENCE_LEVELS);
         requireText(finding, "reviewDimension");
     }
@@ -126,18 +135,6 @@ public class LlmReviewSchemaRepairer {
     private String normalizeEnum(String value, Set<String> allowedValues, String fallback) {
         String normalized = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
         return allowedValues.contains(normalized) ? normalized : fallback;
-    }
-
-    private String defaultConfidence(String severity) {
-        return switch (severity) {
-            case "CRITICAL", "HIGH" -> "HIGH";
-            case "MEDIUM" -> "MEDIUM";
-            default -> "LOW";
-        };
-    }
-
-    private boolean defaultBlocking(String severity) {
-        return "CRITICAL".equals(severity) || "HIGH".equals(severity);
     }
 
     private String readText(JsonNode node, String... fields) {
@@ -185,5 +182,22 @@ public class LlmReviewSchemaRepairer {
             }
         }
         return false;
+    }
+
+    private ArrayNode readRelatedFiles(JsonNode finding) {
+        ArrayNode related = objectMapper.createArrayNode();
+        JsonNode source = finding.path("relatedFiles");
+        if (!source.isArray()) {
+            source = finding.path("related_files");
+        }
+        if (!source.isArray()) {
+            return related;
+        }
+        for (JsonNode value : source) {
+            if (value.isTextual() && StringUtils.hasText(value.asText())) {
+                related.add(value.asText().trim());
+            }
+        }
+        return related;
     }
 }

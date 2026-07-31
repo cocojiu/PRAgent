@@ -14,6 +14,10 @@ import com.repoguard.agent.mapper.ReviewFindingMapper;
 import com.repoguard.agent.mapper.ReviewRuleConfigMapper;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
+import com.repoguard.agent.review.ReviewRuleRegistry;
+import com.repoguard.agent.review.quality.ReviewQualityBaseline;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -24,16 +28,22 @@ class ReviewRuleConfigServiceImplTest {
     private final ReviewRuleConfigMapper reviewRuleConfigMapper = org.mockito.Mockito.mock(ReviewRuleConfigMapper.class);
     private final ReviewFindingMapper reviewFindingMapper = org.mockito.Mockito.mock(ReviewFindingMapper.class);
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+    private final ReviewQualityBaselineService reviewQualityBaselineService =
+        org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
+    private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         reviewRuleConfigMapper,
         reviewFindingMapper,
         cacheEvictionService,
         new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler()
+        new ReviewRuleMetricAssembler(),
+        reviewQualityBaselineService,
+        reviewRuleRegistry
     );
 
     @Test
     void getReviewRulesReturnsRulesAndMetricsFromDatabase() {
+        when(reviewRuleRegistry.contains(any())).thenReturn(true);
         when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(
             rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88),
             rule("RG-SECRET-001", "硬编码密钥检测", "HIGH", "DISABLED", 96)
@@ -43,6 +53,7 @@ class ReviewRuleConfigServiceImplTest {
             ruleHitCount("RG-SECRET-001", 1L)
         ));
         when(reviewFindingMapper.selectReviewRuleFeedbackStat()).thenReturn(ruleFeedbackStat(3L, 1L, 1L, 2L));
+        when(reviewQualityBaselineService.loadBaseline()).thenReturn(qualityBaseline());
 
         var result = service.getReviewRules();
 
@@ -53,38 +64,23 @@ class ReviewRuleConfigServiceImplTest {
         assertThat(result.rules().getFirst().applicableLanguages()).isEqualTo("Java");
         assertThat(result.rules().getFirst().filePatterns()).isEqualTo("*.java");
         assertThat(result.rules().getFirst().falsePositiveGuidance()).contains("false positive");
-        assertThat(result.metrics()).hasSize(6);
+        assertThat(result.metrics()).hasSize(13);
         assertThat(result.metrics().get(4).value()).isEqualTo("50%");
         assertThat(result.metrics().get(5).value()).isEqualTo("50%");
-        assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
+        assertThat(result.metrics()).extracting("label")
+            .contains("启用规则", "累计命中", "高危精确率", "证据锚定率", "累计 LLM 成本");
     }
 
     @Test
-    void createReviewRuleNormalizesFieldsAndEvictsRuleCaches() {
-        when(reviewRuleConfigMapper.selectById("RG-JAVA-002")).thenReturn(null);
-        when(reviewRuleConfigMapper.selectList(any())).thenReturn(List.of(rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88)));
-
-        var result = service.createReviewRule(request("rg-java-002", "New Rule", " low ", " enabled "));
-
-        assertThat(result.id()).isEqualTo("RG-JAVA-002");
-        assertThat(result.severity()).isEqualTo("low");
-        assertThat(result.status()).isEqualTo("enabled");
-        assertThat(result.hitCount()).isZero();
-
-        ArgumentCaptor<ReviewRuleConfig> ruleCaptor = ArgumentCaptor.forClass(ReviewRuleConfig.class);
-        verify(reviewRuleConfigMapper).insert(ruleCaptor.capture());
-        ReviewRuleConfig inserted = ruleCaptor.getValue();
-        assertThat(inserted.getId()).isEqualTo("RG-JAVA-002");
-        assertThat(inserted.getRuleName()).isEqualTo("New Rule");
-        assertThat(inserted.getSeverity()).isEqualTo("LOW");
-        assertThat(inserted.getStatus()).isEqualTo("ENABLED");
-        assertThat(inserted.getSortOrder()).isEqualTo(20);
-        verify(cacheEvictionService).evictReviewRules();
-        verify(cacheEvictionService).evictDashboardRules();
+    void createReviewRuleIsClosedUntilARestrictedDslExists() {
+        assertThatThrownBy(() -> service.createReviewRule(request("rg-java-002", "New Rule", "LOW", "DISABLED")))
+            .isInstanceOf(BusinessException.class)
+            .hasMessageContaining("Dynamic review rule creation is disabled");
     }
 
     @Test
     void updateReviewRuleStatusPersistsNormalizedStatus() {
+        when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
         when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
@@ -99,17 +95,15 @@ class ReviewRuleConfigServiceImplTest {
     }
 
     @Test
-    void createReviewRuleRejectsDuplicateRuleId() {
-        when(reviewRuleConfigMapper.selectById("RG-JAVA-001"))
-            .thenReturn(rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88));
-
-        assertThatThrownBy(() -> service.createReviewRule(request("rg-java-001", "New Rule", "LOW", "ENABLED")))
+    void updateReviewRuleStatusRejectsRuleWithoutDetector() {
+        assertThatThrownBy(() -> service.updateReviewRuleStatus("rg-unknown-001", "enabled"))
             .isInstanceOf(BusinessException.class)
-            .hasMessageContaining("Review rule already exists");
+            .hasMessageContaining("no registered detector");
     }
 
     @Test
     void updateReviewRuleRejectsMismatchedPathAndBodyId() {
+        when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
         assertThatThrownBy(() -> service.updateReviewRule("rg-java-001", request("rg-java-002", "New Rule", "LOW", "ENABLED")))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Review rule id in path and body must match");
@@ -122,7 +116,9 @@ class ReviewRuleConfigServiceImplTest {
             reviewFindingMapper,
             cacheEvictionService,
             new ReviewRuleConfigPolicy(),
-            null
+            null,
+            reviewQualityBaselineService,
+            reviewRuleRegistry
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewRuleMetricAssembler");
@@ -135,10 +131,27 @@ class ReviewRuleConfigServiceImplTest {
             reviewFindingMapper,
             null,
             new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler()
+            new ReviewRuleMetricAssembler(),
+            reviewQualityBaselineService,
+            reviewRuleRegistry
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
+    }
+
+    @Test
+    void constructorRejectsMissingReviewQualityBaselineService() {
+        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            cacheEvictionService,
+            new ReviewRuleConfigPolicy(),
+            new ReviewRuleMetricAssembler(),
+            null,
+            reviewRuleRegistry
+        ))
+            .isInstanceOf(NullPointerException.class)
+            .hasMessageContaining("reviewQualityBaselineService");
     }
 
     private ReviewRuleConfigRequest request(String id, String name, String severity, String status) {
@@ -167,6 +180,7 @@ class ReviewRuleConfigServiceImplTest {
         rule.setSeverity(severity);
         rule.setStatus(status);
         rule.setConfidence(confidence);
+        rule.setEnforcementMode("COMMENT");
         rule.setDescription(name + " description");
         rule.setPositiveExample("catch (IOException ex)");
         rule.setFalsePositiveGuidance("Mark as false positive for framework boundaries.");
@@ -187,5 +201,26 @@ class ReviewRuleConfigServiceImplTest {
         Long reviewedCount
     ) {
         return new RuleFeedbackStat(totalHits, validCount, falsePositiveCount, reviewedCount);
+    }
+
+    private ReviewQualityBaseline qualityBaseline() {
+        return new ReviewQualityBaseline(
+            10,
+            4,
+            new BigDecimal("40.00"),
+            3,
+            2,
+            1,
+            new BigDecimal("66.67"),
+            new BigDecimal("33.33"),
+            9,
+            new BigDecimal("90.00"),
+            1,
+            new BigDecimal("10.00"),
+            5,
+            new BigDecimal("12.40"),
+            new BigDecimal("1.2345"),
+            List.of()
+        );
     }
 }

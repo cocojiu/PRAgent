@@ -16,7 +16,7 @@ final class ReviewRuleApplicability {
         Map<String, ReviewRuleSettings> rules = configuredRules == null ? Map.of() : configuredRules;
         ReviewRuleSettings rule = rules.get(ruleId);
         if (rule == null) {
-            return true;
+            return false;
         }
         if (rule.disabled()) {
             return false;
@@ -27,14 +27,14 @@ final class ReviewRuleApplicability {
         return List.of(rule.filePatterns().split("[,\\n]")).stream()
             .map(String::trim)
             .filter(StringUtils::hasText)
-            .anyMatch(pattern -> matchesPattern(filePath, pattern));
+            .anyMatch(pattern -> matchesPathPattern(filePath, pattern));
     }
 
     static String normalizePath(String value) {
         return value == null ? "" : value.replace('\\', '/').toLowerCase(Locale.ROOT);
     }
 
-    private static boolean matchesPattern(String filePath, String pattern) {
+    static boolean matchesPathPattern(String filePath, String pattern) {
         String normalizedFilePath = normalizePath(filePath);
         String normalizedPattern = normalizePath(pattern);
         if ("*".equals(normalizedPattern)) {
@@ -42,6 +42,12 @@ final class ReviewRuleApplicability {
         }
         String regex = globToRegex(normalizedPattern);
         return normalizedFilePath.matches(".*" + regex);
+    }
+
+    static boolean matchesAnchoredPathPattern(String filePath, String pattern) {
+        String normalizedFilePath = normalizePath(filePath);
+        String normalizedPattern = normalizePath(pattern);
+        return normalizedFilePath.matches(globToRegex(normalizedPattern));
     }
 
     private static String globToRegex(String pattern) {

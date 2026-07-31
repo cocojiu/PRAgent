@@ -148,6 +148,23 @@ class OpenApiPathsContractTest {
         Map<String, Object> changedFiles = operation(paths, "/api/v1/reviews/{id}/changed-files", "get");
         assertThat(parameterSchema(changedFiles, "hasFinding"))
             .containsEntry("type", "boolean");
+
+        Map<String, Object> calibrationQueue = operation(
+            paths,
+            "/api/v1/config/review-calibration/queue",
+            "get"
+        );
+        assertThat(parameterSchema(calibrationQueue, "ruleId"))
+            .containsEntry("type", "string")
+            .containsEntry("maxLength", 64);
+        assertThat(parameterSchema(calibrationQueue, "limit"))
+            .containsEntry("type", "integer")
+            .containsEntry("minimum", 1L)
+            .containsEntry("maximum", 100L)
+            .containsEntry("default", 30);
+        assertThat(parameterSchema(calibrationQueue, "includeIgnored"))
+            .containsEntry("type", "boolean")
+            .containsEntry("default", false);
     }
 
     @Test

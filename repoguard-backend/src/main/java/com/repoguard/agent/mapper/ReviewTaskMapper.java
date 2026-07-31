@@ -17,12 +17,12 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
     @Insert("""
         insert ignore into review_task (
             pr_number, title, repository, organization, commit_sha, branch_name,
-            status, risk_level, mq_retries, publish_attempts, llm_status, pr_url,
+            status, risk_level, assessment_status, mq_retries, publish_attempts, llm_status, pr_url,
             source, trigger_source, human_review_required, human_review_status,
             created_at, duration_seconds
         ) values (
             #{prNumber}, #{title}, #{repository}, #{organization}, #{commitSha}, #{branchName},
-            #{status}, #{riskLevel}, #{mqRetries}, #{publishAttempts}, #{llmStatus}, #{prUrl},
+            #{status}, #{riskLevel}, #{assessmentStatus}, #{mqRetries}, #{publishAttempts}, #{llmStatus}, #{prUrl},
             #{source}, #{triggerSource}, #{humanReviewRequired}, #{humanReviewStatus},
             #{createdAt}, #{durationSeconds}
         )
@@ -59,7 +59,8 @@ public interface ReviewTaskMapper extends BaseMapper<ReviewTask> {
         select
             count(*) as total,
             sum(case
-                when risk_level_norm in ('HIGH', 'CRITICAL')
+                when assessment_status = 'COMPLETE'
+                  and risk_level_norm in ('HIGH', 'CRITICAL')
                 then 1 else 0 end) as highRisk,
             sum(case
                 when status_norm = 'FAILED'

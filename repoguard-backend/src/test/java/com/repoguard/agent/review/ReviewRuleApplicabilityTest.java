@@ -9,9 +9,9 @@ import org.junit.jupiter.api.Test;
 class ReviewRuleApplicabilityTest {
 
     @Test
-    void defaultsToApplicableWhenRuleIsNotConfigured() {
+    void defaultsToDisabledWhenRuleIsNotConfigured() {
         assertThat(ReviewRuleApplicability.isApplicable("RG-JAVA-002", "src/App.java", Map.of()))
-            .isTrue();
+            .isFalse();
     }
 
     @Test

@@ -7,11 +7,14 @@ import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
+import java.util.List;
 
 public interface SystemConfigService {
 
@@ -42,6 +45,30 @@ public interface SystemConfigService {
     ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request);
 
     ReviewRuleConfigDto updateReviewRuleStatus(String id, String status);
+
+    default List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
+        return List.of();
+    }
+
+    default ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+        return null;
+    }
+
+    default ReviewStrategyPolicyDto getReviewStrategyPolicy() {
+        return null;
+    }
+
+    default List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
+        return List.of();
+    }
+
+    default ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
+        return null;
+    }
+
+    default ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
+        return null;
+    }
 
     ConnectionTestResultDto testGithubIntegration(GithubIntegrationConfigRequest request);
 

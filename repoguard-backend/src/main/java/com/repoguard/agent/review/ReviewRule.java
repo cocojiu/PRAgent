@@ -6,9 +6,13 @@ public interface ReviewRule {
 
     String id();
 
+    default String version() {
+        return id().trim().toLowerCase(java.util.Locale.ROOT) + "-detector-v2";
+    }
+
     default int order() {
         return 1000;
     }
 
-    Optional<ReviewFindingResult> evaluate(ReviewRuleLineContext context);
+    Optional<RuleMatch> evaluate(ReviewRuleLineContext context);
 }

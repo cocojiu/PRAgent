@@ -18,7 +18,7 @@ class ReviewQualityEvaluationTest {
     private final ReviewQualityEvaluationRunner runner;
 
     ReviewQualityEvaluationTest() {
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
         runner = new ReviewQualityEvaluationRunner(
             new ObjectMapper(),
             ReviewRuleTestFixtures.defaultReviewer(reviewRuleProvider)

@@ -11,16 +11,16 @@ class ReviewHumanReviewDecisionPolicyTest {
         new ReviewHumanReviewDecisionPolicy(new RiskLevelRanker());
 
     @Test
-    void requiresHumanReviewForMediumAndHigherRisk() {
+    void requiresHumanReviewForHighAndCriticalRiskByDefault() {
         assertThat(policy.requiresHumanReview("LOW")).isFalse();
-        assertThat(policy.requiresHumanReview("MEDIUM")).isTrue();
+        assertThat(policy.requiresHumanReview("MEDIUM")).isFalse();
         assertThat(policy.requiresHumanReview("HIGH")).isTrue();
         assertThat(policy.requiresHumanReview("CRITICAL")).isTrue();
     }
 
     @Test
     void doesNotRequireHumanReviewForUnknownRisk() {
-        assertThat(policy.requiresHumanReview(null)).isFalse();
+        assertThat(policy.requiresHumanReview((String) null)).isFalse();
         assertThat(policy.requiresHumanReview("unknown")).isFalse();
     }
 }

@@ -18,6 +18,13 @@ class FrontendApiContractCatalogTest {
             .containsExactly("page", "pageSize", "severity", "category", "feedbackStatus");
         assertThat(findings.hasRequestBody()).isFalse();
         assertThat(findings.requestBodyRequired()).isFalse();
+
+        assertThat(contracts.get("rollbackReviewRule").endpointKey()).isEqualTo(
+            "POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback"
+        );
+        assertThat(contracts.get("rollbackReviewStrategy").endpointKey()).isEqualTo(
+            "POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback"
+        );
         assertThat(findings.responseType()).isEqualTo("PageResponse<ReviewFinding>");
 
         FrontendApiContractCatalog.EndpointContract feedback = contracts.get("updateFindingFeedback");

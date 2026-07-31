@@ -11,6 +11,7 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.observability.LogContext;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.HumanReviewStatus;
+import com.repoguard.agent.review.AssessmentStatus;
 import com.repoguard.agent.review.LlmStatus;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewTaskSource;
@@ -245,6 +246,7 @@ public class ManualReviewCreationService {
         task.setBranchName(resolveBranch(request));
         task.setStatus(reviewTaskStateMachine.statusWhenQueued());
         task.setRiskLevel("INFO");
+        task.setAssessmentStatus(AssessmentStatus.PARTIAL.name());
         task.setMqRetries(0);
         task.setPublishAttempts(0);
         task.setLlmStatus(LlmStatus.PENDING.code());

@@ -171,6 +171,7 @@ public class GithubPullRequestClientImpl implements GithubPullRequestClient {
                 owner,
                 repository,
                 task.getPrNumber(),
+                expectedHeadSha,
                 resilience
             );
             String headAfterFetch = headReader.fetchHeadSha(

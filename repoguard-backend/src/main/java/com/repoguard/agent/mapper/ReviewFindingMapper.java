@@ -26,13 +26,13 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         select
             count(*) as totalHits,
             sum(case
-                when feedback_status_norm = 'VALID'
+                when feedback_status_norm in ('VALID', 'FIXED')
                 then 1 else 0 end) as validCount,
             sum(case
                 when feedback_status_norm = 'FALSE_POSITIVE'
                 then 1 else 0 end) as falsePositiveCount,
             sum(case
-                when feedback_status_norm <> 'UNREVIEWED'
+                when feedback_status_norm in ('VALID', 'FIXED', 'FALSE_POSITIVE')
                 then 1 else 0 end) as reviewedCount
         from review_finding
         where category = 'FINDING'
@@ -59,6 +59,8 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
         from review_finding
         where task_id = #{taskId}
           and category = 'FINDING'
+          and feedback_status_norm <> 'FALSE_POSITIVE'
+          and enforcement_mode <> 'OBSERVE'
         """)
     SeverityCounts selectFindingSeverityCounts(Long taskId);
 
@@ -86,6 +88,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
                 and (
                     finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
                 )
+                and finding.enforcement_mode <> 'OBSERVE'
                 then 1 else 0 end
             ) as commentableFindings
         from review_finding finding force index (idx_review_finding_task_category_id)
@@ -123,6 +126,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
           and (
               finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
           )
+          and finding.enforcement_mode <> 'OBSERVE'
         order by finding.id asc
         limit #{limit} offset #{offset}
         """)
@@ -148,6 +152,7 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
           and (
               finding.feedback_status_norm in ('UNREVIEWED', 'VALID')
           )
+          and finding.enforcement_mode <> 'OBSERVE'
         order by finding.id asc
         limit #{limit}
         """)

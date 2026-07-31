@@ -20,6 +20,8 @@ class ReviewTaskArchiveSummaryMapperSqlContractTest {
             .contains("task_id, cleanup_batch_id")
             .contains("#{cleanupbatchid} as cleanup_batch_id")
             .contains("#{backupreference} as backup_reference")
+            .contains("task.assessment_status")
+            .contains("assessment_status = values(assessment_status)")
             .contains("from review_task task")
             .contains("left join")
             .contains("where category = 'finding'")

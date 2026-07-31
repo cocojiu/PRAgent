@@ -11,8 +11,10 @@ class SemanticDiffSegmenterTest {
 
     @Test
     void splitsJavaPatchByHunkAndAllocatesSourceLineCounts() {
+        String path = "src/main/java/com/example/order/OrderService.java";
+        ChangedFileContext context = ChangedFileContext.available(path, "head-a", "class OrderService {}");
         PullRequestChangedFile file = new PullRequestChangedFile(
-            "src/main/java/com/example/order/OrderService.java",
+            path,
             "modified",
             10,
             2,
@@ -28,7 +30,8 @@ class SemanticDiffSegmenterTest {
                 -    order.cancel();
                 +    refundService.refund(order.paymentId());
                  }
-                """
+                """,
+            context
         );
 
         List<SemanticDiffSegment> segments = segmenter.segments(file);
@@ -43,6 +46,7 @@ class SemanticDiffSegmenterTest {
             .containsExactly(7, 3);
         assertThat(segments).extracting(SemanticDiffSegment::deletions)
             .containsExactly(1, 1);
+        assertThat(segments).allSatisfy(segment -> assertThat(segment.file().context()).isSameAs(context));
     }
 
     @Test

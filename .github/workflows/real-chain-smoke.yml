@@ -6,7 +6,7 @@ on:
       max_total_tokens:
         description: Stop before starting another task after this cumulative token budget is reached
         required: true
-        default: "15000"
+        default: "25000"
         type: string
       backup_path:
         description: Optional absolute pre-D1 database backup path
@@ -15,6 +15,29 @@ on:
       backend_image:
         description: Optional full backend image reference; defaults to the image recorded in the deployment environment
         required: false
+        type: string
+      backend_image_tag:
+        description: Optional existing ACR backend image tag to pull into the isolated stack
+        required: false
+        type: string
+      expected_revision:
+        description: Optional full 40-character OCI revision; required with backend_image_tag
+        required: false
+        type: string
+      risk_sample_pr_number:
+        description: Closed immutable PR number for the confirmed-positive risk sample
+        required: true
+        default: "132"
+        type: string
+      risk_sample_commit:
+        description: Full 40-character head revision for the confirmed-positive risk sample
+        required: true
+        default: "c8bcd39760bf8ce75128873b61acf7793fe0b372"
+        type: string
+      risk_sample_branch:
+        description: Head branch for the confirmed-positive risk sample
+        required: true
+        default: "codex/e2e-smoke-risk-v2-20260731"
         type: string
 
 permissions:
@@ -86,31 +109,458 @@ jobs:
       - name: Run three sequential real tasks in isolated stack
         shell: bash
         env:
+          ALIYUN_DEPLOY_REGISTRY: ${{ secrets.ALIYUN_DEPLOY_REGISTRY || vars.ALIYUN_DEPLOY_REGISTRY }}
+          ALIYUN_NAMESPACE: ${{ secrets.ALIYUN_NAMESPACE || vars.ALIYUN_NAMESPACE }}
+          ALIYUN_REGISTRY_PASSWORD: ${{ secrets.ALIYUN_REGISTRY_PASSWORD }}
+          ALIYUN_REGISTRY_USERNAME: ${{ secrets.ALIYUN_REGISTRY_USERNAME || vars.ALIYUN_REGISTRY_USERNAME }}
+          ALIYUN_REPOSITORY: ${{ secrets.ALIYUN_REPOSITORY || vars.ALIYUN_REPOSITORY }}
           BACKUP_PATH: ${{ inputs.backup_path }}
           BACKEND_IMAGE: ${{ inputs.backend_image }}
+          BACKEND_IMAGE_TAG: ${{ inputs.backend_image_tag }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || vars.DEPLOY_PATH }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT || vars.DEPLOY_PORT }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER || vars.DEPLOY_USER }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          GITHUB_TOKEN: ${{ github.token }}
           MAX_TOTAL_TOKENS: ${{ inputs.max_total_tokens }}
+          RISK_SAMPLE_BRANCH: ${{ inputs.risk_sample_branch }}
+          RISK_SAMPLE_COMMIT: ${{ inputs.risk_sample_commit }}
+          RISK_SAMPLE_PR_NUMBER: ${{ inputs.risk_sample_pr_number }}
+          SMOKE_SUMMARY_PATH: ${{ runner.temp }}/real-chain-smoke-summary.txt
           SMOKE_RUN_ATTEMPT: ${{ github.run_attempt }}
           SMOKE_RUN_ID: ${{ github.run_id }}
         run: |
+          set -euo pipefail
+          backend_image="${BACKEND_IMAGE}"
+          pull_requested=false
+
+          case "${backend_image}" in
+            *[!a-zA-Z0-9._:/@-]*)
+              echo "backend_image contains unsupported characters." >&2
+              exit 2
+              ;;
+          esac
+          case "${BACKEND_IMAGE_TAG}" in
+            *[!a-zA-Z0-9_.-]*)
+              echo "backend_image_tag contains unsupported characters." >&2
+              exit 2
+              ;;
+          esac
+          case "${EXPECTED_REVISION}" in
+            ''|*[!0-9a-f]*)
+              if [ -n "${EXPECTED_REVISION}" ]; then
+                echo "expected_revision must be a lowercase hexadecimal commit SHA." >&2
+                exit 2
+              fi
+              ;;
+          esac
+          if [ -n "${EXPECTED_REVISION}" ] && [ "${#EXPECTED_REVISION}" -ne 40 ]; then
+            echo "expected_revision must contain exactly 40 hexadecimal characters." >&2
+            exit 2
+          fi
+          case "${RISK_SAMPLE_PR_NUMBER}" in
+            ''|*[!0-9]*)
+              echo "risk_sample_pr_number must be a positive integer." >&2
+              exit 2
+              ;;
+          esac
+          test "${RISK_SAMPLE_PR_NUMBER}" -gt 0 || {
+            echo "risk_sample_pr_number must be greater than zero." >&2
+            exit 2
+          }
+          case "${RISK_SAMPLE_COMMIT}" in
+            *[!0-9a-f]*)
+              echo "risk_sample_commit must be a lowercase hexadecimal commit SHA." >&2
+              exit 2
+              ;;
+          esac
+          if [ "${#RISK_SAMPLE_COMMIT}" -ne 40 ]; then
+            echo "risk_sample_commit must contain exactly 40 hexadecimal characters." >&2
+            exit 2
+          fi
+          case "${RISK_SAMPLE_BRANCH}" in
+            ''|*[!a-zA-Z0-9._/-]*)
+              echo "risk_sample_branch is missing or contains unsupported characters." >&2
+              exit 2
+              ;;
+          esac
+          risk_sample_identity="$(
+            curl -fsS --retry 3 \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/pulls/${RISK_SAMPLE_PR_NUMBER}" \
+              | python3 -c \
+                  'import json,sys; pr=json.load(sys.stdin); print("|".join((pr["head"]["sha"], pr["head"]["ref"], pr["state"])))'
+          )"
+          expected_risk_sample_identity="${RISK_SAMPLE_COMMIT}|${RISK_SAMPLE_BRANCH}|closed"
+          test "${risk_sample_identity}" = "${expected_risk_sample_identity}" || {
+            echo "Risk sample must match the configured immutable closed PR head." >&2
+            exit 2
+          }
+
+          if [ -n "${BACKEND_IMAGE_TAG}" ]; then
+            test -z "${backend_image}" || {
+              echo "Specify either backend_image or backend_image_tag, not both." >&2
+              exit 2
+            }
+            test -n "${EXPECTED_REVISION}" || {
+              echo "expected_revision is required with backend_image_tag." >&2
+              exit 2
+            }
+            for value in \
+              "${ALIYUN_DEPLOY_REGISTRY}" \
+              "${ALIYUN_NAMESPACE}" \
+              "${ALIYUN_REPOSITORY}"; do
+              case "${value}" in
+                ''|*[!a-zA-Z0-9._:/-]*)
+                  echo "Aliyun image coordinates are missing or contain unsupported characters." >&2
+                  exit 2
+                  ;;
+              esac
+            done
+            case "${ALIYUN_REGISTRY_USERNAME}" in
+              ''|*[!a-zA-Z0-9._@-]*)
+                echo "Aliyun registry username is missing or contains unsupported characters." >&2
+                exit 2
+                ;;
+            esac
+            test -n "${ALIYUN_REGISTRY_PASSWORD}" || {
+              echo "Missing ALIYUN_REGISTRY_PASSWORD." >&2
+              exit 2
+            }
+            backend_image="${ALIYUN_DEPLOY_REGISTRY}/${ALIYUN_NAMESPACE}/${ALIYUN_REPOSITORY}:backend-${BACKEND_IMAGE_TAG}"
+            pull_requested=true
+            printf '%s' "${ALIYUN_REGISTRY_PASSWORD}" \
+              | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+                  "docker login '${ALIYUN_DEPLOY_REGISTRY}' -u '${ALIYUN_REGISTRY_USERNAME}' --password-stdin"
+          fi
+
+          smoke_project="repoguard-smoke-${SMOKE_RUN_ID}-${SMOKE_RUN_ATTEMPT}"
+          expected_strategy_policy="1|review-prompt-v2|review-context-v2|review-schema-v2|high-risk-verifier-v1|server-risk-v2|OBSERVE|1|1"
+          policy_probe_log="$(mktemp)"
+          smoke_output_log="$(mktemp "${RUNNER_TEMP}/real-chain-smoke-output.XXXXXX.log")"
+          policy_probe_pid=""
+          : >"${SMOKE_SUMMARY_PATH}"
+
+          cleanup_policy_probe() {
+            if [ -n "${policy_probe_pid}" ] && kill -0 "${policy_probe_pid}" 2>/dev/null; then
+              kill "${policy_probe_pid}" 2>/dev/null || true
+              wait "${policy_probe_pid}" 2>/dev/null || true
+            fi
+            rm -f -- "${policy_probe_log}" "${smoke_output_log}"
+          }
+
+          write_observe_summary() {
+            local smoke_exit_status="$1"
+            local policy_probe_exit_status="$2"
+            {
+              printf 'workflow_head_revision=%s\n' "${GITHUB_SHA}"
+              printf 'target_backend_revision=%s\n' "${EXPECTED_REVISION:-deployment-image}"
+              printf 'workflow_run_id=%s\n' "${SMOKE_RUN_ID}"
+              printf 'workflow_run_attempt=%s\n' "${SMOKE_RUN_ATTEMPT}"
+              printf 'risk_sample_pr=%s\n' "${RISK_SAMPLE_PR_NUMBER}"
+              printf 'risk_sample_revision=%s\n' "${RISK_SAMPLE_COMMIT}"
+              printf 'smoke_exit_status=%s\n' "${smoke_exit_status}"
+              printf 'policy_probe_exit_status=%s\n' "${policy_probe_exit_status}"
+              LC_ALL=C grep -E \
+                '^smoke_(backend_revision=|review_policy_source=|stale_tasks_neutralized=|created |result=|progress |summary |stop=|finding=|finding_count=|observe_violations=|cleanup )' \
+                "${smoke_output_log}" \
+                | LC_ALL=C grep -E '^[a-zA-Z0-9_.+ =|:/-]+$' || true
+              LC_ALL=C grep -E '^smoke_strategy_policy=[a-zA-Z0-9_.|/-]+$' \
+                "${policy_probe_log}" || true
+            } >"${SMOKE_SUMMARY_PATH}"
+            {
+              echo "### OBSERVE isolated smoke summary"
+              echo
+              echo '```text'
+              cat "${SMOKE_SUMMARY_PATH}"
+              echo '```'
+            } >>"${GITHUB_STEP_SUMMARY}"
+          }
+          trap cleanup_policy_probe EXIT
+
+          printf -v policy_probe_args ' %q' "${smoke_project}" "${expected_strategy_policy}"
           ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "backend_image='${BACKEND_IMAGE}'; \
-             if [ -z \"\${backend_image}\" ]; then \
-               backend_container=\$(cd '${DEPLOY_PATH}' && docker compose --env-file .env -f docker-compose.prod.yml ps -q backend); \
-               if [ -n \"\${backend_container}\" ]; then \
-                 backend_image=\$(docker inspect \"\${backend_container}\" --format '{{.Config.Image}}'); \
-               fi; \
-             fi; \
-             if [ -z \"\${backend_image}\" ]; then \
-               backend_image=\$(sed -n 's/^BACKEND_IMAGE=//p' '${DEPLOY_PATH}/.env' | tail -n 1); \
-             fi; \
-             test -n \"\${backend_image}\" || { echo 'Missing deployed BACKEND_IMAGE' >&2; exit 1; }; \
-             '${DEPLOY_PATH}/performance/remote/run-isolated-real-chain-smoke.sh' \
-             '${BACKUP_PATH}' '${MAX_TOTAL_TOKENS}' \"\${backend_image}\" \
-             '${SMOKE_RUN_ID}' '${SMOKE_RUN_ATTEMPT}'"
+            "bash -s --${policy_probe_args}" >"${policy_probe_log}" 2>&1 <<'POLICY_PROBE' &
+          set -euo pipefail
+          project="$1"
+          expected_policy="$2"
+          for _ in $(seq 1 120); do
+            mysql_container="$(
+              docker ps -q \
+                --filter "label=com.docker.compose.project=${project}" \
+                --filter "label=com.docker.compose.service=mysql"
+            )"
+            if [ -n "${mysql_container}" ]; then
+              strategy_policy="$(
+                docker exec "${mysql_container}" sh -lc \
+                  'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT CONCAT_WS('\''|'\'', strategy_version, prompt_version, context_version, schema_version, verifier_version, aggregation_version, enforcement_mode, replay_verified, active) FROM review_strategy_policy_snapshot WHERE active = 1 ORDER BY id DESC LIMIT 1"' \
+                  2>/dev/null || true
+              )"
+              if [ -n "${strategy_policy}" ]; then
+                echo "smoke_strategy_policy=${strategy_policy}"
+                test "${strategy_policy}" = "${expected_policy}" || {
+                  echo "Active review strategy is not the expected OBSERVE baseline." >&2
+                  exit 1
+                }
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo "Timed out waiting for the isolated OBSERVE strategy snapshot." >&2
+          exit 1
+          POLICY_PROBE
+          policy_probe_pid=$!
+
+          printf -v smoke_args ' %q' \
+            "${DEPLOY_PATH}" \
+            "${backend_image}" \
+            "${pull_requested}" \
+            "${EXPECTED_REVISION}" \
+            "${BACKUP_PATH}" \
+            "${MAX_TOTAL_TOKENS}" \
+            "${SMOKE_RUN_ID}" \
+            "${SMOKE_RUN_ATTEMPT}" \
+            "${RISK_SAMPLE_PR_NUMBER}" \
+            "${RISK_SAMPLE_COMMIT}" \
+            "${RISK_SAMPLE_BRANCH}"
+          set +e
+          ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "bash -s --${smoke_args}" 2>&1 <<'ISOLATED_SMOKE' | tee "${smoke_output_log}"
+          set -euo pipefail
+          deploy_path="$1"
+          backend_image="$2"
+          pull_requested="$3"
+          expected_revision="$4"
+          backup_path="$5"
+          max_total_tokens="$6"
+          smoke_run_id="$7"
+          smoke_run_attempt="$8"
+          risk_sample_pr_number="$9"
+          risk_sample_commit="${10}"
+          risk_sample_branch="${11}"
+          production_env="${deploy_path}/.env"
+          docker_compat_dir=""
+
+          cleanup_runtime_compatibility() {
+            if [ -n "${docker_compat_dir}" ]; then
+              rm -rf -- "${docker_compat_dir}"
+            fi
+          }
+          trap cleanup_runtime_compatibility EXIT
+
+          read_production_secret() {
+            secret_name="$1"
+            direct_value="$(
+              sed -n "s/^${secret_name}=//p" "${production_env}" | tail -n 1
+            )"
+            if [ -n "${direct_value}" ]; then
+              printf '%s' "${direct_value}"
+              return 0
+            fi
+
+            secret_file="$(
+              sed -n "s/^${secret_name}_FILE=//p" "${production_env}" | tail -n 1
+            )"
+            test -n "${secret_file}" || {
+              echo "Missing ${secret_name} and ${secret_name}_FILE in production environment." >&2
+              return 1
+            }
+            case "${secret_file}" in
+              /*) ;;
+              *) secret_file="${deploy_path}/${secret_file#./}" ;;
+            esac
+            test -r "${secret_file}" || {
+              echo "Configured ${secret_name}_FILE is not readable." >&2
+              return 1
+            }
+            cat -- "${secret_file}"
+          }
+
+          test -f "${production_env}" || {
+            echo "Missing production environment file." >&2
+            exit 1
+          }
+          encryption_key="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_KEY)"
+          encryption_salt="$(read_production_secret REPOGUARD_SECURITY_ENCRYPTION_SALT)"
+          production_mysql_password="$(read_production_secret MYSQL_PASSWORD)"
+          test -n "${encryption_key}" \
+            && test -n "${encryption_salt}" \
+            && test -n "${production_mysql_password}" || {
+            echo "Production encryption and MySQL compatibility material must not be empty." >&2
+            exit 1
+          }
+          case "${production_mysql_password}" in
+            *$'\n'*|*$'\r'*)
+              echo "Production MySQL password cannot contain line breaks." >&2
+              exit 1
+              ;;
+          esac
+          export REPOGUARD_SECURITY_ENCRYPTION_KEY="${encryption_key}"
+          export REPOGUARD_SECURITY_ENCRYPTION_SALT="${encryption_salt}"
+          export REPOGUARD_GITHUB_WEBHOOK_SECRET="$(openssl rand -hex 32)"
+          unset encryption_key encryption_salt
+
+          if [ -z "${backend_image}" ]; then
+            backend_container="$(
+              cd "${deploy_path}"
+              docker compose --env-file .env -f docker-compose.prod.yml ps -q backend
+            )"
+            if [ -n "${backend_container}" ]; then
+              backend_image="$(
+                docker inspect "${backend_container}" --format '{{.Config.Image}}'
+              )"
+            fi
+          fi
+          if [ -z "${backend_image}" ]; then
+            backend_image="$(
+              sed -n 's/^BACKEND_IMAGE=//p' "${production_env}" | tail -n 1
+            )"
+          fi
+          test -n "${backend_image}" || {
+            echo "Missing deployed BACKEND_IMAGE" >&2
+            exit 1
+          }
+          if [ "${pull_requested}" = "true" ]; then
+            docker pull "${backend_image}" >/dev/null
+          fi
+          if [ -n "${expected_revision}" ]; then
+            actual_revision="$(
+              docker image inspect "${backend_image}" \
+                --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+            )"
+            test "${actual_revision}" = "${expected_revision}" || {
+              echo "Backend image revision mismatch: expected ${expected_revision}, found ${actual_revision:-missing}" >&2
+              exit 1
+            }
+            echo "smoke_backend_revision=${actual_revision}"
+          fi
+
+          production_mysql_container="$(
+            cd "${deploy_path}"
+            docker compose --env-file "${production_env}" \
+              -f docker-compose.prod.yml ps -q mysql
+          )"
+          test -n "${production_mysql_container}" || {
+            echo "Production MySQL container is unavailable for compatibility injection." >&2
+            exit 1
+          }
+          real_docker_bin="$(command -v docker)"
+          test -x "${real_docker_bin}" || {
+            echo "Docker executable is unavailable." >&2
+            exit 1
+          }
+          real_bash_bin="$(command -v bash)"
+          test -x "${real_bash_bin}" || {
+            echo "Bash executable is unavailable." >&2
+            exit 1
+          }
+          "${real_docker_bin}" exec --help | grep -q -- '--env-file' || {
+            echo "Docker exec does not support --env-file compatibility injection." >&2
+            exit 1
+          }
+          docker_compat_dir="$(
+            mktemp -d "${deploy_path}/.smoke-docker-compat.XXXXXX"
+          )"
+          chmod 0700 "${docker_compat_dir}"
+          printf 'MYSQL_PASSWORD=%s\n' "${production_mysql_password}" \
+            >"${docker_compat_dir}/production-mysql.env"
+          chmod 0600 "${docker_compat_dir}/production-mysql.env"
+          unset production_mysql_password
+          cat >"${docker_compat_dir}/docker" <<'DOCKER_COMPATIBILITY'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          if [ "${1:-}" = "exec" ] \
+              && [ "${2:-}" = "${PRODUCTION_MYSQL_CONTAINER:-}" ]; then
+            shift
+            exec "${REAL_DOCKER_BIN}" exec \
+              --env-file "${PRODUCTION_MYSQL_ENV_FILE}" "$@"
+          fi
+          exec "${REAL_DOCKER_BIN}" "$@"
+          DOCKER_COMPATIBILITY
+          chmod 0700 "${docker_compat_dir}/docker"
+          cat >"${docker_compat_dir}/bash" <<'BASH_COMPATIBILITY'
+          #!/bin/sh
+          set -eu
+          if [ "${1:-}" = "${SMOKE_TASK_RUNNER:-}" ]; then
+            mysql_container="${3:-}"
+            baseline_task_id="$(
+              "${REAL_DOCKER_BIN}" exec "${mysql_container}" sh -lc \
+                'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT COALESCE(MAX(id), 0) FROM review_task"'
+            )" || baseline_task_id=0
+            case "${baseline_task_id}" in
+              ''|*[!0-9]*) baseline_task_id=0 ;;
+            esac
+            task_status=0
+            "${REAL_BASH_BIN}" "$@" \
+              "${SMOKE_SMALL_SPEC}" \
+              "${SMOKE_MEDIUM_SPEC}" \
+              "${SMOKE_RISK_SPEC}" || task_status=$?
+            finding_metadata="$(
+              "${REAL_DOCKER_BIN}" exec \
+                --env "SMOKE_BASELINE_TASK_ID=${baseline_task_id}" \
+                "${mysql_container}" sh -lc \
+                'mysql -N -s -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "SELECT CONCAT_WS(CHAR(124), t.pr_number, f.id, COALESCE(f.source, CHAR(45)), COALESCE(f.rule_id, CHAR(45)), f.severity, f.confidence, f.is_blocking, f.enforcement_mode, f.issue_type, f.blocking_candidate, f.verification_status, f.detector_version, f.rule_config_version, f.prompt_version, f.context_version, f.schema_version, f.verifier_version, f.aggregation_version, f.policy_version, f.original_severity, f.original_confidence, f.original_is_blocking, f.anchor_type, f.feedback_status_norm) FROM review_finding f JOIN review_task t ON t.id = f.task_id WHERE t.id > ${SMOKE_BASELINE_TASK_ID} ORDER BY t.id, f.id"'
+            )" || finding_metadata=""
+            if [ -n "${finding_metadata}" ]; then
+              printf '%s\n' "${finding_metadata}" | sed 's/^/smoke_finding=/'
+            fi
+            finding_count="$(
+              printf '%s\n' "${finding_metadata}" | awk 'NF { count++ } END { print count + 0 }'
+            )"
+            echo "smoke_finding_count=${finding_count}"
+            observe_violations="$(
+              printf '%s\n' "${finding_metadata}" \
+                | awk -F'|' 'NF && ($7 != "0" || toupper($8) != "OBSERVE") { count++ } END { print count + 0 }'
+            )"
+            echo "smoke_observe_violations=${observe_violations}"
+            if [ "${observe_violations}" -gt 0 ]; then
+              task_status=1
+            fi
+            exit "${task_status}"
+          fi
+          exec "${REAL_BASH_BIN}" "$@"
+          BASH_COMPATIBILITY
+          chmod 0700 "${docker_compat_dir}/bash"
+          export PRODUCTION_MYSQL_CONTAINER="${production_mysql_container}"
+          export PRODUCTION_MYSQL_ENV_FILE="${docker_compat_dir}/production-mysql.env"
+          export REAL_BASH_BIN="${real_bash_bin}"
+          export REAL_DOCKER_BIN="${real_docker_bin}"
+          export SMOKE_TASK_RUNNER="${deploy_path}/performance/remote/run-real-chain-smoke.sh"
+          export SMOKE_SMALL_SPEC="11|9db67be5669fc43a1dc94fa680677c1ea26f1d6c|codex/e2e-smoke-small-20260621|small"
+          export SMOKE_MEDIUM_SPEC="12|c12901123ad1d21a2d5591c41bce51fc9ce5e50a|codex/e2e-smoke-medium-20260621|medium"
+          export SMOKE_RISK_SPEC="${risk_sample_pr_number}|${risk_sample_commit}|${risk_sample_branch}|risk"
+          export PATH="${docker_compat_dir}:${PATH}"
+          hash -r
+
+          "${deploy_path}/performance/remote/run-isolated-real-chain-smoke.sh" \
+            "${backup_path}" "${max_total_tokens}" "${backend_image}" \
+            "${smoke_run_id}" "${smoke_run_attempt}"
+          ISOLATED_SMOKE
+          smoke_pipeline_status=("${PIPESTATUS[@]}")
+          set -e
+          smoke_status="${smoke_pipeline_status[0]}"
+          if [ "${smoke_pipeline_status[1]}" -ne 0 ]; then
+            smoke_status="${smoke_pipeline_status[1]}"
+          fi
+
+          policy_probe_status=0
+          if [ "${smoke_status}" -ne 0 ]; then
+            if kill -0 "${policy_probe_pid}" 2>/dev/null; then
+              kill "${policy_probe_pid}" 2>/dev/null || true
+            fi
+          fi
+          wait "${policy_probe_pid}" || policy_probe_status=$?
+          policy_probe_pid=""
+          cat "${policy_probe_log}" || true
+          write_observe_summary "${smoke_status}" "${policy_probe_status}"
+          if [ "${smoke_status}" -ne 0 ]; then
+            exit "${smoke_status}"
+          fi
+          test "${policy_probe_status}" -eq 0
 
       - name: Verify production health after isolated smoke
         if: always()
@@ -118,3 +568,12 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST || vars.DEPLOY_HOST }}
         run: curl -fsS "http://${DEPLOY_HOST}/actuator/health"
+
+      - name: Upload sanitized OBSERVE smoke summary
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: real-chain-observe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/real-chain-smoke-summary.txt
+          if-no-files-found: warn
+          retention-days: 90

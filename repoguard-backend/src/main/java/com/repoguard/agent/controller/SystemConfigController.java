@@ -9,8 +9,11 @@ import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
 import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
+import com.repoguard.agent.dto.ReviewEnforcementModeRequest;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
 import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
@@ -22,6 +25,8 @@ import com.repoguard.agent.security.SecretReEncryptionService;
 import com.repoguard.agent.service.SystemConfigService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Min;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -154,6 +159,45 @@ public class SystemConfigController {
         @Valid @RequestBody ReviewRuleStatusRequest request
     ) {
         return ApiResponse.ok(systemConfigService.updateReviewRuleStatus(id, request.status()));
+    }
+
+    @GetMapping("/review-rules/{id}/versions")
+    public ApiResponse<List<ReviewRulePolicyVersionDto>> getReviewRuleVersions(
+        @PathVariable @Size(max = 64) String id
+    ) {
+        return ApiResponse.ok(systemConfigService.getReviewRuleVersions(id));
+    }
+
+    @PostMapping("/review-rules/{id}/versions/{policyVersion}/rollback")
+    public ApiResponse<ReviewRuleConfigDto> rollbackReviewRule(
+        @PathVariable @Size(max = 64) String id,
+        @PathVariable @Min(1) long policyVersion
+    ) {
+        return ApiResponse.ok(systemConfigService.rollbackReviewRule(id, policyVersion));
+    }
+
+    @GetMapping("/review-strategy")
+    public ApiResponse<ReviewStrategyPolicyDto> getReviewStrategyPolicy() {
+        return ApiResponse.ok(systemConfigService.getReviewStrategyPolicy());
+    }
+
+    @GetMapping("/review-strategy/versions")
+    public ApiResponse<List<ReviewStrategyPolicyDto>> getReviewStrategyVersions() {
+        return ApiResponse.ok(systemConfigService.getReviewStrategyVersions());
+    }
+
+    @PutMapping("/review-strategy/enforcement")
+    public ApiResponse<ReviewStrategyPolicyDto> promoteReviewStrategy(
+        @Valid @RequestBody ReviewEnforcementModeRequest request
+    ) {
+        return ApiResponse.ok(systemConfigService.promoteReviewStrategy(request.enforcementMode()));
+    }
+
+    @PostMapping("/review-strategy/versions/{snapshotId}/rollback")
+    public ApiResponse<ReviewStrategyPolicyDto> rollbackReviewStrategy(
+        @PathVariable @Min(1) long snapshotId
+    ) {
+        return ApiResponse.ok(systemConfigService.rollbackReviewStrategy(snapshotId));
     }
 
     @PostMapping("/review-policy/test")

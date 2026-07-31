@@ -53,11 +53,15 @@ import type {
   ReviewPolicyConfigRequest,
   ReviewQuery,
   ReviewFinding,
+  ReviewCalibrationQueue,
   ReviewRetryResponse,
   ReviewRuleConfig,
   ReviewRuleConfigRequest,
+  ReviewRulePolicyVersion,
   ReviewRulesResponse,
   ReviewRuleStatusRequest,
+  ReviewStrategyPolicy,
+  ReviewEnforcementModeRequest,
   SecretReEncryptionRequest,
   SecretReEncryptionResponse,
   ReviewTrendPoint,
@@ -215,9 +219,19 @@ export type ApiContract = {
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
   reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionResponse>;
   fetchReviewRules: ApiOperation<undefined, ReviewRulesResponse>;
+  fetchReviewCalibrationQueue: ApiOperation<
+    { ruleId: string; limit?: number; includeIgnored?: boolean },
+    ReviewCalibrationQueue
+  >;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
   updateReviewRule: ApiOperation<{ id: string; payload: ReviewRuleConfigRequest }, ReviewRuleConfig>;
   updateReviewRuleStatus: ApiOperation<{ id: string; payload: ReviewRuleStatusRequest }, ReviewRuleConfig>;
+  fetchReviewRuleVersions: ApiOperation<{ id: string }, ReviewRulePolicyVersion[]>;
+  rollbackReviewRule: ApiOperation<{ id: string; policyVersion: number }, ReviewRuleConfig>;
+  fetchReviewStrategy: ApiOperation<undefined, ReviewStrategyPolicy>;
+  fetchReviewStrategyVersions: ApiOperation<undefined, ReviewStrategyPolicy[]>;
+  updateReviewStrategyEnforcement: ApiOperation<ReviewEnforcementModeRequest, ReviewStrategyPolicy>;
+  rollbackReviewStrategy: ApiOperation<{ snapshotId: number }, ReviewStrategyPolicy>;
   testGithubIntegrationConnection: ApiOperation<GithubIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testMysqlConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testRabbitMqConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
@@ -495,6 +509,14 @@ const apiEndpoints: ApiEndpointMap = {
   fetchReviewRules: {
     path: () => "/api/v1/config/review-rules"
   },
+  fetchReviewCalibrationQueue: {
+    path: () => "/api/v1/config/review-calibration/queue",
+    query: input => ({
+      ruleId: input.ruleId,
+      limit: input.limit ?? 30,
+      includeIgnored: input.includeIgnored ? "true" : "false"
+    })
+  },
   createReviewRule: {
     method: "POST",
     path: () => "/api/v1/config/review-rules",
@@ -509,6 +531,28 @@ const apiEndpoints: ApiEndpointMap = {
     method: "PUT",
     path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/status`,
     body: input => input.payload
+  },
+  fetchReviewRuleVersions: {
+    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions`
+  },
+  rollbackReviewRule: {
+    method: "POST",
+    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions/${idSegment(input.policyVersion)}/rollback`
+  },
+  fetchReviewStrategy: {
+    path: () => "/api/v1/config/review-strategy"
+  },
+  fetchReviewStrategyVersions: {
+    path: () => "/api/v1/config/review-strategy/versions"
+  },
+  updateReviewStrategyEnforcement: {
+    method: "PUT",
+    path: () => "/api/v1/config/review-strategy/enforcement",
+    body: input => input
+  },
+  rollbackReviewStrategy: {
+    method: "POST",
+    path: input => `/api/v1/config/review-strategy/versions/${idSegment(input.snapshotId)}/rollback`
   },
   testGithubIntegrationConnection: {
     method: "POST",

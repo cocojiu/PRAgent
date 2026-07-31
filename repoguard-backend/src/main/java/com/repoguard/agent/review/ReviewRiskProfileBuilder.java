@@ -22,13 +22,17 @@ public class ReviewRiskProfileBuilder {
         List<ReviewFindingDto> findings,
         List<ChangedFileDto> changedFiles
     ) {
-        Map<String, Long> findingCountByFile = findings.stream()
+        List<ReviewFindingDto> effectiveFindings = findings.stream()
+            .filter(finding -> !"false_positive".equalsIgnoreCase(finding.feedbackStatus()))
+            .filter(finding -> !"observe".equalsIgnoreCase(finding.enforcementMode()))
+            .toList();
+        Map<String, Long> findingCountByFile = effectiveFindings.stream()
             .filter(finding -> StringUtils.hasText(finding.file()))
             .collect(Collectors.groupingBy(ReviewFindingDto::file, Collectors.counting()));
-        int criticalCount = countSeverity(findings, "critical");
-        int highCount = countSeverity(findings, "high");
-        int mediumCount = countSeverity(findings, "medium");
-        int lowCount = countSeverity(findings, "low");
+        int criticalCount = countSeverity(effectiveFindings, "critical");
+        int highCount = countSeverity(effectiveFindings, "high");
+        int mediumCount = countSeverity(effectiveFindings, "medium");
+        int lowCount = countSeverity(effectiveFindings, "low");
         int totalChurn = changedFiles.stream()
             .mapToInt(file -> safeInt(file.additions()) + safeInt(file.deletions()))
             .sum();
@@ -78,7 +82,7 @@ public class ReviewRiskProfileBuilder {
         return new PrRiskProfileDto(
             score,
             level,
-            buildRiskSummary(level, score, findings.size(), changedFiles.size(), totalChurn),
+            buildRiskSummary(level, score, effectiveFindings.size(), changedFiles.size(), totalChurn),
             recommendHumanReview,
             humanReviewReason,
             signals,

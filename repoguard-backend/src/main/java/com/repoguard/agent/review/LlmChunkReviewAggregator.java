@@ -19,6 +19,7 @@ class LlmChunkReviewAggregator {
     private final LlmChunkReviewScheduler chunkReviewScheduler;
     private final LlmChunkReviewFallbackHandler fallbackHandler;
     private final LlmChunkReviewResultAggregator resultAggregator;
+    private final LlmHighRiskVerificationService verificationService;
 
     LlmChunkReviewAggregator(
         RuleBasedPullRequestReviewer ruleBasedReviewer,
@@ -31,6 +32,32 @@ class LlmChunkReviewAggregator {
         int maxTotalChunks,
         int maxInFlightChunks
     ) {
+        this(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            metrics,
+            chunkExecutor,
+            maxTotalChunks,
+            maxInFlightChunks,
+            LlmHighRiskVerificationService.defaults()
+        );
+    }
+
+    LlmChunkReviewAggregator(
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmRuleReviewMerger reviewMerger,
+        LlmReviewQualityScorer qualityScorer,
+        LlmReviewCostEstimator costEstimator,
+        RepoGuardMetrics metrics,
+        Executor chunkExecutor,
+        int maxTotalChunks,
+        int maxInFlightChunks,
+        LlmHighRiskVerificationService verificationService
+    ) {
         RuleBasedPullRequestReviewer requiredRuleBasedReviewer = Objects.requireNonNull(
             ruleBasedReviewer,
             "ruleBasedReviewer"
@@ -38,6 +65,7 @@ class LlmChunkReviewAggregator {
         LlmReviewPromptBuilder requiredPromptBuilder = Objects.requireNonNull(promptBuilder, "promptBuilder");
         LlmRuleReviewMerger requiredReviewMerger = Objects.requireNonNull(reviewMerger, "reviewMerger");
         this.qualityScorer = Objects.requireNonNull(qualityScorer, "qualityScorer");
+        this.verificationService = Objects.requireNonNull(verificationService, "verificationService");
         LlmReviewCostEstimator requiredCostEstimator = Objects.requireNonNull(costEstimator, "costEstimator");
         RepoGuardMetrics requiredMetrics = Objects.requireNonNull(metrics, "metrics");
         this.chunkReviewScheduler = new LlmChunkReviewScheduler(
@@ -71,7 +99,13 @@ class LlmChunkReviewAggregator {
             chunk -> reviewChunk(context, settings, chunk, reviewResultParser, traceId, budget),
             fallbackHandler::fallback
         );
-        return resultAggregator.aggregate(settings, fullDiff, chunks, outcomes);
+        return resultAggregator.aggregate(
+            settings,
+            fullDiff,
+            chunks,
+            outcomes,
+            context.promptContext()
+        );
     }
 
     private LlmChunkReviewOutcome reviewChunk(
@@ -90,9 +124,28 @@ class LlmChunkReviewAggregator {
                 return fallbackHandler.fallback(chunk, BUDGET_EXHAUSTED_CATEGORY, null);
             }
             try {
-                LlmCallResult callResult = context.llmReviewCaller().callLlm(settings, context.task(), chunk.diff());
-                ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), chunk.diff());
-                return LlmChunkReviewOutcome.llm(parsed, callResult);
+                LlmCallResult callResult = context.llmReviewCaller().callLlm(
+                    settings,
+                    context.task(),
+                    chunk.diff(),
+                    context.promptContext()
+                );
+                ReviewResult parsed = qualityScorer.score(
+                    reviewResultParser.parse(callResult.content()),
+                    chunk.diff(),
+                    context.promptContext()
+                );
+                LlmHighRiskVerificationOutcome verified = verificationService.verify(
+                    context,
+                    chunk.diff(),
+                    parsed,
+                    budget
+                );
+                return LlmChunkReviewOutcome.llm(
+                    verified.review(),
+                    LlmCallResult.combine(callResult, verified.verificationUsage()),
+                    verified.summary()
+                );
             } catch (RuntimeException ex) {
                 return fallbackHandler.fallback(chunk, CHUNK_PARTIAL_FAILURE_CATEGORY, ex);
             }

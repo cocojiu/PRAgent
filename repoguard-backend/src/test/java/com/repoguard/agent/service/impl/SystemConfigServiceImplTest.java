@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -41,9 +42,12 @@ import com.repoguard.agent.review.LlmReviewJsonExtractor;
 import com.repoguard.agent.review.LlmReviewParseFailureSummarizer;
 import com.repoguard.agent.review.LlmReviewResultParser;
 import com.repoguard.agent.review.LlmReviewSchemaRepairer;
+import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.config.ReviewRuleConfigPolicy;
 import com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl;
 import com.repoguard.agent.review.config.ReviewRuleMetricAssembler;
+import com.repoguard.agent.review.quality.ReviewQualityBaseline;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -54,6 +58,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.mockito.ArgumentCaptor;
 
 class SystemConfigServiceImplTest {
@@ -68,6 +73,9 @@ class SystemConfigServiceImplTest {
     private final SecretCryptoService secretCryptoService = new SecretCryptoService("test-encryption-key");
     private final ExternalHttpResponseReader responseReader = new ExternalHttpResponseReader();
     private final CacheEvictionService cacheEvictionService = org.mockito.Mockito.mock(CacheEvictionService.class);
+    private final ReviewQualityBaselineService reviewQualityBaselineService =
+        org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
+    private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
     private final ConnectionTestServiceImpl connectionTestService = ConnectionTestServiceTestFactory.create(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -92,7 +100,9 @@ class SystemConfigServiceImplTest {
         reviewFindingMapper,
         cacheEvictionService,
         new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler()
+        new ReviewRuleMetricAssembler(),
+        reviewQualityBaselineService,
+        reviewRuleRegistry
     );
     private final SystemSettingsApplicationServiceImpl systemSettingsApplicationService =
         new SystemSettingsApplicationServiceImpl(
@@ -108,6 +118,11 @@ class SystemConfigServiceImplTest {
         reviewRuleConfigService,
         systemSettingsApplicationService
     );
+
+    @BeforeEach
+    void registerConfiguredRuleDetectors() {
+        when(reviewRuleRegistry.contains(anyString())).thenReturn(true);
+    }
 
     @Test
     void constructorRejectsMissingReviewRuleConfigService() {
@@ -464,6 +479,7 @@ class SystemConfigServiceImplTest {
             ruleHitCount("RG-SECRET-001", 1L)
         ));
         when(reviewFindingMapper.selectReviewRuleFeedbackStat()).thenReturn(ruleFeedbackStat(3L, 1L, 1L, 2L));
+        when(reviewQualityBaselineService.loadBaseline()).thenReturn(qualityBaseline());
 
         var result = service.getReviewRules();
 
@@ -474,10 +490,11 @@ class SystemConfigServiceImplTest {
         assertThat(result.rules().getFirst().applicableLanguages()).isEqualTo("Java");
         assertThat(result.rules().getFirst().filePatterns()).isEqualTo("*.java");
         assertThat(result.rules().getFirst().falsePositiveGuidance()).contains("false positive");
-        assertThat(result.metrics()).hasSize(6);
+        assertThat(result.metrics()).hasSize(13);
         assertThat(result.metrics().get(4).value()).isEqualTo("50%");
         assertThat(result.metrics().get(5).value()).isEqualTo("50%");
-        assertThat(result.metrics()).extracting("label").contains("启用规则", "累计命中");
+        assertThat(result.metrics()).extracting("label")
+            .contains("启用规则", "累计命中", "高危精确率", "证据锚定率", "累计 LLM 成本");
     }
 
     @Test
@@ -600,6 +617,27 @@ class SystemConfigServiceImplTest {
         Long reviewedCount
     ) {
         return new RuleFeedbackStat(totalHits, validCount, falsePositiveCount, reviewedCount);
+    }
+
+    private ReviewQualityBaseline qualityBaseline() {
+        return new ReviewQualityBaseline(
+            10,
+            4,
+            new BigDecimal("40.00"),
+            3,
+            2,
+            1,
+            new BigDecimal("66.67"),
+            new BigDecimal("33.33"),
+            9,
+            new BigDecimal("90.00"),
+            1,
+            new BigDecimal("10.00"),
+            5,
+            new BigDecimal("12.40"),
+            new BigDecimal("1.2345"),
+            List.of()
+        );
     }
 
     private ProbeServer startLlmProbeServer(String responseBody) throws IOException {

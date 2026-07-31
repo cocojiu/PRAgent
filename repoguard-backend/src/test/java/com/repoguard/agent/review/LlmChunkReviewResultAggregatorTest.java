@@ -51,13 +51,17 @@ class LlmChunkReviewResultAggregatorTest {
             "src/B.java"
         )));
         List<LlmChunkReviewOutcome> outcomes = List.of(
-            LlmChunkReviewOutcome.llm(llmReview, new LlmCallResult("{}", 100, 25, 125)),
+            LlmChunkReviewOutcome.llm(
+                llmReview,
+                new LlmCallResult("{}", 130, 35, 165),
+                new LlmVerificationSummary(1, 1, 0, 0)
+            ),
             LlmChunkReviewOutcome.fallback(fallbackReview)
         );
 
         ReviewResult result = aggregator.aggregate(settings(), fullDiff, chunks, outcomes);
 
-        assertThat(result.riskLevel()).isEqualTo("HIGH");
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(result.findings())
             .extracting(ReviewFindingResult::source)
             .containsExactly("LLM", "RULE");
@@ -65,14 +69,16 @@ class LlmChunkReviewResultAggregatorTest {
         assertThat(result.llmPromptSummary()).contains(
             "chunked=true",
             "chunks=2",
-            "aggregateRisk=HIGH",
+            "aggregateRisk=MEDIUM",
             "aggregateFindings=2",
-            "failedChunks=1"
+            "failedChunks=1",
+            "verificationAttempted=1",
+            "verificationPassed=1"
         );
-        assertThat(result.llmPromptTokens()).isEqualTo(100);
-        assertThat(result.llmCompletionTokens()).isEqualTo(25);
-        assertThat(result.llmTotalTokens()).isEqualTo(125);
-        assertThat(result.llmEstimatedCost()).isEqualByComparingTo("0.000200");
+        assertThat(result.llmPromptTokens()).isEqualTo(130);
+        assertThat(result.llmCompletionTokens()).isEqualTo(35);
+        assertThat(result.llmTotalTokens()).isEqualTo(165);
+        assertThat(result.llmEstimatedCost()).isEqualByComparingTo("0.000270");
     }
 
     @Test
@@ -88,7 +94,7 @@ class LlmChunkReviewResultAggregatorTest {
             List.of(LlmChunkReviewOutcome.fallback(fallbackReview))
         );
 
-        assertThat(result.riskLevel()).isEqualTo("LOW");
+        assertThat(result.riskLevel()).isEqualTo("INFO");
         assertThat(result.findings()).isEmpty();
         assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
         assertThat(result.llmPromptTokens()).isNull();

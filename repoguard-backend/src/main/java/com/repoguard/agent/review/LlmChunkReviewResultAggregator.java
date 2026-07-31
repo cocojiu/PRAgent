@@ -28,6 +28,16 @@ final class LlmChunkReviewResultAggregator {
         List<PullRequestDiffChunk> chunks,
         List<LlmChunkReviewOutcome> outcomes
     ) {
+        return aggregate(settings, fullDiff, chunks, outcomes, LlmReviewContext.legacy());
+    }
+
+    ReviewResult aggregate(
+        ReviewPolicySettings settings,
+        PullRequestDiff fullDiff,
+        List<PullRequestDiffChunk> chunks,
+        List<LlmChunkReviewOutcome> outcomes,
+        LlmReviewContext promptContext
+    ) {
         ChunkAggregation aggregation = ChunkAggregation.empty();
         for (LlmChunkReviewOutcome outcome : outcomes) {
             aggregation = addOutcome(
@@ -35,9 +45,13 @@ final class LlmChunkReviewResultAggregator {
                 Objects.requireNonNull(outcome, "chunk outcome")
             );
         }
+        ReviewResult finalized = reviewMerger.mergeWithRuleReview(
+            ReviewResult.completed("INFO", aggregation.findings()),
+            null
+        );
         return ReviewResult.completed(
-            aggregation.riskLevel(),
-            aggregation.findings(),
+            finalized.riskLevel(),
+            finalized.findings(),
             null,
             null,
             null,
@@ -45,9 +59,11 @@ final class LlmChunkReviewResultAggregator {
             promptBuilder.chunkedPromptSummary(
                 fullDiff,
                 chunks,
-                aggregation.findings().size(),
-                aggregation.riskLevel(),
-                aggregation.failedChunks()
+                finalized.findings().size(),
+                finalized.riskLevel(),
+                aggregation.failedChunks(),
+                promptContext,
+                aggregation.verificationSummary()
             ),
             zeroToNull(aggregation.promptTokens()),
             zeroToNull(aggregation.completionTokens()),
@@ -66,7 +82,12 @@ final class LlmChunkReviewResultAggregator {
     ) {
         return outcome.callResult() == null
             ? aggregation.addFallbackResult(outcome.review(), reviewMerger)
-            : aggregation.addLlmResult(outcome.review(), outcome.callResult(), reviewMerger);
+            : aggregation.addLlmResult(
+                outcome.review(),
+                outcome.callResult(),
+                outcome.verificationSummary(),
+                reviewMerger
+            );
     }
 
     private Integer zeroToNull(int value) {
@@ -79,15 +100,25 @@ final class LlmChunkReviewResultAggregator {
         int promptTokens,
         int completionTokens,
         int totalTokens,
-        int failedChunks
+        int failedChunks,
+        LlmVerificationSummary verificationSummary
     ) {
         static ChunkAggregation empty() {
-            return new ChunkAggregation("INFO", new ArrayList<>(), 0, 0, 0, 0);
+            return new ChunkAggregation(
+                "INFO",
+                new ArrayList<>(),
+                0,
+                0,
+                0,
+                0,
+                LlmVerificationSummary.empty()
+            );
         }
 
         ChunkAggregation addLlmResult(
             ReviewResult parsed,
             LlmCallResult callResult,
+            LlmVerificationSummary verification,
             LlmRuleReviewMerger reviewMerger
         ) {
             List<ReviewFindingResult> nextFindings = new ArrayList<>(findings);
@@ -100,7 +131,8 @@ final class LlmChunkReviewResultAggregator {
                 promptTokens + safeInt(callResult.promptTokens()),
                 completionTokens + safeInt(callResult.completionTokens()),
                 totalTokens + safeInt(callResult.totalTokens()),
-                failedChunks
+                failedChunks,
+                verificationSummary.add(verification)
             );
         }
 
@@ -118,7 +150,8 @@ final class LlmChunkReviewResultAggregator {
                 promptTokens,
                 completionTokens,
                 totalTokens,
-                failedChunks + 1
+                failedChunks + 1,
+                verificationSummary
             );
         }
 

@@ -36,6 +36,38 @@ class LlmReviewPipeline {
     private final RepoGuardMetrics metrics;
     private final Duration pipelineBudget;
     private final Executor llmChunkExecutor;
+    private final LlmHighRiskVerificationService verificationService;
+    private final ReviewStrategyEnforcementGate strategyEnforcementGate =
+        new ReviewStrategyEnforcementGate();
+
+    LlmReviewPipeline(
+        RuleBasedPullRequestReviewer ruleBasedReviewer,
+        LlmReviewPromptBuilder promptBuilder,
+        LlmRuleReviewMerger reviewMerger,
+        LlmReviewQualityScorer qualityScorer,
+        LlmReviewCostEstimator costEstimator,
+        LlmReviewResultParser reviewResultParser,
+        RepoGuardMetrics metrics,
+        LlmFallbackReasonClassifier fallbackReasonClassifier,
+        PullRequestDiffChunker diffChunker,
+        @Qualifier(LlmChunkReviewExecutorConfig.LLM_CHUNK_REVIEW_EXECUTOR) Executor llmChunkExecutor,
+        ReviewPipelineBudgetProperties budgetProperties
+    ) {
+        this(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            metrics,
+            fallbackReasonClassifier,
+            diffChunker,
+            llmChunkExecutor,
+            budgetProperties,
+            LlmHighRiskVerificationService.defaults()
+        );
+    }
 
     @Autowired
     LlmReviewPipeline(
@@ -49,7 +81,8 @@ class LlmReviewPipeline {
         LlmFallbackReasonClassifier fallbackReasonClassifier,
         PullRequestDiffChunker diffChunker,
         @Qualifier(LlmChunkReviewExecutorConfig.LLM_CHUNK_REVIEW_EXECUTOR) Executor llmChunkExecutor,
-        ReviewPipelineBudgetProperties budgetProperties
+        ReviewPipelineBudgetProperties budgetProperties,
+        LlmHighRiskVerificationService verificationService
     ) {
         ReviewPipelineBudgetProperties pipelineProperties = Objects.requireNonNull(
             budgetProperties,
@@ -65,6 +98,7 @@ class LlmReviewPipeline {
         this.reviewResultParser = Objects.requireNonNull(reviewResultParser, "reviewResultParser");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.llmChunkExecutor = Objects.requireNonNull(llmChunkExecutor, "llmChunkExecutor");
+        this.verificationService = Objects.requireNonNull(verificationService, "verificationService");
         this.chunkReviewAggregator = new LlmChunkReviewAggregator(
             this.ruleBasedReviewer,
             this.promptBuilder,
@@ -74,7 +108,8 @@ class LlmReviewPipeline {
             metrics,
             this.llmChunkExecutor,
             pipelineProperties.getMaxTotalChunks(),
-            pipelineProperties.getMaxInFlightChunks()
+            pipelineProperties.getMaxInFlightChunks(),
+            this.verificationService
         );
         this.stages = List.of(
             new LlmReadinessStage(),
@@ -88,18 +123,24 @@ class LlmReviewPipeline {
         try {
             for (ReviewPipelineStage stage : stages) {
                 if (state.completed()) {
-                    return state.result();
+                    return applyStrategyEnforcement(context, state.result());
                 }
                 state = stage.apply(state);
             }
-            return state.result();
+            return applyStrategyEnforcement(context, state.result());
         } catch (RuntimeException ex) {
             ReviewPolicySettings settings = context.settings();
             if (settings != null && Boolean.TRUE.equals(settings.fallbackToRules())) {
-                return fallbackReview(context, ex);
+                return applyStrategyEnforcement(context, fallbackReview(context, ex));
             }
             throw ex;
         }
+    }
+
+    private ReviewResult applyStrategyEnforcement(ReviewPipelineContext context, ReviewResult result) {
+        ReviewPolicySettings settings = context.settings();
+        ReviewStrategyRelease release = settings == null ? null : settings.strategyRelease();
+        return strategyEnforcementGate.apply(result, release);
     }
 
     private class LlmReadinessStage implements ReviewPipelineStage {
@@ -132,19 +173,35 @@ class LlmReviewPipeline {
             List<PullRequestDiffChunk> chunks = diffChunker.chunk(diff, settings);
             if (chunks.size() == 1) {
                 LlmCallResult callResult = callSingleChunk(context, settings, diff, budget);
-                ReviewResult parsed = qualityScorer.score(reviewResultParser.parse(callResult.content()), diff);
+                ReviewResult parsed = qualityScorer.score(
+                    reviewResultParser.parse(callResult.content()),
+                    diff,
+                    context.promptContext()
+                );
+                LlmHighRiskVerificationOutcome verified = verificationService.verify(
+                    context,
+                    diff,
+                    parsed,
+                    budget
+                );
+                LlmCallResult completeUsage = LlmCallResult.combine(callResult, verified.verificationUsage());
                 return ReviewResult.completed(
-                    parsed.riskLevel(),
-                    parsed.findings(),
+                    verified.review().riskLevel(),
+                    verified.review().findings(),
                     null,
                     null,
                     null,
                     null,
-                    promptBuilder.promptSummary(diff),
-                    callResult.promptTokens(),
-                    callResult.completionTokens(),
-                    callResult.totalTokens(),
-                    costEstimator.estimate(settings, callResult.promptTokens(), callResult.completionTokens())
+                    promptBuilder.promptSummary(diff, context.promptContext())
+                        + promptBuilder.verificationSummary(verified.summary()),
+                    completeUsage.promptTokens(),
+                    completeUsage.completionTokens(),
+                    completeUsage.totalTokens(),
+                    costEstimator.estimate(
+                        settings,
+                        completeUsage.promptTokens(),
+                        completeUsage.completionTokens()
+                    )
                 );
             }
 
@@ -172,7 +229,12 @@ class LlmReviewPipeline {
             );
         }
         FutureTask<LlmCallResult> call = new FutureTask<>(
-            () -> context.llmReviewCaller().callLlm(settings, context.task(), diff)
+            () -> context.llmReviewCaller().callLlm(
+                settings,
+                context.task(),
+                diff,
+                context.promptContext()
+            )
         );
         try {
             llmChunkExecutor.execute(call);
@@ -238,7 +300,8 @@ class LlmReviewPipeline {
                 parsed.llmPromptTokens(),
                 parsed.llmCompletionTokens(),
                 parsed.llmTotalTokens(),
-                parsed.llmEstimatedCost()
+                parsed.llmEstimatedCost(),
+                ReviewExecutionProvenance.from(settings.strategyRelease())
             );
             return state.withRuleReview(ruleReview).complete(completed);
         }
@@ -286,7 +349,8 @@ class LlmReviewPipeline {
             settings == null ? null : settings.llmProvider(),
             settings == null ? null : settings.modelName(),
             elapsedMillis(context.startedAtNanos()),
-            context.promptSummary()
+            context.promptSummary(),
+            ReviewExecutionProvenance.from(settings == null ? null : settings.strategyRelease())
         );
     }
 

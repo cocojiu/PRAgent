@@ -2,27 +2,41 @@ package com.repoguard.agent.review;
 
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
 class LlmRuleReviewMerger {
 
     private final RiskLevelRanker riskLevelRanker;
+    private final ReviewFindingSemanticDeduplicator findingDeduplicator;
+    private final ServerRiskAggregator riskAggregator;
 
     LlmRuleReviewMerger(RiskLevelRanker riskLevelRanker) {
+        this(riskLevelRanker, new ReviewFindingSemanticDeduplicator(), new ServerRiskAggregator());
+    }
+
+    @Autowired
+    LlmRuleReviewMerger(
+        RiskLevelRanker riskLevelRanker,
+        ReviewFindingSemanticDeduplicator findingDeduplicator,
+        ServerRiskAggregator riskAggregator
+    ) {
         this.riskLevelRanker = Objects.requireNonNull(riskLevelRanker, "riskLevelRanker");
+        this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
+        this.riskAggregator = Objects.requireNonNull(riskAggregator, "riskAggregator");
     }
 
     ReviewResult mergeWithRuleReview(ReviewResult llmReview, ReviewResult ruleReview) {
-        if (ruleReview == null || ruleReview.findings() == null || ruleReview.findings().isEmpty()) {
-            return llmReview;
-        }
         List<ReviewFindingResult> findings = new java.util.ArrayList<>();
-        if (llmReview.findings() != null) {
+        if (llmReview != null && llmReview.findings() != null) {
             findings.addAll(llmReview.findings());
         }
-        findings.addAll(ruleReview.findings());
-        return ReviewResult.completed(maxRisk(llmReview.riskLevel(), ruleReview.riskLevel()), findings);
+        if (ruleReview != null && ruleReview.findings() != null) {
+            findings.addAll(ruleReview.findings());
+        }
+        List<ReviewFindingResult> uniqueFindings = findingDeduplicator.deduplicate(findings);
+        return ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
     }
 
     String hybridPromptSummary(String promptSummary, ReviewResult ruleReview, ReviewResult merged) {

@@ -6,6 +6,7 @@ import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.GithubCommentPreviewFindingStat;
 import com.repoguard.agent.dto.MissingTestDto;
 import com.repoguard.agent.dto.ReviewFindingDto;
+import com.repoguard.agent.dto.ReviewFindingTraceDto;
 import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
@@ -178,6 +179,8 @@ public class GithubCommentPreviewDataLoader {
     }
 
     private ReviewFindingDto toFindingDto(ReviewFinding finding) {
+        boolean falsePositive = FindingFeedbackStatus.fromFinding(finding)
+            == FindingFeedbackStatus.FALSE_POSITIVE;
         return new ReviewFindingDto(
             finding.getId(),
             lower(finding.getSeverity()),
@@ -189,13 +192,51 @@ public class GithubCommentPreviewDataLoader {
             defaultString(finding.getEvidence()),
             defaultString(finding.getImpact()),
             defaultString(finding.getFixExample()),
-            Boolean.TRUE.equals(finding.getIsBlocking()),
+            !falsePositive && Boolean.TRUE.equals(finding.getIsBlocking()),
             defaultString(finding.getReviewDimension()),
             FindingFeedbackStatus.fromFinding(finding).dtoCode(),
             finding.getFeedbackNote(),
             finding.getFeedbackBy(),
-            formatDateTimeOrNull(finding.getFeedbackAt())
+            formatDateTimeOrNull(finding.getFeedbackAt()),
+            defaultString(finding.getEnforcementMode()),
+            defaultString(finding.getPolicyReason()),
+            defaultString(finding.getSource()),
+            defaultString(finding.getRuleId()),
+            defaultString(finding.getIssueType()),
+            defaultString(finding.getPreconditions()),
+            relatedFiles(finding.getRelatedFiles()),
+            Boolean.TRUE.equals(finding.getBlockingCandidate()),
+            defaultString(finding.getVerificationStatus()),
+            trace(finding)
         );
+    }
+
+    private ReviewFindingTraceDto trace(ReviewFinding finding) {
+        return new ReviewFindingTraceDto(
+            defaultString(finding.getDetectorVersion()),
+            finding.getRuleConfigVersion(),
+            defaultString(finding.getPromptVersion()),
+            defaultString(finding.getContextVersion()),
+            defaultString(finding.getSchemaVersion()),
+            defaultString(finding.getVerifierVersion()),
+            defaultString(finding.getAggregationVersion()),
+            finding.getPolicyVersion(),
+            finding.getLlmProvider(),
+            finding.getLlmModel(),
+            defaultString(finding.getOriginalSeverity()),
+            defaultString(finding.getSeverity()),
+            defaultString(finding.getOriginalConfidence()),
+            defaultString(finding.getConfidence()),
+            defaultString(finding.getDowngradeReason()),
+            defaultString(finding.getBlockReason()),
+            defaultString(finding.getAnchorType())
+        );
+    }
+
+    private List<String> relatedFiles(String value) {
+        return StringUtils.hasText(value)
+            ? value.lines().map(String::trim).filter(StringUtils::hasText).distinct().toList()
+            : List.of();
     }
 
     private MissingTestDto toMissingTestDto(ReviewFinding finding) {

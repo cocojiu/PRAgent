@@ -18,7 +18,10 @@ import com.repoguard.agent.dto.ReviewPolicySettingsDto;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleMetricDto;
+import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
+import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.dto.SecuritySettingsDto;
 import com.repoguard.agent.dto.SecretReEncryptionItemDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
@@ -121,6 +124,48 @@ class SystemConfigControllerTest {
                 "2026-06-09 12:00:00",
                 "检测 catch Exception 等过宽异常捕获。"
             );
+        }
+
+        @Override
+        public List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
+            return List.of(new ReviewRulePolicyVersionDto(
+                3,
+                2,
+                "rg-java-001-detector-v2",
+                "medium",
+                "enabled",
+                "88%",
+                "comment",
+                "PROMOTION",
+                2L,
+                "2026-07-30 12:00:00",
+                true
+            ));
+        }
+
+        @Override
+        public ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+            return reviewRuleDto();
+        }
+
+        @Override
+        public ReviewStrategyPolicyDto getReviewStrategyPolicy() {
+            return reviewStrategyDto("observe");
+        }
+
+        @Override
+        public List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
+            return List.of(reviewStrategyDto("observe"));
+        }
+
+        @Override
+        public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
+            return reviewStrategyDto(enforcementMode.toLowerCase());
+        }
+
+        @Override
+        public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
+            return reviewStrategyDto("observe");
         }
 
         @Override
@@ -321,6 +366,50 @@ class SystemConfigControllerTest {
     }
 
     @Test
+    void exposesVersionedRuleAndStrategyGovernanceEndpoints() throws Exception {
+        mockMvc.perform(get("/api/v1/config/review-rules/RG-JAVA-001/versions"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].policyVersion").value(3))
+            .andExpect(jsonPath("$.data[0].detectorVersion").value("rg-java-001-detector-v2"));
+
+        mockMvc.perform(post("/api/v1/config/review-rules/RG-JAVA-001/versions/2/rollback"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.id").value("RG-JAVA-001"));
+
+        mockMvc.perform(get("/api/v1/config/review-strategy"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.snapshotId").value(17))
+            .andExpect(jsonPath("$.data.enforcementMode").value("observe"));
+
+        mockMvc.perform(get("/api/v1/config/review-strategy/versions"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data[0].promptVersion").value("review-prompt-v2"));
+
+        mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"enforcementMode":"comment"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.enforcementMode").value("comment"));
+
+        mockMvc.perform(post("/api/v1/config/review-strategy/versions/11/rollback"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.changeType").value("ROLLBACK"));
+    }
+
+    @Test
+    void rejectsInvalidStrategyEnforcementMode() throws Exception {
+        mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"enforcementMode":"force"}
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
+    }
+
+    @Test
     void reEncryptSecretsReturnsOperationReport() throws Exception {
         Mockito.when(secretReEncryptionService.reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class)))
             .thenReturn(new SecretReEncryptionResponse(
@@ -506,6 +595,36 @@ class SystemConfigControllerTest {
             "88%",
             "2026-06-09 12:00:00",
             "检测 catch Exception 等过宽异常捕获。"
+        );
+    }
+
+    private ReviewStrategyPolicyDto reviewStrategyDto(String mode) {
+        return new ReviewStrategyPolicyDto(
+            17,
+            1,
+            "review-prompt-v2",
+            "review-context-v2",
+            "review-schema-v2",
+            "high-risk-verifier-v1",
+            "server-risk-v2",
+            mode,
+            true,
+            true,
+            "ROLLBACK",
+            11L,
+            "2026-07-30 12:00:00",
+            new ReviewRuleQualityGateDto(
+                30,
+                30,
+                new BigDecimal("93.33"),
+                new BigDecimal("6.67"),
+                new BigDecimal("96.67"),
+                new BigDecimal("3.33"),
+                true,
+                true,
+                "PASS",
+                List.of()
+            )
         );
     }
 }

@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 class ControllerApiTestCoverageRuleTest {
 
     private final ControllerApiTestCoverageRule rule =
-        new ControllerApiTestCoverageRule(new ReviewFindingFactory());
+        new ControllerApiTestCoverageRule(new RuleMatchFactory());
 
     @Test
     void detectsControllerMappingChangeWithoutTestCoverage() {
@@ -22,12 +22,11 @@ class ControllerApiTestCoverageRuleTest {
                 """
         )));
 
-        assertThat(rule.evaluate(diff, Map.of()))
+        assertThat(rule.evaluate(diff, ReviewRuleTestFixtures.settingsFor(rule.id())))
             .singleElement()
             .satisfies(finding -> {
                 assertThat(finding.ruleId()).isEqualTo(ControllerApiTestCoverageRule.RULE_ID);
                 assertThat(finding.lineNumber()).isEqualTo(19);
-                assertThat(finding.severity()).isEqualTo("MEDIUM");
             });
     }
 
@@ -50,7 +49,7 @@ class ControllerApiTestCoverageRuleTest {
             )
         ));
 
-        assertThat(rule.evaluate(diff, Map.of())).isEmpty();
+        assertThat(rule.evaluate(diff, ReviewRuleTestFixtures.settingsFor(rule.id()))).isEmpty();
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.repoguard.agent.review;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Locale;
 
 public record ReviewResult(
     String riskLevel,
@@ -17,8 +16,48 @@ public record ReviewResult(
     Integer llmPromptTokens,
     Integer llmCompletionTokens,
     Integer llmTotalTokens,
-    BigDecimal llmEstimatedCost
+    BigDecimal llmEstimatedCost,
+    ReviewExecutionProvenance executionProvenance
 ) {
+
+    public ReviewResult {
+        executionProvenance = executionProvenance == null
+            ? ReviewExecutionProvenance.rulesOnly()
+            : executionProvenance;
+    }
+
+    public ReviewResult(
+        String riskLevel,
+        String llmStatus,
+        String statusDetail,
+        List<ReviewFindingResult> findings,
+        String llmProvider,
+        String llmModel,
+        Integer llmDurationMs,
+        String llmParseStatus,
+        String llmPromptSummary,
+        Integer llmPromptTokens,
+        Integer llmCompletionTokens,
+        Integer llmTotalTokens,
+        BigDecimal llmEstimatedCost
+    ) {
+        this(
+            riskLevel,
+            llmStatus,
+            statusDetail,
+            findings,
+            llmProvider,
+            llmModel,
+            llmDurationMs,
+            llmParseStatus,
+            llmPromptSummary,
+            llmPromptTokens,
+            llmCompletionTokens,
+            llmTotalTokens,
+            llmEstimatedCost,
+            ReviewExecutionProvenance.rulesOnly()
+        );
+    }
     public ReviewResult(
         String riskLevel,
         String llmStatus,
@@ -57,6 +96,36 @@ public record ReviewResult(
         Integer llmTotalTokens,
         BigDecimal llmEstimatedCost
     ) {
+        return completed(
+            riskLevel,
+            findings,
+            llmProvider,
+            llmModel,
+            llmDurationMs,
+            llmParseStatus,
+            llmPromptSummary,
+            llmPromptTokens,
+            llmCompletionTokens,
+            llmTotalTokens,
+            llmEstimatedCost,
+            ReviewExecutionProvenance.rulesOnly()
+        );
+    }
+
+    public static ReviewResult completed(
+        String riskLevel,
+        List<ReviewFindingResult> findings,
+        String llmProvider,
+        String llmModel,
+        Integer llmDurationMs,
+        String llmParseStatus,
+        String llmPromptSummary,
+        Integer llmPromptTokens,
+        Integer llmCompletionTokens,
+        Integer llmTotalTokens,
+        BigDecimal llmEstimatedCost,
+        ReviewExecutionProvenance executionProvenance
+    ) {
         return new ReviewResult(
             riskLevel,
             LlmStatus.COMPLETED.code(),
@@ -70,7 +139,8 @@ public record ReviewResult(
             llmPromptTokens,
             llmCompletionTokens,
             llmTotalTokens,
-            llmEstimatedCost
+            llmEstimatedCost,
+            executionProvenance
         );
     }
 
@@ -87,6 +157,28 @@ public record ReviewResult(
         Integer llmDurationMs,
         String llmPromptSummary
     ) {
+        return fallback(
+            riskLevel,
+            statusDetail,
+            findings,
+            llmProvider,
+            llmModel,
+            llmDurationMs,
+            llmPromptSummary,
+            ReviewExecutionProvenance.rulesOnly()
+        );
+    }
+
+    public static ReviewResult fallback(
+        String riskLevel,
+        String statusDetail,
+        List<ReviewFindingResult> findings,
+        String llmProvider,
+        String llmModel,
+        Integer llmDurationMs,
+        String llmPromptSummary,
+        ReviewExecutionProvenance executionProvenance
+    ) {
         return new ReviewResult(
             riskLevel,
             LlmStatus.FALLBACK.code(),
@@ -100,17 +192,17 @@ public record ReviewResult(
             null,
             null,
             null,
-            null
+            null,
+            executionProvenance
         );
     }
 
     public ReviewResult withIncompleteInput(String reason, String promptMarker) {
-        String adjustedRisk = riskRank(riskLevel) < riskRank("MEDIUM") ? "MEDIUM" : riskLevel;
         String adjustedParseStatus = LlmStatus.from(llmStatus) == LlmStatus.FALLBACK
             ? LlmParseStatus.FALLBACK.code()
             : LlmParseStatus.PARTIAL_FALLBACK.code();
         return new ReviewResult(
-            adjustedRisk,
+            riskLevel,
             llmStatus,
             appendLimited(statusDetail, reason, 512),
             findings,
@@ -122,7 +214,8 @@ public record ReviewResult(
             llmPromptTokens,
             llmCompletionTokens,
             llmTotalTokens,
-            llmEstimatedCost
+            llmEstimatedCost,
+            executionProvenance
         );
     }
 
@@ -150,17 +243,4 @@ public record ReviewResult(
         return combined.substring(0, maxLength);
     }
 
-    private static int riskRank(String value) {
-        if (value == null) {
-            return 0;
-        }
-        return switch (value.trim().toUpperCase(Locale.ROOT)) {
-            case "CRITICAL" -> 5;
-            case "HIGH" -> 4;
-            case "MEDIUM" -> 3;
-            case "LOW" -> 2;
-            case "INFO" -> 1;
-            default -> 0;
-        };
-    }
 }

@@ -40,7 +40,8 @@ public class ReviewTaskListItemAssembler {
             lower(resolveHumanReviewStatus(task)),
             task.getHumanReviewNote(),
             task.getHumanReviewBy(),
-            formatDateTimeOrNull(task.getHumanReviewedAt())
+            formatDateTimeOrNull(task.getHumanReviewedAt()),
+            lower(task.getAssessmentStatus())
         );
     }
 

@@ -3,6 +3,7 @@ package com.repoguard.agent.review;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.repoguard.agent.config.ReviewContextProperties;
 import com.repoguard.agent.review.ReviewRuleProvider;
 import java.util.List;
 import java.util.Map;
@@ -14,12 +15,14 @@ class ReviewRulePluginRegistrationTest {
     @Test
     void springCollectsReviewRulePluginsForRuleBasedReviewer() {
         ReviewRuleProvider reviewRuleProvider = org.mockito.Mockito.mock(ReviewRuleProvider.class);
-        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of());
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
 
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
             context.registerBean(ReviewRuleProvider.class, () -> reviewRuleProvider);
             context.register(
-                ReviewFindingFactory.class,
+                RuleMatchFactory.class,
+                ReviewContextProperties.class,
+                ReviewFilePolicy.class,
                 BroadExceptionCatchRule.class,
                 StandardOutputLoggingRule.class,
                 FixedSleepRule.class,
@@ -34,6 +37,11 @@ class ReviewRulePluginRegistrationTest {
                 GithubCommentDirectPublishRule.class,
                 ControllerAuthorizationGuardRule.class,
                 ControllerApiTestCoverageRule.class,
+                ReviewRuleRegistry.class,
+                FindingPolicyResolver.class,
+                ReviewFindingFactory.class,
+                ReviewFindingSemanticDeduplicator.class,
+                ServerRiskAggregator.class,
                 RuleBasedPullRequestReviewer.class
             );
             context.refresh();

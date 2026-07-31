@@ -4,15 +4,19 @@ import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Map;
 
-interface PullRequestReviewRule {
+public interface PullRequestReviewRule {
 
     String id();
+
+    default String version() {
+        return id().trim().toLowerCase(java.util.Locale.ROOT) + "-detector-v2";
+    }
 
     default int order() {
         return 1000;
     }
 
-    List<ReviewFindingResult> evaluate(
+    List<RuleMatch> evaluate(
         PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules
     );

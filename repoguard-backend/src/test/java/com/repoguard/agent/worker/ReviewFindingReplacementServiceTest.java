@@ -70,14 +70,18 @@ class ReviewFindingReplacementServiceTest {
             "HIGH",
             List.of(firstFinding, duplicateFinding, secondFinding)
         );
-        when(findingEntityMapper.toEntity(eq(42L), any(ReviewFindingResult.class)))
+        when(findingEntityMapper.toEntity(eq(42L), any(ReviewFindingResult.class), eq(reviewResult)))
             .thenAnswer(invocation -> finding(invocation.getArgument(1, ReviewFindingResult.class).filePath()));
 
         int count = service.replace(42L, reviewResult);
 
         assertThat(count).isEqualTo(2);
         ArgumentCaptor<ReviewFindingResult> findingResultCaptor = ArgumentCaptor.forClass(ReviewFindingResult.class);
-        verify(findingEntityMapper, org.mockito.Mockito.times(2)).toEntity(eq(42L), findingResultCaptor.capture());
+        verify(findingEntityMapper, org.mockito.Mockito.times(2)).toEntity(
+            eq(42L),
+            findingResultCaptor.capture(),
+            eq(reviewResult)
+        );
         assertThat(findingResultCaptor.getAllValues()).extracting(ReviewFindingResult::filePath).containsExactly(
             "src/App.java",
             "src/Task.java"
@@ -88,7 +92,7 @@ class ReviewFindingReplacementServiceTest {
         assertThat(mergedFinding.ruleId()).isEqualTo("LLM / RG-JAVA-002");
         assertThat(mergedFinding.recommendation()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.confidence()).isEqualTo("HIGH");
-        assertThat(mergedFinding.isBlocking()).isTrue();
+        assertThat(mergedFinding.isBlocking()).isFalse();
         assertThat(mergedFinding.fixExample()).isEqualTo("Replace stdout / Use structured logger");
         assertThat(mergedFinding.reviewDimension()).contains("LLM").contains("PROJECT_RULE");
         InOrder inOrder = org.mockito.Mockito.inOrder(reviewFindingMapper, sqlSession);

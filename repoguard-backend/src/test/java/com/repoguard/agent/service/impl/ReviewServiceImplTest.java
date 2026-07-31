@@ -16,6 +16,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.config.RabbitReviewQueueProperties;
+import com.repoguard.agent.config.ReviewHumanReviewProperties;
 import com.repoguard.agent.github.GithubIntegrationProvider;
 import com.repoguard.agent.github.GithubIntegrationSettings;
 import com.repoguard.agent.entity.ChangedFile;
@@ -67,8 +68,12 @@ import com.repoguard.agent.review.task.ReviewTaskMessage;
 import com.repoguard.agent.messaging.ReviewTaskPublishOutboxStore;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
+import com.repoguard.agent.review.HumanReviewPolicyEvaluator;
+import com.repoguard.agent.review.ReviewFindingRiskRecalibrator;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.RiskLevelRanker;
+import com.repoguard.agent.review.ServerRiskAggregator;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
 import com.repoguard.agent.review.ReviewTaskStateMachine;
 import com.repoguard.agent.review.task.HumanReviewCommandService;
@@ -176,7 +181,13 @@ class ReviewServiceImplTest {
         reviewTaskMapper,
         reviewFindingMapper,
         timelineAppender(),
-        cacheEvictionService
+        cacheEvictionService,
+        new ReviewFindingRiskRecalibrator(
+            reviewFindingMapper,
+            new ServerRiskAggregator(),
+            new HumanReviewPolicyEvaluator(new RiskLevelRanker(), new ReviewHumanReviewProperties())
+        ),
+        transitionStore()
     );
     private final GithubWritebackFailureClassifier githubWritebackFailureClassifier =
         new GithubWritebackFailureClassifier();
@@ -597,6 +608,9 @@ class ReviewServiceImplTest {
         assertThat(finding.getFeedbackAt()).isNotNull();
         verify(reviewFindingMapper).updateById(finding);
         verify(reviewTimelineMapper).insert(any(ReviewTimeline.class));
+        verify(cacheEvictionService).evictDashboardFeedbackQuality();
+        verify(cacheEvictionService).evictDashboardReviewActivity();
+        verify(cacheEvictionService).evictReviewRules();
     }
 
     @Test

@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class SensitiveLoggingRuleTest {
 
-    private final SensitiveLoggingRule rule = new SensitiveLoggingRule(new ReviewFindingFactory());
+    private final SensitiveLoggingRule rule = new SensitiveLoggingRule(new RuleMatchFactory());
 
     @Test
     void evaluatesSensitiveLogStatement() {
@@ -16,7 +16,6 @@ class SensitiveLoggingRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-LOG-001");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/AuditLogger.java");
         assertThat(finding.get().lineNumber()).isEqualTo(22);
         assertThat(finding.get().reviewDimension()).isEqualTo("SECURITY_RULE");
@@ -35,6 +34,58 @@ class SensitiveLoggingRuleTest {
     void skipsWhenLineIsNotSensitiveLogging() {
         assertThat(rule.evaluate(context("src/App.java", "log.info(\"review completed\");", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("src/App.java", "String token = \"plain-token\";", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context("src/App.java", "log.info(\"token invalid\");", Map.of()))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.info(\"token {}\", SecretMasker.mask(token));",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.info(\"webhook configured={}\", webhookConfigured);",
+            Map.of()
+        ))).isEmpty();
+    }
+
+    @Test
+    void detectsSensitiveGetterPassedAsStructuredValue() {
+        assertThat(rule.evaluate(context(
+            "src/App.java",
+            "log.trace(\"webhook secret {}\", config.getWebhookSecret());",
+            Map.of()
+        ))).isPresent();
+    }
+
+    @Test
+    void parsesMultilineLoggingCallFromPatchStatement() {
+        String line = "log.info(";
+        ReviewRuleLineContext context = new ReviewRuleLineContext(
+            "src/App.java",
+            22,
+            line,
+            line,
+            ReviewRuleTestFixtures.settingsFor(rule.id()),
+            false,
+            ChangedFileContext.notRequested("src/App.java"),
+            """
+                @@ -21,0 +22,4 @@
+                +log.info(
+                +    "access token {}",
+                +    accessToken
+                +);
+                """
+        );
+
+        assertThat(rule.evaluate(context)).isPresent();
+    }
+
+    @Test
+    void skipsTestFixturesThroughCentralPathPolicy() {
+        assertThat(rule.evaluate(context(
+            "src/test/java/com/example/AuditLoggerTest.java",
+            "log.info(\"token {}\", token);",
+            Map.of()
+        ))).isEmpty();
     }
 
     @Test
@@ -58,6 +109,12 @@ class SensitiveLoggingRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 22, line, line.trim(), configuredRules);
+        return new ReviewRuleLineContext(
+            filePath,
+            22,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules)
+        );
     }
 }

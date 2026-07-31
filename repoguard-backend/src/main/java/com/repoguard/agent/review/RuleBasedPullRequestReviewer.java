@@ -3,7 +3,6 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.review.ReviewRuleProvider;
 import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -16,70 +15,83 @@ public class RuleBasedPullRequestReviewer {
     private final ReviewRuleProvider reviewRuleProvider;
     private final List<ReviewRule> lineRules;
     private final List<PullRequestReviewRule> pullRequestRules;
+    private final FindingPolicyResolver findingPolicyResolver;
+    private final ReviewFindingFactory reviewFindingFactory;
+    private final ReviewFindingSemanticDeduplicator findingDeduplicator;
+    private final ServerRiskAggregator riskAggregator;
 
     @Autowired
     public RuleBasedPullRequestReviewer(
         ReviewRuleProvider reviewRuleProvider,
+        ReviewRuleRegistry reviewRuleRegistry,
+        FindingPolicyResolver findingPolicyResolver,
+        ReviewFindingFactory reviewFindingFactory,
+        ReviewFindingSemanticDeduplicator findingDeduplicator,
+        ServerRiskAggregator riskAggregator
+    ) {
+        this.reviewRuleProvider = Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider");
+        ReviewRuleRegistry registry = Objects.requireNonNull(reviewRuleRegistry, "reviewRuleRegistry");
+        this.lineRules = registry.lineRules();
+        this.pullRequestRules = registry.pullRequestRules();
+        this.findingPolicyResolver = Objects.requireNonNull(findingPolicyResolver, "findingPolicyResolver");
+        this.reviewFindingFactory = Objects.requireNonNull(reviewFindingFactory, "reviewFindingFactory");
+        this.findingDeduplicator = Objects.requireNonNull(findingDeduplicator, "findingDeduplicator");
+        this.riskAggregator = Objects.requireNonNull(riskAggregator, "riskAggregator");
+    }
+
+    RuleBasedPullRequestReviewer(
+        ReviewRuleProvider reviewRuleProvider,
         List<ReviewRule> lineRules,
         List<PullRequestReviewRule> pullRequestRules
     ) {
-        this.reviewRuleProvider = Objects.requireNonNull(reviewRuleProvider, "reviewRuleProvider");
-        this.lineRules = sortedRules(lineRules);
-        this.pullRequestRules = sortedPullRequestRules(pullRequestRules);
-    }
-
-    private static List<ReviewRule> sortedRules(List<ReviewRule> rules) {
-        if (rules == null || rules.isEmpty()) {
-            throw new IllegalArgumentException("At least one ReviewRule plugin must be registered");
-        }
-        return rules.stream()
-            .sorted(Comparator.comparingInt(ReviewRule::order).thenComparing(ReviewRule::id))
-            .toList();
-    }
-
-    private static List<PullRequestReviewRule> sortedPullRequestRules(List<PullRequestReviewRule> rules) {
-        if (rules == null || rules.isEmpty()) {
-            return List.of();
-        }
-        return rules.stream()
-            .sorted(Comparator.comparingInt(PullRequestReviewRule::order).thenComparing(PullRequestReviewRule::id))
-            .toList();
+        this(
+            reviewRuleProvider,
+            new ReviewRuleRegistry(lineRules, pullRequestRules),
+            new FindingPolicyResolver(),
+            new ReviewFindingFactory(),
+            new ReviewFindingSemanticDeduplicator(),
+            new ServerRiskAggregator()
+        );
     }
 
     public ReviewResult review(PullRequestDiff diff) {
-        Map<String, ReviewRuleSettings> configuredRules = reviewRuleProvider.getRulesById();
-        if (configuredRules == null) {
-            configuredRules = Map.of();
-        }
-        List<ReviewFindingResult> findings = new ArrayList<>();
+        Map<String, ReviewRuleSettings> loadedRules = reviewRuleProvider.getRulesById();
+        Map<String, ReviewRuleSettings> configuredRules = loadedRules == null ? Map.of() : loadedRules;
+        List<RuleMatch> matches = new ArrayList<>();
         List<PullRequestChangedFile> files = diff.files() == null ? List.of() : diff.files();
         for (PullRequestChangedFile file : files) {
             String patch = file.patch();
             if (patch == null || patch.isBlank()) {
                 continue;
             }
-            scanPatch(file.filename(), patch, configuredRules, findings);
+            scanPatch(file, configuredRules, matches);
         }
-        scanPullRequestLevelRules(diff, configuredRules, findings);
-        return ReviewResult.completed(resolveRisk(findings), findings);
+        scanPullRequestLevelRules(diff, configuredRules, matches);
+        List<ReviewFindingResult> findings = matches.stream()
+            .map(match -> resolveFinding(match, configuredRules))
+            .filter(Objects::nonNull)
+            .toList();
+        List<ReviewFindingResult> uniqueFindings = findingDeduplicator.deduplicate(findings);
+        return ReviewResult.completed(riskAggregator.aggregate(uniqueFindings), uniqueFindings);
     }
 
     private void scanPullRequestLevelRules(
         PullRequestDiff diff,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<ReviewFindingResult> findings
+        List<RuleMatch> matches
     ) {
         for (PullRequestReviewRule rule : pullRequestRules) {
-            findings.addAll(rule.evaluate(diff, configuredRules));
+            matches.addAll(rule.evaluate(diff, configuredRules));
         }
     }
 
     private void scanPatch(
-        String filePath,
-        String patch,
+        PullRequestChangedFile file,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<ReviewFindingResult> findings
+        List<RuleMatch> matches
     ) {
+        String filePath = file.filename();
+        String patch = file.patch();
         String[] lines = patch.split("\\R");
         int currentLine = 0;
         boolean hasAuthorizationGuard = patchHasAuthorizationGuard(lines);
@@ -90,7 +102,16 @@ public class RuleBasedPullRequestReviewer {
             }
             if (line.startsWith("+") && !line.startsWith("+++")) {
                 String added = line.substring(1);
-                evaluateLineRules(filePath, currentLine, added, configuredRules, findings, hasAuthorizationGuard);
+                evaluateLineRules(
+                    filePath,
+                    currentLine,
+                    added,
+                    configuredRules,
+                    matches,
+                    hasAuthorizationGuard,
+                    file.context(),
+                    patch
+                );
                 currentLine++;
             } else if (!line.startsWith("-")) {
                 currentLine++;
@@ -103,8 +124,10 @@ public class RuleBasedPullRequestReviewer {
         int lineNumber,
         String line,
         Map<String, ReviewRuleSettings> configuredRules,
-        List<ReviewFindingResult> findings,
-        boolean hasAuthorizationGuard
+        List<RuleMatch> matches,
+        boolean hasAuthorizationGuard,
+        ChangedFileContext changedFileContext,
+        String patch
     ) {
         ReviewRuleLineContext context = new ReviewRuleLineContext(
             filePath,
@@ -112,10 +135,12 @@ public class RuleBasedPullRequestReviewer {
             line,
             line.trim(),
             configuredRules,
-            hasAuthorizationGuard
+            hasAuthorizationGuard,
+            changedFileContext,
+            patch
         );
         for (ReviewRule rule : lineRules) {
-            rule.evaluate(context).ifPresent(findings::add);
+            rule.evaluate(context).ifPresent(matches::add);
         }
     }
 
@@ -152,16 +177,19 @@ public class RuleBasedPullRequestReviewer {
         }
     }
 
-    private String resolveRisk(List<ReviewFindingResult> findings) {
-        if (findings.stream().anyMatch(finding -> "HIGH".equals(finding.severity()))) {
-            return "HIGH";
+    private ReviewFindingResult resolveFinding(
+        RuleMatch match,
+        Map<String, ReviewRuleSettings> configuredRules
+    ) {
+        ReviewRuleSettings settings = configuredRules.get(match.ruleId());
+        if (settings == null || settings.disabled()) {
+            return null;
         }
-        if (findings.stream().anyMatch(finding -> "MEDIUM".equals(finding.severity()))) {
-            return "MEDIUM";
-        }
-        if (findings.stream().anyMatch(finding -> "LOW".equals(finding.severity()))) {
-            return "LOW";
-        }
-        return "INFO";
+        EffectiveFinding effectiveFinding = findingPolicyResolver.resolve(
+            match,
+            settings,
+            EvidenceValidation.forRuleMatch(match)
+        );
+        return reviewFindingFactory.finding(effectiveFinding);
     }
 }

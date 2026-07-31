@@ -23,6 +23,29 @@ public class ReviewFinding {
     private String impact;
     private String fixExample;
     private Boolean isBlocking;
+    private String enforcementMode;
+    private String policyReason;
+    private String issueType;
+    private String preconditions;
+    private String relatedFiles;
+    private Boolean blockingCandidate;
+    private String verificationStatus;
+    private String detectorVersion;
+    private Long ruleConfigVersion;
+    private String promptVersion;
+    private String contextVersion;
+    private String schemaVersion;
+    private String verifierVersion;
+    private String aggregationVersion;
+    private Long policyVersion;
+    private String llmProvider;
+    private String llmModel;
+    private String originalSeverity;
+    private String originalConfidence;
+    private Boolean originalIsBlocking;
+    private String downgradeReason;
+    private String blockReason;
+    private String anchorType;
     private String reviewDimension;
     private String methodName;
     private String testType;
@@ -150,6 +173,65 @@ public class ReviewFinding {
     public void setIsBlocking(Boolean isBlocking) {
         this.isBlocking = isBlocking;
     }
+
+    public String getEnforcementMode() {
+        return enforcementMode;
+    }
+
+    public void setEnforcementMode(String enforcementMode) {
+        this.enforcementMode = enforcementMode;
+    }
+
+    public String getPolicyReason() {
+        return policyReason;
+    }
+
+    public void setPolicyReason(String policyReason) {
+        this.policyReason = policyReason;
+    }
+
+    public String getIssueType() { return issueType; }
+    public void setIssueType(String issueType) { this.issueType = issueType; }
+    public String getPreconditions() { return preconditions; }
+    public void setPreconditions(String preconditions) { this.preconditions = preconditions; }
+    public String getRelatedFiles() { return relatedFiles; }
+    public void setRelatedFiles(String relatedFiles) { this.relatedFiles = relatedFiles; }
+    public Boolean getBlockingCandidate() { return blockingCandidate; }
+    public void setBlockingCandidate(Boolean blockingCandidate) { this.blockingCandidate = blockingCandidate; }
+    public String getVerificationStatus() { return verificationStatus; }
+    public void setVerificationStatus(String verificationStatus) { this.verificationStatus = verificationStatus; }
+    public String getDetectorVersion() { return detectorVersion; }
+    public void setDetectorVersion(String detectorVersion) { this.detectorVersion = detectorVersion; }
+    public Long getRuleConfigVersion() { return ruleConfigVersion; }
+    public void setRuleConfigVersion(Long ruleConfigVersion) { this.ruleConfigVersion = ruleConfigVersion; }
+    public String getPromptVersion() { return promptVersion; }
+    public void setPromptVersion(String promptVersion) { this.promptVersion = promptVersion; }
+    public String getContextVersion() { return contextVersion; }
+    public void setContextVersion(String contextVersion) { this.contextVersion = contextVersion; }
+    public String getSchemaVersion() { return schemaVersion; }
+    public void setSchemaVersion(String schemaVersion) { this.schemaVersion = schemaVersion; }
+    public String getVerifierVersion() { return verifierVersion; }
+    public void setVerifierVersion(String verifierVersion) { this.verifierVersion = verifierVersion; }
+    public String getAggregationVersion() { return aggregationVersion; }
+    public void setAggregationVersion(String aggregationVersion) { this.aggregationVersion = aggregationVersion; }
+    public Long getPolicyVersion() { return policyVersion; }
+    public void setPolicyVersion(Long policyVersion) { this.policyVersion = policyVersion; }
+    public String getLlmProvider() { return llmProvider; }
+    public void setLlmProvider(String llmProvider) { this.llmProvider = llmProvider; }
+    public String getLlmModel() { return llmModel; }
+    public void setLlmModel(String llmModel) { this.llmModel = llmModel; }
+    public String getOriginalSeverity() { return originalSeverity; }
+    public void setOriginalSeverity(String originalSeverity) { this.originalSeverity = originalSeverity; }
+    public String getOriginalConfidence() { return originalConfidence; }
+    public void setOriginalConfidence(String originalConfidence) { this.originalConfidence = originalConfidence; }
+    public Boolean getOriginalIsBlocking() { return originalIsBlocking; }
+    public void setOriginalIsBlocking(Boolean originalIsBlocking) { this.originalIsBlocking = originalIsBlocking; }
+    public String getDowngradeReason() { return downgradeReason; }
+    public void setDowngradeReason(String downgradeReason) { this.downgradeReason = downgradeReason; }
+    public String getBlockReason() { return blockReason; }
+    public void setBlockReason(String blockReason) { this.blockReason = blockReason; }
+    public String getAnchorType() { return anchorType; }
+    public void setAnchorType(String anchorType) { this.anchorType = anchorType; }
 
     public String getReviewDimension() {
         return reviewDimension;

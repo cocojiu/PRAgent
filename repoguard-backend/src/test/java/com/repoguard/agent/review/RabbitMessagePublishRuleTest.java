@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 class RabbitMessagePublishRuleTest {
 
-    private final RabbitMessagePublishRule rule = new RabbitMessagePublishRule(new ReviewFindingFactory());
+    private final RabbitMessagePublishRule rule = new RabbitMessagePublishRule(new RuleMatchFactory());
 
     @Test
     void evaluatesRabbitTemplatePublishCall() {
@@ -20,7 +20,6 @@ class RabbitMessagePublishRuleTest {
 
         assertThat(finding).isPresent();
         assertThat(finding.get().ruleId()).isEqualTo("RG-MQ-001");
-        assertThat(finding.get().severity()).isEqualTo("HIGH");
         assertThat(finding.get().filePath()).isEqualTo("src/RabbitPublisher.java");
         assertThat(finding.get().lineNumber()).isEqualTo(44);
         assertThat(finding.get().reviewDimension()).isEqualTo("MESSAGE_RELIABILITY_RULE");
@@ -39,6 +38,50 @@ class RabbitMessagePublishRuleTest {
     void skipsWhenLineDoesNotPublishRabbitMessage() {
         assertThat(rule.evaluate(context("src/App.java", "rabbitTemplate.receive(queue);", Map.of()))).isEmpty();
         assertThat(rule.evaluate(context("src/App.java", "messagePublisher.publish(message);", Map.of()))).isEmpty();
+    }
+
+    @Test
+    void skipsApprovedPublisherBoundaryAndVisibleFailureCompensation() {
+        assertThat(rule.evaluate(context(
+            "src/main/java/com/repoguard/agent/messaging/ReviewTaskPublisher.java",
+            "rabbitTemplate.convertAndSend(exchange, routingKey, message);",
+            Map.of()
+        ))).isEmpty();
+        assertThat(rule.evaluate(context(
+            "src/main/java/com/example/order/OrderService.java",
+            "rabbitTemplate.convertAndSend(exchange, routingKey, message);",
+            Map.of(),
+            ChangedFileContext.available(
+                "src/main/java/com/example/order/OrderService.java",
+                "head",
+                """
+                    class OrderService {
+                        void send() {
+                            rabbitTemplate.convertAndSend(exchange, routingKey, message);
+                            publishFailureStore.recordFailure(message);
+                        }
+                    }
+                    """
+            )
+        ))).isEmpty();
+    }
+
+    @Test
+    void marksDirectPublishCandidateUnverifiedWhenFullContextIsUnavailable() {
+        var finding = rule.evaluate(context(
+            "src/main/java/com/example/order/OrderService.java",
+            "rabbitTemplate.convertAndSend(exchange, routingKey, message);",
+            Map.of(),
+            ChangedFileContext.status(
+                "src/main/java/com/example/order/OrderService.java",
+                "head",
+                ChangedFileContext.Status.BUDGET_EXCEEDED,
+                "max_files"
+            )
+        ));
+
+        assertThat(finding).isPresent();
+        assertThat(finding.get().evidenceVerified()).isFalse();
     }
 
     @Test
@@ -70,6 +113,24 @@ class RabbitMessagePublishRuleTest {
     }
 
     private ReviewRuleLineContext context(String filePath, String line, Map<String, ReviewRuleSettings> configuredRules) {
-        return new ReviewRuleLineContext(filePath, 44, line, line.trim(), configuredRules);
+        return context(filePath, line, configuredRules, ChangedFileContext.notRequested(filePath));
+    }
+
+    private ReviewRuleLineContext context(
+        String filePath,
+        String line,
+        Map<String, ReviewRuleSettings> configuredRules,
+        ChangedFileContext changedFileContext
+    ) {
+        return new ReviewRuleLineContext(
+            filePath,
+            44,
+            line,
+            line.trim(),
+            ReviewRuleTestFixtures.configuredOrDefault(rule.id(), configuredRules),
+            false,
+            changedFileContext,
+            "@@ -44,0 +44,1 @@\n+" + line
+        );
     }
 }

@@ -30,10 +30,13 @@ class LlmReviewQualityScorerTest {
         );
 
         ReviewFindingResult finding = result.findings().getFirst();
+        assertThat(result.riskLevel()).isEqualTo("MEDIUM");
         assertThat(finding.lineNumber()).isEqualTo(12);
         assertThat(finding.confidence()).isEqualTo("HIGH");
+        assertThat(finding.verificationStatus()).isEqualTo("PENDING");
+        assertThat(finding.isBlocking()).isFalse();
         assertThat(finding.evidence()).contains(
-            "LLM quality score=95",
+            "LLM quality score=100",
             "diffFile=matched",
             "diffLine=added_line"
         );
@@ -88,6 +91,47 @@ class LlmReviewQualityScorerTest {
     }
 
     @Test
+    void missingExactHeadContextRejectsHighRiskPrecheckEvenWithValidAddedLine() {
+        ReviewFindingResult candidate = finding(
+            "src/main/java/com/example/AdminController.java",
+            12,
+            "Admin endpoint is missing authorization checks",
+            "Require an ADMIN role before executing the handler"
+        );
+        LlmReviewContext context = new LlmReviewContext(
+            List.of(),
+            "",
+            List.of(new LlmReviewContext.ContextLimitation(
+                candidate.filePath(),
+                "UNAVAILABLE",
+                "fetch_failed"
+            )),
+            false,
+            24_000,
+            8
+        );
+
+        ReviewFindingResult finding = scorer.score(
+            ReviewResult.completed("HIGH", List.of(candidate)),
+            diff("""
+                @@ -8,6 +10,8 @@ public void updateSettings() {
+                 public void updateSettings() {
+                +    audit.log("settings update");
+                +    saveSettings();
+                 }
+                """),
+            context
+        ).findings().getFirst();
+
+        assertThat(finding.severity()).isEqualTo("MEDIUM");
+        assertThat(finding.confidence()).isEqualTo("MEDIUM");
+        assertThat(finding.enforcementMode()).isEqualTo("OBSERVE");
+        assertThat(finding.verificationStatus()).isEqualTo("PRECHECK_REJECTED");
+        assertThat(finding.blockingCandidate()).isFalse();
+        assertThat(finding.evidence()).contains("LLM quality score=65", "context=unavailable");
+    }
+
+    @Test
     void leavesRuleFindingsUnchanged() {
         ReviewFindingResult ruleFinding = new ReviewFindingResult(
             "HIGH",
@@ -113,12 +157,19 @@ class LlmReviewQualityScorerTest {
             lineNumber,
             message,
             recommendation,
-            "MEDIUM",
-            "",
-            "",
+            "HIGH",
+            "POST /admin reaches the handler without an authorization guard",
+            "Unauthorized callers can invoke the administrative write operation",
             recommendation,
             false,
-            "LLM"
+            "SECURITY",
+            EnforcementMode.OBSERVE.name(),
+            "llm_candidate_unscored",
+            "MISSING_AUTHORIZATION",
+            "The route is reachable without an upstream authorization filter",
+            List.of("src/main/java/com/example/SecurityConfig.java"),
+            true,
+            LlmVerificationStatus.NOT_REQUIRED.name()
         );
     }
 

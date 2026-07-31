@@ -3,6 +3,8 @@ package com.repoguard.agent.review;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
+import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -12,13 +14,26 @@ public class ReviewPolicyProvider {
 
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final SecretCryptoService secretCryptoService;
+    private final ReviewStrategyReleaseProvider strategyReleaseProvider;
+
+    @Autowired
+    public ReviewPolicyProvider(
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        SecretCryptoService secretCryptoService,
+        ReviewStrategyReleaseProvider strategyReleaseProvider
+    ) {
+        this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
+        this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
+        this.strategyReleaseProvider = Objects.requireNonNull(strategyReleaseProvider, "strategyReleaseProvider");
+    }
 
     public ReviewPolicyProvider(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
         SecretCryptoService secretCryptoService
     ) {
-        this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
-        this.secretCryptoService = secretCryptoService;
+        this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
+        this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
+        this.strategyReleaseProvider = null;
     }
 
     public ReviewPolicySettings getSettings() {
@@ -43,7 +58,10 @@ public class ReviewPolicyProvider {
             config.getChunkMaxFiles(),
             config.getChunkMaxLines(),
             config.getInputTokenPricePerMillion(),
-            config.getOutputTokenPricePerMillion()
+            config.getOutputTokenPricePerMillion(),
+            strategyReleaseProvider == null
+                ? ReviewStrategyRelease.observeDefaults()
+                : strategyReleaseProvider.getActiveRelease()
         );
     }
 }
