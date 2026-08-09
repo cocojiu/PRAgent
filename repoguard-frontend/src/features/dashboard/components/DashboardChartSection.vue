@@ -23,7 +23,17 @@
     <article class="dashboard-card chart-card">
       <h2>规则命中</h2>
       <div v-if="ruleHits.length" class="donut-layout">
-        <DeferredEChartPanel accessible-label="规则命中分布图" :option="ruleOption" :summary="ruleSummary" />
+        <div
+          class="rule-donut-chart"
+          role="img"
+          :aria-label="ruleSummary"
+          :style="{ background: ruleGradient }"
+        >
+          <div class="rule-donut-hole" aria-hidden="true">
+            <span>总计</span>
+            <strong>{{ totalRuleHits }}</strong>
+          </div>
+        </div>
         <ul class="rule-legend">
           <li v-for="rule in ruleHits" :key="rule.name">
             <span :style="{ background: rule.color }"></span>
@@ -47,9 +57,9 @@ const props = defineProps<{
   reviewTrend: ReviewTrendPoint[];
   riskDistribution: ChartSlice[];
   ruleHits: Required<ChartSlice>[];
+  totalRuleHits: number;
   trendOption: EChartsOption;
   riskOption: EChartsOption;
-  ruleOption: EChartsOption;
 }>();
 
 const trendSummary = computed(() =>
@@ -59,6 +69,18 @@ const riskSummary = computed(() =>
   props.riskDistribution.map((item) => `${item.name} ${item.value} 项`).join("；")
 );
 const ruleSummary = computed(() =>
-  props.ruleHits.map((item) => `${item.name} ${item.value} 次，占 ${item.percent}`).join("；")
+  `总计 ${props.totalRuleHits} 次；${props.ruleHits.map((item) => `${item.name} ${item.value} 次，占 ${item.percent}`).join("；")}`
 );
+const ruleGradient = computed(() => {
+  if (props.totalRuleHits <= 0) {
+    return "#e2e8f0";
+  }
+  let offset = 0;
+  const segments = props.ruleHits.map((item) => {
+    const start = offset;
+    offset += item.value / props.totalRuleHits * 100;
+    return `${item.color} ${start.toFixed(2)}% ${offset.toFixed(2)}%`;
+  });
+  return `conic-gradient(${segments.join(", ")})`;
+});
 </script>

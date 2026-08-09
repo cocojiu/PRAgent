@@ -2,6 +2,7 @@ package com.repoguard.agent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
@@ -36,6 +37,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
     private final CacheEvictionService cacheEvictionService;
     private final OutboundEndpointPolicy outboundEndpointPolicy;
     private final OutboundCredentialPolicy outboundCredentialPolicy;
+    private final RabbitReviewQueueProperties reviewQueueProperties;
 
     @Autowired
     public ReviewPolicyConfigServiceImpl(
@@ -43,13 +45,15 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         SecretCryptoService secretCryptoService,
         CacheEvictionService cacheEvictionService,
         OutboundEndpointPolicy outboundEndpointPolicy,
-        OutboundCredentialPolicy outboundCredentialPolicy
+        OutboundCredentialPolicy outboundCredentialPolicy,
+        RabbitReviewQueueProperties reviewQueueProperties
     ) {
         this.reviewPolicyConfigMapper = reviewPolicyConfigMapper;
         this.secretCryptoService = secretCryptoService;
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.outboundEndpointPolicy = Objects.requireNonNull(outboundEndpointPolicy, "outboundEndpointPolicy");
         this.outboundCredentialPolicy = Objects.requireNonNull(outboundCredentialPolicy, "outboundCredentialPolicy");
+        this.reviewQueueProperties = Objects.requireNonNull(reviewQueueProperties, "reviewQueueProperties");
     }
 
     public ReviewPolicyConfigServiceImpl(
@@ -62,6 +66,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         this.cacheEvictionService = Objects.requireNonNull(cacheEvictionService, "cacheEvictionService");
         this.outboundEndpointPolicy = null;
         this.outboundCredentialPolicy = null;
+        this.reviewQueueProperties = new RabbitReviewQueueProperties();
     }
 
     @Override
@@ -95,7 +100,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         config.setTemperature(request.temperature());
         config.setMaxTokens(request.maxTokens());
         config.setFallbackToRules(request.fallbackToRules());
-        config.setWorkerConcurrency(request.workerConcurrency());
+        config.setWorkerConcurrency(reviewQueueProperties.getWorkerConcurrency());
         config.setChunkFileThreshold(request.chunkFileThreshold());
         config.setChunkLineThreshold(request.chunkLineThreshold());
         config.setChunkMaxFiles(request.chunkMaxFiles());
@@ -136,7 +141,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
         defaultConfig.setTemperature(BigDecimal.valueOf(0.20));
         defaultConfig.setMaxTokens(4096);
         defaultConfig.setFallbackToRules(true);
-        defaultConfig.setWorkerConcurrency(1);
+        defaultConfig.setWorkerConcurrency(reviewQueueProperties.getWorkerConcurrency());
         defaultConfig.setChunkFileThreshold(DEFAULT_CHUNK_FILE_THRESHOLD);
         defaultConfig.setChunkLineThreshold(DEFAULT_CHUNK_LINE_THRESHOLD);
         defaultConfig.setChunkMaxFiles(DEFAULT_CHUNK_MAX_FILES);
@@ -161,7 +166,7 @@ public class ReviewPolicyConfigServiceImpl implements ReviewPolicyConfigService 
             config.getTemperature(),
             config.getMaxTokens(),
             config.getFallbackToRules(),
-            config.getWorkerConcurrency(),
+            reviewQueueProperties.getWorkerConcurrency(),
             valueOrDefault(config.getChunkFileThreshold(), DEFAULT_CHUNK_FILE_THRESHOLD),
             valueOrDefault(config.getChunkLineThreshold(), DEFAULT_CHUNK_LINE_THRESHOLD),
             valueOrDefault(config.getChunkMaxFiles(), DEFAULT_CHUNK_MAX_FILES),

@@ -1,5 +1,6 @@
 package com.repoguard.agent.review;
 
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.entity.ReviewPolicyConfig;
 import com.repoguard.agent.mapper.ReviewPolicyConfigMapper;
 import com.repoguard.agent.security.SecretCryptoService;
@@ -15,16 +16,19 @@ public class ReviewPolicyProvider {
     private final ReviewPolicyConfigMapper reviewPolicyConfigMapper;
     private final SecretCryptoService secretCryptoService;
     private final ReviewStrategyReleaseProvider strategyReleaseProvider;
+    private final RabbitReviewQueueProperties reviewQueueProperties;
 
     @Autowired
     public ReviewPolicyProvider(
         ReviewPolicyConfigMapper reviewPolicyConfigMapper,
         SecretCryptoService secretCryptoService,
-        ReviewStrategyReleaseProvider strategyReleaseProvider
+        ReviewStrategyReleaseProvider strategyReleaseProvider,
+        RabbitReviewQueueProperties reviewQueueProperties
     ) {
         this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
         this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
         this.strategyReleaseProvider = Objects.requireNonNull(strategyReleaseProvider, "strategyReleaseProvider");
+        this.reviewQueueProperties = Objects.requireNonNull(reviewQueueProperties, "reviewQueueProperties");
     }
 
     public ReviewPolicyProvider(
@@ -34,6 +38,18 @@ public class ReviewPolicyProvider {
         this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
         this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
         this.strategyReleaseProvider = null;
+        this.reviewQueueProperties = new RabbitReviewQueueProperties();
+    }
+
+    ReviewPolicyProvider(
+        ReviewPolicyConfigMapper reviewPolicyConfigMapper,
+        SecretCryptoService secretCryptoService,
+        ReviewStrategyReleaseProvider strategyReleaseProvider
+    ) {
+        this.reviewPolicyConfigMapper = Objects.requireNonNull(reviewPolicyConfigMapper, "reviewPolicyConfigMapper");
+        this.secretCryptoService = Objects.requireNonNull(secretCryptoService, "secretCryptoService");
+        this.strategyReleaseProvider = Objects.requireNonNull(strategyReleaseProvider, "strategyReleaseProvider");
+        this.reviewQueueProperties = new RabbitReviewQueueProperties();
     }
 
     public ReviewPolicySettings getSettings() {
@@ -52,7 +68,7 @@ public class ReviewPolicyProvider {
             config.getTemperature(),
             config.getMaxTokens(),
             config.getFallbackToRules(),
-            config.getWorkerConcurrency(),
+            reviewQueueProperties.getWorkerConcurrency(),
             config.getChunkFileThreshold(),
             config.getChunkLineThreshold(),
             config.getChunkMaxFiles(),

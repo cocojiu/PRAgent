@@ -55,6 +55,14 @@ class ReviewFilePolicyTest {
         assertThat(policy.requiresFullFileContext(demo)).isFalse();
     }
 
+    @Test
+    void excludesCredentialBearingFilesFromFullContext() {
+        assertThat(policy.excluded(".env.production")).isTrue();
+        assertThat(policy.excluded("deploy/private-key.pem")).isTrue();
+        assertThat(policy.excluded("config/service-account.json")).isTrue();
+        assertThat(policy.requiresFullFileContext(file("config/credentials.json", "+{}"))).isFalse();
+    }
+
     private PullRequestChangedFile file(String path, String line) {
         return new PullRequestChangedFile(path, "modified", 1, 0, "@@ -1,0 +1,1 @@\n" + line);
     }

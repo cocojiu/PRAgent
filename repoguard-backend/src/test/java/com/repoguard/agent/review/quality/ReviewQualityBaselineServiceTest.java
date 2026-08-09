@@ -14,7 +14,10 @@ import org.junit.jupiter.api.Test;
 class ReviewQualityBaselineServiceTest {
 
     private final ReviewQualityBaselineMapper mapper = org.mockito.Mockito.mock(ReviewQualityBaselineMapper.class);
-    private final ReviewQualityBaselineService service = new ReviewQualityBaselineService(mapper);
+    private final ReviewQualityBaselineService service = new ReviewQualityBaselineService(
+        mapper,
+        new ReviewQualityGatePolicy()
+    );
 
     @Test
     void computesComparableBaselineWithExplicitLabelDenominators() {
@@ -57,12 +60,12 @@ class ReviewQualityBaselineServiceTest {
             assertThat(group.policyVersion()).isEqualTo(1);
             assertThat(group.contextVersion()).isEqualTo("not-applicable");
             assertThat(group.thresholdStatus()).isEqualTo("INSUFFICIENT_SAMPLE");
-            assertThat(group.thresholdAlerts()).isEmpty();
+            assertThat(group.thresholdAlerts()).containsExactly("labeled_high_risk_samples_below_30");
         });
     }
 
     @Test
-    void emitsThresholdAlertsOnlyAfterThirtyExplicitLabels() {
+    void reportsTheSharedGateBlockersAtEverySampleSize() {
         when(mapper.selectSummary()).thenReturn(null);
         when(mapper.selectExecution()).thenReturn(null);
         when(mapper.selectGroups()).thenReturn(List.of(
@@ -73,14 +76,30 @@ class ReviewQualityBaselineServiceTest {
         ReviewQualityBaseline baseline = service.loadBaseline();
 
         assertThat(baseline.groups().get(0).thresholdStatus()).isEqualTo("INSUFFICIENT_SAMPLE");
-        assertThat(baseline.groups().get(0).thresholdAlerts()).isEmpty();
+        assertThat(baseline.groups().get(0).thresholdAlerts())
+            .containsExactly("labeled_high_risk_samples_below_30");
         assertThat(baseline.groups().get(1).thresholdStatus()).isEqualTo("ALERT");
         assertThat(baseline.groups().get(1).thresholdAlerts()).containsExactly(
-            "precision_below_90",
-            "false_positive_rate_above_10",
+            "precision_wilson_lower_bound_below_90",
             "anchor_rate_below_95",
             "duplicate_rate_above_5"
         );
+    }
+
+    @Test
+    void appliesTheSameWilsonThresholdAsLifecyclePromotion() {
+        when(mapper.selectSummary()).thenReturn(null);
+        when(mapper.selectExecution()).thenReturn(null);
+        when(mapper.selectGroups()).thenReturn(List.of(
+            group("point-estimate-pass", 30L, 30L, 27L, 3L, 30L, 0L)
+        ));
+
+        ReviewQualityGroupBaseline group = service.loadBaseline().groups().getFirst();
+
+        assertThat(group.labeledPrecision()).isEqualByComparingTo("90.00");
+        assertThat(group.labeledFalsePositiveRate()).isEqualByComparingTo("10.00");
+        assertThat(group.thresholdStatus()).isEqualTo("ALERT");
+        assertThat(group.thresholdAlerts()).containsExactly("precision_wilson_lower_bound_below_90");
     }
 
     @Test

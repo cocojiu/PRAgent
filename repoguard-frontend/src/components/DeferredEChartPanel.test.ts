@@ -12,12 +12,9 @@ const { dispose, init, off, on, resize, setOption, use } = vi.hoisted(() => ({
 }));
 
 vi.mock("echarts/core", () => ({ init, use }));
-vi.mock("echarts/charts", () => ({ BarChart: {}, LineChart: {}, PieChart: {} }));
+vi.mock("echarts/charts", () => ({ BarChart: {}, LineChart: {} }));
 vi.mock("echarts/components", () => ({
-  AriaComponent: {},
-  GraphicComponent: {},
   GridComponent: {},
-  LegendComponent: {},
   TooltipComponent: {}
 }));
 vi.mock("echarts/renderers", () => ({ CanvasRenderer: {} }));

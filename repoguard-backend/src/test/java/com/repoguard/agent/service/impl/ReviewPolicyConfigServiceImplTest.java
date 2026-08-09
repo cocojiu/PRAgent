@@ -56,7 +56,7 @@ class ReviewPolicyConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(config.getWorkerConcurrency()).isEqualTo(2);
+        assertThat(config.getWorkerConcurrency()).isEqualTo(1);
         assertThat(config.getChunkFileThreshold()).isEqualTo(6);
         assertThat(config.getInputTokenPricePerMillion()).isEqualByComparingTo("0.50");
         assertThat(result.apiKey()).isEqualTo("****5678");

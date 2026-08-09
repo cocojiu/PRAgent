@@ -48,7 +48,22 @@ public class ReviewContextProperties {
         "**/build/**",
         "**/target/**",
         "**/dist/**",
-        "**/node_modules/**"
+        "**/node_modules/**",
+        ".env",
+        ".env.*",
+        "*.pem",
+        "*.key",
+        "*.p12",
+        "*.pfx",
+        "*.jks",
+        "*.keystore",
+        "credentials",
+        "credentials.json",
+        "service-account.json",
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519"
     ));
 
     private List<String> nonProductionPathPatterns = new ArrayList<>(List.of(

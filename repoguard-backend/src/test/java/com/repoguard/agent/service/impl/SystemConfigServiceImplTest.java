@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.repoguard.agent.cache.CacheEvictionService;
+import com.repoguard.agent.config.RabbitReviewQueueProperties;
 import com.repoguard.agent.dto.BaseSettingsRequest;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsRequest;
@@ -109,7 +110,8 @@ class SystemConfigServiceImplTest {
             systemSettingsConfigMapper,
             systemSettingLogMapper,
             reviewPolicyConfigMapper,
-            cacheEvictionService
+            cacheEvictionService,
+            new RabbitReviewQueueProperties()
         );
     private final SystemConfigServiceImpl service = new SystemConfigServiceImpl(
         connectionTestService,
@@ -183,7 +185,7 @@ class SystemConfigServiceImplTest {
         assertThat(config.getApiKeyValue()).startsWith("enc:v3:local:");
         assertThat(secretCryptoService.decrypt(config.getApiKeyValue())).isEqualTo("sk-existing-5678");
         assertThat(config.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(config.getWorkerConcurrency()).isEqualTo(2);
+        assertThat(config.getWorkerConcurrency()).isEqualTo(1);
         assertThat(config.getChunkFileThreshold()).isEqualTo(6);
         assertThat(config.getInputTokenPricePerMillion()).isEqualByComparingTo("0.50");
         assertThat(result.apiKey()).isEqualTo("****5678");
@@ -298,9 +300,9 @@ class SystemConfigServiceImplTest {
         assertThat(settingsConfig.getPublicRepoAllowed()).isTrue();
         assertThat(settingsConfig.getTokenTtlDays()).isEqualTo(45);
         assertThat(reviewPolicyConfig.getTimeoutSeconds()).isEqualTo(90);
-        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(3);
+        assertThat(reviewPolicyConfig.getWorkerConcurrency()).isEqualTo(1);
         assertThat(secretCryptoService.decrypt(reviewPolicyConfig.getApiKeyValue())).isEqualTo("sk-existing-5678");
-        assertThat(result.policy().workerConcurrency()).isEqualTo(3);
+        assertThat(result.policy().workerConcurrency()).isEqualTo(1);
         assertThat(result.logs()).hasSize(1);
         verify(systemSettingsConfigMapper).updateById(settingsConfig);
         verify(reviewPolicyConfigMapper).updateById(reviewPolicyConfig);

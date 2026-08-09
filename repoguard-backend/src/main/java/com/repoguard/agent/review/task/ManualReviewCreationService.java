@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -192,11 +193,15 @@ public class ManualReviewCreationService {
         LocalDateTime createdAt,
         ReviewTask task
     ) {
-        int affectedRows = reviewTaskMapper.insertManualReviewOrReuse(task);
-        if (affectedRows != 1) {
+        try {
+            int affectedRows = reviewTaskMapper.insertManualReview(task);
+            if (affectedRows != 1) {
+                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Review task insert affected an unexpected row count");
+            }
+        } catch (DuplicateKeyException duplicateKeyException) {
             ReviewTask concurrentTask = findExistingManualTask(organization, repository, request.prNumber(), commit);
             if (concurrentTask == null) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Review task idempotency conflict could not be resolved");
+                throw duplicateKeyException;
             }
             completeManualCreateAfterTransaction(idempotencyKey, ownerFuture, concurrentTask);
             return reusedTaskResponse(concurrentTask);

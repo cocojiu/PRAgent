@@ -80,16 +80,16 @@ class ReviewStrategyPolicyServiceTest {
     }
 
     @Test
-    void commentPromotesToBlockOnlyAfterTheThirtySampleQualityGatePasses() {
+    void commentPromotesToBlockOnlyAfterTheQualityGateHasSufficientConfidence() {
         when(mapper.selectOne(any())).thenReturn(snapshot(12, "COMMENT"));
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "HIGH",
-            30,
-            30,
-            27,
-            3,
-            29,
-            1
+            200,
+            200,
+            190,
+            10,
+            196,
+            4
         ))));
         when(mapper.insert(any(ReviewStrategyPolicySnapshot.class))).thenAnswer(invocation -> {
             ((ReviewStrategyPolicySnapshot) invocation.getArgument(0)).setId(13L);

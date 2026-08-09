@@ -7,7 +7,6 @@ import com.repoguard.agent.mapper.projection.ReviewQualityBaselineProjections.Su
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
@@ -18,9 +17,14 @@ public class ReviewQualityBaselineService {
     private static final BigDecimal ZERO_PERCENT = BigDecimal.ZERO.setScale(2, RoundingMode.UNNECESSARY);
 
     private final ReviewQualityBaselineMapper baselineMapper;
+    private final ReviewQualityGatePolicy qualityGatePolicy;
 
-    public ReviewQualityBaselineService(ReviewQualityBaselineMapper baselineMapper) {
+    public ReviewQualityBaselineService(
+        ReviewQualityBaselineMapper baselineMapper,
+        ReviewQualityGatePolicy qualityGatePolicy
+    ) {
         this.baselineMapper = Objects.requireNonNull(baselineMapper, "baselineMapper");
+        this.qualityGatePolicy = Objects.requireNonNull(qualityGatePolicy, "qualityGatePolicy");
     }
 
     public ReviewQualityBaseline loadBaseline() {
@@ -69,7 +73,13 @@ public class ReviewQualityBaselineService {
         BigDecimal falsePositiveRate = percentage(falsePositives, labeled);
         BigDecimal anchorRate = percentage(anchored, total);
         BigDecimal duplicateRate = percentage(duplicates, total);
-        List<String> alerts = thresholdAlerts(labeled, precision, falsePositiveRate, anchorRate, duplicateRate);
+        ReviewQualityGatePolicy.Assessment assessment = qualityGatePolicy.assess(
+            labeled,
+            confirmed,
+            falsePositives,
+            anchorRate,
+            duplicateRate
+        );
         return new ReviewQualityGroupBaseline(
             group.ruleId(),
             group.source(),
@@ -102,35 +112,9 @@ public class ReviewQualityBaselineService {
             anchorRate,
             duplicates,
             duplicateRate,
-            labeled < 30 ? "INSUFFICIENT_SAMPLE" : alerts.isEmpty() ? "PASS" : "ALERT",
-            alerts
+            assessment.status(),
+            assessment.blockers()
         );
-    }
-
-    private List<String> thresholdAlerts(
-        long labeled,
-        BigDecimal precision,
-        BigDecimal falsePositiveRate,
-        BigDecimal anchorRate,
-        BigDecimal duplicateRate
-    ) {
-        if (labeled < 30) {
-            return List.of();
-        }
-        List<String> alerts = new ArrayList<>();
-        if (precision.compareTo(BigDecimal.valueOf(90)) < 0) {
-            alerts.add("precision_below_90");
-        }
-        if (falsePositiveRate.compareTo(BigDecimal.valueOf(10)) > 0) {
-            alerts.add("false_positive_rate_above_10");
-        }
-        if (anchorRate.compareTo(BigDecimal.valueOf(95)) < 0) {
-            alerts.add("anchor_rate_below_95");
-        }
-        if (duplicateRate.compareTo(BigDecimal.valueOf(5)) > 0) {
-            alerts.add("duplicate_rate_above_5");
-        }
-        return List.copyOf(alerts);
     }
 
     private long count(Long value) {
