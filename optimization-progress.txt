@@ -1,5 +1,11 @@
 2026-08-10 | 优化-01 | 规则 scope 字段长度一致性
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：新增 V60 迁移，将 review_rule_policy_snapshot.scope 从 varchar(128) 扩展为 varchar(255)；同步数据库期望版本为 60；新增契约校验，确保请求 DTO、主表与快照表长度一致。
 本地验证：ReviewPolicyVersionGovernanceMigrationTest、SchemaVersionExpectationContractTest 共 4 项通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31332852925、Repository Governance #31332852916/#31332849833、Release Images #31332849840、Auto Create Pull Request #31332849836 均成功。
+
+2026-08-10 | 优化-02 | 认证限流账户键抗碰撞
+状态：本地完成，远程流水线待检查
+变更：将 account-ip 限流键从 32 位 Java hashCode 改为使用认证密钥、带域分隔的 HMAC-SHA256 伪名，保留账户规范化语义且不在内存键中暴露明文账户；增加已知 Java 哈希碰撞账户的回归测试。
+本地验证：AuthAttemptLimiterTest 共 6 项通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
 远程验证：pending

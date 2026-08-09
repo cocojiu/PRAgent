@@ -46,6 +46,28 @@ class AuthAttemptLimiterTest {
     }
 
     @Test
+    void keepsAccountsWithCollidingJavaHashesInIndependentBuckets() {
+        String firstAccount = "wlcpczofix";
+        String secondAccount = "qbqjohipmb";
+        assertThat(firstAccount.hashCode()).isEqualTo(secondAccount.hashCode());
+
+        AuthProperties properties = propertiesWithLimits(10, 1);
+        AuthAttemptLimiter limiter = new AuthAttemptLimiter(
+            properties,
+            new SimpleMeterRegistry(),
+            new MutableClock()
+        );
+        String clientIp = "203.0.113.11";
+
+        limiter.requireAllowed("login", firstAccount, clientIp);
+        limiter.requireAllowed("login", secondAccount, clientIp);
+
+        assertThatThrownBy(() -> limiter.requireAllowed("login", firstAccount, clientIp))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+    }
+
+    @Test
     void failsClosedForNewKeysAtCapacityWhileStillEnforcingTrackedKeys() {
         AuthProperties properties = propertiesWithLimits(2, 2);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();

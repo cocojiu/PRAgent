@@ -3,12 +3,17 @@ package com.repoguard.agent.security;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.time.Clock;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,10 +24,14 @@ public class AuthAttemptLimiter {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthAttemptLimiter.class);
     private static final int MAX_TRACKED_KEYS_PER_DIMENSION = 20_000;
+    private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private static final byte[] ACCOUNT_KEY_DOMAIN = "repoguard:auth-attempt-account:v1\0"
+        .getBytes(StandardCharsets.UTF_8);
     private final AuthProperties properties;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
     private final int maxTrackedKeysPerDimension;
+    private final SecretKeySpec accountKeySecret;
     private final Dimension ipDimension = new Dimension("ip");
     private final Dimension accountIpDimension = new Dimension("account-ip");
 
@@ -48,6 +57,10 @@ public class AuthAttemptLimiter {
             throw new IllegalArgumentException("maxTrackedKeysPerDimension must be positive");
         }
         this.maxTrackedKeysPerDimension = maxTrackedKeysPerDimension;
+        this.accountKeySecret = new SecretKeySpec(
+            properties.getTokenSecret().getBytes(StandardCharsets.UTF_8),
+            HMAC_ALGORITHM
+        );
         LOGGER.info(
             "Auth attempt limits active: {}/min per ip, {}/min per account-ip; thresholds are per-instance, adjust them when running more than one API instance",
             properties.getPublicAuthRequestsPerMinutePerIp(),
@@ -61,7 +74,7 @@ public class AuthAttemptLimiter {
         if (!acquire(ipDimension, normalizedOperation + ":" + ip, properties.getPublicAuthRequestsPerMinutePerIp())
             || !acquire(
                 accountIpDimension,
-                normalizedOperation + ":" + Integer.toUnsignedString(normalize(account).hashCode()) + ":" + ip,
+                normalizedOperation + ":" + pseudonymizeAccount(account) + ":" + ip,
                 properties.getPublicAuthRequestsPerMinutePerAccountIp()
             )) {
             meterRegistry.counter("repoguard.auth.rate_limited", "operation", normalizedOperation).increment();
@@ -115,6 +128,19 @@ public class AuthAttemptLimiter {
 
     private String normalize(String value) {
         return value == null || value.isBlank() ? "unknown" : value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String pseudonymizeAccount(String account) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+            mac.init(accountKeySecret);
+            mac.update(ACCOUNT_KEY_DOMAIN);
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(
+                mac.doFinal(normalize(account).getBytes(StandardCharsets.UTF_8))
+            );
+        } catch (GeneralSecurityException ex) {
+            throw new IllegalStateException("Unable to derive authentication rate-limit key", ex);
+        }
     }
 
     private static final class Dimension {
