@@ -35,7 +35,13 @@
 远程验证：通过。Pull Request Quality #31335908269、Repository Governance #31335908265/#31335906165、Release Images #31335906104、Auto Create Pull Request #31335906108 均成功。
 
 2026-08-10 | 优化-07A | 数据库共享限流与 API 多实例门禁
-状态：已修复首次远程集成测试启动参数，流水线重新检查中
+状态：已完成
 变更：新增 V62 共享固定窗口表与数据库原子计数存储，桶键使用认证密钥 HMAC 后落库；认证、管理 API Key 失败和 GitHub Webhook 限流可统一切换为跨实例总限额，同时保留每实例高基数容量保护；新增 local/database 配置，只有 database 模式允许 API instance-count 大于 1，并同步生产预检、Compose、示例配置和运行说明；Dashboard 数据库快照与手工评审数据库唯一键继续承担跨实例恢复和最终幂等。
 本地验证：共享存储、三类限流、运行角色、Schema V62、生产配置定向测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过；真实 MySQL 原子计数用例已加入远程集成测试。
-远程验证：Pull Request Quality #31336620285 首次执行发现集成测试同时传入默认与覆盖 instance-count，被 Spring 合并为“1,2”；已改为存在覆盖参数时不添加默认值，修复后待重新检查。该次其余 Backend unit、Frontend、Production edge、Dependency review、Secret diff 均通过。
+远程验证：首次 Pull Request Quality #31336620285 发现集成测试默认与覆盖 instance-count 被合并为“1,2”，已在修复提交中消除重复参数；修复后 Pull Request Quality #31336781364（含真实 MySQL 共享计数）、Repository Governance #31336781384/#31336779315、Release Images #31336779322、Auto Create Pull Request #31336779365 均成功。
+
+2026-08-10 | 优化-07B | PRAgent-test 发布流水线去重
+状态：本地完成，远程流水线待检查
+变更：PRAgent-test push 的 Release Images 不再重复执行已由同 SHA Pull Request Quality 覆盖的后端测试和前端 lint/unit tests；Release 仍重新编译可发布 JAR、执行前端类型检查与生产构建、生产依赖审计、镜像构建/运行验证和漏洞扫描；main、master、标签及手动发布继续执行完整 verify 与前端 quality，避免降低正式发布门禁。
+本地验证：工作流 YAML 契约定向验证通过；后端发布工具链契约同时校验 PRAgent-test 去重分支和正式发布完整验证分支。
+远程验证：pending
