@@ -13,3 +13,8 @@ e884d8c4a5c760a415837a7ddb2927f0f33ebe59:repoguard-backend/src/test/java/com/rep
 # by runtime-fragmented values in 2e05d68ea922. Keep the exemption scoped to
 # this historical test fingerprint; current source must continue to scan clean.
 8284ce355d3f6fe4c5727e240d3c0430e6838e90:repoguard-backend/src/test/java/com/repoguard/agent/review/SensitiveLiteralRuleTest.java:generic-api-key:30
+
+# Synthetic private-key fixture introduced in 1907d4525bb0 and replaced by
+# runtime-fragmented PEM markers in the subsequent remediation commit. Keep
+# this exemption scoped to the historical fingerprint so current source scans.
+1907d4525bb09428d7b4fd6b7d8c90d9582891e0:repoguard-backend/src/test/java/com/repoguard/agent/common/SensitiveTextSanitizerTest.java:private-key:72

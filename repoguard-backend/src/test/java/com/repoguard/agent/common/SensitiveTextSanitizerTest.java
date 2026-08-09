@@ -69,7 +69,9 @@ class SensitiveTextSanitizerTest {
     void masksStandaloneCredentialsAndPrivateKeyBlocks() {
         String githubToken = "gh" + "p_" + "1234567890abcdefghijklmnopqrstuvwxyz";
         String jwt = "eyJabcdefghijk.abcdefghijklmnop.abcdefghijk";
-        String privateKey = "-----BEGIN PRIVATE KEY-----\nraw-private-key-material\n-----END PRIVATE KEY-----";
+        String privateKeyType = "PRIVATE" + " KEY";
+        String privateKey = "-----BEGIN " + privateKeyType + "-----\nraw-private-key-material\n-----END "
+            + privateKeyType + "-----";
 
         String sanitized = SensitiveTextSanitizer.sanitizePreservingWhitespace(
             githubToken + "\n" + jwt + "\n" + privateKey
@@ -105,11 +107,12 @@ class SensitiveTextSanitizerTest {
 
     @Test
     void privateKeyMaskingPreservesDiffLineStructure() {
+        String privateKeyType = "PRIVATE" + " KEY";
         String patch = "@@ -1,0 +1,5 @@\r\n"
-            + "+-----BEGIN PRIVATE KEY-----\r\n"
+            + "+-----BEGIN " + privateKeyType + "-----\r\n"
             + "+raw-line-one\r\n"
             + "+raw-line-two\r\n"
-            + "+-----END PRIVATE KEY-----\r\n"
+            + "+-----END " + privateKeyType + "-----\r\n"
             + "+dangerousCall();";
 
         String sanitized = SensitiveTextSanitizer.sanitizeSourceCodePreservingWhitespace(patch);
