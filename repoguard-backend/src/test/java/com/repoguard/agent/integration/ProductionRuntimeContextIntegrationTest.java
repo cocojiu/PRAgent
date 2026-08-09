@@ -637,7 +637,6 @@ class ProductionRuntimeContextIntegrationTest {
     private ConfigurableApplicationContext start(String runtimeRole, String... additionalArguments) {
         List<String> arguments = new ArrayList<>(List.of(
             "--app.runtime.role=" + runtimeRole,
-            "--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1),
             "--app.github.webhook.enabled=false",
             "--app.security.admin-api-key.enabled=false",
             "--app.cors.allowed-origins[0]=https://integration.local",
@@ -645,6 +644,10 @@ class ProductionRuntimeContextIntegrationTest {
             "--spring.main.banner-mode=off",
             "--spring.task.scheduling.enabled=false"
         ));
+        if (Arrays.stream(additionalArguments)
+            .noneMatch(argument -> argument.startsWith("--app.runtime.api.instance-count="))) {
+            arguments.add("--app.runtime.api.instance-count=" + ("worker".equals(runtimeRole) ? 0 : 1));
+        }
         arguments.addAll(Arrays.asList(additionalArguments));
         return new SpringApplicationBuilder(RepoGuardApplication.class)
             .web(WebApplicationType.SERVLET)

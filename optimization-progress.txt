@@ -35,7 +35,7 @@
 远程验证：通过。Pull Request Quality #31335908269、Repository Governance #31335908265/#31335906165、Release Images #31335906104、Auto Create Pull Request #31335906108 均成功。
 
 2026-08-10 | 优化-07A | 数据库共享限流与 API 多实例门禁
-状态：本地完成，远程流水线待检查
+状态：已修复首次远程集成测试启动参数，流水线重新检查中
 变更：新增 V62 共享固定窗口表与数据库原子计数存储，桶键使用认证密钥 HMAC 后落库；认证、管理 API Key 失败和 GitHub Webhook 限流可统一切换为跨实例总限额，同时保留每实例高基数容量保护；新增 local/database 配置，只有 database 模式允许 API instance-count 大于 1，并同步生产预检、Compose、示例配置和运行说明；Dashboard 数据库快照与手工评审数据库唯一键继续承担跨实例恢复和最终幂等。
 本地验证：共享存储、三类限流、运行角色、Schema V62、生产配置定向测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过；真实 MySQL 原子计数用例已加入远程集成测试。
-远程验证：pending
+远程验证：Pull Request Quality #31336620285 首次执行发现集成测试同时传入默认与覆盖 instance-count，被 Spring 合并为“1,2”；已改为存在覆盖参数时不添加默认值，修复后待重新检查。该次其余 Backend unit、Frontend、Production edge、Dependency review、Secret diff 均通过。
