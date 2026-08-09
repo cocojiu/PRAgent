@@ -88,7 +88,7 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
             feedbackAt,
             ReviewTimelineStatus.DONE
         );
-        evictDashboardFeedbackQuality();
+        evictDashboardFeedbackQuality(task);
         return findingFeedbackResponse(finding);
     }
 
@@ -116,9 +116,8 @@ public class FindingFeedbackServiceImpl implements FindingFeedbackService {
         return truncate("Finding feedback updated: " + status.dtoCode() + " for " + file);
     }
 
-    private void evictDashboardFeedbackQuality() {
-        cacheEvictionService.evictDashboardFeedbackQuality();
-        cacheEvictionService.evictDashboardReviewActivity();
+    private void evictDashboardFeedbackQuality(ReviewTask task) {
+        cacheEvictionService.evictDashboardReviewActivity(task.getCreatedAt().toLocalDate());
         cacheEvictionService.evictReviewRules();
     }
 

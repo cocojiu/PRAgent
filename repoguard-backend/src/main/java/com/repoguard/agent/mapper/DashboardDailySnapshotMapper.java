@@ -7,6 +7,7 @@ import com.repoguard.agent.mapper.projection.DashboardProjections.MetricStat;
 import com.repoguard.agent.mapper.projection.DashboardProjections.ReviewTrendCount;
 import com.repoguard.agent.mapper.projection.DashboardProjections.RiskLevelCount;
 import com.repoguard.agent.mapper.projection.DashboardProjections.RuleHitCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.SnapshotRefreshState;
 import java.time.LocalDate;
 import java.util.List;
 import org.apache.ibatis.annotations.Delete;
@@ -14,6 +15,7 @@ import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface DashboardDailySnapshotMapper {
@@ -42,11 +44,93 @@ public interface DashboardDailySnapshotMapper {
         """)
     LocalDate selectEarliestLlmQualitySnapshotDate();
 
+    @Select("""
+        select max(created_date)
+        from review_task
+        where llm_status_norm <> ''
+          and llm_status_norm <> 'pending'
+        """)
+    LocalDate selectLatestLlmQualitySourceDate();
+
+    @Insert("""
+        insert into dashboard_daily_snapshot_refresh_state (
+            stat_date,
+            review_version,
+            review_refreshed_version,
+            llm_quality_version,
+            llm_quality_refreshed_version
+        ) values (#{statDate}, 1, 0, 1, 0)
+        on duplicate key update
+            review_version = review_version + 1,
+            llm_quality_version = llm_quality_version + 1
+        """)
+    int markReviewActivityDirty(@Param("statDate") LocalDate statDate);
+
+    @Insert("""
+        insert into dashboard_daily_snapshot_refresh_state (
+            stat_date,
+            review_version,
+            review_refreshed_version,
+            llm_quality_version,
+            llm_quality_refreshed_version
+        ) values (#{statDate}, 0, 0, 1, 0)
+        on duplicate key update
+            llm_quality_version = llm_quality_version + 1
+        """)
+    int markLlmQualityDirty(@Param("statDate") LocalDate statDate);
+
+    @Select("""
+        select
+            stat_date as statDate,
+            review_version as reviewVersion,
+            review_refreshed_version as reviewRefreshedVersion,
+            llm_quality_version as llmQualityVersion,
+            llm_quality_refreshed_version as llmQualityRefreshedVersion
+        from dashboard_daily_snapshot_refresh_state
+        where stat_date = #{statDate}
+        """)
+    SnapshotRefreshState selectRefreshState(@Param("statDate") LocalDate statDate);
+
+    @Select("""
+        select
+            stat_date as statDate,
+            review_version as reviewVersion,
+            review_refreshed_version as reviewRefreshedVersion,
+            llm_quality_version as llmQualityVersion,
+            llm_quality_refreshed_version as llmQualityRefreshedVersion
+        from dashboard_daily_snapshot_refresh_state
+        where stat_date >= #{startDate}
+          and (
+              review_version > review_refreshed_version
+              or llm_quality_version > llm_quality_refreshed_version
+          )
+        order by stat_date
+        limit #{limit}
+        """)
+    List<SnapshotRefreshState> selectDirtyRefreshStates(
+        @Param("startDate") LocalDate startDate,
+        @Param("limit") int limit
+    );
+
+    @Update("""
+        update dashboard_daily_snapshot_refresh_state
+        set review_refreshed_version = greatest(review_refreshed_version, #{version})
+        where stat_date = #{statDate}
+        """)
+    int markReviewRefreshed(@Param("statDate") LocalDate statDate, @Param("version") long version);
+
+    @Update("""
+        update dashboard_daily_snapshot_refresh_state
+        set llm_quality_refreshed_version = greatest(llm_quality_refreshed_version, #{version})
+        where stat_date = #{statDate}
+        """)
+    int markLlmQualityRefreshed(@Param("statDate") LocalDate statDate, @Param("version") long version);
+
     @Delete("""
         delete from dashboard_review_daily_stat
-        where stat_date >= #{startDate}
+        where stat_date = #{statDate}
         """)
-    int deleteReviewDailyStatsFrom(@Param("startDate") LocalDate startDate);
+    int deleteReviewDailyStatsOn(@Param("statDate") LocalDate statDate);
 
     @Insert("""
         insert into dashboard_review_daily_stat (
@@ -71,16 +155,16 @@ public interface DashboardDailySnapshotMapper {
             sum(case when finished_at is not null then duration_seconds else 0 end) as duration_seconds_sum,
             sum(case when finished_at is not null then 1 else 0 end) as duration_sample_count
         from review_task
-        where created_at >= #{startDate}
+        where created_date = #{statDate}
         group by created_date
         """)
-    int insertReviewDailyStatsFromTasks(@Param("startDate") LocalDate startDate);
+    int insertReviewDailyStatsForDate(@Param("statDate") LocalDate statDate);
 
     @Delete("""
         delete from dashboard_rule_daily_stat
-        where stat_date >= #{startDate}
+        where stat_date = #{statDate}
         """)
-    int deleteRuleDailyStatsFrom(@Param("startDate") LocalDate startDate);
+    int deleteRuleDailyStatsOn(@Param("statDate") LocalDate statDate);
 
     @Insert("""
         insert into dashboard_rule_daily_stat (
@@ -95,16 +179,16 @@ public interface DashboardDailySnapshotMapper {
         from review_finding f
         join review_task t on t.id = f.task_id
         where f.category = 'FINDING'
-          and t.created_at >= #{startDate}
+          and t.created_date = #{statDate}
         group by t.created_date, coalesce(f.rule_id, 'LLM')
         """)
-    int insertRuleDailyStatsFromFindings(@Param("startDate") LocalDate startDate);
+    int insertRuleDailyStatsForDate(@Param("statDate") LocalDate statDate);
 
     @Delete("""
         delete from dashboard_llm_quality_daily_stat
-        where stat_date >= #{startDate}
+        where stat_date = #{statDate}
         """)
-    int deleteLlmQualityDailyStatsFrom(@Param("startDate") LocalDate startDate);
+    int deleteLlmQualityDailyStatsOn(@Param("statDate") LocalDate statDate);
 
     @Insert("""
         insert into dashboard_llm_quality_daily_stat (
@@ -169,7 +253,7 @@ public interface DashboardDailySnapshotMapper {
             from review_task
             where llm_status_norm <> ''
               and llm_status_norm <> 'pending'
-              and created_at >= #{startDate}
+              and created_date = #{statDate}
             group by created_date, llm_model_label, repository_label
         ) task_stats
         left join (
@@ -190,13 +274,13 @@ public interface DashboardDailySnapshotMapper {
             join review_finding f on f.task_id = t.id and f.category = 'FINDING'
             where t.llm_status_norm <> ''
               and t.llm_status_norm <> 'pending'
-              and t.created_at >= #{startDate}
+              and t.created_date = #{statDate}
             group by t.created_date, t.llm_model_label, t.repository_label
         ) feedback_stats on feedback_stats.stat_date = task_stats.stat_date
             and feedback_stats.model_label = task_stats.model_label
             and feedback_stats.repository_label = task_stats.repository_label
         """)
-    int insertLlmQualityDailyStatsFromTasks(@Param("startDate") LocalDate startDate);
+    int insertLlmQualityDailyStatsForDate(@Param("statDate") LocalDate statDate);
 
     @Select("""
         select

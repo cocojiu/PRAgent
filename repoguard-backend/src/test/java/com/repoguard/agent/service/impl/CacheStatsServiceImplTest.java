@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.LocalDate;
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
@@ -22,6 +23,8 @@ import org.springframework.cache.support.SimpleCacheManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 class CacheStatsServiceImplTest {
+
+    private static final LocalDate SNAPSHOT_DATE = LocalDate.of(2026, 6, 19);
 
     private final CacheManager cacheManager = initializedCacheManager();
     private final CacheStatsServiceImpl service = new CacheStatsServiceImpl(cacheManager);
@@ -83,13 +86,14 @@ class CacheStatsServiceImplTest {
     }
 
     @Test
-    void dashboardReviewActivityEvictionRefreshesAllPersistedSnapshots() {
+    void dashboardReviewActivityEvictionMarksAndRefreshesOnlyTheAffectedDate() {
         DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
         CacheEvictionService eviction = new CacheEvictionService(cacheManager, () -> snapshotService, () -> null);
 
-        eviction.evictDashboardReviewActivity();
+        eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
 
-        Mockito.verify(snapshotService).refreshCurrentWindows();
+        Mockito.verify(snapshotService).markReviewActivityDirty(SNAPSHOT_DATE);
+        Mockito.verify(snapshotService).refreshDate(SNAPSHOT_DATE);
     }
 
     @Test
@@ -103,13 +107,14 @@ class CacheStatsServiceImplTest {
             () -> snapshotStore
         );
 
-        eviction.evictDashboardReviewActivity();
-        eviction.evictDashboardReviewActivity();
+        eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
+        eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
 
-        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+        Mockito.verify(snapshotService, Mockito.times(2)).markReviewActivityDirty(SNAPSHOT_DATE);
+        Mockito.verify(snapshotService, Mockito.never()).refreshDate(SNAPSHOT_DATE);
         assertThat(submitted).hasSize(1);
         submitted.remove().run();
-        Mockito.verify(snapshotService).refreshCurrentWindows();
+        Mockito.verify(snapshotService).refreshDate(SNAPSHOT_DATE);
     }
 
     @Test
@@ -131,7 +136,8 @@ class CacheStatsServiceImplTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            eviction.evictDashboardReviewActivity();
+            eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
+            Mockito.verify(snapshotService).markReviewActivityDirty(SNAPSHOT_DATE);
             assertThat(submitted).isEmpty();
             assertThat(summary.get("summary")).isNotNull();
             assertThat(reviewListSummary.get("filters")).isNotNull();
@@ -139,7 +145,7 @@ class CacheStatsServiceImplTest {
             TransactionSynchronizationManager.getSynchronizations()
                 .forEach(synchronization -> synchronization.afterCommit());
 
-            Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+            Mockito.verify(snapshotService, Mockito.never()).refreshDate(SNAPSHOT_DATE);
             assertThat(submitted).hasSize(1);
             assertThat(summary.get("summary")).isNull();
             assertThat(reviewListSummary.get("filters")).isNull();
@@ -148,7 +154,7 @@ class CacheStatsServiceImplTest {
         }
 
         submitted.remove().run();
-        Mockito.verify(snapshotService).refreshCurrentWindows();
+        Mockito.verify(snapshotService).refreshDate(SNAPSHOT_DATE);
     }
 
     @Test
@@ -164,14 +170,15 @@ class CacheStatsServiceImplTest {
 
         TransactionSynchronizationManager.initSynchronization();
         try {
-            eviction.evictDashboardReviewActivity();
+            eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
 
         assertThat(summary.get("summary")).isNotNull();
         assertThat(reviewListSummary.get("filters")).isNotNull();
-        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+        Mockito.verify(snapshotService).markReviewActivityDirty(SNAPSHOT_DATE);
+        Mockito.verify(snapshotService, Mockito.never()).refreshDate(SNAPSHOT_DATE);
     }
 
     @Test
@@ -188,7 +195,7 @@ class CacheStatsServiceImplTest {
         snapshotStore.getOrLoad(CacheNames.DASHBOARD_SUMMARY + ":summary", () -> "summary-snapshot");
         snapshotStore.getOrLoad(CacheNames.DASHBOARD_LLM_QUALITY + ":7", () -> "llm-snapshot");
 
-        eviction.evictDashboardFeedbackQuality();
+        eviction.evictDashboardFeedbackQuality(SNAPSHOT_DATE);
 
         assertThat(summary.get("summary")).isNotNull();
         assertThat(llmQuality.get("7")).isNull();
@@ -196,8 +203,8 @@ class CacheStatsServiceImplTest {
             .isEqualTo("summary-snapshot");
         assertThat(snapshotStore.getOrLoad(CacheNames.DASHBOARD_LLM_QUALITY + ":7", () -> "new-llm"))
             .isEqualTo("new-llm");
-        Mockito.verify(snapshotService).refreshCurrentLlmQualityWindow();
-        Mockito.verify(snapshotService, Mockito.never()).refreshCurrentWindows();
+        Mockito.verify(snapshotService).markLlmQualityDirty(SNAPSHOT_DATE);
+        Mockito.verify(snapshotService).refreshDate(SNAPSHOT_DATE);
     }
 
     @Test

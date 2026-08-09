@@ -3,6 +3,7 @@ package com.repoguard.agent.cache;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
+import java.time.LocalDate;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
@@ -60,14 +61,28 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardReviewActivity() {
-        afterCommitOrNow(this::evictDashboardReviewActivityNow);
+        DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
+        LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
+        if (latestReviewDate == null) {
+            afterCommitOrNow(() -> evictDashboardReviewActivityNow(null));
+            return;
+        }
+        evictDashboardReviewActivity(latestReviewDate);
     }
 
-    private void evictDashboardReviewActivityNow() {
-        submitDashboardRefresh(
-            REVIEW_ACTIVITY_REFRESH_KEY,
-            () -> refreshDashboardSnapshots(DashboardDailySnapshotService::refreshCurrentWindows)
-        );
+    public void evictDashboardReviewActivity(LocalDate statDate) {
+        LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
+        markDashboardSnapshotDirty(service -> service.markReviewActivityDirty(normalizedStatDate));
+        afterCommitOrNow(() -> evictDashboardReviewActivityNow(normalizedStatDate));
+    }
+
+    private void evictDashboardReviewActivityNow(LocalDate statDate) {
+        if (statDate != null) {
+            submitDashboardRefresh(
+                REVIEW_ACTIVITY_REFRESH_KEY + ":" + statDate,
+                () -> refreshDashboardSnapshots(service -> service.refreshDate(statDate))
+            );
+        }
         clear(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         evictDashboardOverviewCompatibilityNow();
         evictDashboardSummary();
@@ -79,14 +94,28 @@ public class CacheEvictionService {
     }
 
     public void evictDashboardFeedbackQuality() {
-        afterCommitOrNow(this::evictDashboardFeedbackQualityNow);
+        DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
+        LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
+        if (latestReviewDate == null) {
+            afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(null));
+            return;
+        }
+        evictDashboardFeedbackQuality(latestReviewDate);
     }
 
-    private void evictDashboardFeedbackQualityNow() {
-        submitDashboardRefresh(
-            FEEDBACK_QUALITY_REFRESH_KEY,
-            () -> refreshDashboardSnapshots(DashboardDailySnapshotService::refreshCurrentLlmQualityWindow)
-        );
+    public void evictDashboardFeedbackQuality(LocalDate statDate) {
+        LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
+        markDashboardSnapshotDirty(service -> service.markLlmQualityDirty(normalizedStatDate));
+        afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(normalizedStatDate));
+    }
+
+    private void evictDashboardFeedbackQualityNow(LocalDate statDate) {
+        if (statDate != null) {
+            submitDashboardRefresh(
+                FEEDBACK_QUALITY_REFRESH_KEY + ":" + statDate,
+                () -> refreshDashboardSnapshots(service -> service.refreshDate(statDate))
+            );
+        }
         evictDashboardLlmQuality();
     }
 
@@ -193,6 +222,15 @@ public class CacheEvictionService {
             refresher.accept(snapshotService);
         } catch (RuntimeException ex) {
             LOGGER.warn("Dashboard daily snapshot refresh failed during cache eviction", ex);
+        }
+    }
+
+    private void markDashboardSnapshotDirty(
+        java.util.function.Consumer<DashboardDailySnapshotService> dirtyMarker
+    ) {
+        DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
+        if (snapshotService != null) {
+            dirtyMarker.accept(snapshotService);
         }
     }
 }

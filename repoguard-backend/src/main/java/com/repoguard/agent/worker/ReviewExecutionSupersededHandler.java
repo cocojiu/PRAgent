@@ -39,7 +39,7 @@ class ReviewExecutionSupersededHandler {
         }
         timelineRecorder.reviewSuperseded(task, ex, taskWrite.supersededAt());
         metricsRecorder.recordSuperseded(startedAt, taskWrite.supersededAt());
-        cacheInvalidator.reviewTaskChanged();
+        cacheInvalidator.reviewTaskChanged(task);
         return true;
     }
 }

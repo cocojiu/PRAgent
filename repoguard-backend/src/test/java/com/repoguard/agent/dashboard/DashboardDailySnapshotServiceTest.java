@@ -2,6 +2,7 @@ package com.repoguard.agent.dashboard;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,7 @@ import com.repoguard.agent.mapper.DashboardDailySnapshotMapper;
 import com.repoguard.agent.mapper.DashboardMapper;
 import com.repoguard.agent.mapper.projection.DashboardProjections.MetricStat;
 import com.repoguard.agent.mapper.projection.DashboardProjections.RiskLevelCount;
+import com.repoguard.agent.mapper.projection.DashboardProjections.SnapshotRefreshState;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -41,10 +43,10 @@ class DashboardDailySnapshotServiceTest {
 
         DashboardMetricStat stat = service.selectMetricStat(startDate);
 
-        verify(snapshotMapper).deleteReviewDailyStatsFrom(startDate);
-        verify(snapshotMapper).insertReviewDailyStatsFromTasks(startDate);
-        verify(snapshotMapper).deleteRuleDailyStatsFrom(startDate);
-        verify(snapshotMapper).insertRuleDailyStatsFromFindings(startDate);
+        verify(snapshotMapper, times(7)).deleteReviewDailyStatsOn(org.mockito.ArgumentMatchers.any());
+        verify(snapshotMapper).insertReviewDailyStatsForDate(startDate);
+        verify(snapshotMapper).insertReviewDailyStatsForDate(LocalDate.of(2026, 6, 19));
+        verify(snapshotMapper, times(7)).deleteRuleDailyStatsOn(org.mockito.ArgumentMatchers.any());
         assertThat(stat.getTotal()).isEqualTo(3L);
     }
 
@@ -58,23 +60,45 @@ class DashboardDailySnapshotServiceTest {
 
         List<DashboardRiskLevelCount> counts = service.selectRiskLevelCounts(startDate);
 
-        verify(snapshotMapper, never()).deleteReviewDailyStatsFrom(startDate);
-        verify(snapshotMapper, never()).insertReviewDailyStatsFromTasks(startDate);
+        verify(snapshotMapper, never()).deleteReviewDailyStatsOn(startDate);
+        verify(snapshotMapper, never()).insertReviewDailyStatsForDate(startDate);
         assertThat(counts).hasSize(1);
         assertThat(counts.get(0).getTotal()).isEqualTo(2L);
     }
 
     @Test
-    void llmStatsRefreshWhenRequestedWindowStartsBeforeExistingSnapshot() {
+    void llmStatsDoNotRebuildEmptyLeadingDaysWhenLatestSourceIsCovered() {
         LocalDate startDate = LocalDate.of(2026, 3, 22);
-        when(dashboardMapper.selectLatestReviewTaskDate()).thenReturn(LocalDate.of(2026, 6, 19));
-        when(snapshotMapper.selectEarliestLlmQualitySnapshotDate()).thenReturn(LocalDate.of(2026, 6, 13));
+        when(snapshotMapper.selectLatestLlmQualitySourceDate()).thenReturn(LocalDate.of(2026, 6, 19));
         when(snapshotMapper.selectLatestLlmQualitySnapshotDate()).thenReturn(LocalDate.of(2026, 6, 19));
 
         service.selectLlmQualityTrendCounts(startDate);
 
-        verify(snapshotMapper).deleteLlmQualityDailyStatsFrom(startDate);
-        verify(snapshotMapper).insertLlmQualityDailyStatsFromTasks(startDate);
+        verify(snapshotMapper, never()).deleteLlmQualityDailyStatsOn(startDate);
+        verify(snapshotMapper, never()).insertLlmQualityDailyStatsForDate(startDate);
+    }
+
+    @Test
+    void dirtyDateIsRebuiltAndAcknowledgedWithoutRefreshingTheWholeWindow() {
+        LocalDate startDate = LocalDate.of(2026, 6, 13);
+        LocalDate dirtyDate = LocalDate.of(2026, 6, 17);
+        SnapshotRefreshState dirtyState = new SnapshotRefreshState(dirtyDate, 4L, 3L, 7L, 6L);
+        when(snapshotMapper.selectDirtyRefreshStates(startDate, 128)).thenReturn(List.of(dirtyState));
+        when(dashboardMapper.selectLatestReviewTaskDate()).thenReturn(LocalDate.of(2026, 6, 19));
+        when(snapshotMapper.selectLatestReviewSnapshotDate()).thenReturn(LocalDate.of(2026, 6, 19));
+        when(snapshotMapper.selectMetricStat(startDate)).thenReturn(metricStat(3L));
+
+        service.selectMetricStat(startDate);
+
+        verify(snapshotMapper).deleteReviewDailyStatsOn(dirtyDate);
+        verify(snapshotMapper).insertReviewDailyStatsForDate(dirtyDate);
+        verify(snapshotMapper).deleteRuleDailyStatsOn(dirtyDate);
+        verify(snapshotMapper).insertRuleDailyStatsForDate(dirtyDate);
+        verify(snapshotMapper).markReviewRefreshed(dirtyDate, 4L);
+        verify(snapshotMapper).deleteLlmQualityDailyStatsOn(dirtyDate);
+        verify(snapshotMapper).insertLlmQualityDailyStatsForDate(dirtyDate);
+        verify(snapshotMapper).markLlmQualityRefreshed(dirtyDate, 7L);
+        verify(snapshotMapper, times(1)).deleteReviewDailyStatsOn(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -83,12 +107,12 @@ class DashboardDailySnapshotServiceTest {
 
         service.refreshCurrentWindows();
 
-        verify(snapshotMapper).deleteReviewDailyStatsFrom(LocalDate.of(2026, 6, 13));
-        verify(snapshotMapper).insertReviewDailyStatsFromTasks(LocalDate.of(2026, 6, 13));
-        verify(snapshotMapper).deleteRuleDailyStatsFrom(LocalDate.of(2026, 6, 13));
-        verify(snapshotMapper).insertRuleDailyStatsFromFindings(LocalDate.of(2026, 6, 13));
-        verify(snapshotMapper).deleteLlmQualityDailyStatsFrom(LocalDate.of(2026, 3, 22));
-        verify(snapshotMapper).insertLlmQualityDailyStatsFromTasks(LocalDate.of(2026, 3, 22));
+        verify(snapshotMapper, times(7)).deleteReviewDailyStatsOn(org.mockito.ArgumentMatchers.any());
+        verify(snapshotMapper).insertReviewDailyStatsForDate(LocalDate.of(2026, 6, 13));
+        verify(snapshotMapper).insertReviewDailyStatsForDate(LocalDate.of(2026, 6, 19));
+        verify(snapshotMapper, times(90)).deleteLlmQualityDailyStatsOn(org.mockito.ArgumentMatchers.any());
+        verify(snapshotMapper).insertLlmQualityDailyStatsForDate(LocalDate.of(2026, 3, 22));
+        verify(snapshotMapper).insertLlmQualityDailyStatsForDate(LocalDate.of(2026, 6, 19));
     }
 
     private MetricStat metricStat(Long total) {

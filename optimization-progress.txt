@@ -5,7 +5,13 @@
 远程验证：通过。Pull Request Quality #31332852925、Repository Governance #31332852916/#31332849833、Release Images #31332849840、Auto Create Pull Request #31332849836 均成功。
 
 2026-08-10 | 优化-02 | 认证限流账户键抗碰撞
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：将 account-ip 限流键从 32 位 Java hashCode 改为使用认证密钥、带域分隔的 HMAC-SHA256 伪名，保留账户规范化语义且不在内存键中暴露明文账户；增加已知 Java 哈希碰撞账户的回归测试。
 本地验证：AuthAttemptLimiterTest 共 6 项通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31333233428、Repository Governance #31333233424/#31333230805、Release Images #31333230816、Auto Create Pull Request #31333230808 均成功。
+
+2026-08-10 | 优化-03 | Dashboard 快照增量刷新与失败恢复
+状态：本地完成，远程流水线待检查
+变更：新增按统计日期维护的持久化脏版本；业务事务内原子标记 review/LLM 快照失效，提交后只重建受影响日期；使用单调版本确认避免并发更新被错误清除；读路径同步恢复脏日期，调度任务每分钟补偿失败刷新并每日全窗口核对；按日期索引 review_task，避免每次评审活动重扫 7/90 天窗口。
+本地验证：DashboardDailySnapshotServiceTest、DashboardDailySnapshotMapperSqlContractTest、DashboardDailySnapshotRecoveryWorkerTest、CacheStatsServiceImplTest、ReviewExecutionCacheInvalidatorTest、ReviewServiceImplTest、ReviewTaskRetryServiceTest、ReviewTaskExecutorImplTest、SchemaVersionExpectationContractTest 定向验证通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
 远程验证：pending

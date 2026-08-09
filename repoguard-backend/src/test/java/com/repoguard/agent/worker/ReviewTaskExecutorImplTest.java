@@ -70,7 +70,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeMovesQueuedTaskToCompletedAndWritesTimeline() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -114,7 +114,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeCompletesMediumRiskTaskWithoutHumanReview() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -147,7 +147,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeDeduplicatesFindingsBeforePersisting() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -184,7 +184,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeStoresLlmQualityMetadata() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -224,7 +224,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeWritesPartialFallbackTimelineWhenChunkedReviewFallsBack() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -265,7 +265,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeIgnoresCompletedTask() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("COMPLETED");
@@ -279,7 +279,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeIgnoresTaskAlreadyInProgress() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("REVIEWING");
@@ -295,7 +295,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeStopsWhenQueuedTaskWasClaimedByAnotherConsumer() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -312,7 +312,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeDiscardsResultWhenRecoveryHasReplacedExecutionClaim() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -341,7 +341,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeMarksTaskFailedWhenDiffFetchFails() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -366,7 +366,7 @@ class ReviewTaskExecutorImplTest {
 
     @Test
     void executeMarksTaskSupersededWithoutCallingReviewerWhenDiffHeadChanged() {
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -409,7 +409,7 @@ class ReviewTaskExecutorImplTest {
             reviewTaskMapper,
             createWorkflow(transactionManager)
         );
-        ReviewTask task = new ReviewTask();
+        ReviewTask task = reviewTask();
         task.setId(42L);
         task.setCommitSha(COMMIT_SHA);
         task.setStatus("QUEUED");
@@ -451,6 +451,12 @@ class ReviewTaskExecutorImplTest {
             COMMIT_SHA,
             LocalDateTime.parse("2026-06-05T18:00:00")
         );
+    }
+
+    private ReviewTask reviewTask() {
+        ReviewTask task = new ReviewTask();
+        task.setCreatedAt(LocalDateTime.parse("2026-06-05T18:00:00"));
+        return task;
     }
 
     private ReviewExecutionWorkflow createWorkflow(PlatformTransactionManager transactionManager) {
