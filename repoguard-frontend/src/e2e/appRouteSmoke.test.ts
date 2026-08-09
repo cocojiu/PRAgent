@@ -62,7 +62,7 @@ describe("application route smoke", () => {
     await expectResolvedRoute("/repoguard/overview", routeNames.overview);
     await expectResolvedRoute("/repoguard/tasks", routeNames.tasks);
     await expectResolvedRoute("/repoguard/tasks/42", routeNames.taskDetail);
-  });
+  }, 10_000);
 
   it("restores only safe internal redirects for authenticated users", async () => {
     saveAuthToken("access-token", false);

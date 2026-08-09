@@ -8,8 +8,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 public final class FrontendApiContractCatalog {
 
@@ -21,10 +23,17 @@ public final class FrontendApiContractCatalog {
         "^\\s{2}([a-zA-Z0-9]+): ApiOperation<",
         Pattern.MULTILINE
     );
+    private static final Pattern FRONTEND_GENERATED_OPERATION_PATTERN = Pattern.compile(
+        "^\\s{2}([a-zA-Z0-9]+): generatedEndpoint\\(\\s*\"([a-zA-Z0-9]+)\"",
+        Pattern.MULTILINE
+    );
     private static final Pattern FRONTEND_METHOD_PATTERN = Pattern.compile("method: \"(GET|POST|PUT|DELETE)\"");
     private static final Pattern FRONTEND_LITERAL_PATH_PATTERN = Pattern.compile("path: \\(\\) => \"([^\"]+)\"");
     private static final Pattern FRONTEND_TEMPLATE_PATH_PATTERN = Pattern.compile("path: input => `([^`]+)`");
     private static final Pattern FRONTEND_API_PATH_LITERAL_PATTERN = Pattern.compile("[\"`](/api/v1/[^\"`]+)[\"`]");
+    private static final Pattern FRONTEND_GENERATED_ENDPOINT_PATTERN = Pattern.compile(
+        "generatedEndpoint\\(\\s*\"([a-zA-Z0-9]+)\""
+    );
     private static final Pattern FRONTEND_INLINE_QUERY_PATTERN = Pattern.compile(
         "query: [^=]+=> \\(\\{(?<query>.*?)\\}\\)",
         Pattern.DOTALL
@@ -38,11 +47,37 @@ public final class FrontendApiContractCatalog {
         String source = Files.readString(contractsPath());
         Matcher operationMatcher = FRONTEND_API_OPERATION_PATTERN.matcher(source);
         Map<String, OperationTypes> operationTypes = apiOperationTypes(source);
+        Map<String, OpenApiGeneratedClientDryRun.GeneratedOperation> generatedOperations =
+            generatedOperationsById();
         Map<String, EndpointContract> contracts = new LinkedHashMap<>();
         while (operationMatcher.find()) {
             String operation = operationMatcher.group(1);
             String body = operationMatcher.group("body");
             OperationTypes types = operationTypes.getOrDefault(operation, new OperationTypes("", ""));
+            Optional<String> generatedOperationId = generatedOperationId(body);
+            if (generatedOperationId.isPresent()) {
+                OpenApiGeneratedClientDryRun.GeneratedOperation generatedOperation =
+                    generatedOperations.get(generatedOperationId.orElseThrow());
+                if (generatedOperation == null) {
+                    throw new IllegalStateException(
+                        "Frontend generated endpoint is missing from reviewed OpenAPI JSON: "
+                            + generatedOperationId.orElseThrow()
+                    );
+                }
+                contracts.put(
+                    operation,
+                    new EndpointContract(
+                        generatedOperation.method(),
+                        generatedOperation.path(),
+                        generatedOperation.queryParamNames(),
+                        generatedOperation.hasRequestBody(),
+                        generatedOperation.requestBodyRequired(),
+                        types.responseType(),
+                        generatedOperation.operationId()
+                    )
+                );
+                continue;
+            }
             extractPath(body).ifPresent(path -> contracts.put(
                 operation,
                 new EndpointContract(
@@ -51,9 +86,20 @@ public final class FrontendApiContractCatalog {
                     queryParamNames(body),
                     body.contains("body:"),
                     body.contains("body:") && !inputTypeAllowsUndefined(types.inputType()),
-                    types.responseType()
+                    types.responseType(),
+                    null
                 )
             ));
+        }
+        Matcher generatedOperationMatcher = FRONTEND_GENERATED_OPERATION_PATTERN.matcher(source);
+        while (generatedOperationMatcher.find()) {
+            String operation = generatedOperationMatcher.group(1);
+            String generatedOperationId = generatedOperationMatcher.group(2);
+            OperationTypes types = operationTypes.getOrDefault(operation, new OperationTypes("", ""));
+            contracts.put(
+                operation,
+                generatedContract(generatedOperations, generatedOperationId, types)
+            );
         }
         return contracts;
     }
@@ -151,6 +197,44 @@ public final class FrontendApiContractCatalog {
         return Optional.empty();
     }
 
+    private static Optional<String> generatedOperationId(String operationBody) {
+        Matcher matcher = FRONTEND_GENERATED_ENDPOINT_PATTERN.matcher(operationBody);
+        return matcher.find() ? Optional.of(matcher.group(1)) : Optional.empty();
+    }
+
+    private static EndpointContract generatedContract(
+        Map<String, OpenApiGeneratedClientDryRun.GeneratedOperation> generatedOperations,
+        String generatedOperationId,
+        OperationTypes types
+    ) {
+        OpenApiGeneratedClientDryRun.GeneratedOperation generatedOperation =
+            generatedOperations.get(generatedOperationId);
+        if (generatedOperation == null) {
+            throw new IllegalStateException(
+                "Frontend generated endpoint is missing from reviewed OpenAPI JSON: " + generatedOperationId
+            );
+        }
+        return new EndpointContract(
+            generatedOperation.method(),
+            generatedOperation.path(),
+            generatedOperation.queryParamNames(),
+            generatedOperation.hasRequestBody(),
+            generatedOperation.requestBodyRequired(),
+            types.responseType(),
+            generatedOperation.operationId()
+        );
+    }
+
+    private static Map<String, OpenApiGeneratedClientDryRun.GeneratedOperation> generatedOperationsById()
+        throws IOException {
+        Map<String, Object> document = OpenApiContractDocument.fromJson(Files.readString(openApiPath()));
+        return OpenApiGeneratedClientDryRun.operations(document).values().stream()
+            .collect(Collectors.toMap(
+                OpenApiGeneratedClientDryRun.GeneratedOperation::operationId,
+                Function.identity()
+            ));
+    }
+
     private static String httpMethod(String operationBody) {
         Matcher methodMatcher = FRONTEND_METHOD_PATTERN.matcher(operationBody);
         return methodMatcher.find() ? methodMatcher.group(1) : "GET";
@@ -245,6 +329,14 @@ public final class FrontendApiContractCatalog {
         return sourcePath("api", "contracts.ts");
     }
 
+    private static Path openApiPath() {
+        Path backendCandidate = Path.of("src/test/resources/contracts/openapi.json");
+        if (Files.exists(backendCandidate)) {
+            return backendCandidate;
+        }
+        return Path.of("repoguard-backend", "src/test/resources/contracts/openapi.json");
+    }
+
     private static Path sourceRoot() {
         Path candidate = Path.of("..", "repoguard-frontend", "src");
         if (Files.exists(candidate)) {
@@ -266,7 +358,9 @@ public final class FrontendApiContractCatalog {
 
     private static boolean isClientOrContract(Path root, Path path) {
         String relativePath = relativePath(root, path);
-        return "api/client.ts".equals(relativePath) || "api/contracts.ts".equals(relativePath);
+        return "api/client.ts".equals(relativePath)
+            || "api/contracts.ts".equals(relativePath)
+            || "api/generated/openapiOperations.ts".equals(relativePath);
     }
 
     private static String relativePath(Path root, Path path) {
@@ -282,7 +376,8 @@ public final class FrontendApiContractCatalog {
         List<String> queryParamNames,
         boolean hasRequestBody,
         boolean requestBodyRequired,
-        String responseType
+        String responseType,
+        String generatedOperationId
     ) {
 
         public String endpointKey() {

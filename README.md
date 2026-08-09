@@ -135,6 +135,13 @@ cd repoguard-frontend
 npm run build
 ```
 
+后端 Controller 或 DTO 契约变更后，重新生成前端 OpenAPI 客户端元数据：
+
+```bash
+cd repoguard-frontend
+npm run generate:api
+```
+
 前端开发：
 
 ```bash

@@ -26,6 +26,12 @@ class OpenApiGeneratedClientContractTest {
         "POST /api/v1/auth/refresh",
         "POST /api/v1/github/webhooks"
     );
+    private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
+        "dashboardController",
+        "reviewController",
+        "notificationController",
+        "notificationIntegrationController"
+    );
 
     @Test
     void reviewedOpenApiJsonCanDriveFrontendTypedClientCoverage() throws Exception {
@@ -94,6 +100,28 @@ class OpenApiGeneratedClientContractTest {
                 "reviewControllerListChangedFiles(input: { path: { id: number }; query?: { hasFinding?: boolean; page?: number; pageSize?: number } }): Promise<PageResponse<ChangedFile>>; // GET /api/v1/reviews/{id}/changed-files",
                 "reviewControllerUpdateFindingFeedback(input: { path: { findingId: number; id: number }; body: FindingFeedbackRequest }): Promise<FindingFeedbackResponse>; // POST /api/v1/reviews/{id}/findings/{findingId}/feedback"
             );
+    }
+
+    @Test
+    void highChangeFrontendDomainsUseGeneratedOpenApiEndpointMetadata() throws Exception {
+        Map<String, FrontendApiContractCatalog.EndpointContract> frontendContracts =
+            FrontendApiContractCatalog.endpointContracts();
+
+        generatedOperations().values().stream()
+            .filter(operation -> MIGRATED_CLIENT_PREFIXES.stream()
+                .anyMatch(prefix -> operation.operationId().startsWith(prefix)))
+            .forEach(operation -> {
+                FrontendApiContractCatalog.EndpointContract frontendContract = frontendContracts.values().stream()
+                    .filter(contract -> operation.endpointKey().equals(contract.endpointKey()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError(
+                        "Migrated generated operation is not exposed by the frontend client: " + operation.operationId()
+                    ));
+
+                assertThat(frontendContract.generatedOperationId())
+                    .as(operation.operationId() + " must use generatedEndpoint metadata in production frontend code")
+                    .isEqualTo(operation.operationId());
+            });
     }
 
     @Test
