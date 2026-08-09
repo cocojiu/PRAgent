@@ -38,7 +38,7 @@ fetchReviewStatus -> reviewControllerGetReviewStatus(input: { path: { id: number
 fetchReviewStrategy -> systemConfigControllerGetReviewStrategyPolicy(): Promise<ReviewStrategyPolicy>; // GET /api/v1/config/review-strategy
 fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions(): Promise<ReviewStrategyPolicy[]>; // GET /api/v1/config/review-strategy/versions
 fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
-fetchReviews -> reviewControllerListReviews(input?: { query?: { cursorCreatedAt?: string; cursorId?: number; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; totalHint?: number; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchReviews -> reviewControllerListReviews(input?: { query?: { cursor?: string; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
 fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits

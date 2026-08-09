@@ -41,7 +41,7 @@ reviewControllerListMissingTests(input: { path: { id: number }; query?: { page?:
 reviewControllerListRepositories(): Promise<string[]>; // GET /api/v1/reviews/repositories
 reviewControllerListReviewFindings(input: { path: { id: number }; query?: { category?: string; feedbackStatus?: string; page?: number; pageSize?: number; severity?: string } }): Promise<PageResponse<ReviewFinding>>; // GET /api/v1/reviews/{id}/findings
 reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
-reviewControllerListReviews(input?: { query?: { cursorCreatedAt?: string; cursorId?: number; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; totalHint?: number; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+reviewControllerListReviews(input?: { query?: { cursor?: string; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
 reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
 reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
 reviewControllerSubmitHumanReview(input: { path: { id: number }; body: HumanReviewRequest }): Promise<HumanReviewResponse>; // POST /api/v1/reviews/{id}/human-review

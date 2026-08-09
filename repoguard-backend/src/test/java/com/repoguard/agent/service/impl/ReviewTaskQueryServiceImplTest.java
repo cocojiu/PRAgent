@@ -24,7 +24,9 @@ import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.review.PrReviewSummaryBuilder;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
+import com.repoguard.agent.security.AuthProperties;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -46,7 +48,8 @@ class ReviewTaskQueryServiceImplTest {
     private final ReviewTaskQueryItemLoader queryItemLoader =
         org.mockito.Mockito.mock(ReviewTaskQueryItemLoader.class);
     private final ReviewTaskStatusAssembler statusAssembler = new ReviewTaskStatusAssembler();
-    private final ReviewTaskListQueryBuilder listQueryBuilder = new ReviewTaskListQueryBuilder();
+    private final ReviewTaskCursorCodec cursorCodec = cursorCodec();
+    private final ReviewTaskListQueryBuilder listQueryBuilder = new ReviewTaskListQueryBuilder(cursorCodec);
     private final ReviewRepositoryDimensionService repositoryDimensionService =
         org.mockito.Mockito.mock(ReviewRepositoryDimensionService.class);
 
@@ -307,50 +310,87 @@ class ReviewTaskQueryServiceImplTest {
 
         org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
         org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThat(response.hasMore()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(response.nextCursor()).isNull();
         verify(reviewTaskMapper).selectPage(any(), any());
         verify(reviewTaskMapper, never()).selectList(any());
         verify(reviewTaskMapper, never()).selectCount(any());
     }
 
     @Test
-    void listReviewsUsesKeysetQueryAndFilterCountWhenCursorIsPresent() {
-        ReviewTask task = reviewTask(8L);
+    void listReviewsIssuesSignedCursorFromOffsetPageWhenMoreRowsExist() {
+        ReviewTask task = reviewTask(7L);
+        Page<ReviewTask> page = Page.of(1, 1);
+        page.setRecords(List.of(task));
+        page.setTotal(2);
         ReviewTaskListItem item = listItem(task.getId());
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(reviewTaskMapper.selectCount(any())).thenReturn(42L);
+        when(reviewTaskMapper.selectPage(any(), any())).thenReturn(page);
+        when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
+        when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
+
+        ReviewQuery query = new ReviewQuery(1, 1, null, null, null, null, null, null);
+        var response = service().listReviews(query);
+        var cursor = listQueryBuilder.decodeCursor(new ReviewQuery(
+            2,
+            1,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            response.nextCursor()
+        ));
+
+        org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
+        org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(response.hasMore()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(cursor).isNotNull();
+        org.assertj.core.api.Assertions.assertThat(cursor.createdAt()).isEqualTo(task.getCreatedAt());
+        org.assertj.core.api.Assertions.assertThat(cursor.id()).isEqualTo(task.getId());
+        org.assertj.core.api.Assertions.assertThat(cursor.total()).isEqualTo(2);
+        verify(reviewTaskMapper).selectPage(any(), any());
+        verify(reviewTaskMapper, never()).selectList(any());
+        verify(reviewTaskMapper, never()).selectCount(any());
+    }
+
+    @Test
+    void listReviewsReturnsServerGeneratedCursorForKeysetContinuation() {
+        ReviewTask task = reviewTask(8L);
+        ReviewTask followingTask = reviewTask(7L);
+        LocalDateTime previousPageCreatedAt = task.getCreatedAt().plusMinutes(1);
+        ReviewTaskListItem item = listItem(task.getId());
+        ReviewQuery firstPageQuery = new ReviewQuery(1, 1, null, null, null, null, null, null);
+        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task, followingTask));
         when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
         when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
 
         var response = service().listReviews(new ReviewQuery(
             3,
-            20,
+            1,
             null,
             null,
             null,
             null,
             null,
             null,
-            "2026-07-08 12:00:00",
-            task.getId()
+            listQueryBuilder.encodeCursor(firstPageQuery, previousPageCreatedAt, 9L, 42L)
         ));
 
         org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
         org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(42);
+        org.assertj.core.api.Assertions.assertThat(response.hasMore()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(response.nextCursor())
+            .isEqualTo(listQueryBuilder.encodeCursor(firstPageQuery, task.getCreatedAt(), task.getId(), 42L));
         verify(reviewTaskMapper).selectList(any());
-        verify(reviewTaskMapper).selectCount(any());
+        verify(reviewTaskMapper, never()).selectCount(any());
         verify(reviewTaskMapper, never()).selectPage(any(), any());
     }
 
     @Test
-    void listReviewsUsesKeysetTotalHintWithoutCountingAgain() {
-        ReviewTask task = reviewTask(8L);
-        ReviewTaskListItem item = listItem(task.getId());
-        when(reviewTaskMapper.selectList(any())).thenReturn(List.of(task));
-        when(queryItemLoader.loadTimelinesByTaskId(List.of(task))).thenReturn(Map.of(task.getId(), List.of()));
-        when(queryItemLoader.assemble(task, List.of())).thenReturn(item);
-
-        var response = service().listReviews(new ReviewQuery(
-            3,
+    void listReviewsRejectsMalformedCursorBeforeRunningDatabaseQueries() {
+        assertThatThrownBy(() -> service().listReviews(new ReviewQuery(
+            1,
             20,
             null,
             null,
@@ -358,14 +398,12 @@ class ReviewTaskQueryServiceImplTest {
             null,
             null,
             null,
-            "2026-07-08 12:00:00",
-            task.getId(),
-            42L
-        ));
+            "not-a-cursor"
+        )))
+            .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
+            .hasMessage("Invalid review list cursor");
 
-        org.assertj.core.api.Assertions.assertThat(response.items()).containsExactly(item);
-        org.assertj.core.api.Assertions.assertThat(response.total()).isEqualTo(42);
-        verify(reviewTaskMapper).selectList(any());
+        verify(reviewTaskMapper, never()).selectList(any());
         verify(reviewTaskMapper, never()).selectCount(any());
         verify(reviewTaskMapper, never()).selectPage(any(), any());
     }
@@ -381,6 +419,13 @@ class ReviewTaskQueryServiceImplTest {
             listQueryBuilder,
             repositoryDimensionService
         );
+    }
+
+    private ReviewTaskCursorCodec cursorCodec() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("review-task-cursor-test-secret-32-characters");
+        properties.setTokenSecretId("review-test");
+        return new ReviewTaskCursorCodec(properties);
     }
 
     private ReviewTask reviewTask(Long id) {

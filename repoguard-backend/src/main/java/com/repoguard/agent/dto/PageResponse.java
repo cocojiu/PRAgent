@@ -7,6 +7,12 @@ import java.util.List;
  */
 public record PageResponse<T>(
     List<T> items,
-    long total
+    long total,
+    String nextCursor,
+    boolean hasMore
 ) {
+
+    public PageResponse(List<T> items, long total) {
+        this(items, total, null, false);
+    }
 }

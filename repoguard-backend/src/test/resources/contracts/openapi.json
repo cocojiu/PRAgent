@@ -544,9 +544,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -1083,9 +1089,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -2800,9 +2812,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -2893,9 +2911,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -3131,30 +3155,12 @@
             "maxLength" : 255
           }
         }, {
-          "name" : "cursorCreatedAt",
+          "name" : "cursor",
           "in" : "query",
           "required" : false,
           "schema" : {
             "type" : "string",
-            "maxLength" : 32
-          }
-        }, {
-          "name" : "cursorId",
-          "in" : "query",
-          "required" : false,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64",
-            "minimum" : 1
-          }
-        }, {
-          "name" : "totalHint",
-          "in" : "query",
-          "required" : false,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64",
-            "minimum" : 0
+            "maxLength" : 256
           }
         } ],
         "responses" : {
@@ -3190,9 +3196,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -3564,9 +3576,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -3674,9 +3692,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -4102,9 +4126,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -4412,9 +4442,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -4540,9 +4576,15 @@
                         "total" : {
                           "type" : "integer",
                           "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
                         }
                       },
-                      "required" : [ "total" ]
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -6860,9 +6902,15 @@
           "total" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "nextCursor" : {
+            "type" : "string"
+          },
+          "hasMore" : {
+            "type" : "boolean"
           }
         },
-        "required" : [ "total" ]
+        "required" : [ "total", "hasMore" ]
       },
       "PrReviewSummaryDto" : {
         "type" : "object",

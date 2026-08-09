@@ -15,9 +15,7 @@ public record ReviewQuery(
     String source,
     String triggerSource,
     String keyword,
-    String cursorCreatedAt,
-    Long cursorId,
-    Long totalHint
+    String cursor
 ) {
     public ReviewQuery(
         int page,
@@ -29,34 +27,7 @@ public record ReviewQuery(
         String triggerSource,
         String keyword
     ) {
-        this(page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, null, null, null);
-    }
-
-    public ReviewQuery(
-        int page,
-        int pageSize,
-        String repository,
-        String status,
-        String riskLevel,
-        String source,
-        String triggerSource,
-        String keyword,
-        String cursorCreatedAt,
-        Long cursorId
-    ) {
-        this(
-            page,
-            pageSize,
-            repository,
-            status,
-            riskLevel,
-            source,
-            triggerSource,
-            keyword,
-            cursorCreatedAt,
-            cursorId,
-            null
-        );
+        this(page, pageSize, repository, status, riskLevel, source, triggerSource, keyword, null);
     }
 
     public ReviewListSummaryCacheKey listSummaryCacheKey() {

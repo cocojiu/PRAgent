@@ -1,18 +1,23 @@
 package com.repoguard.agent.service.impl;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.entity.ReviewTask;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
+import com.repoguard.agent.security.AuthProperties;
+import java.time.LocalDateTime;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 class ReviewTaskListQueryBuilderTest {
 
-    private final ReviewTaskListQueryBuilder builder = new ReviewTaskListQueryBuilder();
+    private final ReviewTaskCursorCodec cursorCodec = cursorCodec();
+    private final ReviewTaskListQueryBuilder builder = new ReviewTaskListQueryBuilder(cursorCodec);
 
     @BeforeAll
     static void initMybatisPlusTableInfo() {
@@ -147,6 +152,17 @@ class ReviewTaskListQueryBuilderTest {
 
     @Test
     void buildsKeysetCursorConditionWithStableOrderAndBoundedLimit() {
+        var baseQuery = new ReviewQuery(
+            3,
+            500,
+            "repo-a",
+            "completed",
+            null,
+            null,
+            null,
+            null,
+            null
+        );
         var query = new ReviewQuery(
             3,
             500,
@@ -156,8 +172,7 @@ class ReviewTaskListQueryBuilderTest {
             null,
             null,
             null,
-            "2026-07-08 12:00:00",
-            123L
+            builder.encodeCursor(baseQuery, LocalDateTime.of(2026, 7, 8, 12, 0), 123L, 42L)
         );
 
         var wrapper = builder.buildKeysetPage(query);
@@ -166,14 +181,14 @@ class ReviewTaskListQueryBuilderTest {
         assertThat(wrapper.getSqlSegment())
             .contains("created_at", "<", "id", "ORDER BY")
             .contains("created_at DESC", "id DESC");
-        assertThat(wrapper.getTargetSql()).contains("limit 100");
+        assertThat(wrapper.getTargetSql()).contains("limit 101");
         assertThat(wrapper.getParamNameValuePairs().values())
             .anySatisfy(value -> assertThat(value).hasToString("2026-07-08T12:00"))
             .contains(123L);
     }
 
     @Test
-    void ignoresInvalidCursorAndKeepsCountQueryUnordered() {
+    void rejectsInvalidCursorInsteadOfFallingBackToOffsetPagination() {
         var query = new ReviewQuery(
             1,
             20,
@@ -183,13 +198,81 @@ class ReviewTaskListQueryBuilderTest {
             null,
             null,
             null,
-            "not-a-date",
-            0L
+            "not-a-cursor"
         );
 
-        var countWrapper = builder.buildCountQuery(query);
+        assertThatThrownBy(() -> builder.buildCountQuery(query))
+            .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
+            .hasMessage("Invalid review list cursor");
+    }
 
-        assertThat(builder.hasKeysetCursor(query)).isFalse();
-        assertThat(countWrapper.getSqlSegment()).doesNotContain("ORDER BY", "limit", "<");
+    @Test
+    void rejectsCursorWhenQueryScopeChanges() {
+        ReviewQuery sourceQuery = new ReviewQuery(1, 20, "repo-a", null, null, null, null, null);
+        String cursor = builder.encodeCursor(sourceQuery, LocalDateTime.of(2026, 7, 8, 12, 0), 123L, 42L);
+
+        assertThatThrownBy(() -> builder.hasKeysetCursor(new ReviewQuery(
+            1,
+            20,
+            "repo-b",
+            null,
+            null,
+            null,
+            null,
+            null,
+            cursor
+        )))
+            .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
+            .hasMessage("Invalid review list cursor");
+    }
+
+    @Test
+    void rejectsCursorWhenSignedPayloadIsTampered() {
+        ReviewQuery query = queryWithoutCursor(new ReviewQuery(
+            1,
+            20,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        ));
+        String cursor = builder.encodeCursor(query, LocalDateTime.of(2026, 7, 8, 12, 0), 123L, 42L);
+        String tamperedCursor = (cursor.charAt(0) == 'A' ? "B" : "A") + cursor.substring(1);
+
+        assertThatThrownBy(() -> builder.hasKeysetCursor(new ReviewQuery(
+            query.page(),
+            query.pageSize(),
+            query.repository(),
+            query.status(),
+            query.riskLevel(),
+            query.source(),
+            query.triggerSource(),
+            query.keyword(),
+            tamperedCursor
+        )))
+            .isInstanceOf(com.repoguard.agent.common.BusinessException.class)
+            .hasMessage("Invalid review list cursor");
+    }
+
+    private ReviewQuery queryWithoutCursor(ReviewQuery query) {
+        return new ReviewQuery(
+            query.page(),
+            query.pageSize(),
+            query.repository(),
+            query.status(),
+            query.riskLevel(),
+            query.source(),
+            query.triggerSource(),
+            query.keyword()
+        );
+    }
+
+    private ReviewTaskCursorCodec cursorCodec() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("review-task-cursor-test-secret-32-characters");
+        properties.setTokenSecretId("review-test");
+        return new ReviewTaskCursorCodec(properties);
     }
 }

@@ -363,9 +363,7 @@ const apiEndpoints: ApiEndpointMap = {
       source: input.source,
       triggerSource: input.triggerSource,
       keyword: input.keyword,
-      cursorCreatedAt: input.cursorCreatedAt,
-      cursorId: input.cursorId,
-      totalHint: input.totalHint
+      cursor: input.cursor
     })
   },
   fetchReviewListSummary: {

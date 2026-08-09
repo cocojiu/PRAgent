@@ -11,11 +11,6 @@ const formatDuration = (seconds: number) => {
   return `${minutes} 分 ${restSeconds} 秒`;
 };
 
-type ReviewTaskCursor = {
-  cursorCreatedAt: string;
-  cursorId: number;
-};
-
 export const useReviewTasksList = () => {
   const loading = ref(false);
   const errorMessage = ref("");
@@ -30,7 +25,7 @@ export const useReviewTasksList = () => {
   const keyword = ref("");
   const currentPage = ref(1);
   const pageSize = ref(8);
-  const pageCursors = new Map<number, ReviewTaskCursor>();
+  const pageCursors = new Map<number, string>();
   let filterDebounceTimer: ReturnType<typeof setTimeout> | undefined;
   let taskRequestSeq = 0;
   let summaryRequestSeq = 0;
@@ -86,16 +81,14 @@ export const useReviewTasksList = () => {
         riskLevel: riskFilter.value,
         triggerSource: sourceFilter.value,
         keyword: keyword.value.trim(),
-        cursorCreatedAt: cursor?.cursorCreatedAt,
-        cursorId: cursor?.cursorId,
-        totalHint: cursor ? totalTasks.value : undefined
+        cursor
       });
       if (requestSeq !== taskRequestSeq) {
         return;
       }
       reviewTasks.value = page.items;
       totalTasks.value = page.total;
-      rememberNextPageCursor(currentPage.value, page.items);
+      rememberNextPageCursor(currentPage.value, page.nextCursor, page.hasMore);
     } catch (error) {
       if (requestSeq !== taskRequestSeq) {
         return;
@@ -145,16 +138,12 @@ export const useReviewTasksList = () => {
     pageCursors.clear();
   };
 
-  const rememberNextPageCursor = (page: number, tasks: ReviewTask[]) => {
-    const lastTask = tasks.at(-1);
-    if (!lastTask?.createdAt || !lastTask.id) {
+  const rememberNextPageCursor = (page: number, nextCursor?: string | null, hasMore?: boolean) => {
+    if (!hasMore || !nextCursor) {
       pageCursors.delete(page + 1);
       return;
     }
-    pageCursors.set(page + 1, {
-      cursorCreatedAt: lastTask.createdAt,
-      cursorId: lastTask.id
-    });
+    pageCursors.set(page + 1, nextCursor);
   };
 
   const scheduleFilterLoad = () => {

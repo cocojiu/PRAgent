@@ -72,6 +72,7 @@ import com.repoguard.agent.review.HumanReviewPolicyEvaluator;
 import com.repoguard.agent.review.ReviewFindingRiskRecalibrator;
 import com.repoguard.agent.review.ReviewRepositoryDimensionService;
 import com.repoguard.agent.review.ReviewRiskProfileBuilder;
+import com.repoguard.agent.review.ReviewTaskCursorCodec;
 import com.repoguard.agent.review.RiskLevelRanker;
 import com.repoguard.agent.review.ServerRiskAggregator;
 import com.repoguard.agent.review.ReviewTaskDetailAssembler;
@@ -85,6 +86,7 @@ import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
 import com.repoguard.agent.review.task.ReviewTaskListItemAssembler;
 import com.repoguard.agent.review.task.ReviewTaskRetryService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
+import com.repoguard.agent.security.AuthProperties;
 import com.repoguard.agent.service.FindingFeedbackService;
 import com.repoguard.agent.service.GithubCommentApplicationService;
 import com.repoguard.agent.service.GithubCommentHistoryQueryService;
@@ -147,6 +149,7 @@ class ReviewServiceImplTest {
     private final ReviewTimelineQueryService reviewTimelineQueryService =
         new ReviewTimelineQueryService(reviewTimelineMapper);
     private final ReviewTaskListItemAssembler reviewTaskListItemAssembler = new ReviewTaskListItemAssembler();
+    private final ReviewTaskCursorCodec reviewTaskCursorCodec = reviewTaskCursorCodec();
     private final ReviewTaskQueryService reviewTaskQueryService = new ReviewTaskQueryServiceImpl(
         reviewTaskMapper,
         reviewTaskArchiveSummaryMapper,
@@ -167,7 +170,7 @@ class ReviewServiceImplTest {
             reviewTaskListItemAssembler
         ),
         new ReviewTaskStatusAssembler(),
-        new ReviewTaskListQueryBuilder(),
+        new ReviewTaskListQueryBuilder(reviewTaskCursorCodec),
         repositoryDimensionService
     );
     private final ReviewTaskCommandService reviewTaskCommandService = new ReviewTaskCommandServiceImpl(
@@ -1485,6 +1488,13 @@ class ReviewServiceImplTest {
             repository,
             1L
         );
+    }
+
+    private ReviewTaskCursorCodec reviewTaskCursorCodec() {
+        AuthProperties properties = new AuthProperties();
+        properties.setTokenSecret("review-task-cursor-test-secret-32-characters");
+        properties.setTokenSecretId("review-test");
+        return new ReviewTaskCursorCodec(properties);
     }
 
     private static void await(CountDownLatch latch) {

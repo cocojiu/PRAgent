@@ -111,6 +111,10 @@ class OpenApiPathsContractTest {
         assertThat(map(pageProperties.get("total")))
             .containsEntry("type", "integer")
             .containsEntry("format", "int64");
+        assertThat(map(pageProperties.get("nextCursor")))
+            .containsEntry("type", "string");
+        assertThat(map(pageProperties.get("hasMore")))
+            .containsEntry("type", "boolean");
 
         Map<String, Object> logoutResponse = response(paths, "/api/v1/auth/logout", "post");
         assertThat(logoutResponse)
@@ -138,6 +142,9 @@ class OpenApiPathsContractTest {
         assertThat(parameterSchema(listReviews, "repository"))
             .containsEntry("type", "string")
             .containsEntry("maxLength", 128);
+        assertThat(parameterSchema(listReviews, "cursor"))
+            .containsEntry("type", "string")
+            .containsEntry("maxLength", 256);
 
         Map<String, Object> reviewDetail = operation(paths, "/api/v1/reviews/{id}", "get");
         assertThat(parameterSchema(reviewDetail, "id"))

@@ -48,9 +48,7 @@ describe("useReviewTasksList", () => {
       riskLevel: "",
       triggerSource: "",
       keyword: "",
-      cursorCreatedAt: undefined,
-      cursorId: undefined,
-      totalHint: undefined
+      cursor: undefined
     });
     expect(reviewApi.fetchReviews).not.toHaveBeenCalledWith(expect.objectContaining({ pageSize: 100 }));
     expect(reviewApi.fetchReviewRepositories).toHaveBeenCalledTimes(1);
@@ -159,12 +157,14 @@ describe("useReviewTasksList", () => {
     expect(list.taskSummaryMetrics.value.every(metric => metric.note === "数据暂不可用")).toBe(true);
   });
 
-  it("uses the previous page tail as cursor when loading the next page", async () => {
+  it("uses the server-issued cursor when loading the next page", async () => {
     const secondTask = { ...reviewTask, id: 8, createdAt: "2026-07-06 15:57:00" };
     reviewApi.fetchReviews
       .mockResolvedValueOnce({
         items: [reviewTask, secondTask],
-        total: 26
+        total: 26,
+        nextCursor: "server-cursor-2",
+        hasMore: true
       })
       .mockResolvedValueOnce({
         items: [],
@@ -181,9 +181,7 @@ describe("useReviewTasksList", () => {
 
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
-      cursorCreatedAt: secondTask.createdAt,
-      cursorId: secondTask.id,
-      totalHint: 26
+      cursor: "server-cursor-2"
     }));
   });
 
@@ -191,7 +189,9 @@ describe("useReviewTasksList", () => {
     reviewApi.fetchReviews
       .mockResolvedValueOnce({
         items: [reviewTask],
-        total: 26
+        total: 26,
+        nextCursor: "server-cursor-2",
+        hasMore: true
       })
       .mockResolvedValueOnce({
         items: [],
@@ -214,9 +214,7 @@ describe("useReviewTasksList", () => {
 
     expect(reviewApi.fetchReviews).toHaveBeenLastCalledWith(expect.objectContaining({
       page: 2,
-      cursorCreatedAt: undefined,
-      cursorId: undefined,
-      totalHint: undefined
+      cursor: undefined
     }));
   });
 

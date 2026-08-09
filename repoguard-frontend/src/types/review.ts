@@ -383,9 +383,7 @@ export interface ReviewQuery {
   source?: ReviewTaskSource | "";
   triggerSource?: ReviewTaskTriggerSource | "";
   keyword?: string;
-  cursorCreatedAt?: string;
-  cursorId?: number;
-  totalHint?: number;
+  cursor?: string;
 }
 
 export interface ReviewTaskListSummaryQuery {
