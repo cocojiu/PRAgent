@@ -29,7 +29,13 @@
 远程验证：通过。Pull Request Quality #31335410198、Repository Governance #31335410170/#31335408448、Release Images #31335408444、Auto Create Pull Request #31335408442 均成功。
 
 2026-08-10 | 优化-06 | 扩大 OpenAPI 生成客户端覆盖
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：将系统配置与评审校准控制器纳入生成客户端治理范围，生成操作由 34 项扩大到 65 项；配置域与规则校准端点改为复用 OpenAPI 生成的路径、方法和请求元数据，同时保留既有运行时响应校验与游标适配；生成器支持可选请求体类型，并同步强化后端覆盖契约，防止迁移端点退回手写元数据。
 本地验证：ApiContractTest、FrontendApiContractCatalogTest、OpenApiGeneratedClientContractTest 定向通过；前端 typecheck、ESLint、36 个测试文件/141 项测试及生产构建全部通过；生成文件一致性与资源预算检查通过。
+远程验证：通过。Pull Request Quality #31335908269、Repository Governance #31335908265/#31335906165、Release Images #31335906104、Auto Create Pull Request #31335906108 均成功。
+
+2026-08-10 | 优化-07A | 数据库共享限流与 API 多实例门禁
+状态：本地完成，远程流水线待检查
+变更：新增 V62 共享固定窗口表与数据库原子计数存储，桶键使用认证密钥 HMAC 后落库；认证、管理 API Key 失败和 GitHub Webhook 限流可统一切换为跨实例总限额，同时保留每实例高基数容量保护；新增 local/database 配置，只有 database 模式允许 API instance-count 大于 1，并同步生产预检、Compose、示例配置和运行说明；Dashboard 数据库快照与手工评审数据库唯一键继续承担跨实例恢复和最终幂等。
+本地验证：共享存储、三类限流、运行角色、Schema V62、生产配置定向测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过；真实 MySQL 原子计数用例已加入远程集成测试。
 远程验证：pending

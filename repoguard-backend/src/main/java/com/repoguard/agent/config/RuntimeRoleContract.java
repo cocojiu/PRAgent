@@ -12,12 +12,14 @@ public record RuntimeRoleContract(
     Mode role,
     DeploymentMode deploymentMode,
     int apiInstanceCount,
+    RateLimitStore rateLimitStore,
     boolean derivedFromLegacyFlags
 ) {
 
     public RuntimeRoleContract {
         Objects.requireNonNull(role, "role");
         Objects.requireNonNull(deploymentMode, "deploymentMode");
+        Objects.requireNonNull(rateLimitStore, "rateLimitStore");
         if (apiInstanceCount < 0) {
             throw new IllegalArgumentException("apiInstanceCount must not be negative");
         }
@@ -92,8 +94,19 @@ public record RuntimeRoleContract(
             "app.runtime.api.instance-count",
             "REPOGUARD_API_INSTANCE_COUNT"
         );
-        validateApiScalingBoundary(role, apiInstanceCount);
-        return new RuntimeRoleContract(role, deploymentMode, apiInstanceCount, derivedFromLegacyFlags);
+        RateLimitStore rateLimitStore = RateLimitStore.parse(firstConfigured(
+            environment,
+            "app.security.rate-limit-store",
+            "REPOGUARD_RATE_LIMIT_STORE"
+        ));
+        validateApiScalingBoundary(role, apiInstanceCount, rateLimitStore);
+        return new RuntimeRoleContract(
+            role,
+            deploymentMode,
+            apiInstanceCount,
+            rateLimitStore,
+            derivedFromLegacyFlags
+        );
     }
 
     private static Mode roleFromLegacyFlags(String legacyApi, String legacyWorker) {
@@ -136,7 +149,11 @@ public record RuntimeRoleContract(
         }
     }
 
-    private static void validateApiScalingBoundary(Mode role, int apiInstanceCount) {
+    private static void validateApiScalingBoundary(
+        Mode role,
+        int apiInstanceCount,
+        RateLimitStore rateLimitStore
+    ) {
         if (apiInstanceCount < 0) {
             throw new IllegalStateException("app.runtime.api.instance-count must not be negative");
         }
@@ -145,10 +162,14 @@ public record RuntimeRoleContract(
                 "Worker runtime requires app.runtime.api.instance-count=0"
             );
         }
-        if (role != Mode.WORKER && apiInstanceCount != 1) {
+        if (role != Mode.WORKER && apiInstanceCount == 0) {
             throw new IllegalStateException(
-                "API runtime currently requires app.runtime.api.instance-count=1 because authentication/webhook "
-                    + "rate limits and dashboard snapshots use process-local state"
+                "API runtime requires app.runtime.api.instance-count to be positive"
+            );
+        }
+        if (role != Mode.WORKER && apiInstanceCount > 1 && rateLimitStore != RateLimitStore.DATABASE) {
+            throw new IllegalStateException(
+                "API runtime with app.runtime.api.instance-count>1 requires app.security.rate-limit-store=database"
             );
         }
     }
@@ -232,6 +253,31 @@ public record RuntimeRoleContract(
             throw new IllegalStateException(
                 "app.runtime.deployment-mode must be monolith or split"
             );
+        }
+    }
+
+    public enum RateLimitStore {
+        LOCAL("local"),
+        DATABASE("database");
+
+        private final String value;
+
+        RateLimitStore(String value) {
+            this.value = value;
+        }
+
+        public String value() {
+            return value;
+        }
+
+        static RateLimitStore parse(String rawValue) {
+            String normalized = rawValue == null ? LOCAL.value : rawValue.trim().toLowerCase(Locale.ROOT);
+            for (RateLimitStore candidate : values()) {
+                if (candidate.value.equals(normalized)) {
+                    return candidate;
+                }
+            }
+            throw new IllegalStateException("app.security.rate-limit-store must be local or database");
         }
     }
 }

@@ -17,6 +17,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -32,16 +33,27 @@ public class AuthAttemptLimiter {
     private final Clock clock;
     private final int maxTrackedKeysPerDimension;
     private final SecretKeySpec accountKeySecret;
+    private final DatabaseRateLimitWindowStore sharedWindowStore;
     private final Dimension ipDimension = new Dimension("ip");
     private final Dimension accountIpDimension = new Dimension("account-ip");
 
     @Autowired
-    public AuthAttemptLimiter(AuthProperties properties, MeterRegistry meterRegistry) {
-        this(properties, meterRegistry, Clock.systemUTC());
+    public AuthAttemptLimiter(
+        AuthProperties properties,
+        MeterRegistry meterRegistry,
+        ObjectProvider<DatabaseRateLimitWindowStore> sharedWindowStoreProvider
+    ) {
+        this(
+            properties,
+            meterRegistry,
+            Clock.systemUTC(),
+            MAX_TRACKED_KEYS_PER_DIMENSION,
+            sharedWindowStoreProvider.getIfAvailable()
+        );
     }
 
     AuthAttemptLimiter(AuthProperties properties, MeterRegistry meterRegistry, Clock clock) {
-        this(properties, meterRegistry, clock, MAX_TRACKED_KEYS_PER_DIMENSION);
+        this(properties, meterRegistry, clock, MAX_TRACKED_KEYS_PER_DIMENSION, null);
     }
 
     AuthAttemptLimiter(
@@ -50,6 +62,16 @@ public class AuthAttemptLimiter {
         Clock clock,
         int maxTrackedKeysPerDimension
     ) {
+        this(properties, meterRegistry, clock, maxTrackedKeysPerDimension, null);
+    }
+
+    AuthAttemptLimiter(
+        AuthProperties properties,
+        MeterRegistry meterRegistry,
+        Clock clock,
+        int maxTrackedKeysPerDimension,
+        DatabaseRateLimitWindowStore sharedWindowStore
+    ) {
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
@@ -57,14 +79,16 @@ public class AuthAttemptLimiter {
             throw new IllegalArgumentException("maxTrackedKeysPerDimension must be positive");
         }
         this.maxTrackedKeysPerDimension = maxTrackedKeysPerDimension;
+        this.sharedWindowStore = sharedWindowStore;
         this.accountKeySecret = new SecretKeySpec(
             properties.getTokenSecret().getBytes(StandardCharsets.UTF_8),
             HMAC_ALGORITHM
         );
         LOGGER.info(
-            "Auth attempt limits active: {}/min per ip, {}/min per account-ip; thresholds are per-instance, adjust them when running more than one API instance",
+            "Auth attempt limits active: {}/min per ip, {}/min per account-ip; store={}",
             properties.getPublicAuthRequestsPerMinutePerIp(),
-            properties.getPublicAuthRequestsPerMinutePerAccountIp()
+            properties.getPublicAuthRequestsPerMinutePerAccountIp(),
+            sharedWindowStore == null ? "local" : "database"
         );
     }
 
@@ -104,6 +128,9 @@ public class AuthAttemptLimiter {
             ).increment();
             dimension.logSaturationOncePerMinute(minute, maxTrackedKeysPerDimension);
             return false;
+        }
+        if (sharedWindowStore != null) {
+            return sharedWindowStore.tryAcquire("auth-" + dimension.name, key, minute, limit);
         }
         return window.count() <= limit;
     }

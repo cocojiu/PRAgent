@@ -22,13 +22,14 @@ public class RuntimeRoleConfiguration {
             );
         }
         LOGGER.info(
-            "Runtime role initialized role={} deploymentMode={} apiEnabled={} workerEnabled={} schedulerEnabled={} apiInstanceCount={} apiStateScope=process-local",
+            "Runtime role initialized role={} deploymentMode={} apiEnabled={} workerEnabled={} schedulerEnabled={} apiInstanceCount={} rateLimitStore={}",
             contract.role().value(),
             contract.deploymentMode().value(),
             contract.apiEnabled(),
             contract.workerEnabled(),
             contract.schedulerEnabled(),
-            contract.apiInstanceCount()
+            contract.apiInstanceCount(),
+            contract.rateLimitStore().value()
         );
         return contract;
     }

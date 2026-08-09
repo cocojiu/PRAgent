@@ -15,6 +15,7 @@ import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Summar
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
@@ -51,6 +52,32 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class ProductionRuntimeContextIntegrationTest {
+
+    @Test
+    void databaseRateLimitStoreSupportsSharedApiScaleOut() {
+        try (ConfigurableApplicationContext context = start(
+            "api",
+            "--app.runtime.api.instance-count=2",
+            "--app.security.rate-limit-store=database"
+        )) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            DatabaseRateLimitWindowStore store = context.getBean(DatabaseRateLimitWindowStore.class);
+            String scope = "integration-" + Long.toUnsignedString(System.nanoTime());
+            long minute = System.currentTimeMillis() / 60_000L;
+            try {
+                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isFalse();
+                assertThat(jdbcTemplate.queryForObject(
+                    "select request_count from api_rate_limit_window where rate_limit_scope = ?",
+                    Long.class,
+                    scope
+                )).isEqualTo(3L);
+            } finally {
+                jdbcTemplate.update("delete from api_rate_limit_window where rate_limit_scope = ?", scope);
+            }
+        }
+    }
 
     @Test
     void apiOnlyContextRunsAllMigrationsAndExcludesWorkers() {

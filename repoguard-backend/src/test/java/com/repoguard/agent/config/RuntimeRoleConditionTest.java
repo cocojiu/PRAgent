@@ -74,6 +74,7 @@ class RuntimeRoleConditionTest {
                 RuntimeRoleContract contract = context.getBean(RuntimeRoleContract.class);
                 assertThat(contract.role()).isEqualTo(RuntimeRoleContract.Mode.API);
                 assertThat(contract.deploymentMode()).isEqualTo(RuntimeRoleContract.DeploymentMode.SPLIT);
+                assertThat(contract.rateLimitStore()).isEqualTo(RuntimeRoleContract.RateLimitStore.LOCAL);
                 assertThat(context.containsBean("apiBean")).isTrue();
                 assertThat(context.containsBean("workerBean")).isFalse();
             });
@@ -110,14 +111,35 @@ class RuntimeRoleConditionTest {
             "app.runtime.role=worker",
             "app.runtime.deployment-mode=monolith"
         );
+        assertStartupFailureContains(
+            "app.security.rate-limit-store must be local or database",
+            "app.security.rate-limit-store=redis"
+        );
     }
 
     @Test
-    void processLocalApiStateRejectsHorizontalApiScaleOut() {
+    void horizontalApiScaleOutRequiresSharedRateLimits() {
         assertStartupFailureContains(
-            "API runtime currently requires app.runtime.api.instance-count=1",
+            "app.runtime.api.instance-count>1 requires app.security.rate-limit-store=database",
             "app.runtime.role=api",
             "app.runtime.api.instance-count=2"
+        );
+        contextRunner
+            .withPropertyValues(
+                "app.runtime.role=api",
+                "app.runtime.api.instance-count=2",
+                "app.security.rate-limit-store=database"
+            )
+            .run(context -> {
+                RuntimeRoleContract contract = context.getBean(RuntimeRoleContract.class);
+                assertThat(contract.apiInstanceCount()).isEqualTo(2);
+                assertThat(contract.rateLimitStore()).isEqualTo(RuntimeRoleContract.RateLimitStore.DATABASE);
+                assertThat(context.containsBean("apiBean")).isTrue();
+            });
+        assertStartupFailureContains(
+            "API runtime requires app.runtime.api.instance-count to be positive",
+            "app.runtime.role=api",
+            "app.runtime.api.instance-count=0"
         );
         assertStartupFailureContains(
             "Worker runtime requires app.runtime.api.instance-count=0",

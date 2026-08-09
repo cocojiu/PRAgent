@@ -182,6 +182,7 @@ npm run dev
 - `REPOGUARD_RUNTIME_ROLE`
 - `REPOGUARD_DEPLOYMENT_MODE`
 - `REPOGUARD_API_INSTANCE_COUNT`
+- `REPOGUARD_RATE_LIMIT_STORE`
 - `REPOGUARD_REVIEW_WORKER_CONCURRENCY`
 
 敏感配置要求：
@@ -194,7 +195,7 @@ npm run dev
 
 - `REPOGUARD_RUNTIME_ROLE` 只接受 `combined`、`api`、`worker`。`combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库栅栏保护的定时任务；`worker` 同时承载消费者与这些定时任务。
 - `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
-- 当前认证/Webhook 限流和 Dashboard 快照仍是进程本地状态，因此 API/combined 角色要求 `REPOGUARD_API_INSTANCE_COUNT=1`。迁移到共享限流与跨节点缓存失效前，不允许横向扩展 API。认证限流阈值（`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_IP`、`REPOGUARD_AUTH_REQUESTS_PER_MINUTE_PER_ACCOUNT_IP`）为单实例语义，若未来放开横向扩展需按实例数调低；实际生效阈值会在 API 启动日志中打印。
+- `REPOGUARD_RATE_LIMIT_STORE` 默认为 `local`，此时 API/combined 角色仍要求 `REPOGUARD_API_INSTANCE_COUNT=1`。横向扩展 API 前必须改为 `database`：认证、管理 API Key 失败和 Webhook 的固定窗口会由 MySQL 原子计数，并以认证密钥 HMAC 后的桶键存储；限流阈值是跨实例总限额，不需要按实例数调低。Dashboard 聚合使用数据库日快照和持久化脏版本，手工评审最终幂等由数据库唯一键保障。
 - Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
 - 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 
@@ -321,7 +322,7 @@ ssh -N -L 3000:127.0.0.1:3000 <deploy-user>@<production-host>
 
 本机打开 `http://127.0.0.1:3000`。不得把 Grafana 端口改为 `0.0.0.0`；确需 Web 入口时必须先增加 SSO 或 IP allowlist，并单独评审拓扑。
 
-API 仍固定 `REPOGUARD_API_INSTANCE_COUNT=1`。吞吐不足时先观测数据库连接、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整 `REPOGUARD_REVIEW_WORKER_CONCURRENCY`；需要进程隔离时启用 `worker-split`。当前 Compose 的固定 `container_name` 只支持一个 Worker 服务，不得直接使用 `--scale`；多 Worker 实例要先移除固定名称、验证日志采集规则和容量预算，且不能横向扩展 API。
+默认部署仍使用 `REPOGUARD_API_INSTANCE_COUNT=1` 和本地限流。由外部编排平台横向扩展 API 时，必须启用数据库共享限流并把实例总数写入 `REPOGUARD_API_INSTANCE_COUNT`；当前 Compose 使用固定 `container_name`，不得直接使用 `--scale`。吞吐不足时先观测数据库连接、共享限流写入、RabbitMQ 未确认消息、LLM bulkhead 和内存，再小步调整容量；多 Worker 实例同样需要先移除固定名称并验证日志采集规则和容量预算。
 
 ## 生产数据库备份
 

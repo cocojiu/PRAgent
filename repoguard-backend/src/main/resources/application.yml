@@ -98,7 +98,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:61}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:62}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
@@ -241,6 +241,7 @@ app:
     api:
       instance-count: ${REPOGUARD_API_INSTANCE_COUNT:}
   security:
+    rate-limit-store: ${REPOGUARD_RATE_LIMIT_STORE:local}
     admin-api-key:
       enabled: ${REPOGUARD_ADMIN_API_KEY_ENABLED:true}
       key: ${REPOGUARD_ADMIN_API_KEY:}
