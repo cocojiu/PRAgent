@@ -71,6 +71,7 @@ class OperationalSqlVerificationPlanTest {
                 "selectReviewRuleHitCounts",
                 "selectReviewRuleFeedbackStat",
                 "selectFindingSeverityCounts",
+                "selectReviewTaskDetailSummary",
                 "selectGithubCommentPreviewCommentableFindings",
                 "selectGithubCommentPublishCandidatesAfterId",
                 "selectChangedFilesWithFindings",
@@ -187,6 +188,7 @@ class OperationalSqlVerificationPlanTest {
             .map(OperationalSqlVerificationPlan.ExplainTableExpectation::mapperMethod)
             .collect(Collectors.toSet()))
             .containsExactlyInAnyOrder(
+                "selectReviewTaskDetailSummary",
                 "selectChangedFilesWithFindings",
                 "selectChangedFilesWithoutFindings"
             );

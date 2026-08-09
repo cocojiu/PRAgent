@@ -33,6 +33,16 @@ public class OperationalSqlVerificationPlan {
             ),
             new QueryAssumption(
                 ReviewFindingMapper.class,
+                "selectReviewTaskDetailSummary",
+                List.of(Long.class),
+                "task detail summary combines task-scoped finding aggregates with changed-file count",
+                List.of(
+                    "idx_review_finding_task_category_severity_norm",
+                    "idx_changed_file_task_file"
+                )
+            ),
+            new QueryAssumption(
+                ReviewFindingMapper.class,
                 "selectGithubCommentPreviewCommentableFindings",
                 List.of(Long.class, long.class, int.class),
                 "preview commentable findings use keyset id paging and published-success anti-join",
@@ -146,6 +156,19 @@ public class OperationalSqlVerificationPlan {
                 List.of("key should include task_id/category/severity_norm")
             ),
             new ExplainObservation(
+                "selectReviewTaskDetailSummary",
+                List.of(
+                    "idx_review_finding_task_category_severity_norm",
+                    "idx_changed_file_task_file"
+                ),
+                List.of("ref", "range"),
+                "rows should stay task-bounded for both finding aggregation and changed-file count.",
+                List.of(
+                    "review_finding key should begin with task_id",
+                    "changed_file scalar subquery should use task_id index"
+                )
+            ),
+            new ExplainObservation(
                 "selectGithubCommentPreviewCommentableFindings",
                 List.of(
                     "idx_review_finding_task_category_id",
@@ -219,6 +242,24 @@ public class OperationalSqlVerificationPlan {
                 List.of("ref", "range"),
                 "review_finding rows should be task/category-bounded before severity aggregation.",
                 List.of("review_finding key should include task_id/category/severity_norm")
+            ),
+            new ExplainTableExpectation(
+                "selectReviewTaskDetailSummary",
+                "review_finding",
+                "finding",
+                List.of("idx_review_finding_task_category_severity_norm"),
+                List.of("ref", "range"),
+                "review_finding rows should be task-bounded before conditional aggregation.",
+                List.of("review_finding key should begin with task_id")
+            ),
+            new ExplainTableExpectation(
+                "selectReviewTaskDetailSummary",
+                "changed_file",
+                "changed",
+                List.of("idx_changed_file_task_file"),
+                List.of("ref", "range"),
+                "changed_file rows should be counted through the task_id lookup.",
+                List.of("changed_file scalar subquery should not scan all rows")
             ),
             new ExplainTableExpectation(
                 "selectGithubCommentPreviewCommentableFindings",

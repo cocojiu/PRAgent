@@ -12,6 +12,7 @@ import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dto.ChangedFileDto;
 import com.repoguard.agent.dto.FindingSeverityCountsDto;
 import com.repoguard.agent.dto.MissingTestDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewQuery;
 import com.repoguard.agent.dto.ReviewFindingDto;
 import com.repoguard.agent.dto.ReviewTaskListItem;
@@ -174,10 +175,16 @@ class ReviewTaskQueryServiceImplTest {
     }
 
     @Test
-    void archivedDetailPagedSectionsReturnArchivedTotalsWithoutHotDetailQueries() {
+    void archivedDetailSectionsFallBackAfterHotDetailQueriesReturnEmpty() {
         ReviewTaskArchiveSummary archive = archiveSummary(521L);
         when(reviewTaskMapper.selectById(521L)).thenReturn(null);
         when(archiveSummaryMapper.selectByTaskId(521L)).thenReturn(archive);
+        when(detailDataLoader.loadFindingsPage(any(), anyInt(), anyInt(), any(), any(), any()))
+            .thenReturn(new PageResponse<>(List.of(), 0L));
+        when(detailDataLoader.loadChangedFilesPage(any(), anyInt(), anyInt(), any()))
+            .thenReturn(new PageResponse<>(List.of(), 0L));
+        when(detailDataLoader.loadMissingTestsPage(any(), anyInt(), anyInt()))
+            .thenReturn(new PageResponse<>(List.of(), 0L));
 
         var findings = service().listReviewFindings(521L, 1, 20, null, null, null);
         var filteredFindings = service().listReviewFindings(521L, 1, 20, "high", null, null);
@@ -193,9 +200,39 @@ class ReviewTaskQueryServiceImplTest {
         org.assertj.core.api.Assertions.assertThat(filteredChangedFiles.total()).isZero();
         org.assertj.core.api.Assertions.assertThat(missingTests.items()).isEmpty();
         org.assertj.core.api.Assertions.assertThat(missingTests.total()).isEqualTo(2);
-        verify(detailDataLoader, never()).loadFindingsPage(any(), anyInt(), anyInt(), any(), any(), any());
-        verify(detailDataLoader, never()).loadChangedFilesPage(any(), anyInt(), anyInt(), any());
-        verify(detailDataLoader, never()).loadMissingTestsPage(any(), anyInt(), anyInt());
+        verify(detailDataLoader, org.mockito.Mockito.times(2))
+            .loadFindingsPage(any(), anyInt(), anyInt(), any(), any(), any());
+        verify(detailDataLoader, org.mockito.Mockito.times(2))
+            .loadChangedFilesPage(any(), anyInt(), anyInt(), any());
+        verify(detailDataLoader).loadMissingTestsPage(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    void populatedHotDetailSectionsSkipTaskAndArchivePreflightQueries() {
+        PageResponse<ReviewFindingDto> findings = new PageResponse<>(List.of(), 6L);
+        PageResponse<ChangedFileDto> changedFiles = new PageResponse<>(List.of(), 12L);
+        PageResponse<MissingTestDto> missingTests = new PageResponse<>(List.of(), 2L);
+        List<ReviewTimelineItem> timeline = List.of(new ReviewTimelineItem("Review completed", "10:20:00", "done"));
+        when(detailDataLoader.loadFindingsPage(521L, 2, 20, null, null, null)).thenReturn(findings);
+        when(detailDataLoader.loadChangedFilesPage(521L, 2, 20, null)).thenReturn(changedFiles);
+        when(detailDataLoader.loadMissingTestsPage(521L, 2, 20)).thenReturn(missingTests);
+        when(detailDataLoader.loadTimelineItems(521L, 20)).thenReturn(timeline);
+
+        org.assertj.core.api.Assertions.assertThat(
+            service().listReviewFindings(521L, 2, 20, null, null, null)
+        ).isSameAs(findings);
+        org.assertj.core.api.Assertions.assertThat(
+            service().listChangedFiles(521L, 2, 20, null)
+        ).isSameAs(changedFiles);
+        org.assertj.core.api.Assertions.assertThat(
+            service().listMissingTests(521L, 2, 20)
+        ).isSameAs(missingTests);
+        org.assertj.core.api.Assertions.assertThat(
+            service().listReviewTimeline(521L, 20)
+        ).isSameAs(timeline);
+
+        verify(reviewTaskMapper, never()).selectById(521L);
+        verify(archiveSummaryMapper, never()).selectByTaskId(521L);
     }
 
     @Test
@@ -203,6 +240,7 @@ class ReviewTaskQueryServiceImplTest {
         ReviewTaskArchiveSummary archive = archiveSummary(521L);
         when(reviewTaskMapper.selectById(521L)).thenReturn(null);
         when(archiveSummaryMapper.selectByTaskId(521L)).thenReturn(archive);
+        when(detailDataLoader.loadTimelineItems(521L, 20)).thenReturn(List.of());
 
         var timeline = service().listReviewTimeline(521L, 20);
         var status = service().getReviewStatus(521L);
@@ -216,7 +254,7 @@ class ReviewTaskQueryServiceImplTest {
         org.assertj.core.api.Assertions.assertThat(status.id()).isEqualTo(521L);
         org.assertj.core.api.Assertions.assertThat(status.status()).isEqualTo("completed");
         org.assertj.core.api.Assertions.assertThat(status.latestTimeline().label()).contains("archived");
-        verify(detailDataLoader, never()).loadTimelineItems(521L, 20);
+        verify(detailDataLoader).loadTimelineItems(521L, 20);
         verify(queryItemLoader, never()).loadTimelines(521L);
     }
 

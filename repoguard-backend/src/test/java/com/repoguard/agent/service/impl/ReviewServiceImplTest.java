@@ -55,6 +55,7 @@ import com.repoguard.agent.mapper.ReviewTaskArchiveSummaryMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.ReviewTimelineMapper;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.ReviewTaskDetailSummary;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.dto.FindingFeedbackRequest;
@@ -1308,9 +1309,17 @@ class ReviewServiceImplTest {
     ) {
         when(changedFileMapper.selectPage(any(), any())).thenReturn(page(changedFiles));
         when(reviewFindingMapper.selectPage(any(), any())).thenReturn(page(findings), page(missingTests));
-        when(changedFileMapper.selectCount(any())).thenReturn((long) changedFiles.size());
-        when(reviewFindingMapper.selectCount(any())).thenReturn((long) findings.size(), (long) missingTests.size());
-        when(reviewFindingMapper.selectFindingSeverityCounts(521L)).thenReturn(severityCounts(findings));
+        SeverityCounts severityCounts = severityCounts(findings);
+        when(reviewFindingMapper.selectReviewTaskDetailSummary(521L)).thenReturn(new ReviewTaskDetailSummary(
+            (long) changedFiles.size(),
+            (long) findings.size(),
+            (long) missingTests.size(),
+            severityCounts.critical(),
+            severityCounts.high(),
+            severityCounts.medium(),
+            severityCounts.low(),
+            severityCounts.info()
+        ));
     }
 
     private void stubGithubCommentPreviewPage(List<ReviewFinding> findings) {

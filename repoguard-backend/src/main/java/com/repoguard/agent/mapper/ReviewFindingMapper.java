@@ -3,6 +3,7 @@ package com.repoguard.agent.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.GithubCommentPreviewFindingStat;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.ReviewTaskDetailSummary;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleFeedbackStat;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCount;
 import com.repoguard.agent.mapper.projection.ReviewFindingProjections.SeverityCounts;
@@ -63,6 +64,54 @@ public interface ReviewFindingMapper extends BaseMapper<ReviewFinding> {
           and enforcement_mode <> 'OBSERVE'
         """)
     SeverityCounts selectFindingSeverityCounts(Long taskId);
+
+    @Select("""
+        select
+            (
+                select count(*)
+                from changed_file changed
+                where changed.task_id = #{taskId}
+            ) as changedFileTotal,
+            sum(case
+                when finding.category = 'FINDING'
+                then 1 else 0 end) as findingTotal,
+            sum(case
+                when finding.category = 'MISSING_TEST'
+                then 1 else 0 end) as missingTestTotal,
+            sum(case
+                when finding.category = 'FINDING'
+                  and finding.feedback_status_norm <> 'FALSE_POSITIVE'
+                  and finding.enforcement_mode <> 'OBSERVE'
+                  and finding.severity_norm = 'critical'
+                then 1 else 0 end) as critical,
+            sum(case
+                when finding.category = 'FINDING'
+                  and finding.feedback_status_norm <> 'FALSE_POSITIVE'
+                  and finding.enforcement_mode <> 'OBSERVE'
+                  and finding.severity_norm = 'high'
+                then 1 else 0 end) as high,
+            sum(case
+                when finding.category = 'FINDING'
+                  and finding.feedback_status_norm <> 'FALSE_POSITIVE'
+                  and finding.enforcement_mode <> 'OBSERVE'
+                  and finding.severity_norm = 'medium'
+                then 1 else 0 end) as medium,
+            sum(case
+                when finding.category = 'FINDING'
+                  and finding.feedback_status_norm <> 'FALSE_POSITIVE'
+                  and finding.enforcement_mode <> 'OBSERVE'
+                  and finding.severity_norm = 'low'
+                then 1 else 0 end) as low,
+            sum(case
+                when finding.category = 'FINDING'
+                  and finding.feedback_status_norm <> 'FALSE_POSITIVE'
+                  and finding.enforcement_mode <> 'OBSERVE'
+                  and finding.severity_norm not in ('critical', 'high', 'medium', 'low')
+                then 1 else 0 end) as info
+        from review_finding finding
+        where finding.task_id = #{taskId}
+        """)
+    ReviewTaskDetailSummary selectReviewTaskDetailSummary(Long taskId);
 
     @Select("""
         select

@@ -263,40 +263,63 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
         String category,
         String feedbackStatus
     ) {
+        PageResponse<ReviewFindingDto> result = detailDataLoader.loadFindingsPage(
+            id,
+            page,
+            pageSize,
+            severity,
+            category,
+            feedbackStatus
+        );
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             long total = hasAnyText(severity, category, feedbackStatus) ? 0L : longValue(archive.getFindingCount());
             return new PageResponse<>(List.of(), total);
         }
-        return detailDataLoader.loadFindingsPage(id, page, pageSize, severity, category, feedbackStatus);
+        return result;
     }
 
     @Override
     public PageResponse<ChangedFileDto> listChangedFiles(Long id, int page, int pageSize, Boolean hasFinding) {
+        PageResponse<ChangedFileDto> result = detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             long total = hasFinding == null ? longValue(archive.getChangedFileCount()) : 0L;
             return new PageResponse<>(List.of(), total);
         }
-        return detailDataLoader.loadChangedFilesPage(id, page, pageSize, hasFinding);
+        return result;
     }
 
     @Override
     public PageResponse<MissingTestDto> listMissingTests(Long id, int page, int pageSize) {
+        PageResponse<MissingTestDto> result = detailDataLoader.loadMissingTestsPage(id, page, pageSize);
+        if (hasPageData(result)) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             return new PageResponse<>(List.of(), longValue(archive.getMissingTestCount()));
         }
-        return detailDataLoader.loadMissingTestsPage(id, page, pageSize);
+        return result;
     }
 
     @Override
     public List<ReviewTimelineItem> listReviewTimeline(Long id, int limit) {
+        List<ReviewTimelineItem> result = detailDataLoader.loadTimelineItems(id, limit);
+        if (result != null && !result.isEmpty()) {
+            return result;
+        }
         ReviewTaskArchiveSummary archive = archiveIfHotTaskMissing(id);
         if (archive != null) {
             return List.of(archivedTimelineItem(archive));
         }
-        return detailDataLoader.loadTimelineItems(id, limit);
+        return result == null ? List.of() : result;
     }
 
     @Override
@@ -322,6 +345,11 @@ public class ReviewTaskQueryServiceImpl implements ReviewTaskQueryService {
             return null;
         }
         return loadArchiveSummaryOrThrow(id);
+    }
+
+    private boolean hasPageData(PageResponse<?> response) {
+        return response != null
+            && (response.total() > 0 || (response.items() != null && !response.items().isEmpty()));
     }
 
     private ReviewTaskArchiveSummary loadArchiveSummaryOrThrow(Long id) {

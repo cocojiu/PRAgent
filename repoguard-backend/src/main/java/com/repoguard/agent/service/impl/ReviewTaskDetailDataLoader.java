@@ -12,6 +12,7 @@ import com.repoguard.agent.entity.ChangedFile;
 import com.repoguard.agent.entity.ReviewFinding;
 import com.repoguard.agent.mapper.ChangedFileMapper;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
+import com.repoguard.agent.mapper.projection.ReviewFindingProjections.ReviewTaskDetailSummary;
 import com.repoguard.agent.review.FindingFeedbackStatus;
 import com.repoguard.agent.review.ReviewFindingProjectionAssembler;
 import java.util.List;
@@ -67,18 +68,24 @@ public class ReviewTaskDetailDataLoader {
     }
 
     public ReviewTaskDetailData loadSummary(Long taskId) {
-        FindingSeverityCountsDto findingSeverityCounts = ReviewFindingProjectionAssembler.toDto(
-            reviewFindingMapper.selectFindingSeverityCounts(taskId)
-        );
+        ReviewTaskDetailSummary summary = reviewFindingMapper.selectReviewTaskDetailSummary(taskId);
         return new ReviewTaskDetailData(
             List.of(),
             List.of(),
             List.of(),
             List.of(),
-            countChangedFiles(taskId),
-            countFindings(taskId),
-            countMissingTests(taskId),
-            findingSeverityCounts == null ? FindingSeverityCountsDto.empty() : findingSeverityCounts
+            longValue(summary == null ? null : summary.changedFileTotal()),
+            longValue(summary == null ? null : summary.findingTotal()),
+            longValue(summary == null ? null : summary.missingTestTotal()),
+            summary == null
+                ? FindingSeverityCountsDto.empty()
+                : new FindingSeverityCountsDto(
+                    summary.critical(),
+                    summary.high(),
+                    summary.medium(),
+                    summary.low(),
+                    summary.info()
+                )
         );
     }
 
@@ -112,23 +119,6 @@ public class ReviewTaskDetailDataLoader {
             missingTestPageQuery(taskId)
         );
         return new PageResponse<>(findingAssembler.toMissingTestDtos(pageRecords(result)), pageTotal(result));
-    }
-
-    private long countChangedFiles(Long taskId) {
-        Long total = changedFileMapper.selectCount(
-            new LambdaQueryWrapper<ChangedFile>().eq(ChangedFile::getTaskId, taskId)
-        );
-        return total == null ? 0L : total;
-    }
-
-    private long countFindings(Long taskId) {
-        Long total = reviewFindingMapper.selectCount(findingPageQuery(taskId, null, null, null));
-        return total == null ? 0L : total;
-    }
-
-    private long countMissingTests(Long taskId) {
-        Long total = reviewFindingMapper.selectCount(missingTestPageQuery(taskId));
-        return total == null ? 0L : total;
     }
 
     private <T> List<T> pageRecords(Page<T> page) {
@@ -201,6 +191,10 @@ public class ReviewTaskDetailDataLoader {
 
     private String normalizeUpper(String value) {
         return value == null ? null : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private long longValue(Long value) {
+        return value == null ? 0L : value;
     }
 
     public record ReviewTaskDetailData(
