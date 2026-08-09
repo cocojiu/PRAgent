@@ -2,6 +2,7 @@ package com.repoguard.agent.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -11,8 +12,14 @@ import org.junit.jupiter.api.Test;
 
 class ReviewPolicyVersionGovernanceMigrationTest {
 
+    private static final Path RULE_CONFIG_MIGRATION = Path.of(
+        "src/main/resources/db/migration/V7__review_rule_config.sql"
+    );
     private static final Path MIGRATION = Path.of(
         "src/main/resources/db/migration/V58__review_policy_version_governance.sql"
+    );
+    private static final Path SCOPE_LENGTH_ALIGNMENT_MIGRATION = Path.of(
+        "src/main/resources/db/migration/V60__align_review_rule_snapshot_scope_length.sql"
     );
 
     @Test
@@ -40,5 +47,21 @@ class ReviewPolicyVersionGovernanceMigrationTest {
             .contains("downgrade_reason")
             .contains("block_reason")
             .contains("anchor_type");
+    }
+
+    @Test
+    void snapshotScopeLengthMatchesAcceptedRuleConfigurationLength() throws ReflectiveOperationException, IOException {
+        String ruleConfigSql = Files.readString(RULE_CONFIG_MIGRATION, StandardCharsets.UTF_8)
+            .toLowerCase(Locale.ROOT);
+        String snapshotSql = Files.readString(SCOPE_LENGTH_ALIGNMENT_MIGRATION, StandardCharsets.UTF_8)
+            .toLowerCase(Locale.ROOT);
+        int acceptedScopeLength = ReviewRuleConfigRequest.class
+            .getDeclaredField("scope")
+            .getAnnotation(jakarta.validation.constraints.Size.class)
+            .max();
+
+        assertThat(acceptedScopeLength).isEqualTo(255);
+        assertThat(ruleConfigSql).contains("scope varchar(" + acceptedScopeLength + ") not null");
+        assertThat(snapshotSql).contains("modify column scope varchar(" + acceptedScopeLength + ") not null");
     }
 }
