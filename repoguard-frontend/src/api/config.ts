@@ -1,4 +1,5 @@
 import { apiRequest } from "@/api/contracts";
+import type { ApiRequestOptions } from "@/api/contracts";
 import type {
   DataRetentionCleanupRequest,
   GithubIntegrationConfigRequest,
@@ -100,8 +101,9 @@ export const updateReviewRuleStatus = (id: string, payload: ReviewRuleStatusRequ
 
 export const fetchReviewRuleVersions = (
   id: string,
-  options: { cursor?: string; pageSize?: number } = {}
-) => apiRequest("fetchReviewRuleVersions", { id, ...options });
+  options: { cursor?: string; pageSize?: number } = {},
+  requestOptions: ApiRequestOptions = {}
+) => apiRequest("fetchReviewRuleVersions", { id, ...options }, requestOptions);
 
 export const rollbackReviewRule = (
   id: string,
@@ -112,8 +114,9 @@ export const rollbackReviewRule = (
 export const fetchReviewStrategy = () => apiRequest("fetchReviewStrategy", undefined);
 
 export const fetchReviewStrategyVersions = (
-  options: { cursor?: string; pageSize?: number } = {}
-) => apiRequest("fetchReviewStrategyVersions", options);
+  options: { cursor?: string; pageSize?: number } = {},
+  requestOptions: ApiRequestOptions = {}
+) => apiRequest("fetchReviewStrategyVersions", options, requestOptions);
 
 export const updateReviewStrategyEnforcement = (payload: ReviewEnforcementModeRequest) =>
   apiRequest("updateReviewStrategyEnforcement", payload);

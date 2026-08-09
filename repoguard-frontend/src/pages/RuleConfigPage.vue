@@ -240,8 +240,13 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="ruleVersionDialogVisible" :title="`${selectedRuleId} 策略版本历史`" width="920px">
-      <el-table v-loading="historyLoading" :data="ruleVersions" class="rg-table" size="small">
+    <el-dialog
+      v-model="ruleVersionDialogVisible"
+      :title="`${selectedRuleId} 策略版本历史`"
+      width="920px"
+      @closed="cancelRuleHistoryRequest"
+    >
+      <el-table v-loading="ruleHistoryLoading" :data="ruleVersions" class="rg-table" size="small">
         <el-table-column prop="policyVersion" label="策略版本" width="100" />
         <el-table-column prop="configVersion" label="配置版本" width="100" />
         <el-table-column prop="detectorVersion" label="检测器" min-width="140" />
@@ -264,12 +269,17 @@
         </el-table-column>
       </el-table>
       <div v-if="ruleHistoryHasMore" class="history-load-more">
-        <el-button :loading="historyLoading" @click="loadMoreRuleVersions">加载更多</el-button>
+        <el-button :loading="ruleHistoryLoading" @click="loadMoreRuleVersions">加载更多</el-button>
       </div>
     </el-dialog>
 
-    <el-dialog v-model="strategyVersionDialogVisible" title="审查策略版本历史" width="980px">
-      <el-table v-loading="historyLoading" :data="strategyVersions" class="rg-table" size="small">
+    <el-dialog
+      v-model="strategyVersionDialogVisible"
+      title="审查策略版本历史"
+      width="980px"
+      @closed="cancelStrategyHistoryRequest"
+    >
+      <el-table v-loading="strategyHistoryLoading" :data="strategyVersions" class="rg-table" size="small">
         <el-table-column prop="snapshotId" label="快照" width="80" />
         <el-table-column prop="strategyVersion" label="策略版本" width="100" />
         <el-table-column prop="promptVersion" label="Prompt" width="110" />
@@ -293,7 +303,7 @@
         </el-table-column>
       </el-table>
       <div v-if="strategyHistoryHasMore" class="history-load-more">
-        <el-button :loading="historyLoading" @click="loadMoreStrategyVersions">加载更多</el-button>
+        <el-button :loading="strategyHistoryLoading" @click="loadMoreStrategyVersions">加载更多</el-button>
       </div>
     </el-dialog>
   </div>
@@ -301,7 +311,7 @@
 
 <script setup lang="ts">
 import "@/features/rule-config/ruleConfig.css";
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus/es/components/message/index.mjs";
 import { CheckCircle, ListChecks, Search, ShieldAlert, Target, Zap } from "@lucide/vue";
 import { canManage } from "@/stores/authState";
@@ -318,6 +328,7 @@ import {
 import MetricGrid, { type MetricGridItem } from "@/components/MetricGrid.vue";
 import { useMetricIcon } from "@/composables/useMetricIcon";
 import ReviewCalibrationQueueCard from "@/features/rule-config/components/ReviewCalibrationQueueCard.vue";
+import { createLatestPolicyHistoryLoader } from "@/features/rule-config/latestPolicyHistoryLoader";
 import type {
   EnforcementMode,
   ReviewQualityGroup,
@@ -349,7 +360,8 @@ const qualityGroups = ref<ReviewQualityGroup[]>([]);
 const strategyPolicy = ref<ReviewStrategyPolicy | null>(null);
 const strategyTargetMode = ref<EnforcementMode>("observe");
 const strategySaving = ref(false);
-const historyLoading = ref(false);
+const ruleHistoryLoading = ref(false);
+const strategyHistoryLoading = ref(false);
 const rollbackSavingId = ref("");
 const selectedRuleId = ref("");
 const ruleVersions = ref<ReviewRulePolicyVersion[]>([]);
@@ -358,6 +370,12 @@ const ruleHistoryNextCursor = ref<string | null>(null);
 const ruleHistoryHasMore = ref(false);
 const strategyHistoryNextCursor = ref<string | null>(null);
 const strategyHistoryHasMore = ref(false);
+const ruleHistoryLoader = createLatestPolicyHistoryLoader(value => {
+  ruleHistoryLoading.value = value;
+});
+const strategyHistoryLoader = createLatestPolicyHistoryLoader(value => {
+  strategyHistoryLoading.value = value;
+});
 
 const ruleForm = reactive<ReviewRuleConfigRequest>({
   id: "",
@@ -457,72 +475,93 @@ const openEditDialog = (rule: ReviewRuleConfig) => {
 
 const openRuleVersions = async (rule: ReviewRuleConfig) => {
   selectedRuleId.value = rule.id;
+  ruleVersions.value = [];
+  ruleHistoryNextCursor.value = null;
+  ruleHistoryHasMore.value = false;
   ruleVersionDialogVisible.value = true;
-  historyLoading.value = true;
   try {
-    const page = await fetchReviewRuleVersions(rule.id);
-    ruleVersions.value = page.items;
-    ruleHistoryNextCursor.value = page.nextCursor ?? null;
-    ruleHistoryHasMore.value = Boolean(page.hasMore);
+    await loadRuleHistoryPage(rule.id);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
   }
 };
 
 const openStrategyVersions = async () => {
+  strategyVersions.value = [];
+  strategyHistoryNextCursor.value = null;
+  strategyHistoryHasMore.value = false;
   strategyVersionDialogVisible.value = true;
-  historyLoading.value = true;
   try {
-    const page = await fetchReviewStrategyVersions();
-    strategyVersions.value = page.items;
-    strategyHistoryNextCursor.value = page.nextCursor ?? null;
-    strategyHistoryHasMore.value = Boolean(page.hasMore);
+    await loadStrategyHistoryPage();
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
   }
 };
 
-const loadMoreRuleVersions = async () => {
-  if (!selectedRuleId.value || !ruleHistoryHasMore.value || !ruleHistoryNextCursor.value) {
-    return;
-  }
-  historyLoading.value = true;
-  try {
-    const page = await fetchReviewRuleVersions(selectedRuleId.value, {
-      cursor: ruleHistoryNextCursor.value
-    });
-    ruleVersions.value.push(...page.items);
+const loadRuleHistoryPage = (
+  ruleId: string,
+  cursor?: string,
+  append = false
+) => ruleHistoryLoader.load(
+  signal => fetchReviewRuleVersions(ruleId, { cursor }, { signal }),
+  page => {
+    if (selectedRuleId.value !== ruleId) {
+      return;
+    }
+    ruleVersions.value = append ? [...ruleVersions.value, ...page.items] : page.items;
     ruleHistoryNextCursor.value = page.nextCursor ?? null;
     ruleHistoryHasMore.value = Boolean(page.hasMore);
+  }
+);
+
+const loadStrategyHistoryPage = (
+  cursor?: string,
+  append = false
+) => strategyHistoryLoader.load(
+  signal => fetchReviewStrategyVersions({ cursor }, { signal }),
+  page => {
+    strategyVersions.value = append ? [...strategyVersions.value, ...page.items] : page.items;
+    strategyHistoryNextCursor.value = page.nextCursor ?? null;
+    strategyHistoryHasMore.value = Boolean(page.hasMore);
+  }
+);
+
+const loadMoreRuleVersions = async () => {
+  if (
+    ruleHistoryLoading.value
+    || !selectedRuleId.value
+    || !ruleHistoryHasMore.value
+    || !ruleHistoryNextCursor.value
+  ) {
+    return;
+  }
+  const ruleId = selectedRuleId.value;
+  const cursor = ruleHistoryNextCursor.value;
+  try {
+    await loadRuleHistoryPage(ruleId, cursor, true);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
   }
 };
 
 const loadMoreStrategyVersions = async () => {
-  if (!strategyHistoryHasMore.value || !strategyHistoryNextCursor.value) {
+  if (
+    strategyHistoryLoading.value
+    || !strategyHistoryHasMore.value
+    || !strategyHistoryNextCursor.value
+  ) {
     return;
   }
-  historyLoading.value = true;
+  const cursor = strategyHistoryNextCursor.value;
   try {
-    const page = await fetchReviewStrategyVersions({
-      cursor: strategyHistoryNextCursor.value
-    });
-    strategyVersions.value.push(...page.items);
-    strategyHistoryNextCursor.value = page.nextCursor ?? null;
-    strategyHistoryHasMore.value = Boolean(page.hasMore);
+    await loadStrategyHistoryPage(cursor, true);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
-  } finally {
-    historyLoading.value = false;
   }
 };
+
+const cancelRuleHistoryRequest = () => ruleHistoryLoader.cancel();
+const cancelStrategyHistoryRequest = () => strategyHistoryLoader.cancel();
 
 const saveStrategyEnforcement = async () => {
   if (!canManage.value || !strategyPolicy.value) {
@@ -558,10 +597,7 @@ const rollbackRuleVersion = async (policyVersion: number) => {
     await rollbackReviewRule(selectedRuleId.value, policyVersion, activeRule.policyVersion);
     ElMessage.success("规则策略已生成新的回滚版本");
     await loadRules();
-    const page = await fetchReviewRuleVersions(selectedRuleId.value);
-    ruleVersions.value = page.items;
-    ruleHistoryNextCursor.value = page.nextCursor ?? null;
-    ruleHistoryHasMore.value = Boolean(page.hasMore);
+    await loadRuleHistoryPage(selectedRuleId.value);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则策略回滚失败"));
     await loadRules();
@@ -583,10 +619,7 @@ const rollbackStrategyVersion = async (snapshotId: number) => {
     strategyTargetMode.value = strategyPolicy.value.enforcementMode;
     ElMessage.success("审查策略已生成新的回滚快照");
     await loadRules();
-    const page = await fetchReviewStrategyVersions();
-    strategyVersions.value = page.items;
-    strategyHistoryNextCursor.value = page.nextCursor ?? null;
-    strategyHistoryHasMore.value = Boolean(page.hasMore);
+    await loadStrategyHistoryPage();
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "审查策略回滚失败"));
     await loadRules();
@@ -705,4 +738,8 @@ const qualityStatusType = (status: string): "success" | "warning" | "danger" | "
 };
 
 onMounted(loadRules);
+onBeforeUnmount(() => {
+  cancelRuleHistoryRequest();
+  cancelStrategyHistoryRequest();
+});
 </script>
