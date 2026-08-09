@@ -27,6 +27,7 @@ public class DashboardOverviewFacade {
     private final DashboardReviewTrendWindow reviewTrendWindow;
     private final DashboardSnapshotStore snapshotStore;
     private final DashboardDailySnapshotService dailySnapshotService;
+    private final DashboardQualityFacade qualityFacade;
 
     public DashboardOverviewFacade(
         DashboardMapper dashboardMapper,
@@ -37,7 +38,8 @@ public class DashboardOverviewFacade {
         DashboardHighRiskReviewAssembler highRiskReviewAssembler,
         DashboardReviewTrendWindow reviewTrendWindow,
         DashboardSnapshotStore snapshotStore,
-        DashboardDailySnapshotService dailySnapshotService
+        DashboardDailySnapshotService dailySnapshotService,
+        DashboardQualityFacade qualityFacade
     ) {
         this.dashboardMapper = Objects.requireNonNull(dashboardMapper, "dashboardMapper must not be null");
         this.dashboardMetricAssembler =
@@ -54,12 +56,13 @@ public class DashboardOverviewFacade {
         this.snapshotStore = Objects.requireNonNull(snapshotStore, "snapshotStore must not be null");
         this.dailySnapshotService =
             Objects.requireNonNull(dailySnapshotService, "dailySnapshotService must not be null");
+        this.qualityFacade = Objects.requireNonNull(qualityFacade, "qualityFacade must not be null");
     }
 
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
         return snapshotStore.getOrLoad(
             CacheNames.DASHBOARD_OVERVIEW + ":" + DashboardLlmTrendDays.normalize(llmTrendDays),
-            this::buildOverviewCompatibilitySummary
+            () -> buildOverview(llmTrendDays)
         );
     }
 
@@ -106,18 +109,20 @@ public class DashboardOverviewFacade {
         );
     }
 
-    private DashboardOverviewResponse buildOverviewCompatibilitySummary() {
+    private DashboardOverviewResponse buildOverview(Integer llmTrendDays) {
+        DashboardRulesResponse rules = getRules();
+        var llmQuality = qualityFacade.getLlmQuality(llmTrendDays);
         return new DashboardOverviewResponse(
             getSummary(),
+            getReviewTrend(),
+            getRiskDistribution(),
+            rules.ruleHits(),
+            getHighRiskReviews(),
+            rules.failedRules(),
             List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of(),
-            List.of()
+            llmQuality.byModel(),
+            llmQuality.byRepository(),
+            llmQuality.trend()
         );
     }
 

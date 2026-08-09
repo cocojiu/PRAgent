@@ -1,0 +1,5 @@
+2026-08-09 | item-01 | dashboard-overview
+scope: 修复 GET /api/v1/dashboard/overview 仅返回 summary、其余模块为空的接口契约问题。
+changes: overview 聚合 reviewTrend、riskDistribution、rules、highRiskReviews、LLM quality 和依赖健康快照；保留拆分模块接口兼容性。
+local-validation: DashboardControllerTest、DashboardServiceImplTest 通过，共 19 项。
+remote-action: pending

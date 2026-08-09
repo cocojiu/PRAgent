@@ -42,7 +42,19 @@ public class DashboardServiceImpl implements DashboardService {
         sync = true
     )
     public DashboardOverviewResponse getOverview(Integer llmTrendDays) {
-        return overviewFacade.getOverview(llmTrendDays);
+        DashboardOverviewResponse overview = overviewFacade.getOverview(llmTrendDays);
+        return new DashboardOverviewResponse(
+            overview.overviewMetrics(),
+            overview.reviewTrend(),
+            overview.riskDistribution(),
+            overview.ruleHits(),
+            overview.highRiskReviews(),
+            overview.failedRules(),
+            systemHealthProbe.probe(),
+            overview.llmQualityByModel(),
+            overview.llmQualityByRepository(),
+            overview.llmQualityTrend()
+        );
     }
 
     @Override
