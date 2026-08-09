@@ -98,7 +98,7 @@ repoguard:
     # Roles that do not own Flyway migrations refuse to start below this version.
     # Keep in sync with the highest version under db/migration; the production
     # readiness check enforces the match.
-    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:58}
+    expected-version: ${REPOGUARD_SCHEMA_EXPECTED_VERSION:59}
   async:
     github-comment-threads: ${REPOGUARD_ASYNC_GITHUB_COMMENT_THREADS:2}
     github-comment-queue-capacity: ${REPOGUARD_ASYNC_GITHUB_COMMENT_QUEUE_CAPACITY:100}
@@ -214,6 +214,12 @@ repoguard:
     encryption-key-id: ${REPOGUARD_SECURITY_ENCRYPTION_KEY_ID}
     encryption-salt: ${REPOGUARD_SECURITY_ENCRYPTION_SALT:}
     allow-plaintext-secrets: ${REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS:false}
+    re-encryption:
+      batch-size: ${REPOGUARD_SECRET_RE_ENCRYPTION_BATCH_SIZE:100}
+      lease-seconds: ${REPOGUARD_SECRET_RE_ENCRYPTION_LEASE_SECONDS:120}
+      retry-delay-seconds: ${REPOGUARD_SECRET_RE_ENCRYPTION_RETRY_DELAY_SECONDS:30}
+      max-attempts: ${REPOGUARD_SECRET_RE_ENCRYPTION_MAX_ATTEMPTS:5}
+      poll-interval-ms: ${REPOGUARD_SECRET_RE_ENCRYPTION_POLL_INTERVAL_MS:1000}
   auth:
     token-secret: ${REPOGUARD_AUTH_TOKEN_SECRET}
     token-secret-id: ${REPOGUARD_AUTH_TOKEN_SECRET_ID:k1}

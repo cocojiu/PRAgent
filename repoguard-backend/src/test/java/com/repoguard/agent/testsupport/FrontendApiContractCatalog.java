@@ -180,6 +180,7 @@ public final class FrontendApiContractCatalog {
             .replace("${idSegment(input.findingId)}", "{findingId}")
             .replace("${idSegment(input.policyVersion)}", "{policyVersion}")
             .replace("${idSegment(input.snapshotId)}", "{snapshotId}")
+            .replace("${idSegment(input.jobId)}", "{jobId}")
             .replace("${idSegment(input.taskId)}", "{taskId}")
             .replace("${idSegment(input.id)}", "{id}");
     }

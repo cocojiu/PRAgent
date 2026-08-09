@@ -172,12 +172,19 @@ describe("apiRequest", () => {
 
   it("posts secret re-encryption requests to the protected system config endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue(okResponse({
+      id: 7,
       executed: false,
-      scannedCount: 1,
-      reEncryptedCount: 1,
+      status: "PENDING",
+      sourceKeyId: "old-key",
+      targetKeyId: "new-key",
+      currentTable: "integration_config",
+      checkpointId: 0,
+      batchSize: 100,
+      scannedCount: 0,
+      reEncryptedCount: 0,
       skippedCount: 0,
       failedCount: 0,
-      items: []
+      retryCount: 0
     }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -199,6 +206,43 @@ describe("apiRequest", () => {
       targetKeyId: "new-key",
       execute: false
     }));
+  });
+
+  it("loads and controls secret re-encryption background jobs", async () => {
+    const job = {
+      id: 7,
+      executed: true,
+      status: "RUNNING",
+      sourceKeyId: "old-key",
+      targetKeyId: "new-key",
+      currentTable: "review_policy_config",
+      checkpointId: 11,
+      batchSize: 100,
+      scannedCount: 11,
+      reEncryptedCount: 10,
+      skippedCount: 1,
+      failedCount: 0,
+      retryCount: 0
+    };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(okResponse(job))
+      .mockResolvedValueOnce(okResponse({ items: [job], total: 1 }))
+      .mockResolvedValueOnce(okResponse({ items: [], total: 0 }))
+      .mockResolvedValueOnce(okResponse({ ...job, status: "PAUSED" }))
+      .mockResolvedValueOnce(okResponse({ ...job, status: "PENDING" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchSecretReEncryptionJob", { jobId: 7 });
+    await apiRequest("fetchSecretReEncryptionJobs", { page: 1, pageSize: 1 });
+    await apiRequest("fetchSecretReEncryptionJobItems", { jobId: 7, page: 2, pageSize: 50 });
+    await apiRequest("pauseSecretReEncryptionJob", { jobId: 7 });
+    await apiRequest("resumeSecretReEncryptionJob", { jobId: 7 });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/secrets/re-encryption/jobs/7");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain("/secrets/re-encryption/jobs?page=1&pageSize=1");
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/secrets/re-encryption/jobs/7/items?page=2&pageSize=50");
+    expect(fetchMock.mock.calls[3]?.[1]).toMatchObject({ method: "POST" });
+    expect(fetchMock.mock.calls[4]?.[1]).toMatchObject({ method: "POST" });
   });
 
   it("keeps operational cache, data retention, and refresh reset endpoint contracts", async () => {

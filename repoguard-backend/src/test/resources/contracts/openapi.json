@@ -2141,7 +2141,7 @@
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "SecretReEncryptionResponse",
+            "x-java-response-data" : "SecretReEncryptionJobDto",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2158,7 +2158,335 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "$ref" : "#/components/schemas/SecretReEncryptionResponse"
+                      "$ref" : "#/components/schemas/SecretReEncryptionJobDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption/jobs" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerListSecretReEncryptionJobs",
+        "x-controller-operation" : "SystemConfigController#listSecretReEncryptionJobs",
+        "parameters" : [ {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<SecretReEncryptionJobDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<SecretReEncryptionJobDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/SecretReEncryptionJobDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption/jobs/{jobId}" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerGetSecretReEncryptionJob",
+        "x-controller-operation" : "SystemConfigController#getSecretReEncryptionJob",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SecretReEncryptionJobDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SecretReEncryptionJobDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption/jobs/{jobId}/items" : {
+      "get" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerListSecretReEncryptionJobItems",
+        "x-controller-operation" : "SystemConfigController#listSecretReEncryptionJobItems",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "page",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "default" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 50
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "PageResponse<SecretReEncryptionItemDto>",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<SecretReEncryptionItemDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/SecretReEncryptionItemDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption/jobs/{jobId}/pause" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerPauseSecretReEncryptionJob",
+        "x-controller-operation" : "SystemConfigController#pauseSecretReEncryptionJob",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SecretReEncryptionJobDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SecretReEncryptionJobDto"
+                    },
+                    "timestamp" : {
+                      "type" : "string",
+                      "format" : "date-time"
+                    }
+                  },
+                  "required" : [ "success", "code", "message", "timestamp" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/config/secrets/re-encryption/jobs/{jobId}/resume" : {
+      "post" : {
+        "tags" : [ "SystemConfig" ],
+        "operationId" : "systemConfigControllerResumeSecretReEncryptionJob",
+        "x-controller-operation" : "SystemConfigController#resumeSecretReEncryptionJob",
+        "parameters" : [ {
+          "name" : "jobId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "description" : "OK",
+            "x-java-response-envelope" : "ApiResponse",
+            "x-java-response-data" : "SecretReEncryptionJobDto",
+            "content" : {
+              "application/json" : {
+                "schema" : {
+                  "type" : "object",
+                  "x-java-type" : "ApiResponse",
+                  "properties" : {
+                    "success" : {
+                      "type" : "boolean"
+                    },
+                    "code" : {
+                      "type" : "string"
+                    },
+                    "message" : {
+                      "type" : "string"
+                    },
+                    "data" : {
+                      "$ref" : "#/components/schemas/SecretReEncryptionJobDto"
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -8492,6 +8820,78 @@
           }
         }
       },
+      "SecretReEncryptionJobDto" : {
+        "type" : "object",
+        "x-java-type" : "SecretReEncryptionJobDto",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "executed" : {
+            "type" : "boolean"
+          },
+          "status" : {
+            "type" : "string"
+          },
+          "sourceKeyId" : {
+            "type" : "string"
+          },
+          "targetKeyId" : {
+            "type" : "string"
+          },
+          "currentTable" : {
+            "type" : "string"
+          },
+          "checkpointId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "batchSize" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "scannedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "reEncryptedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "skippedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failedCount" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "retryCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "nextRetryAt" : {
+            "type" : "string"
+          },
+          "lastFailureReason" : {
+            "type" : "string"
+          },
+          "createdByUsername" : {
+            "type" : "string"
+          },
+          "createdAt" : {
+            "type" : "string"
+          },
+          "updatedAt" : {
+            "type" : "string"
+          },
+          "completedAt" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "executed", "checkpointId", "batchSize", "scannedCount", "reEncryptedCount", "skippedCount", "failedCount", "retryCount" ]
+      },
       "SecretReEncryptionRequest" : {
         "type" : "object",
         "x-java-type" : "SecretReEncryptionRequest",
@@ -8524,38 +8924,6 @@
           }
         },
         "required" : [ "sourceEncryptionKey", "targetEncryptionKey", "targetKeyId" ]
-      },
-      "SecretReEncryptionResponse" : {
-        "type" : "object",
-        "x-java-type" : "SecretReEncryptionResponse",
-        "properties" : {
-          "executed" : {
-            "type" : "boolean"
-          },
-          "scannedCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "reEncryptedCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "skippedCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "failedCount" : {
-            "type" : "integer",
-            "format" : "int32"
-          },
-          "items" : {
-            "type" : "array",
-            "items" : {
-              "$ref" : "#/components/schemas/SecretReEncryptionItemDto"
-            }
-          }
-        },
-        "required" : [ "executed", "scannedCount", "reEncryptedCount", "skippedCount", "failedCount" ]
       },
       "SecuritySettingsDto" : {
         "type" : "object",

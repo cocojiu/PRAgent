@@ -5,6 +5,7 @@ import com.repoguard.agent.config.ApiRuntimeEnabled;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
@@ -14,15 +15,18 @@ import com.repoguard.agent.dto.ReviewRuleStatusRequest;
 import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.dto.ReviewEnforcementModeRequest;
+import com.repoguard.agent.dto.SecretReEncryptionItemDto;
+import com.repoguard.agent.dto.SecretReEncryptionJobDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
-import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
 import com.repoguard.agent.security.RequireRole;
-import com.repoguard.agent.security.SecretReEncryptionService;
+import com.repoguard.agent.security.SecretReEncryptionJobService;
 import com.repoguard.agent.service.SystemConfigService;
+import com.repoguard.agent.web.RequestAuthentication;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Min;
@@ -33,6 +37,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -42,14 +47,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class SystemConfigController {
 
     private final SystemConfigService systemConfigService;
-    private final SecretReEncryptionService secretReEncryptionService;
+    private final SecretReEncryptionJobService secretReEncryptionJobService;
 
     public SystemConfigController(
         SystemConfigService systemConfigService,
-        SecretReEncryptionService secretReEncryptionService
+        SecretReEncryptionJobService secretReEncryptionJobService
     ) {
         this.systemConfigService = systemConfigService;
-        this.secretReEncryptionService = secretReEncryptionService;
+        this.secretReEncryptionJobService = secretReEncryptionJobService;
     }
 
     @GetMapping("/integrations/github")
@@ -208,9 +213,53 @@ public class SystemConfigController {
     }
 
     @PostMapping("/secrets/re-encryption")
-    public ApiResponse<SecretReEncryptionResponse> reEncryptSecrets(
-        @Valid @RequestBody SecretReEncryptionRequest request
+    public ApiResponse<SecretReEncryptionJobDto> reEncryptSecrets(
+        @Valid @RequestBody SecretReEncryptionRequest request,
+        HttpServletRequest servletRequest
     ) {
-        return ApiResponse.ok(secretReEncryptionService.reEncrypt(request));
+        var operator = RequestAuthentication.require(servletRequest);
+        return ApiResponse.ok(secretReEncryptionJobService.start(
+            request,
+            operator.id(),
+            operator.username()
+        ));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs/{jobId}")
+    public ApiResponse<SecretReEncryptionJobDto> getSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.get(jobId));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs")
+    public ApiResponse<PageResponse<SecretReEncryptionJobDto>> listSecretReEncryptionJobs(
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @jakarta.validation.constraints.Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.listJobs(page, pageSize));
+    }
+
+    @GetMapping("/secrets/re-encryption/jobs/{jobId}/items")
+    public ApiResponse<PageResponse<SecretReEncryptionItemDto>> listSecretReEncryptionJobItems(
+        @PathVariable @Min(1) Long jobId,
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "50") @Min(1) @jakarta.validation.constraints.Max(100) int pageSize
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.listItems(jobId, page, pageSize));
+    }
+
+    @PostMapping("/secrets/re-encryption/jobs/{jobId}/pause")
+    public ApiResponse<SecretReEncryptionJobDto> pauseSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.pause(jobId));
+    }
+
+    @PostMapping("/secrets/re-encryption/jobs/{jobId}/resume")
+    public ApiResponse<SecretReEncryptionJobDto> resumeSecretReEncryptionJob(
+        @PathVariable @Min(1) Long jobId
+    ) {
+        return ApiResponse.ok(secretReEncryptionJobService.resume(jobId));
     }
 }

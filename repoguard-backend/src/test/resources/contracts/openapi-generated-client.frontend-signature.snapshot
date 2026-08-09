@@ -39,6 +39,9 @@ fetchReviewStrategy -> systemConfigControllerGetReviewStrategyPolicy(): Promise<
 fetchReviewStrategyVersions -> systemConfigControllerGetReviewStrategyVersions(): Promise<ReviewStrategyPolicy[]>; // GET /api/v1/config/review-strategy/versions
 fetchReviewTimeline -> reviewControllerListReviewTimeline(input: { path: { id: number }; query?: { limit?: number } }): Promise<TimelineItem[]>; // GET /api/v1/reviews/{id}/timeline
 fetchReviews -> reviewControllerListReviews(input?: { query?: { cursor?: string; keyword?: string; page?: number; pageSize?: number; repository?: string; riskLevel?: string; source?: string; status?: string; triggerSource?: string } }): Promise<PageResponse<ReviewTask>>; // GET /api/v1/reviews
+fetchSecretReEncryptionJob -> systemConfigControllerGetSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}
+fetchSecretReEncryptionJobItems -> systemConfigControllerListSecretReEncryptionJobItems(input: { path: { jobId: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionItem>>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items
+fetchSecretReEncryptionJobs -> systemConfigControllerListSecretReEncryptionJobs(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionJob>>; // GET /api/v1/config/secrets/re-encryption/jobs
 fetchSystemHealthSummary -> systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary
 fetchSystemSettings -> systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
 fetchUserOperationAudits -> userManagementControllerListOperationAudits(input?: { query?: { page?: number; pageSize?: number } }): Promise<PageResponse<UserOperationAudit>>; // GET /api/v1/users/audits
@@ -46,12 +49,14 @@ fetchUsers -> userManagementControllerListUsers(input?: { query?: { keyword?: st
 getCurrentUser -> authControllerMe(): Promise<CurrentUser>; // GET /api/v1/auth/me
 login -> authControllerLogin(input: { body: AuthLoginRequest }): Promise<AuthResponse>; // POST /api/v1/auth/login
 logout -> authControllerLogout(input?: { body?: AuthLogoutRequest }): Promise<void>; // POST /api/v1/auth/logout
+pauseSecretReEncryptionJob -> systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause
 publishGithubComments -> reviewControllerPublishGithubComments(input: { path: { id: number } }): Promise<GithubCommentPublish>; // POST /api/v1/reviews/{id}/github-comments
-reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionResponse>; // POST /api/v1/config/secrets/re-encryption
+reEncryptSecrets -> systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 register -> authControllerRegister(input: { body: AuthRegisterRequest }): Promise<AuthResponse>; // POST /api/v1/auth/register
 reportFrontendPerformance -> frontendPerformanceControllerRecordPerformance(input: { body: FrontendPerformanceReportRequest }): Promise<void>; // POST /api/v1/observability/frontend/performance
 requeueMessageQueueTask -> messageQueueHealthControllerRequeueTask(input: { path: { taskId: number } }): Promise<MessageQueueRequeueResponse>; // POST /api/v1/message-queue/tasks/{taskId}/requeue
 resetRefreshToken -> authControllerResetRefreshToken(input: { body: AuthRefreshTokenResetRequest }): Promise<AuthResponse>; // POST /api/v1/auth/refresh-token/reset
+resumeSecretReEncryptionJob -> systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
 retryNotificationEvent -> notificationIntegrationControllerRetryEvent(input: { path: { id: number } }): Promise<NotificationEvent>; // POST /api/v1/notification-events/{id}/retry
 retryReview -> reviewControllerRetryReview(input: { path: { id: number } }): Promise<ReviewRetryResponse>; // POST /api/v1/reviews/{id}/retry
 rollbackReviewRule -> systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number } }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback

@@ -157,6 +157,11 @@ npm run dev
 - `REPOGUARD_SECURITY_ENCRYPTION_KEY_ID`
 - `REPOGUARD_SECURITY_ENCRYPTION_SALT_FILE`
 - `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_BATCH_SIZE`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_LEASE_SECONDS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_RETRY_DELAY_SECONDS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_MAX_ATTEMPTS`
+- `REPOGUARD_SECRET_RE_ENCRYPTION_POLL_INTERVAL_MS`
 - `REPOGUARD_AUTH_TOKEN_SECRET_FILE`
 - `REPOGUARD_AUTH_TOKEN_SECRET_ID`
 - `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS`
@@ -284,8 +289,8 @@ BACKEND_IMAGE='<目标后端镜像>' FRONTEND_IMAGE='<目标前端镜像>' \
 ### 密钥轮换与明文配置迁移
 
 - Token 密钥轮换：把当前文件值和当前 ID 临时配置为 `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS` / `REPOGUARD_AUTH_TOKEN_SECRET_PREVIOUS_ID`，用临时文件加 `mv` 原子替换 `repoguard.auth.token-secret`，更新活动 ID并强制重建 API/Worker；至少等待一个 access-token TTL 后清空 previous 对。previous 值在轮换窗口内仍属于 `.env` 残余风险，窗口结束必须删除。
-- 主加密密钥轮换：先完成数据库备份和恢复验证，在维护窗口调用 `/api/v1/config/secrets/re-encryption` 做 `execute=false` 预演；失败数为 0 后使用 `confirmText=RE-ENCRYPT` 执行，立即原子替换密钥文件、更新 key ID并重建后端。新实例验证所有集成配置可解密前保留旧密钥的离线副本。
-- 历史明文业务密钥迁移：仅在维护窗口临时设置 `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS=true`，通过同一重加密接口完成预演与执行；确认扫描结果无明文、无失败后立刻恢复为 `false` 并重建后端。
+- 主加密密钥轮换：先完成数据库备份和恢复验证，在维护窗口调用 `/api/v1/config/secrets/re-encryption` 创建 `execute=false` 预演任务，通过 `/api/v1/config/secrets/re-encryption/jobs/{jobId}` 轮询状态并分页检查 `/items` 明细；预演以 `COMPLETED` 完成且失败数为 0 后，使用 `confirmText=RE-ENCRYPT` 创建执行任务。任务按主键分页、短事务和数据库 lease 运行，可通过 `/pause`、`/resume` 暂停或继续；只有执行任务以 `COMPLETED` 完成且失败数为 0 后，才可原子替换密钥文件、更新 key ID并重建后端。新实例验证所有集成配置可解密前保留旧密钥的离线副本。
+- 历史明文业务密钥迁移：仅在维护窗口临时设置 `REPOGUARD_SECURITY_ALLOW_PLAINTEXT_SECRETS=true`，通过同一后台任务完成预演与执行；确认任务明细无明文、无失败后立刻恢复为 `false` 并重建后端。
 
 ### MySQL 恢复
 

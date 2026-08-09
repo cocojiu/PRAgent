@@ -52,14 +52,24 @@ describe("secretReEncryptionRequestBuilders", () => {
       targetEncryptionKey: "",
       targetKeyId: "new-key"
     })).toBe(false);
+    expect(canSubmitSecretReEncryption({
+      sourceEncryptionKey: "source-secret",
+      sourceKeyId: "same-key",
+      targetEncryptionKey: "target-secret",
+      targetKeyId: "same-key"
+    })).toBe(false);
   });
 
   it("renders execution confirmation with source and target key ids", () => {
-    expect(secretReEncryptionExecutionConfirmMessage({
+    const message = secretReEncryptionExecutionConfirmMessage({
       sourceEncryptionKey: "source-secret",
       sourceKeyId: "old-key",
       targetEncryptionKey: "target-secret",
       targetKeyId: "new-key"
-    })).toContain("old-key 重加密到 new-key");
+    });
+
+    expect(message).toContain("old-key 重加密到 new-key");
+    expect(message).toContain("只能在维护窗口执行");
+    expect(message).toContain("立即切换活动密钥");
   });
 });

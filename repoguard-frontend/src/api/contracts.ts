@@ -10,6 +10,9 @@ import {
   isGithubIntegrationConfig,
   isReviewPolicyConfig,
   isReviewTaskSummary,
+  isSecretReEncryptionItemPage,
+  isSecretReEncryptionJob,
+  isSecretReEncryptionJobPage,
   isServiceIntegrationConfig,
   validateApiResponse,
   type ApiResponseValidator
@@ -62,8 +65,9 @@ import type {
   ReviewRuleStatusRequest,
   ReviewStrategyPolicy,
   ReviewEnforcementModeRequest,
+  SecretReEncryptionJob,
+  SecretReEncryptionItem,
   SecretReEncryptionRequest,
-  SecretReEncryptionResponse,
   ReviewTrendPoint,
   ReviewTask,
   ReviewTaskListSummary,
@@ -217,7 +221,18 @@ export type ApiContract = {
   updateReviewPolicyConfig: ApiOperation<ReviewPolicyConfigRequest, ReviewPolicyConfig>;
   fetchSystemSettings: ApiOperation<undefined, SystemSettings>;
   updateSystemSettings: ApiOperation<SystemSettingsRequest, SystemSettings>;
-  reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionResponse>;
+  reEncryptSecrets: ApiOperation<SecretReEncryptionRequest, SecretReEncryptionJob>;
+  fetchSecretReEncryptionJob: ApiOperation<{ jobId: number }, SecretReEncryptionJob>;
+  fetchSecretReEncryptionJobs: ApiOperation<
+    { page?: number; pageSize?: number },
+    PageResponse<SecretReEncryptionJob>
+  >;
+  fetchSecretReEncryptionJobItems: ApiOperation<
+    { jobId: number; page?: number; pageSize?: number },
+    PageResponse<SecretReEncryptionItem>
+  >;
+  pauseSecretReEncryptionJob: ApiOperation<{ jobId: number }, SecretReEncryptionJob>;
+  resumeSecretReEncryptionJob: ApiOperation<{ jobId: number }, SecretReEncryptionJob>;
   fetchReviewRules: ApiOperation<undefined, ReviewRulesResponse>;
   fetchReviewCalibrationQueue: ApiOperation<
     { ruleId: string; limit?: number; includeIgnored?: boolean },
@@ -502,7 +517,38 @@ const apiEndpoints: ApiEndpointMap = {
   reEncryptSecrets: {
     method: "POST",
     path: () => "/api/v1/config/secrets/re-encryption",
-    body: input => input
+    body: input => input,
+    validateResponse: isSecretReEncryptionJob
+  },
+  fetchSecretReEncryptionJob: {
+    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}`,
+    validateResponse: isSecretReEncryptionJob
+  },
+  fetchSecretReEncryptionJobs: {
+    path: () => "/api/v1/config/secrets/re-encryption/jobs",
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize
+    }),
+    validateResponse: isSecretReEncryptionJobPage
+  },
+  fetchSecretReEncryptionJobItems: {
+    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/items`,
+    query: input => ({
+      page: input.page,
+      pageSize: input.pageSize
+    }),
+    validateResponse: isSecretReEncryptionItemPage
+  },
+  pauseSecretReEncryptionJob: {
+    method: "POST",
+    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/pause`,
+    validateResponse: isSecretReEncryptionJob
+  },
+  resumeSecretReEncryptionJob: {
+    method: "POST",
+    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/resume`,
+    validateResponse: isSecretReEncryptionJob
   },
   fetchReviewRules: {
     path: () => "/api/v1/config/review-rules"

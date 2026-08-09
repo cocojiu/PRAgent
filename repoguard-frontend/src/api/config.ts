@@ -61,6 +61,24 @@ export const fetchDataRetentionCleanupAudits = (
 export const reEncryptSecrets = (payload: SecretReEncryptionRequest) =>
   apiRequest("reEncryptSecrets", payload);
 
+export const fetchSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("fetchSecretReEncryptionJob", { jobId });
+
+export const fetchSecretReEncryptionJobs = (page = 1, pageSize = 20) =>
+  apiRequest("fetchSecretReEncryptionJobs", { page, pageSize });
+
+export const fetchSecretReEncryptionJobItems = (
+  jobId: number,
+  page = 1,
+  pageSize = 50
+) => apiRequest("fetchSecretReEncryptionJobItems", { jobId, page, pageSize });
+
+export const pauseSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("pauseSecretReEncryptionJob", { jobId });
+
+export const resumeSecretReEncryptionJob = (jobId: number) =>
+  apiRequest("resumeSecretReEncryptionJob", { jobId });
+
 export const fetchReviewRules = () => apiRequest("fetchReviewRules", undefined);
 
 export const fetchReviewCalibrationQueue = (

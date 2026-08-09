@@ -24,14 +24,16 @@ import com.repoguard.agent.dto.ReviewRulesResponse;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.dto.SecuritySettingsDto;
 import com.repoguard.agent.dto.SecretReEncryptionItemDto;
+import com.repoguard.agent.dto.SecretReEncryptionJobDto;
 import com.repoguard.agent.dto.SecretReEncryptionRequest;
-import com.repoguard.agent.dto.SecretReEncryptionResponse;
 import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SettingLogDto;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
-import com.repoguard.agent.security.SecretReEncryptionService;
+import com.repoguard.agent.authentication.AuthenticatedPrincipal;
+import com.repoguard.agent.authentication.RequestAuthenticationAttributes;
+import com.repoguard.agent.security.SecretReEncryptionJobService;
 import com.repoguard.agent.service.SystemConfigService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -189,9 +191,10 @@ class SystemConfigControllerTest {
         }
     };
 
-    private final SecretReEncryptionService secretReEncryptionService = Mockito.mock(SecretReEncryptionService.class);
+    private final SecretReEncryptionJobService secretReEncryptionJobService =
+        Mockito.mock(SecretReEncryptionJobService.class);
     private final MockMvc mockMvc = MockMvcBuilders
-        .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionService))
+        .standaloneSetup(new SystemConfigController(systemConfigService, secretReEncryptionJobService))
         .setControllerAdvice(new GlobalExceptionHandler())
         .build();
 
@@ -410,29 +413,38 @@ class SystemConfigControllerTest {
     }
 
     @Test
-    void reEncryptSecretsReturnsOperationReport() throws Exception {
-        Mockito.when(secretReEncryptionService.reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class)))
-            .thenReturn(new SecretReEncryptionResponse(
-                false,
-                1,
-                1,
-                0,
-                0,
-                List.of(new SecretReEncryptionItemDto(
-                    "integration_config",
-                    1L,
-                    "token_value",
-                    "GITHUB",
-                    "enc:v2",
-                    "old-2026",
-                    "new-2026",
-                    "WOULD_RE_ENCRYPT",
-                    null,
-                    "Secret can be re-encrypted"
-                ))
-            ));
+    void reEncryptSecretsReturnsQueuedJob() throws Exception {
+        Mockito.when(secretReEncryptionJobService.start(
+            org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        )).thenReturn(new SecretReEncryptionJobDto(
+            7L,
+            false,
+            "PENDING",
+            "old-2026",
+            "new-2026",
+            "integration_config",
+            0L,
+            100,
+            0L,
+            0L,
+            0L,
+            0L,
+            0,
+            null,
+            null,
+            "admin",
+            "2026-08-09 23:00:00",
+            "2026-08-09 23:00:00",
+            null
+        ));
 
         mockMvc.perform(post("/api/v1/config/secrets/re-encryption")
+                .requestAttr(
+                    RequestAuthenticationAttributes.AUTHENTICATED_PRINCIPAL,
+                    new AuthenticatedPrincipal(11L, "admin", "ADMIN", Long.MAX_VALUE)
+                )
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
@@ -446,8 +458,44 @@ class SystemConfigControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.executed").value(false))
-            .andExpect(jsonPath("$.data.items[0].status").value("WOULD_RE_ENCRYPT"))
-            .andExpect(jsonPath("$.data.items[0].failureReason").doesNotExist());
+            .andExpect(jsonPath("$.data.status").value("PENDING"))
+            .andExpect(jsonPath("$.data.id").value(7));
+    }
+
+    @Test
+    void listSecretReEncryptionJobsReturnsPagedSummaries() throws Exception {
+        Mockito.when(secretReEncryptionJobService.listJobs(1, 20))
+            .thenReturn(new com.repoguard.agent.dto.PageResponse<>(
+                List.of(new SecretReEncryptionJobDto(
+                    7L,
+                    true,
+                    "RUNNING",
+                    "old-2026",
+                    "new-2026",
+                    "integration_config",
+                    10L,
+                    100,
+                    10L,
+                    9L,
+                    1L,
+                    0L,
+                    0,
+                    null,
+                    null,
+                    "admin",
+                    "2026-08-09 23:00:00",
+                    "2026-08-09 23:01:00",
+                    null
+                )),
+                1
+            ));
+
+        mockMvc.perform(get("/api/v1/config/secrets/re-encryption/jobs"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.total").value(1))
+            .andExpect(jsonPath("$.data.items[0].id").value(7))
+            .andExpect(jsonPath("$.data.items[0].status").value("RUNNING"));
     }
 
     @Test
@@ -467,8 +515,12 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value("Request validation failed"));
 
-        Mockito.verify(secretReEncryptionService, Mockito.never())
-            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
+        Mockito.verify(secretReEncryptionJobService, Mockito.never())
+            .start(
+                org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+            );
     }
 
     @Test
@@ -489,8 +541,12 @@ class SystemConfigControllerTest {
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"))
             .andExpect(jsonPath("$.message").value("Request validation failed"));
 
-        Mockito.verify(secretReEncryptionService, Mockito.never())
-            .reEncrypt(org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class));
+        Mockito.verify(secretReEncryptionJobService, Mockito.never())
+            .start(
+                org.mockito.ArgumentMatchers.any(SecretReEncryptionRequest.class),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any()
+            );
     }
 
     private GithubIntegrationConfigDto githubDto() {
