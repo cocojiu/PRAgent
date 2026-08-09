@@ -23,7 +23,13 @@
 远程验证：通过。Pull Request Quality #31334989049、Repository Governance #31334989018/#31334987530、Release Images #31334987515、Auto Create Pull Request #31334987523 均成功。
 
 2026-08-10 | 优化-05 | 前端策略历史请求竞态治理
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：规则与策略历史请求改为独立的 latest-only 请求通道；新请求会中止同类旧请求并用序列号抑制迟到响应和陈旧错误；弹窗关闭及组件卸载时主动取消请求；规则/策略加载状态拆分，防止并发请求相互清除 loading；分页加载阻止重复点击并复用同一竞态保护。
 本地验证：新增请求乱序、取消和陈旧错误回归测试；前端 typecheck、ESLint、36 个测试文件/141 项测试及生产构建全部通过；资源预算检查通过。
+远程验证：通过。Pull Request Quality #31335410198、Repository Governance #31335410170/#31335408448、Release Images #31335408444、Auto Create Pull Request #31335408442 均成功。
+
+2026-08-10 | 优化-06 | 扩大 OpenAPI 生成客户端覆盖
+状态：本地完成，远程流水线待检查
+变更：将系统配置与评审校准控制器纳入生成客户端治理范围，生成操作由 34 项扩大到 65 项；配置域与规则校准端点改为复用 OpenAPI 生成的路径、方法和请求元数据，同时保留既有运行时响应校验与游标适配；生成器支持可选请求体类型，并同步强化后端覆盖契约，防止迁移端点退回手写元数据。
+本地验证：ApiContractTest、FrontendApiContractCatalogTest、OpenApiGeneratedClientContractTest 定向通过；前端 typecheck、ESLint、36 个测试文件/141 项测试及生产构建全部通过；生成文件一致性与资源预算检查通过。
 远程验证：pending

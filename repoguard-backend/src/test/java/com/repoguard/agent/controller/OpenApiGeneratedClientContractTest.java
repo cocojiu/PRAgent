@@ -28,9 +28,11 @@ class OpenApiGeneratedClientContractTest {
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
         "dashboardController",
+        "reviewCalibrationController",
         "reviewController",
         "notificationController",
-        "notificationIntegrationController"
+        "notificationIntegrationController",
+        "systemConfigController"
     );
 
     @Test

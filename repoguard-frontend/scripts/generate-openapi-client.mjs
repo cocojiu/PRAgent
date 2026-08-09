@@ -15,9 +15,11 @@ const outputPath = resolve(
 const checkOnly = process.argv.includes("--check");
 const migratedOperationPrefixes = [
   "dashboardController",
+  "reviewCalibrationController",
   "reviewController",
   "notificationController",
-  "notificationIntegrationController"
+  "notificationIntegrationController",
+  "systemConfigController"
 ];
 const httpMethods = ["get", "post", "put", "delete"];
 
@@ -109,7 +111,8 @@ function requestBodyType(operation) {
   if (typeof javaType !== "string") {
     throw new Error(`Operation ${operation.operationId} request body is missing x-java-type`);
   }
-  return typescriptDataType(javaType);
+  const bodyType = typescriptDataType(javaType);
+  return operation.requestBody.required ? bodyType : `${bodyType} | undefined`;
 }
 
 function responseType(operation) {

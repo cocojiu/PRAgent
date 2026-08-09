@@ -446,162 +446,143 @@ const apiEndpoints: ApiEndpointMap = {
     body: input => input
   }),
   fetchGithubIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/github",
+    ...generatedEndpoint("systemConfigControllerGetGithubIntegration", {}),
     validateResponse: isGithubIntegrationConfig
   },
   updateGithubIntegrationConfig: {
-    method: "PUT",
-    path: () => "/api/v1/config/integrations/github",
-    body: input => input,
+    ...generatedEndpoint("systemConfigControllerUpdateGithubIntegration", {
+      body: input => input
+    }),
     validateResponse: isGithubIntegrationConfig
   },
   fetchMysqlIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/mysql",
+    ...generatedEndpoint("systemConfigControllerGetMysqlIntegration", {}),
     validateResponse: isServiceIntegrationConfig
   },
   updateMysqlIntegrationConfig: {
-    method: "PUT",
-    path: () => "/api/v1/config/integrations/mysql",
-    body: input => input,
+    ...generatedEndpoint("systemConfigControllerUpdateMysqlIntegration", {
+      body: input => input
+    }),
     validateResponse: isServiceIntegrationConfig
   },
   fetchRabbitMqIntegrationConfig: {
-    path: () => "/api/v1/config/integrations/rabbitmq",
+    ...generatedEndpoint("systemConfigControllerGetRabbitMqIntegration", {}),
     validateResponse: isServiceIntegrationConfig
   },
   updateRabbitMqIntegrationConfig: {
-    method: "PUT",
-    path: () => "/api/v1/config/integrations/rabbitmq",
-    body: input => input,
+    ...generatedEndpoint("systemConfigControllerUpdateRabbitMqIntegration", {
+      body: input => input
+    }),
     validateResponse: isServiceIntegrationConfig
   },
   fetchReviewPolicyConfig: {
-    path: () => "/api/v1/config/review-policy",
+    ...generatedEndpoint("systemConfigControllerGetReviewPolicy", {}),
     validateResponse: isReviewPolicyConfig
   },
   updateReviewPolicyConfig: {
-    method: "PUT",
-    path: () => "/api/v1/config/review-policy",
-    body: input => input,
+    ...generatedEndpoint("systemConfigControllerUpdateReviewPolicy", {
+      body: input => input
+    }),
     validateResponse: isReviewPolicyConfig
   },
-  fetchSystemSettings: {
-    path: () => "/api/v1/config/system-settings"
-  },
-  updateSystemSettings: {
-    method: "PUT",
-    path: () => "/api/v1/config/system-settings",
+  fetchSystemSettings: generatedEndpoint("systemConfigControllerGetSystemSettings", {}),
+  updateSystemSettings: generatedEndpoint("systemConfigControllerUpdateSystemSettings", {
     body: input => input
-  },
+  }),
   reEncryptSecrets: {
-    method: "POST",
-    path: () => "/api/v1/config/secrets/re-encryption",
-    body: input => input,
+    ...generatedEndpoint("systemConfigControllerReEncryptSecrets", {
+      body: input => input
+    }),
     validateResponse: isSecretReEncryptionJob
   },
   fetchSecretReEncryptionJob: {
-    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}`,
+    ...generatedEndpoint("systemConfigControllerGetSecretReEncryptionJob", {
+      path: input => ({ jobId: input.jobId })
+    }),
     validateResponse: isSecretReEncryptionJob
   },
   fetchSecretReEncryptionJobs: {
-    path: () => "/api/v1/config/secrets/re-encryption/jobs",
-    query: input => ({
-      page: input.page,
-      pageSize: input.pageSize
+    ...generatedEndpoint("systemConfigControllerListSecretReEncryptionJobs", {
+      query: input => ({ page: input.page, pageSize: input.pageSize })
     }),
     validateResponse: isSecretReEncryptionJobPage
   },
   fetchSecretReEncryptionJobItems: {
-    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/items`,
-    query: input => ({
-      page: input.page,
-      pageSize: input.pageSize
+    ...generatedEndpoint("systemConfigControllerListSecretReEncryptionJobItems", {
+      path: input => ({ jobId: input.jobId }),
+      query: input => ({ page: input.page, pageSize: input.pageSize })
     }),
     validateResponse: isSecretReEncryptionItemPage
   },
   pauseSecretReEncryptionJob: {
-    method: "POST",
-    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/pause`,
+    ...generatedEndpoint("systemConfigControllerPauseSecretReEncryptionJob", {
+      path: input => ({ jobId: input.jobId })
+    }),
     validateResponse: isSecretReEncryptionJob
   },
   resumeSecretReEncryptionJob: {
-    method: "POST",
-    path: input => `/api/v1/config/secrets/re-encryption/jobs/${idSegment(input.jobId)}/resume`,
+    ...generatedEndpoint("systemConfigControllerResumeSecretReEncryptionJob", {
+      path: input => ({ jobId: input.jobId })
+    }),
     validateResponse: isSecretReEncryptionJob
   },
-  fetchReviewRules: {
-    path: () => "/api/v1/config/review-rules"
-  },
-  fetchReviewCalibrationQueue: {
-    path: () => "/api/v1/config/review-calibration/queue",
+  fetchReviewRules: generatedEndpoint("systemConfigControllerGetReviewRules", {}),
+  fetchReviewCalibrationQueue: generatedEndpoint("reviewCalibrationControllerGetReviewCalibrationQueue", {
     query: input => ({
       ruleId: input.ruleId,
       limit: input.limit ?? 30,
-      includeIgnored: input.includeIgnored ? "true" : "false"
+      includeIgnored: input.includeIgnored ?? false
     })
-  },
-  createReviewRule: {
-    method: "POST",
-    path: () => "/api/v1/config/review-rules",
+  }),
+  createReviewRule: generatedEndpoint("systemConfigControllerCreateReviewRule", {
     body: input => input
-  },
-  updateReviewRule: {
-    method: "PUT",
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}`,
+  }),
+  updateReviewRule: generatedEndpoint("systemConfigControllerUpdateReviewRule", {
+    path: input => ({ id: input.id }),
     query: input => ({ expectedPolicyVersion: input.expectedPolicyVersion }),
     body: input => input.payload
-  },
-  updateReviewRuleStatus: {
-    method: "PUT",
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/status`,
+  }),
+  updateReviewRuleStatus: generatedEndpoint("systemConfigControllerUpdateReviewRuleStatus", {
+    path: input => ({ id: input.id }),
     body: input => input.payload
-  },
-  fetchReviewRuleVersions: {
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions`,
-    query: input => ({ cursor: input.cursor, pageSize: input.pageSize })
-  },
-  rollbackReviewRule: {
-    method: "POST",
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions/${idSegment(input.policyVersion)}/rollback`,
+  }),
+  fetchReviewRuleVersions: generatedEndpoint("systemConfigControllerGetReviewRuleVersions", {
+    path: input => ({ id: input.id }),
+    query: input => ({
+      cursor: input.cursor ? Number(input.cursor) : undefined,
+      pageSize: input.pageSize
+    })
+  }),
+  rollbackReviewRule: generatedEndpoint("systemConfigControllerRollbackReviewRule", {
+    path: input => ({ id: input.id, policyVersion: input.policyVersion }),
     body: input => ({ expectedPolicyVersion: input.expectedPolicyVersion })
-  },
-  fetchReviewStrategy: {
-    path: () => "/api/v1/config/review-strategy"
-  },
-  fetchReviewStrategyVersions: {
-    path: () => "/api/v1/config/review-strategy/versions",
-    query: input => ({ cursor: input.cursor, pageSize: input.pageSize })
-  },
-  updateReviewStrategyEnforcement: {
-    method: "PUT",
-    path: () => "/api/v1/config/review-strategy/enforcement",
+  }),
+  fetchReviewStrategy: generatedEndpoint("systemConfigControllerGetReviewStrategyPolicy", {}),
+  fetchReviewStrategyVersions: generatedEndpoint("systemConfigControllerGetReviewStrategyVersions", {
+    query: input => ({
+      cursor: input.cursor ? Number(input.cursor) : undefined,
+      pageSize: input.pageSize
+    })
+  }),
+  updateReviewStrategyEnforcement: generatedEndpoint("systemConfigControllerPromoteReviewStrategy", {
     body: input => input
-  },
-  rollbackReviewStrategy: {
-    method: "POST",
-    path: input => `/api/v1/config/review-strategy/versions/${idSegment(input.snapshotId)}/rollback`,
+  }),
+  rollbackReviewStrategy: generatedEndpoint("systemConfigControllerRollbackReviewStrategy", {
+    path: input => ({ snapshotId: input.snapshotId }),
     body: input => ({ expectedSnapshotId: input.expectedSnapshotId })
-  },
-  testGithubIntegrationConnection: {
-    method: "POST",
-    path: () => "/api/v1/config/integrations/github/test",
+  }),
+  testGithubIntegrationConnection: generatedEndpoint("systemConfigControllerTestGithubIntegration", {
     body: input => input
-  },
-  testMysqlConnection: {
-    method: "POST",
-    path: () => "/api/v1/config/integrations/mysql/test",
+  }),
+  testMysqlConnection: generatedEndpoint("systemConfigControllerTestMysqlConnection", {
     body: input => input
-  },
-  testRabbitMqConnection: {
-    method: "POST",
-    path: () => "/api/v1/config/integrations/rabbitmq/test",
+  }),
+  testRabbitMqConnection: generatedEndpoint("systemConfigControllerTestRabbitMqConnection", {
     body: input => input
-  },
-  testReviewPolicyConnection: {
-    method: "POST",
-    path: () => "/api/v1/config/review-policy/test",
+  }),
+  testReviewPolicyConnection: generatedEndpoint("systemConfigControllerTestReviewPolicy", {
     body: input => input
-  },
+  }),
   fetchNotificationBindings: generatedEndpoint(
     "notificationIntegrationControllerListBindings",
     {

@@ -14,6 +14,8 @@ import type {
   GithubCommentPreview,
   GithubCommentPublicationHistory,
   GithubCommentPublish,
+  GithubIntegrationConfig,
+  GithubIntegrationConfigRequest,
   GithubPullRequestOptions,
   HighRiskReview,
   HumanReviewRequest,
@@ -28,13 +30,32 @@ import type {
   NotificationDelivery,
   NotificationEvent,
   PageResponse,
+  ReviewCalibrationQueue,
+  ReviewEnforcementModeRequest,
   ReviewFinding,
+  ReviewPolicyConfig,
+  ReviewPolicyConfigRequest,
   ReviewRetryResponse,
+  ReviewRuleConfig,
+  ReviewRuleConfigRequest,
+  ReviewRulePolicyVersion,
+  ReviewRuleRollbackRequest,
+  ReviewRuleStatusRequest,
+  ReviewRulesResponse,
+  ReviewStrategyPolicy,
+  ReviewStrategyRollbackRequest,
   ReviewTask,
   ReviewTaskListSummary,
   ReviewTaskStatus,
   ReviewTaskSummary,
   ReviewTrendPoint,
+  SecretReEncryptionItem,
+  SecretReEncryptionJob,
+  SecretReEncryptionRequest,
+  ServiceIntegrationConfig,
+  ServiceIntegrationConfigRequest,
+  SystemSettings,
+  SystemSettingsRequest,
   TimelineItem,
 } from "@/types";
 
@@ -158,6 +179,13 @@ export type GeneratedOpenApiOperationMap = {
     body: NotificationBindingStatusRequest;
     response: NotificationBinding;
   };
+  "reviewCalibrationControllerGetReviewCalibrationQueue": {
+    method: "GET";
+    pathParams: never;
+    query: { includeIgnored?: boolean; limit?: number; ruleId: string };
+    body: never;
+    response: ReviewCalibrationQueue;
+  };
   "reviewControllerGetGithubCommentPreview": {
     method: "GET";
     pathParams: { id: number };
@@ -276,6 +304,216 @@ export type GeneratedOpenApiOperationMap = {
     query: never;
     body: FindingFeedbackRequest;
     response: FindingFeedbackResponse;
+  };
+  "systemConfigControllerCreateReviewRule": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: ReviewRuleConfigRequest;
+    response: ReviewRuleConfig;
+  };
+  "systemConfigControllerGetGithubIntegration": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: GithubIntegrationConfig;
+  };
+  "systemConfigControllerGetMysqlIntegration": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: ServiceIntegrationConfig;
+  };
+  "systemConfigControllerGetRabbitMqIntegration": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: ServiceIntegrationConfig;
+  };
+  "systemConfigControllerGetReviewPolicy": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: ReviewPolicyConfig;
+  };
+  "systemConfigControllerGetReviewRules": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: ReviewRulesResponse;
+  };
+  "systemConfigControllerGetReviewRuleVersions": {
+    method: "GET";
+    pathParams: { id: string };
+    query: { cursor?: number; pageSize?: number };
+    body: never;
+    response: PageResponse<ReviewRulePolicyVersion>;
+  };
+  "systemConfigControllerGetReviewStrategyPolicy": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: ReviewStrategyPolicy;
+  };
+  "systemConfigControllerGetReviewStrategyVersions": {
+    method: "GET";
+    pathParams: never;
+    query: { cursor?: number; pageSize?: number };
+    body: never;
+    response: PageResponse<ReviewStrategyPolicy>;
+  };
+  "systemConfigControllerGetSecretReEncryptionJob": {
+    method: "GET";
+    pathParams: { jobId: number };
+    query: never;
+    body: never;
+    response: SecretReEncryptionJob;
+  };
+  "systemConfigControllerGetSystemSettings": {
+    method: "GET";
+    pathParams: never;
+    query: never;
+    body: never;
+    response: SystemSettings;
+  };
+  "systemConfigControllerListSecretReEncryptionJobItems": {
+    method: "GET";
+    pathParams: { jobId: number };
+    query: { page?: number; pageSize?: number };
+    body: never;
+    response: PageResponse<SecretReEncryptionItem>;
+  };
+  "systemConfigControllerListSecretReEncryptionJobs": {
+    method: "GET";
+    pathParams: never;
+    query: { page?: number; pageSize?: number };
+    body: never;
+    response: PageResponse<SecretReEncryptionJob>;
+  };
+  "systemConfigControllerPauseSecretReEncryptionJob": {
+    method: "POST";
+    pathParams: { jobId: number };
+    query: never;
+    body: never;
+    response: SecretReEncryptionJob;
+  };
+  "systemConfigControllerPromoteReviewStrategy": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: ReviewEnforcementModeRequest;
+    response: ReviewStrategyPolicy;
+  };
+  "systemConfigControllerReEncryptSecrets": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: SecretReEncryptionRequest;
+    response: SecretReEncryptionJob;
+  };
+  "systemConfigControllerResumeSecretReEncryptionJob": {
+    method: "POST";
+    pathParams: { jobId: number };
+    query: never;
+    body: never;
+    response: SecretReEncryptionJob;
+  };
+  "systemConfigControllerRollbackReviewRule": {
+    method: "POST";
+    pathParams: { id: string; policyVersion: number };
+    query: never;
+    body: ReviewRuleRollbackRequest;
+    response: ReviewRuleConfig;
+  };
+  "systemConfigControllerRollbackReviewStrategy": {
+    method: "POST";
+    pathParams: { snapshotId: number };
+    query: never;
+    body: ReviewStrategyRollbackRequest;
+    response: ReviewStrategyPolicy;
+  };
+  "systemConfigControllerTestGithubIntegration": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: GithubIntegrationConfigRequest | undefined;
+    response: ConnectionTestResult;
+  };
+  "systemConfigControllerTestMysqlConnection": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: ServiceIntegrationConfigRequest | undefined;
+    response: ConnectionTestResult;
+  };
+  "systemConfigControllerTestRabbitMqConnection": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: ServiceIntegrationConfigRequest | undefined;
+    response: ConnectionTestResult;
+  };
+  "systemConfigControllerTestReviewPolicy": {
+    method: "POST";
+    pathParams: never;
+    query: never;
+    body: ReviewPolicyConfigRequest | undefined;
+    response: ConnectionTestResult;
+  };
+  "systemConfigControllerUpdateGithubIntegration": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: GithubIntegrationConfigRequest;
+    response: GithubIntegrationConfig;
+  };
+  "systemConfigControllerUpdateMysqlIntegration": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: ServiceIntegrationConfigRequest;
+    response: ServiceIntegrationConfig;
+  };
+  "systemConfigControllerUpdateRabbitMqIntegration": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: ServiceIntegrationConfigRequest;
+    response: ServiceIntegrationConfig;
+  };
+  "systemConfigControllerUpdateReviewPolicy": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: ReviewPolicyConfigRequest;
+    response: ReviewPolicyConfig;
+  };
+  "systemConfigControllerUpdateReviewRule": {
+    method: "PUT";
+    pathParams: { id: string };
+    query: { expectedPolicyVersion: number };
+    body: ReviewRuleConfigRequest;
+    response: ReviewRuleConfig;
+  };
+  "systemConfigControllerUpdateReviewRuleStatus": {
+    method: "PUT";
+    pathParams: { id: string };
+    query: never;
+    body: ReviewRuleStatusRequest;
+    response: ReviewRuleConfig;
+  };
+  "systemConfigControllerUpdateSystemSettings": {
+    method: "PUT";
+    pathParams: never;
+    query: never;
+    body: SystemSettingsRequest;
+    response: SystemSettings;
   };
 };
 
@@ -435,6 +673,14 @@ export const generatedOpenApiOperations = {
     hasRequestBody: true,
     requestBodyRequired: true
   },
+  "reviewCalibrationControllerGetReviewCalibrationQueue": {
+    method: "GET",
+    path: "/api/v1/config/review-calibration/queue",
+    pathParamNames: [],
+    queryParamNames: ["includeIgnored", "limit", "ruleId"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
   "reviewControllerGetGithubCommentPreview": {
     method: "GET",
     path: "/api/v1/reviews/{id}/github-comments/preview",
@@ -567,6 +813,246 @@ export const generatedOpenApiOperations = {
     method: "POST",
     path: "/api/v1/reviews/{id}/findings/{findingId}/feedback",
     pathParamNames: ["findingId", "id"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerCreateReviewRule": {
+    method: "POST",
+    path: "/api/v1/config/review-rules",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerGetGithubIntegration": {
+    method: "GET",
+    path: "/api/v1/config/integrations/github",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetMysqlIntegration": {
+    method: "GET",
+    path: "/api/v1/config/integrations/mysql",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetRabbitMqIntegration": {
+    method: "GET",
+    path: "/api/v1/config/integrations/rabbitmq",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetReviewPolicy": {
+    method: "GET",
+    path: "/api/v1/config/review-policy",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetReviewRules": {
+    method: "GET",
+    path: "/api/v1/config/review-rules",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetReviewRuleVersions": {
+    method: "GET",
+    path: "/api/v1/config/review-rules/{id}/versions",
+    pathParamNames: ["id"],
+    queryParamNames: ["cursor", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetReviewStrategyPolicy": {
+    method: "GET",
+    path: "/api/v1/config/review-strategy",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetReviewStrategyVersions": {
+    method: "GET",
+    path: "/api/v1/config/review-strategy/versions",
+    pathParamNames: [],
+    queryParamNames: ["cursor", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetSecretReEncryptionJob": {
+    method: "GET",
+    path: "/api/v1/config/secrets/re-encryption/jobs/{jobId}",
+    pathParamNames: ["jobId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerGetSystemSettings": {
+    method: "GET",
+    path: "/api/v1/config/system-settings",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerListSecretReEncryptionJobItems": {
+    method: "GET",
+    path: "/api/v1/config/secrets/re-encryption/jobs/{jobId}/items",
+    pathParamNames: ["jobId"],
+    queryParamNames: ["page", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerListSecretReEncryptionJobs": {
+    method: "GET",
+    path: "/api/v1/config/secrets/re-encryption/jobs",
+    pathParamNames: [],
+    queryParamNames: ["page", "pageSize"],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerPauseSecretReEncryptionJob": {
+    method: "POST",
+    path: "/api/v1/config/secrets/re-encryption/jobs/{jobId}/pause",
+    pathParamNames: ["jobId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerPromoteReviewStrategy": {
+    method: "PUT",
+    path: "/api/v1/config/review-strategy/enforcement",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerReEncryptSecrets": {
+    method: "POST",
+    path: "/api/v1/config/secrets/re-encryption",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerResumeSecretReEncryptionJob": {
+    method: "POST",
+    path: "/api/v1/config/secrets/re-encryption/jobs/{jobId}/resume",
+    pathParamNames: ["jobId"],
+    queryParamNames: [],
+    hasRequestBody: false,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerRollbackReviewRule": {
+    method: "POST",
+    path: "/api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback",
+    pathParamNames: ["id", "policyVersion"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerRollbackReviewStrategy": {
+    method: "POST",
+    path: "/api/v1/config/review-strategy/versions/{snapshotId}/rollback",
+    pathParamNames: ["snapshotId"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerTestGithubIntegration": {
+    method: "POST",
+    path: "/api/v1/config/integrations/github/test",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerTestMysqlConnection": {
+    method: "POST",
+    path: "/api/v1/config/integrations/mysql/test",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerTestRabbitMqConnection": {
+    method: "POST",
+    path: "/api/v1/config/integrations/rabbitmq/test",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerTestReviewPolicy": {
+    method: "POST",
+    path: "/api/v1/config/review-policy/test",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: false
+  },
+  "systemConfigControllerUpdateGithubIntegration": {
+    method: "PUT",
+    path: "/api/v1/config/integrations/github",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateMysqlIntegration": {
+    method: "PUT",
+    path: "/api/v1/config/integrations/mysql",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateRabbitMqIntegration": {
+    method: "PUT",
+    path: "/api/v1/config/integrations/rabbitmq",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateReviewPolicy": {
+    method: "PUT",
+    path: "/api/v1/config/review-policy",
+    pathParamNames: [],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateReviewRule": {
+    method: "PUT",
+    path: "/api/v1/config/review-rules/{id}",
+    pathParamNames: ["id"],
+    queryParamNames: ["expectedPolicyVersion"],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateReviewRuleStatus": {
+    method: "PUT",
+    path: "/api/v1/config/review-rules/{id}/status",
+    pathParamNames: ["id"],
+    queryParamNames: [],
+    hasRequestBody: true,
+    requestBodyRequired: true
+  },
+  "systemConfigControllerUpdateSystemSettings": {
+    method: "PUT",
+    path: "/api/v1/config/system-settings",
+    pathParamNames: [],
     queryParamNames: [],
     hasRequestBody: true,
     requestBodyRequired: true
