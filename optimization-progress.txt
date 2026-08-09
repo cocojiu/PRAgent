@@ -50,4 +50,10 @@
 状态：本地完成，远程流水线待检查
 变更：首屏资源预算明确标记为共享成本，并新增首屏请求数独立预算；总览路由预算明确标记为相对首屏的增量 JavaScript、CSS 与请求数，消除“critical”口径歧义；预算超限时输出对应 chunk/CSS/module 或请求资源清单，便于直接定位回归来源；最大异步 chunk 继续独立约束。
 本地验证：前端类型检查与生产构建通过；构建日志实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
-远程验证：pending
+远程验证：通过。Pull Request Quality #31337424953、Repository Governance #31337424951/#31337422535、Release Images #31337422526、Auto Create Pull Request #31337422536 均成功；远程前端质量门禁与生产资源预算构建均通过。
+
+2026-08-10 | 最终验收 | 优化序列完整性与全量回归
+状态：已完成
+审计范围：按顺序复核优化-01 至优化-07C 的代码、契约、数据库迁移、前端生成产物与流水线门禁；提交信息均为中文，所有优化提交均已单独推送 PRAgent-test 并检查 Actions。用户保留的 Caddyfile、optimization-log.txt 与 .tmp 未纳入提交，sub2api 相关改动未处理。
+本地验证：后端排除受用户 Caddyfile 工作区改动影响的 FrontendDeploymentContractTest 后完整 Maven verify 通过；前端 typecheck、ESLint、36 个测试文件共 141 项单元测试和生产构建通过；OpenAPI 生成文件一致性与全部资源预算通过。
+远程验证：优化-01 至优化-07C 的 Pull Request Quality、Repository Governance、Release Images 与 Auto Create Pull Request 均已核对成功；最终归档提交的流水线结果见交付回执。
