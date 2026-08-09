@@ -263,6 +263,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="ruleHistoryHasMore" class="history-load-more">
+        <el-button :loading="historyLoading" @click="loadMoreRuleVersions">加载更多</el-button>
+      </div>
     </el-dialog>
 
     <el-dialog v-model="strategyVersionDialogVisible" title="审查策略版本历史" width="980px">
@@ -289,6 +292,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div v-if="strategyHistoryHasMore" class="history-load-more">
+        <el-button :loading="historyLoading" @click="loadMoreStrategyVersions">加载更多</el-button>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -336,6 +342,7 @@ const dialogVisible = ref(false);
 const ruleVersionDialogVisible = ref(false);
 const strategyVersionDialogVisible = ref(false);
 const editingRuleId = ref("");
+const editingPolicyVersion = ref(0);
 const rules = ref<ReviewRuleConfig[]>([]);
 const metrics = ref<SimpleMetric[]>([]);
 const qualityGroups = ref<ReviewQualityGroup[]>([]);
@@ -347,6 +354,10 @@ const rollbackSavingId = ref("");
 const selectedRuleId = ref("");
 const ruleVersions = ref<ReviewRulePolicyVersion[]>([]);
 const strategyVersions = ref<ReviewStrategyPolicy[]>([]);
+const ruleHistoryNextCursor = ref<string | null>(null);
+const ruleHistoryHasMore = ref(false);
+const strategyHistoryNextCursor = ref<string | null>(null);
+const strategyHistoryHasMore = ref(false);
 
 const ruleForm = reactive<ReviewRuleConfigRequest>({
   id: "",
@@ -439,6 +450,7 @@ const openEditDialog = (rule: ReviewRuleConfig) => {
     return;
   }
   editingRuleId.value = rule.id;
+  editingPolicyVersion.value = rule.policyVersion;
   resetForm(rule);
   dialogVisible.value = true;
 };
@@ -448,7 +460,10 @@ const openRuleVersions = async (rule: ReviewRuleConfig) => {
   ruleVersionDialogVisible.value = true;
   historyLoading.value = true;
   try {
-    ruleVersions.value = await fetchReviewRuleVersions(rule.id);
+    const page = await fetchReviewRuleVersions(rule.id);
+    ruleVersions.value = page.items;
+    ruleHistoryNextCursor.value = page.nextCursor ?? null;
+    ruleHistoryHasMore.value = Boolean(page.hasMore);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
   } finally {
@@ -460,7 +475,48 @@ const openStrategyVersions = async () => {
   strategyVersionDialogVisible.value = true;
   historyLoading.value = true;
   try {
-    strategyVersions.value = await fetchReviewStrategyVersions();
+    const page = await fetchReviewStrategyVersions();
+    strategyVersions.value = page.items;
+    strategyHistoryNextCursor.value = page.nextCursor ?? null;
+    strategyHistoryHasMore.value = Boolean(page.hasMore);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
+  } finally {
+    historyLoading.value = false;
+  }
+};
+
+const loadMoreRuleVersions = async () => {
+  if (!selectedRuleId.value || !ruleHistoryHasMore.value || !ruleHistoryNextCursor.value) {
+    return;
+  }
+  historyLoading.value = true;
+  try {
+    const page = await fetchReviewRuleVersions(selectedRuleId.value, {
+      cursor: ruleHistoryNextCursor.value
+    });
+    ruleVersions.value.push(...page.items);
+    ruleHistoryNextCursor.value = page.nextCursor ?? null;
+    ruleHistoryHasMore.value = Boolean(page.hasMore);
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, "规则版本历史加载失败"));
+  } finally {
+    historyLoading.value = false;
+  }
+};
+
+const loadMoreStrategyVersions = async () => {
+  if (!strategyHistoryHasMore.value || !strategyHistoryNextCursor.value) {
+    return;
+  }
+  historyLoading.value = true;
+  try {
+    const page = await fetchReviewStrategyVersions({
+      cursor: strategyHistoryNextCursor.value
+    });
+    strategyVersions.value.push(...page.items);
+    strategyHistoryNextCursor.value = page.nextCursor ?? null;
+    strategyHistoryHasMore.value = Boolean(page.hasMore);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "策略版本历史加载失败"));
   } finally {
@@ -475,14 +531,15 @@ const saveStrategyEnforcement = async () => {
   strategySaving.value = true;
   try {
     strategyPolicy.value = await updateReviewStrategyEnforcement({
-      enforcementMode: strategyTargetMode.value
+      enforcementMode: strategyTargetMode.value,
+      expectedSnapshotId: strategyPolicy.value.snapshotId
     });
     strategyTargetMode.value = strategyPolicy.value.enforcementMode;
     ElMessage.success("审查策略处置模式已更新");
     await loadRules();
   } catch (error) {
-    strategyTargetMode.value = strategyPolicy.value.enforcementMode;
     ElMessage.error(getErrorMessage(error, "策略处置模式更新失败"));
+    await loadRules();
   } finally {
     strategySaving.value = false;
   }
@@ -494,12 +551,20 @@ const rollbackRuleVersion = async (policyVersion: number) => {
   }
   rollbackSavingId.value = `rule-${policyVersion}`;
   try {
-    await rollbackReviewRule(selectedRuleId.value, policyVersion);
+    const activeRule = rules.value.find(rule => rule.id === selectedRuleId.value);
+    if (!activeRule) {
+      throw new Error("当前规则不存在，请刷新后重试");
+    }
+    await rollbackReviewRule(selectedRuleId.value, policyVersion, activeRule.policyVersion);
     ElMessage.success("规则策略已生成新的回滚版本");
     await loadRules();
-    ruleVersions.value = await fetchReviewRuleVersions(selectedRuleId.value);
+    const page = await fetchReviewRuleVersions(selectedRuleId.value);
+    ruleVersions.value = page.items;
+    ruleHistoryNextCursor.value = page.nextCursor ?? null;
+    ruleHistoryHasMore.value = Boolean(page.hasMore);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则策略回滚失败"));
+    await loadRules();
   } finally {
     rollbackSavingId.value = "";
   }
@@ -511,13 +576,20 @@ const rollbackStrategyVersion = async (snapshotId: number) => {
   }
   rollbackSavingId.value = `strategy-${snapshotId}`;
   try {
-    strategyPolicy.value = await rollbackReviewStrategy(snapshotId);
+    if (!strategyPolicy.value) {
+      throw new Error("当前策略不存在，请刷新后重试");
+    }
+    strategyPolicy.value = await rollbackReviewStrategy(snapshotId, strategyPolicy.value.snapshotId);
     strategyTargetMode.value = strategyPolicy.value.enforcementMode;
     ElMessage.success("审查策略已生成新的回滚快照");
     await loadRules();
-    strategyVersions.value = await fetchReviewStrategyVersions();
+    const page = await fetchReviewStrategyVersions();
+    strategyVersions.value = page.items;
+    strategyHistoryNextCursor.value = page.nextCursor ?? null;
+    strategyHistoryHasMore.value = Boolean(page.hasMore);
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "审查策略回滚失败"));
+    await loadRules();
   } finally {
     rollbackSavingId.value = "";
   }
@@ -535,12 +607,18 @@ const saveRule = async () => {
   saving.value = true;
   try {
     const payload = normalizedPayload();
-    await updateReviewRule(editingRuleId.value, payload);
+    await updateReviewRule(editingRuleId.value, editingPolicyVersion.value, payload);
     ElMessage.success("规则已更新");
     dialogVisible.value = false;
     await loadRules();
   } catch (error) {
     ElMessage.error(getErrorMessage(error, "规则操作失败"));
+    await loadRules();
+    const refreshedRule = rules.value.find(rule => rule.id === editingRuleId.value);
+    if (refreshedRule) {
+      editingPolicyVersion.value = refreshedRule.policyVersion;
+      resetForm(refreshedRule);
+    }
   } finally {
     saving.value = false;
   }
@@ -555,13 +633,17 @@ const toggleRule = async (rule: ReviewRuleConfig, value: string | number | boole
   const previousStatus: RuleStatus = nextStatus === "enabled" ? "disabled" : "enabled";
   statusSavingId.value = rule.id;
   try {
-    const updated = await updateReviewRuleStatus(rule.id, { status: nextStatus });
+    const updated = await updateReviewRuleStatus(rule.id, {
+      status: nextStatus,
+      expectedPolicyVersion: rule.policyVersion
+    });
     Object.assign(rule, updated);
     ElMessage.success(`${rule.name} 已${nextStatus === "enabled" ? "启用" : "停用"}`);
     await loadRules();
   } catch (error) {
     rule.status = previousStatus;
     ElMessage.error(getErrorMessage(error, "规则操作失败"));
+    await loadRules();
   } finally {
     statusSavingId.value = "";
   }

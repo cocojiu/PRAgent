@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
 import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.entity.ReviewStrategyPolicySnapshot;
@@ -47,16 +48,30 @@ public class ReviewStrategyPolicyService {
         return toDto(requireActive(), baseline);
     }
 
-    public List<ReviewStrategyPolicyDto> list() {
+    public PageResponse<ReviewStrategyPolicyDto> list(Long cursor, int pageSize) {
+        validatePage(cursor, pageSize);
         ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
-        return snapshotMapper.selectList(
-            new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>().orderByDesc(ReviewStrategyPolicySnapshot::getId)
-        ).stream().map(snapshot -> toDto(snapshot, baseline)).toList();
+        LambdaQueryWrapper<ReviewStrategyPolicySnapshot> query =
+            new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>()
+                .orderByDesc(ReviewStrategyPolicySnapshot::getId);
+        if (cursor != null) {
+            query.lt(ReviewStrategyPolicySnapshot::getId, cursor);
+        }
+        List<ReviewStrategyPolicySnapshot> snapshots = snapshotMapper.selectList(
+            query.last("limit " + (pageSize + 1))
+        );
+        boolean hasMore = snapshots.size() > pageSize;
+        List<ReviewStrategyPolicySnapshot> page = hasMore ? snapshots.subList(0, pageSize) : snapshots;
+        List<ReviewStrategyPolicyDto> items = page.stream().map(snapshot -> toDto(snapshot, baseline)).toList();
+        String nextCursor = hasMore ? String.valueOf(page.getLast().getId()) : null;
+        long total = snapshotMapper.selectCount(new LambdaQueryWrapper<ReviewStrategyPolicySnapshot>());
+        return new PageResponse<>(items, total, nextCursor, hasMore);
     }
 
     @Transactional
-    public ReviewStrategyPolicyDto promote(String requestedMode) {
-        ReviewStrategyPolicySnapshot active = requireActive();
+    public ReviewStrategyPolicyDto promote(String requestedMode, long expectedSnapshotId) {
+        ReviewStrategyPolicySnapshot active = requireActiveForUpdate();
+        requireExpectedSnapshot(active, expectedSnapshotId);
         ReviewStrategyRelease release = toRelease(active);
         EnforcementMode current = release.enforcementMode();
         EnforcementMode target = EnforcementMode.from(requestedMode);
@@ -69,12 +84,12 @@ public class ReviewStrategyPolicyService {
         );
         validatePromotion(release, current, target, qualityGate);
         ReviewStrategyPolicySnapshot promoted = copy(active, target, "PROMOTION", active.getId());
-        activate(promoted);
+        activate(promoted, active);
         return toDto(promoted, qualityBaselineService.loadBaseline());
     }
 
     @Transactional
-    public ReviewStrategyPolicyDto rollback(long snapshotId) {
+    public ReviewStrategyPolicyDto rollback(long snapshotId, long expectedSnapshotId) {
         ReviewStrategyPolicySnapshot target = snapshotMapper.selectById(snapshotId);
         if (target == null) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Review strategy snapshot not found: " + snapshotId);
@@ -86,13 +101,15 @@ public class ReviewStrategyPolicyService {
                 "Review strategy snapshot uses versions unsupported by the current runtime"
             );
         }
+        ReviewStrategyPolicySnapshot active = requireActiveForUpdate();
+        requireExpectedSnapshot(active, expectedSnapshotId);
         ReviewStrategyPolicySnapshot restored = copy(
             target,
             release.enforcementMode(),
             "ROLLBACK",
             target.getId()
         );
-        activate(restored);
+        activate(restored, active);
         return toDto(restored, qualityBaselineService.loadBaseline());
     }
 
@@ -125,13 +142,20 @@ public class ReviewStrategyPolicyService {
         }
     }
 
-    private void activate(ReviewStrategyPolicySnapshot snapshot) {
-        snapshotMapper.update(
+    private void activate(
+        ReviewStrategyPolicySnapshot snapshot,
+        ReviewStrategyPolicySnapshot expectedActive
+    ) {
+        int updated = snapshotMapper.update(
             null,
             new LambdaUpdateWrapper<ReviewStrategyPolicySnapshot>()
+                .eq(ReviewStrategyPolicySnapshot::getId, expectedActive.getId())
                 .eq(ReviewStrategyPolicySnapshot::getActive, true)
                 .set(ReviewStrategyPolicySnapshot::getActive, false)
         );
+        if (updated != 1) {
+            throw strategyConflict();
+        }
         snapshotMapper.insert(snapshot);
     }
 
@@ -168,6 +192,30 @@ public class ReviewStrategyPolicyService {
             throw new IllegalStateException("Active review strategy policy snapshot is missing");
         }
         return active;
+    }
+
+    private ReviewStrategyPolicySnapshot requireActiveForUpdate() {
+        ReviewStrategyPolicySnapshot active = snapshotMapper.selectActiveForUpdate();
+        if (active == null) {
+            throw new IllegalStateException("Active review strategy policy snapshot is missing");
+        }
+        return active;
+    }
+
+    private void requireExpectedSnapshot(ReviewStrategyPolicySnapshot active, long expectedSnapshotId) {
+        if (!Objects.equals(active.getId(), expectedSnapshotId)) {
+            throw strategyConflict();
+        }
+    }
+
+    private BusinessException strategyConflict() {
+        return new BusinessException(ErrorCode.CONFLICT, "Review strategy changed; reload and retry");
+    }
+
+    private void validatePage(Long cursor, int pageSize) {
+        if ((cursor != null && cursor < 1) || pageSize < 1 || pageSize > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid review strategy history page");
+        }
     }
 
     private ReviewStrategyPolicyDto toDto(

@@ -1708,6 +1708,15 @@
             "type" : "string",
             "maxLength" : 64
           }
+        }, {
+          "name" : "expectedPolicyVersion",
+          "in" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
         } ],
         "requestBody" : {
           "required" : true,
@@ -1830,12 +1839,32 @@
             "type" : "string",
             "maxLength" : 64
           }
+        }, {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
         } ],
         "responses" : {
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "List<ReviewRulePolicyVersionDto>",
+            "x-java-response-data" : "PageResponse<ReviewRulePolicyVersionDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -1852,10 +1881,27 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "type" : "array",
-                      "items" : {
-                        "$ref" : "#/components/schemas/ReviewRulePolicyVersionDto"
-                      }
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewRulePolicyVersionDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewRulePolicyVersionDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -1893,6 +1939,17 @@
             "minimum" : 1
           }
         } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewRuleRollbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewRuleRollbackRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -2029,12 +2086,32 @@
         "tags" : [ "SystemConfig" ],
         "operationId" : "systemConfigControllerGetReviewStrategyVersions",
         "x-controller-operation" : "SystemConfigController#getReviewStrategyVersions",
-        "parameters" : [ ],
+        "parameters" : [ {
+          "name" : "cursor",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        }, {
+          "name" : "pageSize",
+          "in" : "query",
+          "required" : false,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32",
+            "minimum" : 1,
+            "maximum" : 100,
+            "default" : 20
+          }
+        } ],
         "responses" : {
           "200" : {
             "description" : "OK",
             "x-java-response-envelope" : "ApiResponse",
-            "x-java-response-data" : "List<ReviewStrategyPolicyDto>",
+            "x-java-response-data" : "PageResponse<ReviewStrategyPolicyDto>",
             "content" : {
               "application/json" : {
                 "schema" : {
@@ -2051,10 +2128,27 @@
                       "type" : "string"
                     },
                     "data" : {
-                      "type" : "array",
-                      "items" : {
-                        "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
-                      }
+                      "type" : "object",
+                      "x-java-type" : "PageResponse<ReviewStrategyPolicyDto>",
+                      "properties" : {
+                        "items" : {
+                          "type" : "array",
+                          "items" : {
+                            "$ref" : "#/components/schemas/ReviewStrategyPolicyDto"
+                          }
+                        },
+                        "total" : {
+                          "type" : "integer",
+                          "format" : "int64"
+                        },
+                        "nextCursor" : {
+                          "type" : "string"
+                        },
+                        "hasMore" : {
+                          "type" : "boolean"
+                        }
+                      },
+                      "required" : [ "total", "hasMore" ]
                     },
                     "timestamp" : {
                       "type" : "string",
@@ -2084,6 +2178,17 @@
             "minimum" : 1
           }
         } ],
+        "requestBody" : {
+          "required" : true,
+          "x-java-type" : "ReviewStrategyRollbackRequest",
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReviewStrategyRollbackRequest"
+              }
+            }
+          }
+        },
         "responses" : {
           "200" : {
             "description" : "OK",
@@ -7620,9 +7725,14 @@
             "type" : "string",
             "minLength" : 1,
             "pattern" : "(?i)observe|comment|block"
+          },
+          "expectedSnapshotId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         },
-        "required" : [ "enforcementMode" ]
+        "required" : [ "enforcementMode", "expectedSnapshotId" ]
       },
       "ReviewFindingDto" : {
         "type" : "object",
@@ -8355,6 +8465,18 @@
         },
         "required" : [ "labeledSamples", "labeledHighRiskSamples", "commentEligible", "blockEligible" ]
       },
+      "ReviewRuleRollbackRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewRuleRollbackRequest",
+        "properties" : {
+          "expectedPolicyVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "expectedPolicyVersion" ]
+      },
       "ReviewRuleStatusRequest" : {
         "type" : "object",
         "x-java-type" : "ReviewRuleStatusRequest",
@@ -8363,9 +8485,14 @@
             "type" : "string",
             "minLength" : 1,
             "pattern" : "(?i)enabled|disabled"
+          },
+          "expectedPolicyVersion" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
           }
         },
-        "required" : [ "status" ]
+        "required" : [ "status", "expectedPolicyVersion" ]
       },
       "ReviewRulesResponse" : {
         "type" : "object",
@@ -8445,6 +8572,18 @@
           }
         },
         "required" : [ "snapshotId", "strategyVersion", "replayVerified", "active" ]
+      },
+      "ReviewStrategyRollbackRequest" : {
+        "type" : "object",
+        "x-java-type" : "ReviewStrategyRollbackRequest",
+        "properties" : {
+          "expectedSnapshotId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "minimum" : 1
+          }
+        },
+        "required" : [ "expectedSnapshotId" ]
       },
       "ReviewTaskListItem" : {
         "type" : "object",

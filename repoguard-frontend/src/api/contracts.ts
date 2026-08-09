@@ -226,14 +226,29 @@ export type ApiContract = {
     ReviewCalibrationQueue
   >;
   createReviewRule: ApiOperation<ReviewRuleConfigRequest, ReviewRuleConfig>;
-  updateReviewRule: ApiOperation<{ id: string; payload: ReviewRuleConfigRequest }, ReviewRuleConfig>;
+  updateReviewRule: ApiOperation<
+    { id: string; expectedPolicyVersion: number; payload: ReviewRuleConfigRequest },
+    ReviewRuleConfig
+  >;
   updateReviewRuleStatus: ApiOperation<{ id: string; payload: ReviewRuleStatusRequest }, ReviewRuleConfig>;
-  fetchReviewRuleVersions: ApiOperation<{ id: string }, ReviewRulePolicyVersion[]>;
-  rollbackReviewRule: ApiOperation<{ id: string; policyVersion: number }, ReviewRuleConfig>;
+  fetchReviewRuleVersions: ApiOperation<
+    { id: string; cursor?: string; pageSize?: number },
+    PageResponse<ReviewRulePolicyVersion>
+  >;
+  rollbackReviewRule: ApiOperation<
+    { id: string; policyVersion: number; expectedPolicyVersion: number },
+    ReviewRuleConfig
+  >;
   fetchReviewStrategy: ApiOperation<undefined, ReviewStrategyPolicy>;
-  fetchReviewStrategyVersions: ApiOperation<undefined, ReviewStrategyPolicy[]>;
+  fetchReviewStrategyVersions: ApiOperation<
+    { cursor?: string; pageSize?: number },
+    PageResponse<ReviewStrategyPolicy>
+  >;
   updateReviewStrategyEnforcement: ApiOperation<ReviewEnforcementModeRequest, ReviewStrategyPolicy>;
-  rollbackReviewStrategy: ApiOperation<{ snapshotId: number }, ReviewStrategyPolicy>;
+  rollbackReviewStrategy: ApiOperation<
+    { snapshotId: number; expectedSnapshotId: number },
+    ReviewStrategyPolicy
+  >;
   testGithubIntegrationConnection: ApiOperation<GithubIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testMysqlConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
   testRabbitMqConnection: ApiOperation<ServiceIntegrationConfigRequest | undefined, ConnectionTestResult>;
@@ -533,6 +548,7 @@ const apiEndpoints: ApiEndpointMap = {
   updateReviewRule: {
     method: "PUT",
     path: input => `/api/v1/config/review-rules/${idSegment(input.id)}`,
+    query: input => ({ expectedPolicyVersion: input.expectedPolicyVersion }),
     body: input => input.payload
   },
   updateReviewRuleStatus: {
@@ -541,17 +557,20 @@ const apiEndpoints: ApiEndpointMap = {
     body: input => input.payload
   },
   fetchReviewRuleVersions: {
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions`
+    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions`,
+    query: input => ({ cursor: input.cursor, pageSize: input.pageSize })
   },
   rollbackReviewRule: {
     method: "POST",
-    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions/${idSegment(input.policyVersion)}/rollback`
+    path: input => `/api/v1/config/review-rules/${idSegment(input.id)}/versions/${idSegment(input.policyVersion)}/rollback`,
+    body: input => ({ expectedPolicyVersion: input.expectedPolicyVersion })
   },
   fetchReviewStrategy: {
     path: () => "/api/v1/config/review-strategy"
   },
   fetchReviewStrategyVersions: {
-    path: () => "/api/v1/config/review-strategy/versions"
+    path: () => "/api/v1/config/review-strategy/versions",
+    query: input => ({ cursor: input.cursor, pageSize: input.pageSize })
   },
   updateReviewStrategyEnforcement: {
     method: "PUT",
@@ -560,7 +579,8 @@ const apiEndpoints: ApiEndpointMap = {
   },
   rollbackReviewStrategy: {
     method: "POST",
-    path: input => `/api/v1/config/review-strategy/versions/${idSegment(input.snapshotId)}/rollback`
+    path: input => `/api/v1/config/review-strategy/versions/${idSegment(input.snapshotId)}/rollback`,
+    body: input => ({ expectedSnapshotId: input.expectedSnapshotId })
   },
   testGithubIntegrationConnection: {
     method: "POST",

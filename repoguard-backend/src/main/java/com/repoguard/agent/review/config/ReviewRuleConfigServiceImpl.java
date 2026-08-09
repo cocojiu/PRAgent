@@ -1,6 +1,7 @@
 package com.repoguard.agent.review.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
@@ -13,6 +14,7 @@ import com.repoguard.agent.dto.ReviewQualityGroupDto;
 import com.repoguard.agent.dto.ReviewRuleFeedbackStat;
 import com.repoguard.agent.dto.ReviewRuleHitCount;
 import com.repoguard.agent.dto.ReviewRulesResponse;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
 import com.repoguard.agent.mapper.ReviewFindingMapper;
@@ -162,7 +164,11 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     @Override
     @Transactional
-    public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
+    public ReviewRuleConfigDto updateReviewRule(
+        String id,
+        ReviewRuleConfigRequest request,
+        long expectedPolicyVersion
+    ) {
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         ensureRegistered(normalizedId);
         if (!normalizedId.equals(reviewRuleConfigPolicy.normalizeRuleId(request.id()))) {
@@ -173,6 +179,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         String previousStatus = rule.getStatus();
         EnforcementMode previousMode = EnforcementMode.from(rule.getEnforcementMode());
         long previousPolicyVersion = positiveVersion(rule.getPolicyVersion());
+        requireExpectedPolicyVersion(previousPolicyVersion, expectedPolicyVersion);
         long previousConfigVersion = positiveVersion(rule.getConfigVersion());
         applyReviewRuleRequest(rule, normalizedId, request);
         rule.setDetectorVersion(reviewRuleRegistry.detectorVersion(normalizedId));
@@ -201,7 +208,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         }
         rule.setPolicyVersion(previousPolicyVersion + 1);
         rule.setUpdatedAt(LocalDateTime.now());
-        reviewRuleConfigMapper.updateById(rule);
+        updateRuleIfCurrent(rule, previousPolicyVersion);
         saveSnapshot(rule, changeType, previousPolicyVersion);
         evictRuleCaches();
         return toReviewRuleDto(
@@ -213,12 +220,13 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     @Override
     @Transactional
-    public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
+    public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion) {
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         ensureRegistered(normalizedId);
         ReviewRuleConfig rule = loadReviewRule(normalizedId);
         String normalizedStatus = reviewRuleConfigPolicy.normalizeStatus(status);
         long previousPolicyVersion = positiveVersion(rule.getPolicyVersion());
+        requireExpectedPolicyVersion(previousPolicyVersion, expectedPolicyVersion);
         rule.setStatus(normalizedStatus);
         rule.setDetectorVersion(reviewRuleRegistry.detectorVersion(normalizedId));
         rule.setConfigVersion(positiveVersion(rule.getConfigVersion()));
@@ -227,7 +235,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
         }
         rule.setUpdatedAt(LocalDateTime.now());
-        reviewRuleConfigMapper.updateById(rule);
+        updateRuleIfCurrent(rule, previousPolicyVersion);
         saveSnapshot(
             rule,
             "ENABLED".equals(normalizedStatus) ? "ENABLE_OBSERVE" : "DISABLE",
@@ -242,24 +250,40 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     @Override
-    public List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
+    public PageResponse<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id, Long cursor, int pageSize) {
         requireSnapshotStore();
+        validateHistoryPage(cursor, pageSize);
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         ensureRegistered(normalizedId);
         ReviewRuleConfig active = loadReviewRule(normalizedId);
         long activePolicyVersion = positiveVersion(active.getPolicyVersion());
-        return policySnapshotStore.list(normalizedId).stream()
+        List<ReviewRulePolicySnapshot> snapshots = policySnapshotStore.page(
+            normalizedId,
+            cursor,
+            pageSize + 1
+        );
+        boolean hasMore = snapshots.size() > pageSize;
+        List<ReviewRulePolicySnapshot> page = hasMore ? snapshots.subList(0, pageSize) : snapshots;
+        List<ReviewRulePolicyVersionDto> items = page.stream()
             .map(snapshot -> toVersionDto(snapshot, activePolicyVersion))
             .toList();
+        String nextCursor = hasMore ? String.valueOf(page.getLast().getPolicyVersion()) : null;
+        return new PageResponse<>(items, policySnapshotStore.count(normalizedId), nextCursor, hasMore);
     }
 
     @Override
     @Transactional
-    public ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+    public ReviewRuleConfigDto rollbackReviewRule(
+        String id,
+        long policyVersion,
+        long expectedPolicyVersion
+    ) {
         requireSnapshotStore();
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         ensureRegistered(normalizedId);
         ReviewRuleConfig rule = loadReviewRule(normalizedId);
+        long currentPolicyVersion = positiveVersion(rule.getPolicyVersion());
+        requireExpectedPolicyVersion(currentPolicyVersion, expectedPolicyVersion);
         ReviewRulePolicySnapshot snapshot = policySnapshotStore.find(normalizedId, policyVersion);
         if (snapshot == null) {
             throw new BusinessException(
@@ -274,9 +298,9 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
                 "Review rule detector version is unsupported by the current runtime"
             );
         }
-        long newPolicyVersion = positiveVersion(rule.getPolicyVersion()) + 1;
+        long newPolicyVersion = currentPolicyVersion + 1;
         policySnapshotStore.restore(rule, snapshot, newPolicyVersion);
-        reviewRuleConfigMapper.updateById(rule);
+        updateRuleIfCurrent(rule, currentPolicyVersion);
         saveSnapshot(rule, "ROLLBACK", policyVersion);
         evictRuleCaches();
         return toReviewRuleDto(
@@ -289,6 +313,34 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private void evictRuleCaches() {
         cacheEvictionService.evictReviewRules();
         cacheEvictionService.evictDashboardRules();
+    }
+
+    private void updateRuleIfCurrent(ReviewRuleConfig rule, long expectedPolicyVersion) {
+        int updated = reviewRuleConfigMapper.update(
+            rule,
+            new LambdaUpdateWrapper<ReviewRuleConfig>()
+                .eq(ReviewRuleConfig::getId, rule.getId())
+                .eq(ReviewRuleConfig::getPolicyVersion, expectedPolicyVersion)
+        );
+        if (updated != 1) {
+            throw policyConflict();
+        }
+    }
+
+    private void requireExpectedPolicyVersion(long currentPolicyVersion, long expectedPolicyVersion) {
+        if (currentPolicyVersion != expectedPolicyVersion) {
+            throw policyConflict();
+        }
+    }
+
+    private BusinessException policyConflict() {
+        return new BusinessException(ErrorCode.CONFLICT, "Review rule policy changed; reload and retry");
+    }
+
+    private void validateHistoryPage(Long cursor, int pageSize) {
+        if ((cursor != null && cursor < 1) || pageSize < 1 || pageSize > 100) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Invalid review rule history page");
+        }
     }
 
     private void saveSnapshot(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {

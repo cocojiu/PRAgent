@@ -11,7 +11,13 @@
 远程验证：通过。Pull Request Quality #31333233428、Repository Governance #31333233424/#31333230805、Release Images #31333230816、Auto Create Pull Request #31333230808 均成功。
 
 2026-08-10 | 优化-03 | Dashboard 快照增量刷新与失败恢复
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：新增按统计日期维护的持久化脏版本；业务事务内原子标记 review/LLM 快照失效，提交后只重建受影响日期；使用单调版本确认避免并发更新被错误清除；读路径同步恢复脏日期，调度任务每分钟补偿失败刷新并每日全窗口核对；按日期索引 review_task，避免每次评审活动重扫 7/90 天窗口。
 本地验证：DashboardDailySnapshotServiceTest、DashboardDailySnapshotMapperSqlContractTest、DashboardDailySnapshotRecoveryWorkerTest、CacheStatsServiceImplTest、ReviewExecutionCacheInvalidatorTest、ReviewServiceImplTest、ReviewTaskRetryServiceTest、ReviewTaskExecutorImplTest、SchemaVersionExpectationContractTest 定向验证通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
+远程验证：通过。Pull Request Quality #31334112395、Repository Governance #31334112400/#31334110700、Release Images #31334110709、Auto Create Pull Request #31334110716 均成功。
+
+2026-08-10 | 优化-04 | 规则/策略并发控制与历史游标分页
+状态：本地完成，远程流水线待检查
+变更：规则编辑、状态切换和回滚增加期望策略版本校验，并用 policy_version 条件更新消除并发覆盖；策略发布和回滚锁定当前活动快照，按活动快照 ID 条件失活并在冲突时返回 409；规则与策略历史改为最多 100 条的游标分页，前端支持逐页加载并在变更请求中携带期望版本；同步 OpenAPI、前端契约和生成客户端快照。
+本地验证：新增规则与策略陈旧版本、条件写冲突和游标分页回归测试；后端 API/OpenAPI/生成客户端契约定向验证通过；前端 typecheck、ESLint 及 35 个测试文件/139 项测试通过；排除工作区既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过。
 远程验证：pending

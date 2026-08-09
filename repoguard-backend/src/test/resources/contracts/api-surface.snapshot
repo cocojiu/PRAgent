@@ -9,9 +9,9 @@ GET /api/v1/config/notification-bindings query=[page, pageSize, organization, re
 GET /api/v1/config/review-calibration/queue query=[ruleId, limit, includeIgnored] body=- bodyRequired=false
 GET /api/v1/config/review-policy query=[] body=- bodyRequired=false
 GET /api/v1/config/review-rules query=[] body=- bodyRequired=false
-GET /api/v1/config/review-rules/{id}/versions query=[] body=- bodyRequired=false
+GET /api/v1/config/review-rules/{id}/versions query=[cursor, pageSize] body=- bodyRequired=false
 GET /api/v1/config/review-strategy query=[] body=- bodyRequired=false
-GET /api/v1/config/review-strategy/versions query=[] body=- bodyRequired=false
+GET /api/v1/config/review-strategy/versions query=[cursor, pageSize] body=- bodyRequired=false
 GET /api/v1/config/secrets/re-encryption/jobs query=[page, pageSize] body=- bodyRequired=false
 GET /api/v1/config/secrets/re-encryption/jobs/{jobId} query=[] body=- bodyRequired=false
 GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items query=[page, pageSize] body=- bodyRequired=false
@@ -56,8 +56,8 @@ POST /api/v1/config/notification-bindings query=[] body=NotificationBindingReque
 POST /api/v1/config/notification-bindings/{id}/test query=[] body=- bodyRequired=false
 POST /api/v1/config/review-policy/test query=[] body=ReviewPolicyConfigRequest bodyRequired=false
 POST /api/v1/config/review-rules query=[] body=ReviewRuleConfigRequest bodyRequired=true
-POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback query=[] body=- bodyRequired=false
-POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback query=[] body=- bodyRequired=false
+POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback query=[] body=ReviewRuleRollbackRequest bodyRequired=true
+POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback query=[] body=ReviewStrategyRollbackRequest bodyRequired=true
 POST /api/v1/config/secrets/re-encryption query=[] body=SecretReEncryptionRequest bodyRequired=true
 POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/pause query=[] body=- bodyRequired=false
 POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume query=[] body=- bodyRequired=false
@@ -77,7 +77,7 @@ PUT /api/v1/config/integrations/rabbitmq query=[] body=ServiceIntegrationConfigR
 PUT /api/v1/config/notification-bindings/{id} query=[] body=NotificationBindingRequest bodyRequired=true
 PUT /api/v1/config/notification-bindings/{id}/status query=[] body=NotificationBindingStatusRequest bodyRequired=true
 PUT /api/v1/config/review-policy query=[] body=ReviewPolicyConfigRequest bodyRequired=true
-PUT /api/v1/config/review-rules/{id} query=[] body=ReviewRuleConfigRequest bodyRequired=true
+PUT /api/v1/config/review-rules/{id} query=[expectedPolicyVersion] body=ReviewRuleConfigRequest bodyRequired=true
 PUT /api/v1/config/review-rules/{id}/status query=[] body=ReviewRuleStatusRequest bodyRequired=true
 PUT /api/v1/config/review-strategy/enforcement query=[] body=ReviewEnforcementModeRequest bodyRequired=true
 PUT /api/v1/config/system-settings query=[] body=SystemSettingsRequest bodyRequired=true

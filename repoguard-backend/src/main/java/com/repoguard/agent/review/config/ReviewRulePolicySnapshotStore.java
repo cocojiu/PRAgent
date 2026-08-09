@@ -41,12 +41,20 @@ public class ReviewRulePolicySnapshotStore {
         snapshotMapper.insert(snapshot);
     }
 
-    public List<ReviewRulePolicySnapshot> list(String ruleId) {
-        return snapshotMapper.selectList(
-            new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
-                .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
-                .orderByDesc(ReviewRulePolicySnapshot::getPolicyVersion)
-                .orderByDesc(ReviewRulePolicySnapshot::getId)
+    public List<ReviewRulePolicySnapshot> page(String ruleId, Long cursor, int limit) {
+        LambdaQueryWrapper<ReviewRulePolicySnapshot> query = new LambdaQueryWrapper<ReviewRulePolicySnapshot>()
+            .eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
+            .orderByDesc(ReviewRulePolicySnapshot::getPolicyVersion)
+            .orderByDesc(ReviewRulePolicySnapshot::getId);
+        if (cursor != null) {
+            query.lt(ReviewRulePolicySnapshot::getPolicyVersion, cursor);
+        }
+        return snapshotMapper.selectList(query.last("limit " + limit));
+    }
+
+    public long count(String ruleId) {
+        return snapshotMapper.selectCount(
+            new LambdaQueryWrapper<ReviewRulePolicySnapshot>().eq(ReviewRulePolicySnapshot::getRuleId, ruleId)
         );
     }
 

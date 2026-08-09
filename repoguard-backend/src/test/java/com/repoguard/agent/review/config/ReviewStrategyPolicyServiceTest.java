@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
+import com.repoguard.agent.dto.ReviewStrategyPolicyDto;
 import com.repoguard.agent.entity.ReviewStrategyPolicySnapshot;
 import com.repoguard.agent.mapper.ReviewStrategyPolicySnapshotMapper;
 import com.repoguard.agent.review.LlmReviewVersions;
@@ -35,10 +37,10 @@ class ReviewStrategyPolicyServiceTest {
 
     @Test
     void observeCannotPromoteToCommentWithoutAnExplicitLabel() {
-        when(mapper.selectOne(any())).thenReturn(snapshot(11, "OBSERVE"));
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
 
-        assertThatThrownBy(() -> service.promote("comment"))
+        assertThatThrownBy(() -> service.promote("comment", 11))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("explicit labeled sample");
 
@@ -48,7 +50,8 @@ class ReviewStrategyPolicyServiceTest {
     @Test
     void promotionCreatesANewSnapshotInsteadOfMutatingTheRelease() {
         ReviewStrategyPolicySnapshot active = snapshot(11, "OBSERVE");
-        when(mapper.selectOne(any())).thenReturn(active);
+        when(mapper.selectActiveForUpdate()).thenReturn(active);
+        when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "MEDIUM",
             1,
@@ -64,7 +67,7 @@ class ReviewStrategyPolicyServiceTest {
             return 1;
         });
 
-        var result = service.promote("comment");
+        var result = service.promote("comment", 11);
 
         ArgumentCaptor<ReviewStrategyPolicySnapshot> captor =
             ArgumentCaptor.forClass(ReviewStrategyPolicySnapshot.class);
@@ -81,7 +84,8 @@ class ReviewStrategyPolicyServiceTest {
 
     @Test
     void commentPromotesToBlockOnlyAfterTheQualityGateHasSufficientConfidence() {
-        when(mapper.selectOne(any())).thenReturn(snapshot(12, "COMMENT"));
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(12, "COMMENT"));
+        when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "HIGH",
             200,
@@ -96,7 +100,7 @@ class ReviewStrategyPolicyServiceTest {
             return 1;
         });
 
-        var result = service.promote("block");
+        var result = service.promote("block", 12);
 
         assertThat(result.enforcementMode()).isEqualTo("block");
         assertThat(result.qualityGate().blockEligible()).isTrue();
@@ -107,13 +111,15 @@ class ReviewStrategyPolicyServiceTest {
     void rollbackCreatesANewActiveSnapshotAndRejectsUnsupportedRuntimeVersions() {
         ReviewStrategyPolicySnapshot target = snapshot(7, "COMMENT");
         when(mapper.selectById(7L)).thenReturn(target);
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(19, "OBSERVE"));
+        when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
         when(mapper.insert(any(ReviewStrategyPolicySnapshot.class))).thenAnswer(invocation -> {
             ((ReviewStrategyPolicySnapshot) invocation.getArgument(0)).setId(20L);
             return 1;
         });
 
-        var result = service.rollback(7);
+        var result = service.rollback(7, 19);
 
         ArgumentCaptor<ReviewStrategyPolicySnapshot> captor =
             ArgumentCaptor.forClass(ReviewStrategyPolicySnapshot.class);
@@ -126,9 +132,61 @@ class ReviewStrategyPolicyServiceTest {
         unsupported.setPromptVersion("review-prompt-v1");
         when(mapper.selectById(8L)).thenReturn(unsupported);
 
-        assertThatThrownBy(() -> service.rollback(8))
+        assertThatThrownBy(() -> service.rollback(8, 19))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("unsupported");
+    }
+
+    @Test
+    void staleStrategySnapshotIsRejectedBeforePromotion() {
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
+
+        assertThatThrownBy(() -> service.promote("comment", 10))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT));
+
+        verify(mapper, never()).insert(any(ReviewStrategyPolicySnapshot.class));
+    }
+
+    @Test
+    void failedConditionalStrategyActivationReturnsConflict() {
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
+        when(mapper.update(any(), any())).thenReturn(0);
+        when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
+            "MEDIUM",
+            1,
+            1,
+            1,
+            0,
+            1,
+            0
+        ))));
+
+        assertThatThrownBy(() -> service.promote("comment", 11))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT));
+
+        verify(mapper, never()).insert(any(ReviewStrategyPolicySnapshot.class));
+    }
+
+    @Test
+    void strategyHistoryUsesCursorPagination() {
+        when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
+        when(mapper.selectList(any())).thenReturn(List.of(
+            snapshot(13, "COMMENT"),
+            snapshot(12, "OBSERVE"),
+            snapshot(11, "OBSERVE")
+        ));
+        when(mapper.selectCount(any())).thenReturn(4L);
+
+        var page = service.list(null, 2);
+
+        assertThat(page.items()).extracting(ReviewStrategyPolicyDto::snapshotId).containsExactly(13L, 12L);
+        assertThat(page.total()).isEqualTo(4);
+        assertThat(page.hasMore()).isTrue();
+        assertThat(page.nextCursor()).isEqualTo("12");
     }
 
     private ReviewStrategyPolicySnapshot snapshot(long id, String mode) {

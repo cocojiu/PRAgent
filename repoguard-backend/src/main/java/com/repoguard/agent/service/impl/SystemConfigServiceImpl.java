@@ -3,6 +3,7 @@ package com.repoguard.agent.service.impl;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
@@ -21,7 +22,6 @@ import com.repoguard.agent.service.SystemConfigService;
 import com.repoguard.agent.service.SystemIntegrationConfigService;
 import com.repoguard.agent.service.SystemSettingsApplicationService;
 import com.repoguard.agent.review.config.ReviewStrategyPolicyService;
-import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -150,23 +150,31 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
-    public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
-        return reviewRuleConfigService.updateReviewRule(id, request);
+    public ReviewRuleConfigDto updateReviewRule(
+        String id,
+        ReviewRuleConfigRequest request,
+        long expectedPolicyVersion
+    ) {
+        return reviewRuleConfigService.updateReviewRule(id, request, expectedPolicyVersion);
     }
 
     @Override
-    public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
-        return reviewRuleConfigService.updateReviewRuleStatus(id, status);
+    public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion) {
+        return reviewRuleConfigService.updateReviewRuleStatus(id, status, expectedPolicyVersion);
     }
 
     @Override
-    public List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
-        return reviewRuleConfigService.getReviewRuleVersions(id);
+    public PageResponse<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id, Long cursor, int pageSize) {
+        return reviewRuleConfigService.getReviewRuleVersions(id, cursor, pageSize);
     }
 
     @Override
-    public ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
-        return reviewRuleConfigService.rollbackReviewRule(id, policyVersion);
+    public ReviewRuleConfigDto rollbackReviewRule(
+        String id,
+        long policyVersion,
+        long expectedPolicyVersion
+    ) {
+        return reviewRuleConfigService.rollbackReviewRule(id, policyVersion, expectedPolicyVersion);
     }
 
     @Override
@@ -175,18 +183,18 @@ public class SystemConfigServiceImpl implements SystemConfigService {
     }
 
     @Override
-    public List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
-        return requireReviewStrategyPolicyService().list();
+    public PageResponse<ReviewStrategyPolicyDto> getReviewStrategyVersions(Long cursor, int pageSize) {
+        return requireReviewStrategyPolicyService().list(cursor, pageSize);
     }
 
     @Override
-    public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
-        return requireReviewStrategyPolicyService().promote(enforcementMode);
+    public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode, long expectedSnapshotId) {
+        return requireReviewStrategyPolicyService().promote(enforcementMode, expectedSnapshotId);
     }
 
     @Override
-    public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
-        return requireReviewStrategyPolicyService().rollback(snapshotId);
+    public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId, long expectedSnapshotId) {
+        return requireReviewStrategyPolicyService().rollback(snapshotId, expectedSnapshotId);
     }
 
     private ReviewStrategyPolicyService requireReviewStrategyPolicyService() {

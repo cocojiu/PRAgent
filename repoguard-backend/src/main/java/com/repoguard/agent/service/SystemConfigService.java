@@ -3,6 +3,7 @@ package com.repoguard.agent.service;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.ConnectionTestResultDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
@@ -14,7 +15,6 @@ import com.repoguard.agent.dto.ServiceIntegrationConfigDto;
 import com.repoguard.agent.dto.ServiceIntegrationConfigRequest;
 import com.repoguard.agent.dto.SystemSettingsDto;
 import com.repoguard.agent.dto.SystemSettingsRequest;
-import java.util.List;
 
 public interface SystemConfigService {
 
@@ -42,15 +42,15 @@ public interface SystemConfigService {
 
     ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request);
 
-    ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request);
+    ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request, long expectedPolicyVersion);
 
-    ReviewRuleConfigDto updateReviewRuleStatus(String id, String status);
+    ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion);
 
-    default List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
-        return List.of();
+    default PageResponse<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id, Long cursor, int pageSize) {
+        return new PageResponse<>(java.util.List.of(), 0);
     }
 
-    default ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+    default ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion, long expectedPolicyVersion) {
         return null;
     }
 
@@ -58,15 +58,15 @@ public interface SystemConfigService {
         return null;
     }
 
-    default List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
-        return List.of();
+    default PageResponse<ReviewStrategyPolicyDto> getReviewStrategyVersions(Long cursor, int pageSize) {
+        return new PageResponse<>(java.util.List.of(), 0);
     }
 
-    default ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
+    default ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode, long expectedSnapshotId) {
         return null;
     }
 
-    default ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
+    default ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId, long expectedSnapshotId) {
         return null;
     }
 

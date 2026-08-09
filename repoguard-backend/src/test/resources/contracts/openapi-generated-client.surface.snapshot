@@ -52,10 +52,10 @@ systemConfigControllerGetGithubIntegration(): Promise<GithubIntegrationConfig>; 
 systemConfigControllerGetMysqlIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/mysql
 systemConfigControllerGetRabbitMqIntegration(): Promise<ServiceIntegrationConfig>; // GET /api/v1/config/integrations/rabbitmq
 systemConfigControllerGetReviewPolicy(): Promise<ReviewPolicyConfig>; // GET /api/v1/config/review-policy
-systemConfigControllerGetReviewRuleVersions(input: { path: { id: string } }): Promise<ReviewRulePolicyVersion[]>; // GET /api/v1/config/review-rules/{id}/versions
+systemConfigControllerGetReviewRuleVersions(input: { path: { id: string }; query?: { cursor?: number; pageSize?: number } }): Promise<PageResponse<ReviewRulePolicyVersion>>; // GET /api/v1/config/review-rules/{id}/versions
 systemConfigControllerGetReviewRules(): Promise<ReviewRulesResponse>; // GET /api/v1/config/review-rules
 systemConfigControllerGetReviewStrategyPolicy(): Promise<ReviewStrategyPolicy>; // GET /api/v1/config/review-strategy
-systemConfigControllerGetReviewStrategyVersions(): Promise<ReviewStrategyPolicy[]>; // GET /api/v1/config/review-strategy/versions
+systemConfigControllerGetReviewStrategyVersions(input?: { query?: { cursor?: number; pageSize?: number } }): Promise<PageResponse<ReviewStrategyPolicy>>; // GET /api/v1/config/review-strategy/versions
 systemConfigControllerGetSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}
 systemConfigControllerGetSystemSettings(): Promise<SystemSettings>; // GET /api/v1/config/system-settings
 systemConfigControllerListSecretReEncryptionJobItems(input: { path: { jobId: number }; query?: { page?: number; pageSize?: number } }): Promise<PageResponse<SecretReEncryptionItem>>; // GET /api/v1/config/secrets/re-encryption/jobs/{jobId}/items
@@ -64,8 +64,8 @@ systemConfigControllerPauseSecretReEncryptionJob(input: { path: { jobId: number 
 systemConfigControllerPromoteReviewStrategy(input: { body: ReviewEnforcementModeRequest }): Promise<ReviewStrategyPolicy>; // PUT /api/v1/config/review-strategy/enforcement
 systemConfigControllerReEncryptSecrets(input: { body: SecretReEncryptionRequest }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption
 systemConfigControllerResumeSecretReEncryptionJob(input: { path: { jobId: number } }): Promise<SecretReEncryptionJob>; // POST /api/v1/config/secrets/re-encryption/jobs/{jobId}/resume
-systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number } }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
-systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number } }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
+systemConfigControllerRollbackReviewRule(input: { path: { id: string; policyVersion: number }; body: ReviewRuleRollbackRequest }): Promise<ReviewRuleConfig>; // POST /api/v1/config/review-rules/{id}/versions/{policyVersion}/rollback
+systemConfigControllerRollbackReviewStrategy(input: { path: { snapshotId: number }; body: ReviewStrategyRollbackRequest }): Promise<ReviewStrategyPolicy>; // POST /api/v1/config/review-strategy/versions/{snapshotId}/rollback
 systemConfigControllerTestGithubIntegration(input?: { body?: GithubIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/github/test
 systemConfigControllerTestMysqlConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/mysql/test
 systemConfigControllerTestRabbitMqConnection(input?: { body?: ServiceIntegrationConfigRequest }): Promise<ConnectionTestResult>; // POST /api/v1/config/integrations/rabbitmq/test
@@ -74,7 +74,7 @@ systemConfigControllerUpdateGithubIntegration(input: { body: GithubIntegrationCo
 systemConfigControllerUpdateMysqlIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/mysql
 systemConfigControllerUpdateRabbitMqIntegration(input: { body: ServiceIntegrationConfigRequest }): Promise<ServiceIntegrationConfig>; // PUT /api/v1/config/integrations/rabbitmq
 systemConfigControllerUpdateReviewPolicy(input: { body: ReviewPolicyConfigRequest }): Promise<ReviewPolicyConfig>; // PUT /api/v1/config/review-policy
-systemConfigControllerUpdateReviewRule(input: { path: { id: string }; body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}
+systemConfigControllerUpdateReviewRule(input: { path: { id: string }; query?: { expectedPolicyVersion: number }; body: ReviewRuleConfigRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}
 systemConfigControllerUpdateReviewRuleStatus(input: { path: { id: string }; body: ReviewRuleStatusRequest }): Promise<ReviewRuleConfig>; // PUT /api/v1/config/review-rules/{id}/status
 systemConfigControllerUpdateSystemSettings(input: { body: SystemSettingsRequest }): Promise<SystemSettings>; // PUT /api/v1/config/system-settings
 systemHealthControllerGetSystemHealthSummary(): Promise<SystemHealthItem[]>; // GET /api/v1/system/health/summary

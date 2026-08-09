@@ -83,20 +83,21 @@ class ReviewRuleConfigServiceImplTest {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
+        when(reviewRuleConfigMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
 
-        var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
+        var result = service.updateReviewRuleStatus("rg-java-001", "disabled", 1);
 
         assertThat(rule.getStatus()).isEqualTo("DISABLED");
         assertThat(result.status()).isEqualTo("disabled");
-        verify(reviewRuleConfigMapper).updateById(rule);
+        verify(reviewRuleConfigMapper).update(any(ReviewRuleConfig.class), any());
         verify(cacheEvictionService).evictReviewRules();
         verify(cacheEvictionService).evictDashboardRules();
     }
 
     @Test
     void updateReviewRuleStatusRejectsRuleWithoutDetector() {
-        assertThatThrownBy(() -> service.updateReviewRuleStatus("rg-unknown-001", "enabled"))
+        assertThatThrownBy(() -> service.updateReviewRuleStatus("rg-unknown-001", "enabled", 1))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("no registered detector");
     }
@@ -104,7 +105,11 @@ class ReviewRuleConfigServiceImplTest {
     @Test
     void updateReviewRuleRejectsMismatchedPathAndBodyId() {
         when(reviewRuleRegistry.contains("RG-JAVA-001")).thenReturn(true);
-        assertThatThrownBy(() -> service.updateReviewRule("rg-java-001", request("rg-java-002", "New Rule", "LOW", "ENABLED")))
+        assertThatThrownBy(() -> service.updateReviewRule(
+            "rg-java-001",
+            request("rg-java-002", "New Rule", "LOW", "ENABLED"),
+            1
+        ))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("Review rule id in path and body must match");
     }

@@ -9,8 +9,10 @@ import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.common.BusinessException;
+import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
+import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
 import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
 import com.repoguard.agent.entity.ReviewRuleConfig;
 import com.repoguard.agent.entity.ReviewRulePolicySnapshot;
@@ -65,10 +67,11 @@ class ReviewRulePolicyGovernanceServiceTest {
         when(registry.contains(RULE_ID)).thenReturn(true);
         when(registry.detectorVersion(RULE_ID)).thenReturn(DETECTOR_VERSION);
         when(ruleMapper.selectById(RULE_ID)).thenReturn(rule);
+        when(ruleMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(findingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
         when(baselineService.loadBaseline()).thenReturn(emptyBaseline());
 
-        var result = service.updateReviewRule(RULE_ID, request("Changed semantic description", "BLOCK"));
+        var result = service.updateReviewRule(RULE_ID, request("Changed semantic description", "BLOCK"), 5);
 
         assertThat(rule.getConfigVersion()).isEqualTo(3);
         assertThat(rule.getPolicyVersion()).isEqualTo(6);
@@ -104,7 +107,7 @@ class ReviewRulePolicyGovernanceServiceTest {
             )
         ));
 
-        assertThatThrownBy(() -> service.updateReviewRule(RULE_ID, request(rule.getDescription(), "COMMENT")))
+        assertThatThrownBy(() -> service.updateReviewRule(RULE_ID, request(rule.getDescription(), "COMMENT"), 5))
             .isInstanceOf(BusinessException.class)
             .hasMessageContaining("explicit labeled sample");
 
@@ -121,10 +124,11 @@ class ReviewRulePolicyGovernanceServiceTest {
         when(registry.detectorVersion(RULE_ID)).thenReturn(DETECTOR_VERSION);
         when(ruleMapper.selectById(RULE_ID)).thenReturn(active);
         when(snapshotMapper.selectOne(any())).thenReturn(historic);
+        when(ruleMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(findingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
         when(baselineService.loadBaseline()).thenReturn(emptyBaseline());
 
-        var result = service.rollbackReviewRule(RULE_ID, 2);
+        var result = service.rollbackReviewRule(RULE_ID, 2, 5);
 
         assertThat(active.getConfigVersion()).isEqualTo(1);
         assertThat(active.getPolicyVersion()).isEqualTo(6);
@@ -135,7 +139,68 @@ class ReviewRulePolicyGovernanceServiceTest {
         assertThat(captor.getValue().getChangeType()).isEqualTo("ROLLBACK");
         assertThat(captor.getValue().getSourcePolicyVersion()).isEqualTo(2);
         assertThat(captor.getValue().getPolicyVersion()).isEqualTo(6);
-        verify(ruleMapper).updateById(active);
+        verify(ruleMapper).update(any(ReviewRuleConfig.class), any());
+    }
+
+    @Test
+    void stalePolicyVersionIsRejectedBeforeRuleMutation() {
+        ReviewRuleConfig rule = rule();
+        when(registry.contains(RULE_ID)).thenReturn(true);
+        when(ruleMapper.selectById(RULE_ID)).thenReturn(rule);
+
+        assertThatThrownBy(() -> service.updateReviewRule(
+            RULE_ID,
+            request("Changed semantic description", "COMMENT"),
+            4
+        ))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT));
+
+        verify(ruleMapper, never()).update(any(ReviewRuleConfig.class), any());
+        verify(snapshotMapper, never()).insert(any(ReviewRulePolicySnapshot.class));
+    }
+
+    @Test
+    void concurrentRuleUpdateThatLosesConditionalWriteReturnsConflict() {
+        ReviewRuleConfig rule = rule();
+        when(registry.contains(RULE_ID)).thenReturn(true);
+        when(registry.detectorVersion(RULE_ID)).thenReturn(DETECTOR_VERSION);
+        when(ruleMapper.selectById(RULE_ID)).thenReturn(rule);
+        when(ruleMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.updateReviewRule(
+            RULE_ID,
+            request("Changed semantic description", "COMMENT"),
+            5
+        ))
+            .isInstanceOf(BusinessException.class)
+            .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                .isEqualTo(ErrorCode.CONFLICT));
+
+        verify(snapshotMapper, never()).insert(any(ReviewRulePolicySnapshot.class));
+    }
+
+    @Test
+    void rulePolicyHistoryUsesCursorPagination() {
+        ReviewRuleConfig active = rule();
+        ReviewRulePolicySnapshot versionFive = historicSnapshot();
+        versionFive.setPolicyVersion(5L);
+        ReviewRulePolicySnapshot versionFour = historicSnapshot();
+        versionFour.setPolicyVersion(4L);
+        ReviewRulePolicySnapshot versionThree = historicSnapshot();
+        versionThree.setPolicyVersion(3L);
+        when(registry.contains(RULE_ID)).thenReturn(true);
+        when(ruleMapper.selectById(RULE_ID)).thenReturn(active);
+        when(snapshotMapper.selectList(any())).thenReturn(List.of(versionFive, versionFour, versionThree));
+        when(snapshotMapper.selectCount(any())).thenReturn(5L);
+
+        var page = service.getReviewRuleVersions(RULE_ID, null, 2);
+
+        assertThat(page.items()).extracting(ReviewRulePolicyVersionDto::policyVersion).containsExactly(5L, 4L);
+        assertThat(page.total()).isEqualTo(5);
+        assertThat(page.hasMore()).isTrue();
+        assertThat(page.nextCursor()).isEqualTo("4");
     }
 
     private ReviewRuleConfigRequest request(String description, String mode) {

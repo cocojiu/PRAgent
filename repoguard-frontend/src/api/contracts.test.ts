@@ -632,6 +632,7 @@ describe("apiRequest", () => {
     });
     await apiRequest("updateReviewRule", {
       id: "RG-JAVA-001",
+      expectedPolicyVersion: 4,
       payload: {
         id: "RG-JAVA-001",
         name: "Java rule",
@@ -649,7 +650,7 @@ describe("apiRequest", () => {
     });
     await apiRequest("updateReviewRuleStatus", {
       id: "RG-JAVA-001",
-      payload: { status: "disabled" }
+      payload: { status: "disabled", expectedPolicyVersion: 4 }
     });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
@@ -680,37 +681,53 @@ describe("apiRequest", () => {
     expect(calls[9][0]).toContain("/api/v1/config/review-rules");
     expect(calls[9][1].method).toBe("POST");
     expect(calls[10][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001");
+    expect(calls[10][0]).toContain("expectedPolicyVersion=4");
     expect(calls[10][1].method).toBe("PUT");
     expect(calls[11][0]).toContain("/api/v1/config/review-rules/RG-JAVA-001/status");
     expect(calls[11][1].method).toBe("PUT");
-    expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled" }));
+    expect(calls[11][1].body).toBe(JSON.stringify({ status: "disabled", expectedPolicyVersion: 4 }));
   });
 
   it("keeps versioned review policy governance endpoint contracts", async () => {
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
     vi.stubGlobal("fetch", fetchMock);
 
-    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001" });
-    await apiRequest("rollbackReviewRule", { id: "RG/JAVA 001", policyVersion: 7 });
+    await apiRequest("fetchReviewRuleVersions", { id: "RG/JAVA 001", cursor: "7", pageSize: 20 });
+    await apiRequest("rollbackReviewRule", {
+      id: "RG/JAVA 001",
+      policyVersion: 7,
+      expectedPolicyVersion: 9
+    });
     await apiRequest("fetchReviewStrategy", undefined);
-    await apiRequest("fetchReviewStrategyVersions", undefined);
-    await apiRequest("updateReviewStrategyEnforcement", { enforcementMode: "comment" });
-    await apiRequest("rollbackReviewStrategy", { snapshotId: 13 });
+    await apiRequest("fetchReviewStrategyVersions", { cursor: "13", pageSize: 20 });
+    await apiRequest("updateReviewStrategyEnforcement", {
+      enforcementMode: "comment",
+      expectedSnapshotId: 17
+    });
+    await apiRequest("rollbackReviewStrategy", { snapshotId: 13, expectedSnapshotId: 17 });
 
     const calls = fetchMock.mock.calls as [string, RequestInit][];
     expect(calls[0][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions");
+    expect(calls[0][0]).toContain("cursor=7");
+    expect(calls[0][0]).toContain("pageSize=20");
     expect(calls[0][1].method).toBeUndefined();
     expect(calls[1][0]).toContain("/api/v1/config/review-rules/RG%2FJAVA%20001/versions/7/rollback");
     expect(calls[1][1].method).toBe("POST");
+    expect(calls[1][1].body).toBe(JSON.stringify({ expectedPolicyVersion: 9 }));
     expect(calls[2][0]).toContain("/api/v1/config/review-strategy");
     expect(calls[2][1].method).toBeUndefined();
     expect(calls[3][0]).toContain("/api/v1/config/review-strategy/versions");
+    expect(calls[3][0]).toContain("cursor=13");
     expect(calls[3][1].method).toBeUndefined();
     expect(calls[4][0]).toContain("/api/v1/config/review-strategy/enforcement");
     expect(calls[4][1].method).toBe("PUT");
-    expect(calls[4][1].body).toBe(JSON.stringify({ enforcementMode: "comment" }));
+    expect(calls[4][1].body).toBe(JSON.stringify({
+      enforcementMode: "comment",
+      expectedSnapshotId: 17
+    }));
     expect(calls[5][0]).toContain("/api/v1/config/review-strategy/versions/13/rollback");
     expect(calls[5][1].method).toBe("POST");
+    expect(calls[5][1].body).toBe(JSON.stringify({ expectedSnapshotId: 17 }));
   });
 });
 

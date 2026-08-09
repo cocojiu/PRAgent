@@ -503,13 +503,14 @@ class SystemConfigServiceImplTest {
     void updateReviewRuleStatusPersistsNormalizedStatus() {
         ReviewRuleConfig rule = rule("RG-JAVA-001", "异常捕获过宽", "MEDIUM", "ENABLED", 88);
         when(reviewRuleConfigMapper.selectById("RG-JAVA-001")).thenReturn(rule);
+        when(reviewRuleConfigMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
         when(reviewFindingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
 
-        var result = service.updateReviewRuleStatus("rg-java-001", "disabled");
+        var result = service.updateReviewRuleStatus("rg-java-001", "disabled", 1);
 
         assertThat(rule.getStatus()).isEqualTo("DISABLED");
         assertThat(result.status()).isEqualTo("disabled");
-        verify(reviewRuleConfigMapper).updateById(rule);
+        verify(reviewRuleConfigMapper).update(any(ReviewRuleConfig.class), any());
     }
 
     private IntegrationConfig githubConfig(String token) {

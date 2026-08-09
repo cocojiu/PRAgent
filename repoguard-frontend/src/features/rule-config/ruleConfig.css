@@ -275,6 +275,12 @@
   gap: 14px;
 }
 
+.history-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 @media (max-width: 1280px) {
   .rule-layout {
     grid-template-columns: repeat(2, minmax(0, 1fr));

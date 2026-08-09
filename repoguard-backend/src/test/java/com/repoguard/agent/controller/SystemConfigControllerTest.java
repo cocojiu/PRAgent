@@ -12,6 +12,7 @@ import com.repoguard.agent.dto.ConnectionTestResultDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigDto;
 import com.repoguard.agent.dto.GithubIntegrationConfigRequest;
 import com.repoguard.agent.dto.NotificationSettingsDto;
+import com.repoguard.agent.dto.PageResponse;
 import com.repoguard.agent.dto.ReviewPolicyConfigDto;
 import com.repoguard.agent.dto.ReviewPolicyConfigRequest;
 import com.repoguard.agent.dto.ReviewPolicySettingsDto;
@@ -107,12 +108,16 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public ReviewRuleConfigDto updateReviewRule(String id, ReviewRuleConfigRequest request) {
+        public ReviewRuleConfigDto updateReviewRule(
+            String id,
+            ReviewRuleConfigRequest request,
+            long expectedPolicyVersion
+        ) {
             return reviewRuleDto();
         }
 
         @Override
-        public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status) {
+        public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion) {
             return new ReviewRuleConfigDto(
                 id.toUpperCase(),
                 "异常捕获过宽",
@@ -129,8 +134,12 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public List<ReviewRulePolicyVersionDto> getReviewRuleVersions(String id) {
-            return List.of(new ReviewRulePolicyVersionDto(
+        public PageResponse<ReviewRulePolicyVersionDto> getReviewRuleVersions(
+            String id,
+            Long cursor,
+            int pageSize
+        ) {
+            return new PageResponse<>(List.of(new ReviewRulePolicyVersionDto(
                 3,
                 2,
                 "rg-java-001-detector-v2",
@@ -142,11 +151,15 @@ class SystemConfigControllerTest {
                 2L,
                 "2026-07-30 12:00:00",
                 true
-            ));
+            )), 1);
         }
 
         @Override
-        public ReviewRuleConfigDto rollbackReviewRule(String id, long policyVersion) {
+        public ReviewRuleConfigDto rollbackReviewRule(
+            String id,
+            long policyVersion,
+            long expectedPolicyVersion
+        ) {
             return reviewRuleDto();
         }
 
@@ -156,17 +169,17 @@ class SystemConfigControllerTest {
         }
 
         @Override
-        public List<ReviewStrategyPolicyDto> getReviewStrategyVersions() {
-            return List.of(reviewStrategyDto("observe"));
+        public PageResponse<ReviewStrategyPolicyDto> getReviewStrategyVersions(Long cursor, int pageSize) {
+            return new PageResponse<>(List.of(reviewStrategyDto("observe")), 1);
         }
 
         @Override
-        public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode) {
+        public ReviewStrategyPolicyDto promoteReviewStrategy(String enforcementMode, long expectedSnapshotId) {
             return reviewStrategyDto(enforcementMode.toLowerCase());
         }
 
         @Override
-        public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId) {
+        public ReviewStrategyPolicyDto rollbackReviewStrategy(long snapshotId, long expectedSnapshotId) {
             return reviewStrategyDto("observe");
         }
 
@@ -359,7 +372,8 @@ class SystemConfigControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                     {
-                      "status": "disabled"
+                      "status": "disabled",
+                      "expectedPolicyVersion": 3
                     }
                     """))
             .andExpect(status().isOk())
@@ -372,10 +386,15 @@ class SystemConfigControllerTest {
     void exposesVersionedRuleAndStrategyGovernanceEndpoints() throws Exception {
         mockMvc.perform(get("/api/v1/config/review-rules/RG-JAVA-001/versions"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].policyVersion").value(3))
-            .andExpect(jsonPath("$.data[0].detectorVersion").value("rg-java-001-detector-v2"));
+            .andExpect(jsonPath("$.data.items[0].policyVersion").value(3))
+            .andExpect(jsonPath("$.data.items[0].detectorVersion").value("rg-java-001-detector-v2"))
+            .andExpect(jsonPath("$.data.total").value(1));
 
-        mockMvc.perform(post("/api/v1/config/review-rules/RG-JAVA-001/versions/2/rollback"))
+        mockMvc.perform(post("/api/v1/config/review-rules/RG-JAVA-001/versions/2/rollback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"expectedPolicyVersion":3}
+                    """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.id").value("RG-JAVA-001"));
 
@@ -386,17 +405,21 @@ class SystemConfigControllerTest {
 
         mockMvc.perform(get("/api/v1/config/review-strategy/versions"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data[0].promptVersion").value("review-prompt-v2"));
+            .andExpect(jsonPath("$.data.items[0].promptVersion").value("review-prompt-v2"));
 
         mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"enforcementMode":"comment"}
+                    {"enforcementMode":"comment","expectedSnapshotId":17}
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.enforcementMode").value("comment"));
 
-        mockMvc.perform(post("/api/v1/config/review-strategy/versions/11/rollback"))
+        mockMvc.perform(post("/api/v1/config/review-strategy/versions/11/rollback")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"expectedSnapshotId":17}
+                    """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.data.changeType").value("ROLLBACK"));
     }
@@ -406,7 +429,7 @@ class SystemConfigControllerTest {
         mockMvc.perform(put("/api/v1/config/review-strategy/enforcement")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                    {"enforcementMode":"force"}
+                    {"enforcementMode":"force","expectedSnapshotId":17}
                     """))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("BAD_REQUEST"));
