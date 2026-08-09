@@ -314,9 +314,6 @@ app:
       dead-letter-exchange: ${REPOGUARD_REVIEW_DLX:repoguard.review.dlx}
       dead-letter-queue: ${REPOGUARD_REVIEW_DLQ:repoguard.review.dlq}
       dead-letter-routing-key: ${REPOGUARD_REVIEW_DLQ_ROUTING_KEY:repoguard.review.dead}
-      publish-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_MAX_ATTEMPTS:3}
-      publish-initial-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_INITIAL_INTERVAL_MS:500}
-      publish-multiplier: ${REPOGUARD_REVIEW_PUBLISH_MULTIPLIER:3.0}
       publish-confirm-timeout-ms: ${REPOGUARD_REVIEW_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
       publish-compensation-max-attempts: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_MAX_ATTEMPTS:10}
       publish-compensation-interval-ms: ${REPOGUARD_REVIEW_PUBLISH_COMPENSATION_INTERVAL_MS:60000}
@@ -335,9 +332,6 @@ app:
       dead-letter-exchange: ${REPOGUARD_NOTIFICATION_DLX:repoguard.notification.dlx}
       dead-letter-queue: ${REPOGUARD_NOTIFICATION_DLQ:repoguard.notification.dlq}
       dead-letter-routing-key: ${REPOGUARD_NOTIFICATION_DLQ_ROUTING_KEY:repoguard.notification.dead}
-      publish-max-attempts: ${REPOGUARD_NOTIFICATION_PUBLISH_MAX_ATTEMPTS:3}
-      publish-initial-interval-ms: ${REPOGUARD_NOTIFICATION_PUBLISH_INITIAL_INTERVAL_MS:500}
-      publish-multiplier: ${REPOGUARD_NOTIFICATION_PUBLISH_MULTIPLIER:3.0}
       publish-confirm-timeout-ms: ${REPOGUARD_NOTIFICATION_PUBLISH_CONFIRM_TIMEOUT_MS:5000}
       publish-compensation-max-attempts: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_MAX_ATTEMPTS:5}
       publish-compensation-batch-size: ${REPOGUARD_NOTIFICATION_PUBLISH_COMPENSATION_BATCH_SIZE:20}

@@ -23,23 +23,8 @@ public class RabbitReliableMessagePublisher {
     }
 
     public RabbitPublishResult publish(Object message, RabbitPublishSpec spec) {
-        int attempts = spec.normalizedMaxAttempts();
-        long backoffMs = spec.normalizedInitialBackoffMs();
-        MessagePublishException lastFailure = null;
-        for (int attempt = 1; attempt <= attempts; attempt++) {
-            try {
-                publishOnce(message, spec, attempt);
-                return new RabbitPublishResult(attempt);
-            } catch (MessagePublishException ex) {
-                lastFailure = ex;
-                if (attempt == attempts) {
-                    break;
-                }
-                sleepBeforeRetry(backoffMs);
-                backoffMs = nextBackoff(backoffMs, spec.normalizedBackoffMultiplier());
-            }
-        }
-        throw lastFailure == null ? new MessagePublishException("RabbitMQ message publish failed") : lastFailure;
+        publishOnce(message, spec, 1);
+        return new RabbitPublishResult(1);
     }
 
     public String failureReason(MessagePublishException ex) {
@@ -78,19 +63,4 @@ public class RabbitReliableMessagePublisher {
         return "%s-attempt-%d-%s".formatted(spec.correlationIdPrefix(), attempt, UUID.randomUUID());
     }
 
-    private void sleepBeforeRetry(long backoffMs) {
-        if (backoffMs <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(backoffMs);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new MessagePublishException("RabbitMQ publish retry sleep was interrupted", ex);
-        }
-    }
-
-    private long nextBackoff(long currentBackoffMs, double multiplier) {
-        return Math.max(0, Math.round(currentBackoffMs * multiplier));
-    }
 }

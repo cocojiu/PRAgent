@@ -6,11 +6,5 @@ public interface RabbitPublishProperties {
 
     String getRoutingKey();
 
-    int getPublishMaxAttempts();
-
-    long getPublishInitialIntervalMs();
-
-    double getPublishMultiplier();
-
     long getPublishConfirmTimeoutMs();
 }
