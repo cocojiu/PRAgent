@@ -6,6 +6,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,7 @@ public class AuthAttemptLimiter {
     private final AuthProperties properties;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
+    private final int maxTrackedKeysPerDimension;
     private final Dimension ipDimension = new Dimension("ip");
     private final Dimension accountIpDimension = new Dimension("account-ip");
 
@@ -29,9 +32,22 @@ public class AuthAttemptLimiter {
     }
 
     AuthAttemptLimiter(AuthProperties properties, MeterRegistry meterRegistry, Clock clock) {
+        this(properties, meterRegistry, clock, MAX_TRACKED_KEYS_PER_DIMENSION);
+    }
+
+    AuthAttemptLimiter(
+        AuthProperties properties,
+        MeterRegistry meterRegistry,
+        Clock clock,
+        int maxTrackedKeysPerDimension
+    ) {
         this.properties = properties;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
+        if (maxTrackedKeysPerDimension <= 0) {
+            throw new IllegalArgumentException("maxTrackedKeysPerDimension must be positive");
+        }
+        this.maxTrackedKeysPerDimension = maxTrackedKeysPerDimension;
         LOGGER.info(
             "Auth attempt limits active: {}/min per ip, {}/min per account-ip; thresholds are per-instance, adjust them when running more than one API instance",
             properties.getPublicAuthRequestsPerMinutePerIp(),
@@ -55,29 +71,46 @@ public class AuthAttemptLimiter {
 
     private boolean acquire(Dimension dimension, String key, int limit) {
         long minute = clock.millis() / 60_000L;
-        if (!dimension.windows.containsKey(key) && dimension.windows.size() >= MAX_TRACKED_KEYS_PER_DIMENSION) {
-            long lastPrunedMinute = dimension.pruneMinute.get();
-            if (lastPrunedMinute != minute && dimension.pruneMinute.compareAndSet(lastPrunedMinute, minute)) {
-                dimension.windows.entrySet().removeIf(entry -> entry.getValue().minute() < minute);
+        pruneExpiredAtCapacity(dimension, minute);
+        AtomicBoolean saturated = new AtomicBoolean();
+        Window window = dimension.windows.compute(key, (ignored, current) -> {
+            if (current == null && !dimension.reserveSlot(maxTrackedKeysPerDimension)) {
+                saturated.set(true);
+                return null;
             }
-            if (dimension.windows.size() >= MAX_TRACKED_KEYS_PER_DIMENSION) {
-                meterRegistry.counter("repoguard.auth.rate_limiter_saturated", "dimension", dimension.name).increment();
-                long lastLoggedMinute = dimension.saturationLogMinute.get();
-                if (lastLoggedMinute != minute && dimension.saturationLogMinute.compareAndSet(lastLoggedMinute, minute)) {
-                    LOGGER.warn(
-                        "Auth attempt limiter {} dimension saturated at {} tracked keys; allowing new keys without limiting",
-                        dimension.name,
-                        MAX_TRACKED_KEYS_PER_DIMENSION
-                    );
-                }
-                return true;
-            }
-        }
-        Window window = dimension.windows.compute(key, (ignored, current) ->
-            current == null || current.minute() != minute
+            return current == null || current.minute() != minute
                 ? new Window(minute, 1)
-                : new Window(minute, current.count() + 1));
+                : new Window(minute, current.count() + 1);
+        });
+        if (saturated.get()) {
+            meterRegistry.counter("repoguard.auth.rate_limiter_saturated", "dimension", dimension.name).increment();
+            meterRegistry.counter(
+                "repoguard.auth.rate_limiter_overflow_rejected",
+                "dimension",
+                dimension.name
+            ).increment();
+            dimension.logSaturationOncePerMinute(minute, maxTrackedKeysPerDimension);
+            return false;
+        }
         return window.count() <= limit;
+    }
+
+    private void pruneExpiredAtCapacity(Dimension dimension, long minute) {
+        if (dimension.trackedKeys.get() < maxTrackedKeysPerDimension) {
+            return;
+        }
+        synchronized (dimension.pruneMonitor) {
+            if (dimension.trackedKeys.get() < maxTrackedKeysPerDimension
+                || dimension.pruneMinute.get() == minute) {
+                return;
+            }
+            dimension.pruneMinute.set(minute);
+            dimension.windows.forEach((key, window) -> {
+                if (window.minute() < minute && dimension.windows.remove(key, window)) {
+                    dimension.trackedKeys.decrementAndGet();
+                }
+            });
+        }
     }
 
     private String normalize(String value) {
@@ -88,11 +121,36 @@ public class AuthAttemptLimiter {
 
         private final String name;
         private final ConcurrentHashMap<String, Window> windows = new ConcurrentHashMap<>();
+        private final AtomicInteger trackedKeys = new AtomicInteger();
+        private final Object pruneMonitor = new Object();
         private final AtomicLong pruneMinute = new AtomicLong(Long.MIN_VALUE);
         private final AtomicLong saturationLogMinute = new AtomicLong(Long.MIN_VALUE);
 
         private Dimension(String name) {
             this.name = name;
+        }
+
+        private boolean reserveSlot(int maxTrackedKeys) {
+            while (true) {
+                int current = trackedKeys.get();
+                if (current >= maxTrackedKeys) {
+                    return false;
+                }
+                if (trackedKeys.compareAndSet(current, current + 1)) {
+                    return true;
+                }
+            }
+        }
+
+        private void logSaturationOncePerMinute(long minute, int maxTrackedKeys) {
+            long lastLoggedMinute = saturationLogMinute.get();
+            if (lastLoggedMinute != minute && saturationLogMinute.compareAndSet(lastLoggedMinute, minute)) {
+                LOGGER.warn(
+                    "Auth attempt limiter {} dimension saturated at {} tracked keys; rejecting new keys",
+                    name,
+                    maxTrackedKeys
+                );
+            }
         }
     }
 

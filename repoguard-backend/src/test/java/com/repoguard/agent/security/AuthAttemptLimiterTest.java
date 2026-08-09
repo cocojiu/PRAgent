@@ -19,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class AuthAttemptLimiterTest {
@@ -45,29 +46,33 @@ class AuthAttemptLimiterTest {
     }
 
     @Test
-    void failsOpenForNewKeysAtCapacityWhileStillEnforcingTrackedKeys() {
+    void failsClosedForNewKeysAtCapacityWhileStillEnforcingTrackedKeys() {
         AuthProperties properties = propertiesWithLimits(2, 2);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MutableClock clock = new MutableClock();
-        AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock);
+        AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock, 2);
 
-        for (int index = 0; index < 20_000; index++) {
+        for (int index = 0; index < 2; index++) {
             limiter.requireAllowed("login", "account-" + index, "client-" + index);
         }
 
         String overflowClient = "overflow-client";
-        limiter.requireAllowed("login", "overflow-account", overflowClient);
-        limiter.requireAllowed("login", "overflow-account", overflowClient);
-        limiter.requireAllowed("login", "overflow-account", overflowClient);
-        assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isZero();
-        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "ip").count()).isEqualTo(3.0);
-        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "account-ip").count()).isEqualTo(3.0);
+        assertThatThrownBy(() -> limiter.requireAllowed("login", "overflow-account", overflowClient))
+            .isInstanceOfSatisfying(BusinessException.class, exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+        assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(1.0);
+        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "ip").count()).isEqualTo(1.0);
+        assertThat(
+            registry.counter("repoguard.auth.rate_limiter_overflow_rejected", "dimension", "ip").count()
+        ).isEqualTo(1.0);
+        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "account-ip").count())
+            .isZero();
 
         limiter.requireAllowed("login", "account-0", "client-0");
         assertThatThrownBy(() -> limiter.requireAllowed("login", "account-0", "client-0"))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
-        assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(1.0);
+        assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(2.0);
 
         clock.advance(Duration.ofMinutes(1));
 
@@ -76,34 +81,32 @@ class AuthAttemptLimiterTest {
         assertThatThrownBy(() -> limiter.requireAllowed("login", "overflow-account", overflowClient))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
-        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "ip").count()).isEqualTo(3.0);
-        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "account-ip").count()).isEqualTo(3.0);
+        assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "ip").count()).isEqualTo(1.0);
     }
 
     @Test
     void accountIpSaturationDoesNotConsumeIpDimensionCapacity() {
-        AuthProperties properties = propertiesWithLimits(2, 1_000_000);
+        AuthProperties properties = propertiesWithLimits(1_000_000, 1_000_000);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         MutableClock clock = new MutableClock();
-        AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock);
+        AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock, 2);
+        String clientIp = "203.0.113.50";
 
-        for (int index = 0; index < 10_500; index++) {
-            String clientIp = "client-" + index;
-            limiter.requireAllowed("login", "account-a-" + index, clientIp);
-            limiter.requireAllowed("login", "account-b-" + index, clientIp);
-        }
+        limiter.requireAllowed("login", "account-a", clientIp);
+        limiter.requireAllowed("login", "account-b", clientIp);
 
-        String victimIp = "203.0.113.50";
-        limiter.requireAllowed("login", "victim", victimIp);
-        limiter.requireAllowed("login", "victim", victimIp);
-        assertThatThrownBy(() -> limiter.requireAllowed("login", "victim", victimIp))
+        assertThatThrownBy(() -> limiter.requireAllowed("login", "account-c", clientIp))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+        limiter.requireAllowed("login", "account-a", clientIp);
 
         assertThat(registry.counter("repoguard.auth.rate_limited", "operation", "login").count()).isEqualTo(1.0);
         assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "ip").count()).isZero();
         assertThat(registry.counter("repoguard.auth.rate_limiter_saturated", "dimension", "account-ip").count())
-            .isGreaterThanOrEqualTo(2.0);
+            .isEqualTo(1.0);
+        assertThat(
+            registry.counter("repoguard.auth.rate_limiter_overflow_rejected", "dimension", "account-ip").count()
+        ).isEqualTo(1.0);
     }
 
     @Test
@@ -140,6 +143,71 @@ class AuthAttemptLimiterTest {
         assertThatThrownBy(() -> limiter.requireAllowed("login", "user@example.com", "203.0.113.10"))
             .isInstanceOfSatisfying(BusinessException.class, exception ->
                 assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS));
+    }
+
+    @Test
+    void boundsConcurrentHighCardinalityKeysAndRecoversCapacityAfterExpiry() throws Exception {
+        int capacity = 16;
+        int attempts = 128;
+        AuthProperties properties = propertiesWithLimits(1_000_000, 1);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        MutableClock clock = new MutableClock();
+        AuthAttemptLimiter limiter = new AuthAttemptLimiter(properties, registry, clock, capacity);
+
+        assertConcurrentHighCardinalityResult(limiter, "first", attempts, capacity);
+        assertThat(
+            registry.counter("repoguard.auth.rate_limiter_overflow_rejected", "dimension", "account-ip").count()
+        ).isEqualTo(attempts - capacity);
+
+        clock.advance(Duration.ofMinutes(1));
+
+        assertConcurrentHighCardinalityResult(limiter, "second", attempts, capacity);
+        assertThat(
+            registry.counter("repoguard.auth.rate_limiter_overflow_rejected", "dimension", "account-ip").count()
+        ).isEqualTo((attempts - capacity) * 2.0);
+    }
+
+    private void assertConcurrentHighCardinalityResult(
+        AuthAttemptLimiter limiter,
+        String accountPrefix,
+        int attempts,
+        int expectedAllowed
+    ) throws Exception {
+        int threads = 8;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger allowed = new AtomicInteger();
+        AtomicInteger rejected = new AtomicInteger();
+        List<Future<Void>> futures = new ArrayList<>();
+        try {
+            for (int attempt = 0; attempt < attempts; attempt++) {
+                int index = attempt;
+                futures.add(executor.submit((Callable<Void>) () -> {
+                    start.await();
+                    try {
+                        limiter.requireAllowed(
+                            "login",
+                            accountPrefix + "-account-" + index,
+                            "203.0.113.99"
+                        );
+                        allowed.incrementAndGet();
+                    } catch (BusinessException ex) {
+                        assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.TOO_MANY_REQUESTS);
+                        rejected.incrementAndGet();
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<Void> future : futures) {
+                future.get(30, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(allowed).hasValue(expectedAllowed);
+        assertThat(rejected).hasValue(attempts - expectedAllowed);
     }
 
     private AuthProperties propertiesWithLimits(int perIp, int perAccountIp) {
