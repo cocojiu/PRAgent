@@ -119,3 +119,9 @@
 变更：生成器新增 Cache stats、数据保留、前端性能、消息队列健康/requeue、系统健康和用户管理控制器范围，生成客户端操作由 65 项扩大到 77 项；12 个前端 API 契约改用 generatedEndpoint，保留数据保留查询适配、用户角色/状态请求体映射和前端性能上报 observe=false；补齐用户更新请求与性能上报类型别名。认证 7 项和 GitHub Webhook 继续保留明确手写 adapter。后端 OpenAPIGeneratedClientContractTest 同步把 12 个普通控制器纳入生成元数据治理。
 本地验证：后端 ApiContractTest、OpenApiGeneratedClientContractTest 共 25 项通过；前端生成文件一致性、vue-tsc、ESLint、37 个测试文件共 147 项单元测试、用户管理生成路径回归和生产构建通过。构建实测首屏共享 JavaScript 86.0 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
 下一步：R6 代码项完成；继续补齐 R4 真实质量 SQL EXPLAIN 基线和 R5 严格 2C4G 部署级容量证据。
+
+2026-08-11 | 优化-15 | R4 质量 SQL 固定规模 EXPLAIN 基线
+状态：本地完成，远程流水线待检查
+变更：在 ProductionRuntimeContextIntegrationTest 的真实 MySQL 上下文中，以单事务批量构造 500 个已完成任务和 10000 条质量 Finding；对 ReviewQualityBaselineMapper.selectSummary/selectGroups 同时采集 EXPLAIN ANALYZE 与 EXPLAIN FORMAT=JSON，记录实际扫描行数、访问类型、索引选择、临时表/filesort 标记和完整计划。两条 SQL 各预热 1 次、采样 10 次并输出 P95/P99，P99 门禁为 5 秒；所有固定规模数据在事务结束时回滚，并验证无测试数据残留。
+本地验证：ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实 MySQL/RabbitMQ 时 10 项按环境门禁跳过；ReviewQualityBaselineMapperSqlContractTest 3 项通过。真实执行计划和延迟数据必须由 Spring MySQL RabbitMQ integration 作业验收，本地跳过不视为完成。
+下一步：提交并推送 PRAgent-test，检查全部 Actions；从真实 MySQL 作业日志归档 selectSummary/selectGroups 的执行计划、P95/P99、临时表/filesort 和索引命中证据，失败立即修复。

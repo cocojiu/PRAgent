@@ -11,6 +11,7 @@ import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
+import com.repoguard.agent.mapper.ReviewQualityBaselineMapper;
 import com.repoguard.agent.mapper.ReviewTaskMapper;
 import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Sample;
 import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Summary;
@@ -44,6 +45,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
+import org.apache.ibatis.annotations.Select;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.LoggerFactory;
@@ -65,6 +67,10 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class ProductionRuntimeContextIntegrationTest {
+
+    private static final int QUALITY_EXPLAIN_TASK_COUNT = 500;
+    private static final int QUALITY_EXPLAIN_FINDINGS_PER_TASK = 20;
+    private static final int QUALITY_EXPLAIN_SAMPLE_COUNT = 10;
 
     private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(
         ProductionRuntimeContextIntegrationTest.class
@@ -690,6 +696,81 @@ class ProductionRuntimeContextIntegrationTest {
     }
 
     @Test
+    void reviewQualitySqlHasFixedScaleExplainAndLatencyEvidence() throws NoSuchMethodException {
+        try (ConfigurableApplicationContext context = start("api")) {
+            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
+            ReviewQualityBaselineMapper mapper = context.getBean(ReviewQualityBaselineMapper.class);
+            TransactionTemplate transactionTemplate = new TransactionTemplate(
+                context.getBean(PlatformTransactionManager.class)
+            );
+            String organization = "quality-explain-" + Long.toUnsignedString(System.nanoTime());
+            String summarySql = reviewQualityMapperSql("selectSummary");
+            String groupsSql = reviewQualityMapperSql("selectGroups");
+
+            transactionTemplate.executeWithoutResult(status -> {
+                try {
+                    insertQualityExplainDataset(jdbcTemplate, organization);
+                    int insertedTasks = jdbcTemplate.queryForObject(
+                        "select count(*) from review_task where organization = ?",
+                        Integer.class,
+                        organization
+                    );
+                    int insertedFindings = jdbcTemplate.queryForObject("""
+                        select count(*)
+                        from review_finding finding
+                        join review_task task on task.id = finding.task_id
+                        where task.organization = ?
+                        """, Integer.class, organization);
+                    assertThat(insertedTasks).isEqualTo(QUALITY_EXPLAIN_TASK_COUNT);
+                    assertThat(insertedFindings).isEqualTo(
+                        QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
+                    );
+
+                    String summaryPlan = explainAnalyze(jdbcTemplate, summarySql);
+                    String groupsPlan = explainAnalyze(jdbcTemplate, groupsSql);
+                    String summaryPlanJson = explainJson(jdbcTemplate, summarySql);
+                    String groupsPlanJson = explainJson(jdbcTemplate, groupsSql);
+                    assertExplainEvidence(summaryPlan, summaryPlanJson, "selectSummary");
+                    assertExplainEvidence(groupsPlan, groupsPlanJson, "selectGroups");
+
+                    mapper.selectSummary();
+                    mapper.selectGroups();
+                    List<Long> summaryDurations = measureSql(
+                        () -> mapper.selectSummary(),
+                        QUALITY_EXPLAIN_SAMPLE_COUNT
+                    );
+                    List<Long> groupDurations = measureSql(
+                        () -> mapper.selectGroups(),
+                        QUALITY_EXPLAIN_SAMPLE_COUNT
+                    );
+                    logQualitySqlEvidence(
+                        "selectSummary",
+                        summaryDurations,
+                        summaryPlan,
+                        summaryPlanJson
+                    );
+                    logQualitySqlEvidence(
+                        "selectGroups",
+                        groupDurations,
+                        groupsPlan,
+                        groupsPlanJson
+                    );
+                    assertThat(percentile(summaryDurations, 0.99d)).isLessThan(TimeUnit.SECONDS.toNanos(5));
+                    assertThat(percentile(groupDurations, 0.99d)).isLessThan(TimeUnit.SECONDS.toNanos(5));
+                } finally {
+                    status.setRollbackOnly();
+                }
+            });
+
+            assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from review_task where organization = ?",
+                Integer.class,
+                organization
+            )).isZero();
+        }
+    }
+
+    @Test
     void terminalStateAndNotificationOutboxCommitOrRollBackAtomically() throws Exception {
         RabbitTopology topology = RabbitTopology.unique("atomic");
         try (ConfigurableApplicationContext context = start("api", topology.arguments())) {
@@ -936,6 +1017,161 @@ class ProductionRuntimeContextIntegrationTest {
         filter.doFilter(request, response, new MockFilterChain());
 
         assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    private void insertQualityExplainDataset(JdbcTemplate jdbcTemplate, String organization) {
+        LocalDateTime now = LocalDateTime.now();
+        List<Object[]> taskArguments = new ArrayList<>(QUALITY_EXPLAIN_TASK_COUNT);
+        for (int index = 0; index < QUALITY_EXPLAIN_TASK_COUNT; index++) {
+            LocalDateTime createdAt = now.minusDays(index % 90L).minusSeconds(index);
+            taskArguments.add(new Object[] {
+                200_000 + index,
+                "Quality explain task " + index,
+                "quality-explain-repository-" + index % 20,
+                organization,
+                String.format("%040x", index + 1),
+                "quality-explain",
+                "COMPLETED",
+                index % 4 == 0 ? "HIGH" : "LOW",
+                0,
+                0,
+                "COMPLETED",
+                "openai",
+                "quality-explain-model-" + index % 3,
+                "PARSED",
+                "https://example.invalid/quality-explain/" + index,
+                "MANUAL_INPUT",
+                "MANUAL_INPUT",
+                false,
+                "NOT_REQUIRED",
+                "COMPLETE",
+                createdAt,
+                createdAt.plusSeconds(30),
+                30,
+                new BigDecimal("0.001000")
+            });
+        }
+        jdbcTemplate.batchUpdate("""
+            insert into review_task (
+                pr_number, title, repository, organization, commit_sha, branch_name,
+                status, risk_level, mq_retries, publish_attempts, llm_status,
+                llm_provider, llm_model, llm_parse_status, pr_url, source,
+                trigger_source, human_review_required, human_review_status,
+                assessment_status, created_at, finished_at, duration_seconds,
+                llm_estimated_cost
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, taskArguments);
+
+        List<Long> taskIds = jdbcTemplate.queryForList(
+            "select id from review_task where organization = ? order by id",
+            Long.class,
+            organization
+        );
+        List<Object[]> findingArguments = new ArrayList<>(
+            QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK
+        );
+        for (Long taskId : taskIds) {
+            for (int index = 0; index < QUALITY_EXPLAIN_FINDINGS_PER_TASK; index++) {
+                int duplicatePattern = index % 10;
+                String extension = switch (duplicatePattern % 4) {
+                    case 0 -> "java";
+                    case 1 -> "sql";
+                    case 2 -> "yml";
+                    default -> "ts";
+                };
+                String feedbackStatus = switch (index % 4) {
+                    case 0 -> "VALID";
+                    case 1 -> "FIXED";
+                    case 2 -> "FALSE_POSITIVE";
+                    default -> "UNREVIEWED";
+                };
+                findingArguments.add(new Object[] {
+                    taskId,
+                    "FINDING",
+                    duplicatePattern % 3 == 0 ? "HIGH" : "LOW",
+                    "RULE",
+                    "RG-EXPLAIN-" + duplicatePattern % 5,
+                    "src/quality/Explain" + duplicatePattern % 4 + "." + extension,
+                    duplicatePattern + 1,
+                    "quality explain finding " + duplicatePattern,
+                    "quality explain recommendation",
+                    feedbackStatus,
+                    duplicatePattern % 5 == 0 ? "NONE" : "ADDED_LINE",
+                    duplicatePattern % 3 == 0
+                });
+            }
+        }
+        jdbcTemplate.batchUpdate("""
+            insert into review_finding (
+                task_id, category, severity, source, rule_id, file_path,
+                line_number, message, recommendation, feedback_status,
+                anchor_type, is_blocking
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, findingArguments);
+    }
+
+    private String reviewQualityMapperSql(String methodName) throws NoSuchMethodException {
+        Select select = ReviewQualityBaselineMapper.class.getMethod(methodName).getAnnotation(Select.class);
+        assertThat(select).as(methodName + " @Select").isNotNull();
+        return String.join("\n", select.value());
+    }
+
+    private String explainAnalyze(JdbcTemplate jdbcTemplate, String sql) {
+        String plan = jdbcTemplate.queryForObject("explain analyze " + sql, String.class);
+        assertThat(plan).isNotBlank();
+        return plan;
+    }
+
+    private String explainJson(JdbcTemplate jdbcTemplate, String sql) {
+        String plan = jdbcTemplate.queryForObject("explain format=json " + sql, String.class);
+        assertThat(plan).isNotBlank();
+        return plan;
+    }
+
+    private void assertExplainEvidence(String plan, String jsonPlan, String mapperMethod) {
+        assertThat(plan)
+            .as(mapperMethod + " EXPLAIN ANALYZE")
+            .contains("actual time=")
+            .contains("rows=")
+            .doesNotContain("never executed");
+        assertThat(jsonPlan)
+            .as(mapperMethod + " EXPLAIN FORMAT=JSON")
+            .contains("\"query_block\"")
+            .contains("\"access_type\"")
+            .contains("\"rows_examined_per_scan\"");
+    }
+
+    private List<Long> measureSql(Runnable query, int sampleCount) {
+        List<Long> durations = new ArrayList<>(sampleCount);
+        for (int index = 0; index < sampleCount; index++) {
+            long startedAt = System.nanoTime();
+            query.run();
+            durations.add(System.nanoTime() - startedAt);
+        }
+        durations.sort(Long::compareTo);
+        return durations;
+    }
+
+    private void logQualitySqlEvidence(
+        String mapperMethod,
+        List<Long> durations,
+        String plan,
+        String jsonPlan
+    ) {
+        LOGGER.info(
+            "Review quality SQL evidence tasks={} findings={} query={} samples={} p95Ms={} p99Ms={} "
+                + "usesTemporaryTable={} usesFilesort={} analyzePlan={} jsonPlan={}",
+            QUALITY_EXPLAIN_TASK_COUNT,
+            QUALITY_EXPLAIN_TASK_COUNT * QUALITY_EXPLAIN_FINDINGS_PER_TASK,
+            mapperMethod,
+            durations.size(),
+            nanosToMillis(percentile(durations, 0.95d)),
+            nanosToMillis(percentile(durations, 0.99d)),
+            jsonPlan.contains("\"using_temporary_table\": true"),
+            jsonPlan.contains("\"using_filesort\": true"),
+            plan.replaceAll("\\s+", " ").trim(),
+            jsonPlan.replaceAll("\\s+", " ").trim()
+        );
     }
 
     private Long insertReviewTask(
