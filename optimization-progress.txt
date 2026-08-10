@@ -102,3 +102,10 @@
 语义保持：OBSERVE -> COMMENT -> BLOCK、语义编辑回落 OBSERVE、expected policy version 预检、policy_version 条件更新 CAS、409 冲突、游标历史、回滚、缓存失效、质量基线在短写事务外读取，以及事务内只写规则/快照/晋升证据的边界均保持不变。架构契约新增 5 个组件归属校验，并禁止门面重新依赖 Mapper、质量基线、校准和快照存储。
 本地验证：规则配置、策略治理、短事务、系统配置、Spring 构造器和架构契约定向 78 项通过；跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
 下一步：继续 R6，提取 RuleConfigPage.vue 的规则目录、编辑器、策略历史、策略治理和校准队列编排逻辑，保持 latest-only、AbortController 和 409 冲突语义。
+
+2026-08-10 | 优化-13 | R6 规则配置前端职责提取
+状态：本地完成，远程流水线待检查
+变更：将 RuleConfigPage.vue 从 745 行缩减为 414 行，页面脚本只保留 composable 组合、指标图标映射和展示格式化；新增 useReviewRuleCatalog、useReviewRuleEditor、useReviewPolicyHistory、useReviewStrategyGovernance，分别收口规则目录与筛选、编辑/启停命令、两类游标历史与回滚、策略处置模式发布。ReviewCalibrationQueueCard 已独立封装校准规则选择、路由联动、请求代际和样本跳转，未再增加只做代理的空壳 useReviewCalibrationQueue。
+语义保持：规则/策略历史继续复用 createLatestPolicyHistoryLoader，新请求中止同类旧请求并抑制迟到响应；弹窗关闭和页面卸载仍会取消请求；保存、启停、发布或回滚失败后重新加载规则；规则编辑冲突后采用最新 policyVersion 并重置表单，策略冲突后采用最新 snapshotId 和处置模式；回滚请求始终携带当前活动版本。
+本地验证：新增 5 项 composable 回归，覆盖目录筛选、规则 409 冲突刷新、策略快照冲突刷新、规则/策略回滚期望版本和卸载取消；生成客户端一致性、vue-tsc、ESLint、37 个测试文件共 146 项单元测试、生产构建及全部资源预算通过。构建实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均未退化。
+下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Repository Governance、Release Images 和 Auto Create Pull Request；如有失败立即修复。随后继续迁移剩余 12 个普通管理 OpenAPI 元数据。
