@@ -74,7 +74,11 @@
 下一步：执行 R4 质量快照、关键 SQL EXPLAIN 基线和晋升写事务缩短，随后完成 R5 共享限流容量与成本可观测、R6 结构和剩余 API 契约提取。
 
 2026-08-10 | 优化-10 | 质量基线持久化快照与晋升短事务
-状态：本地完成，远程流水线待检查
+状态：已完成
+实现提交：c32544b8；修复提交：6e0859d0。
+远程验收：Pull Request Quality #31395079969；Repository Governance #31395072177/#31395077886；Release Images #31395072170；Auto Create Pull Request #31395072224，均成功。
+首次流水线失败原因：Spring MySQL/RabbitMQ 集成测试绕过生产失效标记直接写入数据，读取了旧质量快照；修复测试夹具后重新运行全部通过。Deploy 按 test 分支策略跳过。
+下一步：进入 R5，共享限流容量与成本可观测性验证。
 变更：新增 V64 全局质量基线快照、单调脏版本和刷新版本；评审结果、反馈和数据保留清理在业务事务内标记快照失效，提交后异步重建，调度任务补偿失败刷新并每日核对；损坏或不兼容的 JSON 快照会自动转为脏状态并重建。规则和策略晋升在写锁外完成质量聚合与证据捕获，短 REQUIRES_NEW 事务只执行 expected version CAS、版本快照与不可变晋升证据写入；质量状态过滤改为直接命中 assessment_status=COMPLETE，避免函数包装影响索引选择。
 本地验证：质量快照、SQL 契约、恢复任务、短事务、规则/策略治理、数据保留和缓存定向 47 项通过；本机只有 JDK 26，跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2331 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。精确 JDK 25、V64 真实 MySQL 迁移和多角色 Spring 上下文由远程 Actions 验证。
 下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Spring MySQL RabbitMQ integration、Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。
