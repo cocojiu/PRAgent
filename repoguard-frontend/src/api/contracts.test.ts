@@ -729,6 +729,47 @@ describe("apiRequest", () => {
     expect(calls[5][1].method).toBe("POST");
     expect(calls[5][1].body).toBe(JSON.stringify({ expectedSnapshotId: 17 }));
   });
+
+  it("uses generated metadata for user management paths and request bodies", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(okResponse({})));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await apiRequest("fetchUsers", {
+      page: 2,
+      pageSize: 25,
+      role: "ADMIN",
+      status: "ACTIVE",
+      keyword: "alice"
+    });
+    await apiRequest("fetchUserOperationAudits", { page: 3, pageSize: 10 });
+    await apiRequest("createUser", {
+      username: "alice",
+      email: "alice@example.com",
+      password: "password",
+      confirmPassword: "password"
+    });
+    await apiRequest("updateUserRole", { id: 42, role: "VIEWER" });
+    await apiRequest("updateUserStatus", { id: 42, status: "DISABLED" });
+
+    const calls = fetchMock.mock.calls as [string, RequestInit][];
+    expect(calls[0][0]).toContain("/api/v1/users");
+    expect(calls[0][0]).toContain("page=2");
+    expect(calls[0][0]).toContain("pageSize=25");
+    expect(calls[0][0]).toContain("role=ADMIN");
+    expect(calls[0][0]).toContain("status=ACTIVE");
+    expect(calls[0][0]).toContain("keyword=alice");
+    expect(calls[1][0]).toContain("/api/v1/users/audits");
+    expect(calls[1][0]).toContain("page=3");
+    expect(calls[1][0]).toContain("pageSize=10");
+    expect(calls[2][0]).toContain("/api/v1/users");
+    expect(calls[2][1].method).toBe("POST");
+    expect(calls[3][0]).toContain("/api/v1/users/42/role");
+    expect(calls[3][1].method).toBe("PUT");
+    expect(calls[3][1].body).toBe(JSON.stringify({ role: "VIEWER" }));
+    expect(calls[4][0]).toContain("/api/v1/users/42/status");
+    expect(calls[4][1].method).toBe("PUT");
+    expect(calls[4][1].body).toBe(JSON.stringify({ status: "DISABLED" }));
+  });
 });
 
 const setCsrfCookie = (token: string) => {

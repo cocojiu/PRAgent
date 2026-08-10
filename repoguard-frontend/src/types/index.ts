@@ -7,3 +7,4 @@ export * from "./review";
 export * from "./ruleConfig";
 export * from "./shared";
 export * from "./systemSettings";
+export type { ManagedUser, UserCreateRequest, UserOperationAudit } from "../api/users";

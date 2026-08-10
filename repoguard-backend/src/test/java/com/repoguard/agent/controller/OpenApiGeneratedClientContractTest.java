@@ -27,12 +27,18 @@ class OpenApiGeneratedClientContractTest {
         "POST /api/v1/github/webhooks"
     );
     private static final List<String> MIGRATED_CLIENT_PREFIXES = List.of(
+        "cacheStatsController",
+        "dataRetentionController",
         "dashboardController",
+        "frontendPerformanceController",
+        "messageQueueHealthController",
         "reviewCalibrationController",
         "reviewController",
         "notificationController",
         "notificationIntegrationController",
-        "systemConfigController"
+        "systemConfigController",
+        "systemHealthController",
+        "userManagementController"
     );
 
     @Test

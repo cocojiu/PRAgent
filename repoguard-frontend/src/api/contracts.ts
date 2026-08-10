@@ -283,8 +283,6 @@ type ApiEndpointMap = {
   >;
 };
 
-const idSegment = (value: number | string) => encodeURIComponent(String(value));
-
 const apiEndpoints: ApiEndpointMap = {
   login: {
     method: "POST",
@@ -329,19 +327,12 @@ const apiEndpoints: ApiEndpointMap = {
   fetchDashboardLlmQuality: generatedEndpoint("dashboardControllerGetLlmQuality", {
     query: input => ({ llmTrendDays: input.llmTrendDays })
   }),
-  fetchSystemHealthSummary: {
-    path: () => "/api/v1/system/health/summary"
-  },
-  fetchCacheStats: {
-    path: () => "/api/v1/cache/stats"
-  },
-  cleanupDataRetention: {
-    method: "POST",
-    path: () => "/api/v1/config/data-retention/cleanup",
+  fetchSystemHealthSummary: generatedEndpoint("systemHealthControllerGetSystemHealthSummary", {}),
+  fetchCacheStats: generatedEndpoint("cacheStatsControllerGetStats", {}),
+  cleanupDataRetention: generatedEndpoint("dataRetentionControllerCleanup", {
     body: input => input
-  },
-  fetchDataRetentionCleanupAudits: {
-    path: () => "/api/v1/config/data-retention/cleanup-audits",
+  }),
+  fetchDataRetentionCleanupAudits: generatedEndpoint("dataRetentionControllerListCleanupAudits", {
     query: input => ({
       page: input.page,
       pageSize: input.pageSize,
@@ -349,7 +340,7 @@ const apiEndpoints: ApiEndpointMap = {
       status: input.status,
       backupReference: input.backupReference
     })
-  },
+  }),
   fetchReviews: generatedEndpoint("reviewControllerListReviews", {
     query: input => ({
       page: input.page,
@@ -655,16 +646,12 @@ const apiEndpoints: ApiEndpointMap = {
       })
     }
   ),
-  fetchMessageQueueHealth: {
-    path: () => "/api/v1/message-queue/health"
-  },
-  requeueMessageQueueTask: {
-    method: "POST",
-    path: input => `/api/v1/message-queue/tasks/${idSegment(input.taskId)}/requeue`
-  },
+  fetchMessageQueueHealth: generatedEndpoint("messageQueueHealthControllerGetHealth", {}),
+  requeueMessageQueueTask: generatedEndpoint("messageQueueHealthControllerRequeueTask", {
+    path: input => ({ taskId: input.taskId })
+  }),
   fetchNotifications: generatedEndpoint("notificationControllerGetNotifications", {}),
-  fetchUsers: {
-    path: () => "/api/v1/users",
+  fetchUsers: generatedEndpoint("userManagementControllerListUsers", {
     query: input => ({
       page: input.page,
       pageSize: input.pageSize,
@@ -672,30 +659,25 @@ const apiEndpoints: ApiEndpointMap = {
       status: input.status || undefined,
       keyword: input.keyword
     })
-  },
-  fetchUserOperationAudits: {
-    path: () => "/api/v1/users/audits",
+  }),
+  fetchUserOperationAudits: generatedEndpoint("userManagementControllerListOperationAudits", {
     query: input => ({ page: input.page, pageSize: input.pageSize })
-  },
-  createUser: {
-    method: "POST",
-    path: () => "/api/v1/users",
+  }),
+  createUser: generatedEndpoint("userManagementControllerCreateUser", {
     body: input => input
-  },
-  updateUserRole: {
-    method: "PUT",
-    path: input => `/api/v1/users/${idSegment(input.id)}/role`,
+  }),
+  updateUserRole: generatedEndpoint("userManagementControllerUpdateRole", {
+    path: input => ({ id: input.id }),
     body: input => ({ role: input.role })
-  },
-  updateUserStatus: {
-    method: "PUT",
-    path: input => `/api/v1/users/${idSegment(input.id)}/status`,
+  }),
+  updateUserStatus: generatedEndpoint("userManagementControllerUpdateStatus", {
+    path: input => ({ id: input.id }),
     body: input => ({ status: input.status })
-  },
+  }),
   reportFrontendPerformance: {
-    method: "POST",
-    path: () => "/api/v1/observability/frontend/performance",
-    body: input => input,
+    ...generatedEndpoint("frontendPerformanceControllerRecordPerformance", {
+      body: input => input
+    }),
     observe: false
   }
 };

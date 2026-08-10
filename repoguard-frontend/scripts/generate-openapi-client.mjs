@@ -14,12 +14,18 @@ const outputPath = resolve(
 );
 const checkOnly = process.argv.includes("--check");
 const migratedOperationPrefixes = [
+  "cacheStatsController",
+  "dataRetentionController",
   "dashboardController",
+  "frontendPerformanceController",
+  "messageQueueHealthController",
   "reviewCalibrationController",
   "reviewController",
   "notificationController",
   "notificationIntegrationController",
-  "systemConfigController"
+  "systemConfigController",
+  "systemHealthController",
+  "userManagementController"
 ];
 const httpMethods = ["get", "post", "put", "delete"];
 
@@ -31,6 +37,7 @@ const javaTypeAliases = new Map([
   ["DashboardLlmQualityResponse", "DashboardLlmQuality"],
   ["DashboardOverviewResponse", "DashboardOverview"],
   ["DashboardRulesResponse", "DashboardRules"],
+  ["FrontendPerformanceReportRequest", "FrontendPerformanceReport"],
   ["GithubCommentPreviewResponse", "GithubCommentPreview"],
   ["GithubCommentPublicationHistoryResponse", "GithubCommentPublicationHistory"],
   ["GithubCommentPublishResponse", "GithubCommentPublish"],
