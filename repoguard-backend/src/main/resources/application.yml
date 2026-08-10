@@ -53,6 +53,16 @@ mybatis-plus:
       id-type: auto
 
 management:
+  metrics:
+    distribution:
+      percentiles:
+        repoguard.api.request.duration: 0.95,0.99
+        repoguard.security.shared_rate_limit.acquire.duration: 0.95,0.99
+        repoguard.security.shared_rate_limit.database.operation.duration: 0.95,0.99
+      percentiles-histogram:
+        repoguard.api.request.duration: true
+        repoguard.security.shared_rate_limit.acquire.duration: true
+        repoguard.security.shared_rate_limit.database.operation.duration: true
   endpoints:
     web:
       exposure:

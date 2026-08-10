@@ -82,3 +82,10 @@
 变更：新增 V64 全局质量基线快照、单调脏版本和刷新版本；评审结果、反馈和数据保留清理在业务事务内标记快照失效，提交后异步重建，调度任务补偿失败刷新并每日核对；损坏或不兼容的 JSON 快照会自动转为脏状态并重建。规则和策略晋升在写锁外完成质量聚合与证据捕获，短 REQUIRES_NEW 事务只执行 expected version CAS、版本快照与不可变晋升证据写入；质量状态过滤改为直接命中 assessment_status=COMPLETE，避免函数包装影响索引选择。
 本地验证：质量快照、SQL 契约、恢复任务、短事务、规则/策略治理、数据保留和缓存定向 47 项通过；本机只有 JDK 26，跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2331 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。精确 JDK 25、V64 真实 MySQL 迁移和多角色 Spring 上下文由远程 Actions 验证。
 下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Spring MySQL RabbitMQ integration、Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。
+
+2026-08-10 | 优化-11 | 共享数据库限流成本与容量可观测
+状态：本地完成，远程流水线待检查
+变更：数据库共享限流新增低基数 Micrometer 指标，记录整体获取耗时、原子计数/清理数据库操作耗时、清理删除行数、数据库故障分类和 fail-closed 拒绝数；仅保留 5 个内建 scope 标签，其余统一归为 other。MySQL 1205/1213 与 SQLState 41000/40001 分别归类为 lock_timeout/deadlock，故障日志每分钟限频；清理失败会恢复清理门闩以允许同分钟重试。共享计数改用显式 TransactionOperations，数据库操作、回滚和提交阶段异常都在事务边界外统一转为拒绝。API 请求、共享限流获取和数据库操作计时器启用 P95/P99 与 Prometheus 直方图。
+容量验收用例：真实 MySQL 集成测试启动两个 API Spring 上下文，分别比较 1 实例和 2 实例的 5/10 RPS；要求请求全部通过共享原子计数、数据库故障为 0、P95/P99 均低于 1 秒，并输出四组无敏感信息的容量证据。
+本地验证：DatabaseRateLimitWindowStoreTest、SharedRateLimitMetricsConfigurationTest、RuntimeRoleConditionTest、AuthAttemptLimiterTest、AdminApiKeyAttemptLimiterTest、GithubWebhookRateLimiterTest 定向通过；ProductionRuntimeContextIntegrationTest 编译通过，本机无真实 MySQL/RabbitMQ 环境时 9 项按门禁跳过。跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+下一步：提交并推送 origin/PRAgent-test，由 JDK 25 与真实 MySQL/RabbitMQ Actions 执行四组容量验收，并核对 Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。

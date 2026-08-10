@@ -28,6 +28,7 @@ import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -42,6 +43,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.slf4j.LoggerFactory;
@@ -64,28 +66,75 @@ import org.springframework.transaction.support.TransactionTemplate;
 @EnabledIfEnvironmentVariable(named = "REPOGUARD_RUN_INTEGRATION_TESTS", matches = "true")
 class ProductionRuntimeContextIntegrationTest {
 
+    private static final org.slf4j.Logger LOGGER = LoggerFactory.getLogger(
+        ProductionRuntimeContextIntegrationTest.class
+    );
+
     @Test
-    void databaseRateLimitStoreSupportsSharedApiScaleOut() {
-        try (ConfigurableApplicationContext context = start(
-            "api",
+    void databaseRateLimitStoreSupportsSharedApiScaleOutAndTargetRps() {
+        String[] scaleOutArguments = {
             "--app.runtime.api.instance-count=2",
             "--app.security.rate-limit-store=database"
-        )) {
-            JdbcTemplate jdbcTemplate = context.getBean(JdbcTemplate.class);
-            DatabaseRateLimitWindowStore store = context.getBean(DatabaseRateLimitWindowStore.class);
-            String scope = "integration-" + Long.toUnsignedString(System.nanoTime());
+        };
+        try (ConfigurableApplicationContext instanceA = start(
+            "api",
+            scaleOutArguments
+        ); ConfigurableApplicationContext instanceB = start("api", scaleOutArguments)) {
+            JdbcTemplate jdbcTemplate = instanceA.getBean(JdbcTemplate.class);
+            DatabaseRateLimitWindowStore storeA = instanceA.getBean(DatabaseRateLimitWindowStore.class);
+            DatabaseRateLimitWindowStore storeB = instanceB.getBean(DatabaseRateLimitWindowStore.class);
+            String suffix = Long.toUnsignedString(System.nanoTime());
+            String scope = "integration-atomic-" + suffix;
+            List<String> capacityScopes = List.of(
+                "integration-single-5-" + suffix,
+                "integration-single-10-" + suffix,
+                "integration-dual-5-" + suffix,
+                "integration-dual-10-" + suffix
+            );
             long minute = System.currentTimeMillis() / 60_000L;
             try {
-                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isTrue();
-                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isTrue();
-                assertThat(store.tryAcquire(scope, "same-client", minute, 2)).isFalse();
+                assertThat(storeA.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(storeB.tryAcquire(scope, "same-client", minute, 2)).isTrue();
+                assertThat(storeA.tryAcquire(scope, "same-client", minute, 2)).isFalse();
                 assertThat(jdbcTemplate.queryForObject(
                     "select request_count from api_rate_limit_window where rate_limit_scope = ?",
                     Long.class,
                     scope
                 )).isEqualTo(3L);
+
+                List<RateLimitCapacitySample> samples = List.of(
+                    measureRateLimitCapacity(List.of(storeA), capacityScopes.get(0), minute, 5),
+                    measureRateLimitCapacity(List.of(storeA), capacityScopes.get(1), minute, 10),
+                    measureRateLimitCapacity(List.of(storeA, storeB), capacityScopes.get(2), minute, 5),
+                    measureRateLimitCapacity(List.of(storeA, storeB), capacityScopes.get(3), minute, 10)
+                );
+                assertThat(samples).allSatisfy(sample -> {
+                    assertThat(sample.allowedRequests()).isEqualTo(sample.targetRps());
+                    assertThat(sample.p95Nanos()).isLessThan(TimeUnit.SECONDS.toNanos(1));
+                    assertThat(sample.p99Nanos()).isLessThan(TimeUnit.SECONDS.toNanos(1));
+                    LOGGER.info(
+                        "Shared rate-limit capacity evidence instances={} targetRps={} requests={} p95Ms={} p99Ms={}",
+                        sample.instanceCount(),
+                        sample.targetRps(),
+                        sample.allowedRequests(),
+                        nanosToMillis(sample.p95Nanos()),
+                        nanosToMillis(sample.p99Nanos())
+                    );
+                });
+                for (int index = 0; index < capacityScopes.size(); index++) {
+                    assertThat(jdbcTemplate.queryForObject(
+                        "select request_count from api_rate_limit_window where rate_limit_scope = ?",
+                        Long.class,
+                        capacityScopes.get(index)
+                    )).isEqualTo(index % 2 == 0 ? 5L : 10L);
+                }
+                assertThat(databaseFailureCount(instanceA.getBean(MeterRegistry.class))).isZero();
+                assertThat(databaseFailureCount(instanceB.getBean(MeterRegistry.class))).isZero();
             } finally {
                 jdbcTemplate.update("delete from api_rate_limit_window where rate_limit_scope = ?", scope);
+                for (String capacityScope : capacityScopes) {
+                    jdbcTemplate.update("delete from api_rate_limit_window where rate_limit_scope = ?", capacityScope);
+                }
             }
         }
     }
@@ -1121,6 +1170,55 @@ class ProductionRuntimeContextIntegrationTest {
         rabbitAdmin.deleteExchange(topology.deadLetterExchange());
     }
 
+    private RateLimitCapacitySample measureRateLimitCapacity(
+        List<DatabaseRateLimitWindowStore> stores,
+        String scope,
+        long windowEpochMinute,
+        int targetRps
+    ) {
+        long intervalNanos = TimeUnit.SECONDS.toNanos(1) / targetRps;
+        long nextStartNanos = System.nanoTime();
+        List<Long> durations = new ArrayList<>(targetRps);
+        int allowedRequests = 0;
+        for (int index = 0; index < targetRps; index++) {
+            if (index > 0) {
+                LockSupport.parkNanos(Math.max(0L, nextStartNanos - System.nanoTime()));
+            }
+            long startedAt = System.nanoTime();
+            DatabaseRateLimitWindowStore store = stores.get(index % stores.size());
+            if (store.tryAcquire(scope, "same-client", windowEpochMinute, targetRps)) {
+                allowedRequests++;
+            }
+            durations.add(System.nanoTime() - startedAt);
+            nextStartNanos += intervalNanos;
+        }
+        durations.sort(Long::compareTo);
+        return new RateLimitCapacitySample(
+            stores.size(),
+            targetRps,
+            allowedRequests,
+            percentile(durations, 0.95d),
+            percentile(durations, 0.99d)
+        );
+    }
+
+    private long percentile(List<Long> sortedValues, double percentile) {
+        int index = Math.max(0, (int) Math.ceil(sortedValues.size() * percentile) - 1);
+        return sortedValues.get(index);
+    }
+
+    private double nanosToMillis(long nanos) {
+        return nanos / 1_000_000.0d;
+    }
+
+    private double databaseFailureCount(MeterRegistry meterRegistry) {
+        return meterRegistry.find("repoguard.security.shared_rate_limit.database.failures")
+            .counters()
+            .stream()
+            .mapToDouble(counter -> counter.count())
+            .sum();
+    }
+
     private int runConcurrently(TransitionAction first, TransitionAction second) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         CountDownLatch ready = new CountDownLatch(2);
@@ -1171,6 +1269,15 @@ class ProductionRuntimeContextIntegrationTest {
     @FunctionalInterface
     private interface TransitionAction {
         void run();
+    }
+
+    private record RateLimitCapacitySample(
+        int instanceCount,
+        int targetRps,
+        int allowedRequests,
+        long p95Nanos,
+        long p99Nanos
+    ) {
     }
 
     private record RabbitTopology(
