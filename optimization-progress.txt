@@ -57,3 +57,10 @@
 审计范围：按顺序复核优化-01 至优化-07C 的代码、契约、数据库迁移、前端生成产物与流水线门禁；提交信息均为中文，所有优化提交均已单独推送 PRAgent-test 并检查 Actions。用户保留的 Caddyfile、optimization-log.txt 与 .tmp 未纳入提交，sub2api 相关改动未处理。
 本地验证：后端排除受用户 Caddyfile 工作区改动影响的 FrontendDeploymentContractTest 后完整 Maven verify 通过；前端 typecheck、ESLint、36 个测试文件共 141 项单元测试和生产构建通过；OpenAPI 生成文件一致性与全部资源预算通过。
 远程验证：优化-01 至优化-07C 的 Pull Request Quality、Repository Governance、Release Images 与 Auto Create Pull Request 均已核对成功；最终归档提交的流水线结果见交付回执。
+
+2026-08-10 | 优化-08 | 质量晋升证据持久化与保留策略
+状态：已完成
+变更：新增 V63 质量晋升证据表，规则和策略向 COMMENT/BLOCK 晋升时在同一事务内追加不可变证据；保存规则或策略快照、源/目标处置模式、基线与门禁版本、计算时间、样本截止时间、样本与高危标注计数、有效/误报/锚定/重复计数、precision、Wilson 下界、blockers、样本稳定指纹、操作人和 traceId。证据只关联版本快照并使用 ON DELETE RESTRICT，不依赖原始 Finding 保留；规则校准和策略窗口统一只统计 COMPLETE 任务，证据窗口与门禁计数不一致时整次晋升失败回滚。
+本地验证：ReviewPolicyPromotionEvidenceStoreTest、ReviewPolicyPromotionEvidenceMapperSqlContractTest、ReviewPolicyPromotionEvidenceMigrationTest、规则/策略治理和构造器契约定向 26 项通过；JDK 25 后端 clean verify 通过，2317 项通过、8 项跳过，JaCoCo 门禁和 JAR 构建通过。工作区既有 Caddyfile 的 sub2api 配置仍单独导致 FrontendDeploymentContractTest 失败，未纳入提交。
+远程验证：首次 Pull Request Quality #31376670109 的真实 MySQL 集成发现 V63 列名 precision 命中 MySQL 保留字，提交 371edbf9 将列改为 precision_rate；修复后 Pull Request Quality #31377570831（后端、前端、Spring MySQL RabbitMQ 集成、密钥与边缘配置）、Repository Governance #31377570688/#31377564481、Release Images #31377564611、Auto Create Pull Request #31377564528 全部成功，Deploy 按 test 分支策略跳过。实现提交为 383cdccd，修复提交为 371edbf9。
+下一步：执行 R1 API 多实例认证缓存一致性，关闭多实例下的进程内认证账户缓存或引入可验证的跨实例失效机制，并完成双 API 实例一致性演练。
