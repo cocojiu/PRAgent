@@ -121,7 +121,8 @@
 下一步：R6 代码项完成；继续补齐 R4 真实质量 SQL EXPLAIN 基线和 R5 严格 2C4G 部署级容量证据。
 
 2026-08-11 | 优化-15 | R4 质量 SQL 固定规模 EXPLAIN 基线
-状态：本地完成，远程流水线待检查
+状态：已完成
 变更：在 ProductionRuntimeContextIntegrationTest 的真实 MySQL 上下文中，以单事务批量构造 500 个已完成任务和 10000 条质量 Finding；对 ReviewQualityBaselineMapper.selectSummary/selectGroups 同时采集 EXPLAIN ANALYZE 与 EXPLAIN FORMAT=JSON，记录实际扫描行数、访问类型、索引选择、临时表/filesort 标记和完整计划。两条 SQL 各预热 1 次、采样 10 次并输出 P95/P99，P99 门禁为 5 秒；所有固定规模数据在事务结束时回滚，并验证无测试数据残留。
-本地验证：ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实 MySQL/RabbitMQ 时 10 项按环境门禁跳过；ReviewQualityBaselineMapperSqlContractTest 3 项通过。真实执行计划和延迟数据必须由 Spring MySQL RabbitMQ integration 作业验收，本地跳过不视为完成。
-下一步：提交并推送 PRAgent-test，检查全部 Actions；从真实 MySQL 作业日志归档 selectSummary/selectGroups 的执行计划、P95/P99、临时表/filesort 和索引命中证据，失败立即修复。
+本地验证：ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实 MySQL/RabbitMQ 时 10 项按环境门禁跳过；ReviewQualityBaselineMapperSqlContractTest 3 项通过。真实执行计划和延迟数据由 Spring MySQL RabbitMQ integration 作业验收，本地跳过不作为完成依据。
+远程验收：Pull Request Quality #31407455839、Spring MySQL RabbitMQ integration job #93517130882、Repository Governance #31407455770/#31407450855、Release Images #31407450897、Auto Create Pull Request #31407450958 均成功。
+真实 MySQL 证据：固定数据集 500 tasks/10000 findings；selectSummary P95/P99 为 0.22501/0.22501 ms，使用 idx_review_finding_category，聚合子查询使用临时表；selectGroups P95/P99 为 0.168303/0.168303 ms，使用 idx_review_finding_category，窗口排序与分组使用临时表并出现 filesort。两条 SQL 的 EXPLAIN ANALYZE 均记录实际 rows/time，事务回滚后测试组织数据为 0。
