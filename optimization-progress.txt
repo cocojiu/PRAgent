@@ -84,8 +84,12 @@
 下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Spring MySQL RabbitMQ integration、Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。
 
 2026-08-10 | 优化-11 | 共享数据库限流成本与容量可观测
-状态：本地完成，远程流水线待检查
+状态：已完成（CI 容量门禁）；严格 2C4G 硬资源约束下的部署压测仍作为残余验证项
+实现提交：8e9c1c51；修复提交：bb2f1847。
+远程验收：Pull Request Quality #31397911522；Repository Governance #31397904445/#31397911589；Release Images #31397903844；Auto Create Pull Request #31397903759，均成功。Deploy 按 test 分支策略跳过。
+真实 MySQL 容量证据：单实例 5 RPS 的 P95/P99 为 4.561/4.561 ms，单实例 10 RPS 为 4.785/4.785 ms；双实例 5 RPS 为 5.498/5.498 ms，双实例 10 RPS 为 4.997/4.997 ms。四组请求全部通过共享原子计数，两个实例的数据库故障指标均为 0。
+首次流水线失败原因：新增测试构造器后生产构造器未显式标注 @Autowired，Spring 在 database 模式寻找默认构造器，导致双实例上下文启动失败；修复后将 DatabaseRateLimitWindowStore 纳入 SpringBeanConstructorSelectionTest 治理，重新运行全部通过。
 变更：数据库共享限流新增低基数 Micrometer 指标，记录整体获取耗时、原子计数/清理数据库操作耗时、清理删除行数、数据库故障分类和 fail-closed 拒绝数；仅保留 5 个内建 scope 标签，其余统一归为 other。MySQL 1205/1213 与 SQLState 41000/40001 分别归类为 lock_timeout/deadlock，故障日志每分钟限频；清理失败会恢复清理门闩以允许同分钟重试。共享计数改用显式 TransactionOperations，数据库操作、回滚和提交阶段异常都在事务边界外统一转为拒绝。API 请求、共享限流获取和数据库操作计时器启用 P95/P99 与 Prometheus 直方图。
 容量验收用例：真实 MySQL 集成测试启动两个 API Spring 上下文，分别比较 1 实例和 2 实例的 5/10 RPS；要求请求全部通过共享原子计数、数据库故障为 0、P95/P99 均低于 1 秒，并输出四组无敏感信息的容量证据。
 本地验证：DatabaseRateLimitWindowStoreTest、SharedRateLimitMetricsConfigurationTest、RuntimeRoleConditionTest、AuthAttemptLimiterTest、AdminApiKeyAttemptLimiterTest、GithubWebhookRateLimiterTest 定向通过；ProductionRuntimeContextIntegrationTest 编译通过，本机无真实 MySQL/RabbitMQ 环境时 9 项按门禁跳过。跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
-下一步：提交并推送 origin/PRAgent-test，由 JDK 25 与真实 MySQL/RabbitMQ Actions 执行四组容量验收，并核对 Release Images、Repository Governance 和 Auto Create Pull Request；如有失败立即修复。
+下一步：进入 R6，按职责提取 ReviewRuleConfigServiceImpl 与 RuleConfigPage.vue 编排逻辑，并继续迁移剩余普通管理 OpenAPI；另行安排严格 2C4G 硬限制环境的持续压测，不以当前 GitHub Runner 结果替代该部署证据。
