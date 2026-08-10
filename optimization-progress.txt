@@ -64,3 +64,11 @@
 本地验证：ReviewPolicyPromotionEvidenceStoreTest、ReviewPolicyPromotionEvidenceMapperSqlContractTest、ReviewPolicyPromotionEvidenceMigrationTest、规则/策略治理和构造器契约定向 26 项通过；JDK 25 后端 clean verify 通过，2317 项通过、8 项跳过，JaCoCo 门禁和 JAR 构建通过。工作区既有 Caddyfile 的 sub2api 配置仍单独导致 FrontendDeploymentContractTest 失败，未纳入提交。
 远程验证：首次 Pull Request Quality #31376670109 的真实 MySQL 集成发现 V63 列名 precision 命中 MySQL 保留字，提交 371edbf9 将列改为 precision_rate；修复后 Pull Request Quality #31377570831（后端、前端、Spring MySQL RabbitMQ 集成、密钥与边缘配置）、Repository Governance #31377570688/#31377564481、Release Images #31377564611、Auto Create Pull Request #31377564528 全部成功，Deploy 按 test 分支策略跳过。实现提交为 383cdccd，修复提交为 371edbf9。
 下一步：执行 R1 API 多实例认证缓存一致性，关闭多实例下的进程内认证账户缓存或引入可验证的跨实例失效机制，并完成双 API 实例一致性演练。
+
+2026-08-10 | 优化-09 | API 多实例认证缓存一致性
+状态：已完成
+变更：当 REPOGUARD_API_INSTANCE_COUNT>1 时，AuthAccountCache 自动切换为数据库直读安全模式，每次受保护请求重新读取账号状态与 session_version；单实例继续保留 5 秒本地缓存和事务提交后失效。运行角色启动日志显式输出认证缓存模式，根目录 README 同步说明单/多实例一致性 SLA。真实集成用例启动两个 API Spring 上下文并共享同一 MySQL/RabbitMQ，验证 A 实例修改密码、禁用账号或注销会话后，B 实例立即对旧 access token 返回 401。
+本地验证：RuntimeRoleConditionTest、AuthAccountCacheTest 共 12 项通过；ProductionRuntimeContextIntegrationTest 编译通过，本机未启用真实集成环境时 9 项按环境门禁跳过；JDK 25 下排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 mvn verify 通过，2320 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+提交推送：实现提交 3412e46d，中文提交“优化：关闭多实例认证账户缓存并补充跨实例验证”，已推送 origin/PRAgent-test。
+远程验证：Pull Request Quality #31382625755 全部成功，包含后端、前端、Production edge configuration 与 Spring MySQL RabbitMQ integration；双 API 实例认证一致性用例在真实 MySQL/RabbitMQ 作业通过。Repository Governance #31382625773/#31382621862、Release Images #31382621877、Auto Create Pull Request #31382621866 均成功，Deploy 按 test 分支策略跳过。
+下一步：执行 R4 质量快照、关键 SQL EXPLAIN 基线和晋升写事务缩短，随后完成 R5 共享限流容量与成本可观测、R6 结构和剩余 API 契约提取。
