@@ -372,6 +372,7 @@ class ProductionRuntimeContextIntegrationTest {
             String organization = "quality-baseline-" + suffix;
             String repository = "quality-baseline-repository-" + suffix;
             String ruleId = "RG-GOLDEN-" + suffix;
+            List<Long> taskIds = new ArrayList<>();
             Long taskId = null;
 
             ReviewQualityBaseline before = baselineService.loadBaseline();
@@ -384,6 +385,7 @@ class ProductionRuntimeContextIntegrationTest {
                     false,
                     "NOT_REQUIRED"
                 );
+                taskIds.add(taskId);
                 jdbcTemplate.update("""
                     update review_task
                     set repository = ?,
@@ -401,6 +403,43 @@ class ProductionRuntimeContextIntegrationTest {
                 insertQualityFinding(jdbcTemplate, taskId, ruleId, "HIGH", null, "IGNORED", "ignored");
                 insertQualityFinding(jdbcTemplate, taskId, ruleId, "LOW", 50, "UNREVIEWED", "pending");
 
+                List<String> excludedAssessmentStatuses = List.of("PARTIAL", "FAILED", "SUPERSEDED");
+                List<String> excludedTaskStatuses = List.of("COMPLETED", "FAILED", "SUPERSEDED");
+                for (int index = 0; index < excludedAssessmentStatuses.size(); index++) {
+                    Long excludedTaskId = insertReviewTask(
+                        jdbcTemplate,
+                        organization,
+                        9151 + index,
+                        excludedTaskStatuses.get(index),
+                        false,
+                        "NOT_REQUIRED"
+                    );
+                    taskIds.add(excludedTaskId);
+                    jdbcTemplate.update("""
+                        update review_task
+                        set repository = ?,
+                            assessment_status = ?,
+                            finished_at = ?,
+                            duration_seconds = 9,
+                            llm_estimated_cost = 0.100000
+                        where id = ?
+                        """,
+                        repository,
+                        excludedAssessmentStatuses.get(index),
+                        LocalDateTime.now(),
+                        excludedTaskId
+                    );
+                    insertQualityFinding(
+                        jdbcTemplate,
+                        excludedTaskId,
+                        ruleId,
+                        "HIGH",
+                        60 + index,
+                        "VALID",
+                        "excluded-" + excludedAssessmentStatuses.get(index).toLowerCase(java.util.Locale.ROOT)
+                    );
+                }
+
                 ReviewQualityBaseline after = baselineService.loadBaseline();
 
                 assertThat(after.totalFindings() - before.totalFindings()).isEqualTo(6);
@@ -410,9 +449,9 @@ class ProductionRuntimeContextIntegrationTest {
                 assertThat(after.falsePositiveHighRiskFindings() - before.falsePositiveHighRiskFindings()).isOne();
                 assertThat(after.anchoredFindings() - before.anchoredFindings()).isEqualTo(5);
                 assertThat(after.duplicateFindings() - before.duplicateFindings()).isOne();
-                assertThat(after.completedTasks() - before.completedTasks()).isOne();
+                assertThat(after.completedTasks() - before.completedTasks()).isEqualTo(4);
                 assertThat(after.totalLlmEstimatedCost().subtract(before.totalLlmEstimatedCost()))
-                    .isEqualByComparingTo("0.123400");
+                    .isEqualByComparingTo("0.423400");
                 assertThat(after.groups())
                     .filteredOn(group -> ruleId.equals(group.ruleId())
                         && repository.equals(group.repository())
@@ -469,8 +508,8 @@ class ProductionRuntimeContextIntegrationTest {
                         assertThat(sample.message()).isEqualTo("ignored");
                     });
             } finally {
-                if (taskId != null) {
-                    jdbcTemplate.update("delete from review_finding where task_id = ?", taskId);
+                for (Long insertedTaskId : taskIds) {
+                    jdbcTemplate.update("delete from review_finding where task_id = ?", insertedTaskId);
                 }
                 jdbcTemplate.update("delete from review_task where organization = ?", organization);
             }
