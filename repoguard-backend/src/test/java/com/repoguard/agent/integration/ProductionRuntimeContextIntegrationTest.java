@@ -556,6 +556,10 @@ class ProductionRuntimeContextIntegrationTest {
                     );
                 }
 
+                // This fixture writes directly through JdbcTemplate and therefore
+                // must model the invalidation normally performed by application
+                // command services before asserting the persisted read model.
+                baselineService.markDirty();
                 ReviewQualityBaseline after = baselineService.loadBaseline();
 
                 assertThat(after.totalFindings() - before.totalFindings()).isEqualTo(6);
@@ -628,6 +632,10 @@ class ProductionRuntimeContextIntegrationTest {
                     jdbcTemplate.update("delete from review_finding where task_id = ?", insertedTaskId);
                 }
                 jdbcTemplate.update("delete from review_task where organization = ?", organization);
+                if (!taskIds.isEmpty()) {
+                    baselineService.markDirty();
+                    baselineService.refreshIfDirty();
+                }
             }
         }
     }
