@@ -113,7 +113,9 @@
 下一步：继续 R6，将用户管理、Cache stats、数据保留、消息队列健康/requeue、系统健康和前端性能上报共 12 个普通管理接口迁移到 OpenAPI 生成元数据；认证与 Webhook 继续保留明确的手写 adapter。
 
 2026-08-10 | 优化-14 | R6 剩余普通管理 OpenAPI 生成覆盖
-状态：本地完成，远程流水线待检查
+状态：已完成
+实现提交：41e402a2。
+远程验收：Pull Request Quality #31405623502；Repository Governance #31405623476/#31405619983；Release Images #31405620078；Auto Create Pull Request #31405619861，均成功。JDK 25 后端、真实 MySQL/RabbitMQ、前端类型检查/Lint/147 项单元测试/生产构建、镜像运行和双镜像高危/严重漏洞扫描全部通过；Deploy 按 test 分支策略跳过。
 变更：生成器新增 Cache stats、数据保留、前端性能、消息队列健康/requeue、系统健康和用户管理控制器范围，生成客户端操作由 65 项扩大到 77 项；12 个前端 API 契约改用 generatedEndpoint，保留数据保留查询适配、用户角色/状态请求体映射和前端性能上报 observe=false；补齐用户更新请求与性能上报类型别名。认证 7 项和 GitHub Webhook 继续保留明确手写 adapter。后端 OpenAPIGeneratedClientContractTest 同步把 12 个普通控制器纳入生成元数据治理。
 本地验证：后端 ApiContractTest、OpenApiGeneratedClientContractTest 共 25 项通过；前端生成文件一致性、vue-tsc、ESLint、37 个测试文件共 147 项单元测试、用户管理生成路径回归和生产构建通过。构建实测首屏共享 JavaScript 86.0 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均在独立预算内。
-下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Repository Governance、Release Images 和 Auto Create Pull Request；如有失败立即修复。R6 代码项完成后，继续补齐 R4 真实质量 SQL EXPLAIN 基线和 R5 严格 2C4G 部署级容量证据。
+下一步：R6 代码项完成；继续补齐 R4 真实质量 SQL EXPLAIN 基线和 R5 严格 2C4G 部署级容量证据。
