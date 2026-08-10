@@ -25,6 +25,7 @@ import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisher;
 import com.repoguard.agent.review.task.ReviewTaskAfterCommitPublisherExecutor;
 import com.repoguard.agent.review.task.ReviewTaskRetryService;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.security.SecretCryptoService;
 import com.repoguard.agent.service.impl.FindingFeedbackServiceImpl;
 import com.repoguard.agent.service.impl.ReviewTaskCommandServiceImpl;
@@ -52,6 +53,7 @@ class SpringBeanConstructorSelectionTest {
             Class.forName("com.repoguard.agent.review.ReviewPolicyProvider"),
             RuleBasedPullRequestReviewer.class,
             AuthTokenService.class,
+            DatabaseRateLimitWindowStore.class,
             SecretCryptoService.class,
             CacheEvictionService.class,
             DataRetentionServiceImpl.class,

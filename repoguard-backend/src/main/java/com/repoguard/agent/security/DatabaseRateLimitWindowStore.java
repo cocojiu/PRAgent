@@ -13,6 +13,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -46,6 +47,7 @@ public class DatabaseRateLimitWindowStore {
     private final AtomicLong lastCleanupMinute = new AtomicLong(Long.MIN_VALUE);
     private final AtomicLong lastFailureLogMinute = new AtomicLong(Long.MIN_VALUE);
 
+    @Autowired
     public DatabaseRateLimitWindowStore(
         JdbcTemplate jdbcTemplate,
         AuthProperties authProperties,
