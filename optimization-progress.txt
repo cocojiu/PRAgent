@@ -104,8 +104,10 @@
 下一步：继续 R6，提取 RuleConfigPage.vue 的规则目录、编辑器、策略历史、策略治理和校准队列编排逻辑，保持 latest-only、AbortController 和 409 冲突语义。
 
 2026-08-10 | 优化-13 | R6 规则配置前端职责提取
-状态：本地完成，远程流水线待检查
+状态：已完成
+实现提交：50b66159。
+远程验收：Pull Request Quality #31403378164；Repository Governance #31403378524/#31403371222；Release Images #31403371223；Auto Create Pull Request #31403371218，均成功。JDK 25 后端、真实 MySQL/RabbitMQ、前端类型检查/Lint/146 项单元测试/生产构建、镜像运行和双镜像高危/严重漏洞扫描全部通过；Deploy 按 test 分支策略跳过。
 变更：将 RuleConfigPage.vue 从 745 行缩减为 414 行，页面脚本只保留 composable 组合、指标图标映射和展示格式化；新增 useReviewRuleCatalog、useReviewRuleEditor、useReviewPolicyHistory、useReviewStrategyGovernance，分别收口规则目录与筛选、编辑/启停命令、两类游标历史与回滚、策略处置模式发布。ReviewCalibrationQueueCard 已独立封装校准规则选择、路由联动、请求代际和样本跳转，未再增加只做代理的空壳 useReviewCalibrationQueue。
 语义保持：规则/策略历史继续复用 createLatestPolicyHistoryLoader，新请求中止同类旧请求并抑制迟到响应；弹窗关闭和页面卸载仍会取消请求；保存、启停、发布或回滚失败后重新加载规则；规则编辑冲突后采用最新 policyVersion 并重置表单，策略冲突后采用最新 snapshotId 和处置模式；回滚请求始终携带当前活动版本。
 本地验证：新增 5 项 composable 回归，覆盖目录筛选、规则 409 冲突刷新、策略快照冲突刷新、规则/策略回滚期望版本和卸载取消；生成客户端一致性、vue-tsc、ESLint、37 个测试文件共 146 项单元测试、生产构建及全部资源预算通过。构建实测首屏共享 JavaScript 85.8 KiB、CSS 10.3 KiB、8 个请求，总览路由增量 JavaScript 10.6 KiB、CSS 2.2 KiB、12 个请求，最大异步 JavaScript chunk 113.5 KiB，均未退化。
-下一步：提交并推送 origin/PRAgent-test，检查 Pull Request Quality、Repository Governance、Release Images 和 Auto Create Pull Request；如有失败立即修复。随后继续迁移剩余 12 个普通管理 OpenAPI 元数据。
+下一步：继续 R6，将用户管理、Cache stats、数据保留、消息队列健康/requeue、系统健康和前端性能上报共 12 个普通管理接口迁移到 OpenAPI 生成元数据；认证与 Webhook 继续保留明确的手写 adapter。
