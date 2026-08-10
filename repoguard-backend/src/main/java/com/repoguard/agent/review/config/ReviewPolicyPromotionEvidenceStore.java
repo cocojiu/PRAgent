@@ -42,16 +42,11 @@ public class ReviewPolicyPromotionEvidenceStore {
         this.qualityGatePolicy = Objects.requireNonNull(qualityGatePolicy, "qualityGatePolicy");
     }
 
-    public void recordRulePromotion(
-        ReviewRulePolicySnapshot snapshot,
+    public CapturedPromotionEvidence captureRulePromotion(
         EnforcementMode sourceMode,
         EnforcementMode targetMode,
         ReviewCalibrationQueueDto evaluation
     ) {
-        Objects.requireNonNull(snapshot, "snapshot");
-        if (snapshot.getId() == null) {
-            throw new IllegalStateException("Rule policy snapshot id is required before recording promotion evidence");
-        }
         ReviewCalibrationQueueDto capturedEvaluation = Objects.requireNonNull(evaluation, "evaluation");
         ReviewCalibrationVersionDto version = Objects.requireNonNull(
             capturedEvaluation.version(),
@@ -71,30 +66,39 @@ public class ReviewPolicyPromotionEvidenceStore {
             requireText(version.verifierVersion(), "version.verifierVersion"),
             requireText(version.aggregationVersion(), "version.aggregationVersion")
         );
-        ReviewPolicyPromotionEvidence evidence = evidence(
+        return new CapturedPromotionEvidence(evidence(
             RULE_BASELINE_VERSION,
             sourceMode,
             targetMode,
             qualityGate,
             window
-        );
+        ));
+    }
+
+    public void recordRulePromotion(
+        ReviewRulePolicySnapshot snapshot,
+        CapturedPromotionEvidence capturedEvidence
+    ) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (snapshot.getId() == null) {
+            throw new IllegalStateException("Rule policy snapshot id is required before recording promotion evidence");
+        }
+        ReviewPolicyPromotionEvidence evidence = Objects.requireNonNull(
+            capturedEvidence,
+            "capturedEvidence"
+        ).evidence();
         evidence.setTargetType("RULE");
         evidence.setRulePolicySnapshotId(snapshot.getId());
         evidence.setRuleId(requireText(snapshot.getRuleId(), "snapshot.ruleId"));
         mapper.insert(evidence);
     }
 
-    public void recordStrategyPromotion(
-        ReviewStrategyPolicySnapshot snapshot,
+    public CapturedPromotionEvidence captureStrategyPromotion(
         ReviewStrategyRelease release,
         EnforcementMode sourceMode,
         EnforcementMode targetMode,
         ReviewRuleQualityGateDto qualityGate
     ) {
-        Objects.requireNonNull(snapshot, "snapshot");
-        if (snapshot.getId() == null) {
-            throw new IllegalStateException("Strategy policy snapshot id is required before recording promotion evidence");
-        }
         ReviewStrategyRelease capturedRelease = Objects.requireNonNull(release, "release");
         ReviewPolicyPromotionEvidenceProjection window = mapper.selectStrategyEvidence(
             requireText(capturedRelease.promptVersion(), "release.promptVersion"),
@@ -103,13 +107,27 @@ public class ReviewPolicyPromotionEvidenceStore {
             requireText(capturedRelease.verifierVersion(), "release.verifierVersion"),
             requireText(capturedRelease.aggregationVersion(), "release.aggregationVersion")
         );
-        ReviewPolicyPromotionEvidence evidence = evidence(
+        return new CapturedPromotionEvidence(evidence(
             STRATEGY_BASELINE_VERSION,
             sourceMode,
             targetMode,
             qualityGate,
             window
-        );
+        ));
+    }
+
+    public void recordStrategyPromotion(
+        ReviewStrategyPolicySnapshot snapshot,
+        CapturedPromotionEvidence capturedEvidence
+    ) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (snapshot.getId() == null) {
+            throw new IllegalStateException("Strategy policy snapshot id is required before recording promotion evidence");
+        }
+        ReviewPolicyPromotionEvidence evidence = Objects.requireNonNull(
+            capturedEvidence,
+            "capturedEvidence"
+        ).evidence();
         evidence.setTargetType("STRATEGY");
         evidence.setStrategyPolicySnapshotId(snapshot.getId());
         mapper.insert(evidence);
@@ -209,4 +227,11 @@ public class ReviewPolicyPromotionEvidenceStore {
         }
         return value.substring(0, maxLength);
     }
+    public record CapturedPromotionEvidence(ReviewPolicyPromotionEvidence evidence) {
+
+        public CapturedPromotionEvidence {
+            Objects.requireNonNull(evidence, "evidence");
+        }
+    }
+
 }

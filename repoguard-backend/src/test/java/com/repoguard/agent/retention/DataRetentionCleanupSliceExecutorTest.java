@@ -7,8 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.repoguard.agent.retention.DataRetentionArchiveWriter;
-import com.repoguard.agent.retention.DataRetentionDeleteExecutor;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -20,9 +19,12 @@ class DataRetentionCleanupSliceExecutorTest {
 
     private final DataRetentionArchiveWriter archiveWriter = org.mockito.Mockito.mock(DataRetentionArchiveWriter.class);
     private final DataRetentionDeleteExecutor deleteExecutor = org.mockito.Mockito.mock(DataRetentionDeleteExecutor.class);
+    private final ReviewQualityBaselineService qualityBaselineService =
+        org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final DataRetentionCleanupSliceExecutor sliceExecutor = new DataRetentionCleanupSliceExecutor(
         archiveWriter,
-        deleteExecutor
+        deleteExecutor,
+        qualityBaselineService
     );
 
     @Test
@@ -40,6 +42,7 @@ class DataRetentionCleanupSliceExecutorTest {
         InOrder order = inOrder(archiveWriter, deleteExecutor);
         order.verify(archiveWriter).write(42L, "backup://mysql/prod/2026-07-07T22:00:00", List.of(7L, 9L));
         order.verify(deleteExecutor).delete(List.of(7L, 9L));
+        verify(qualityBaselineService).markDirty();
     }
 
     @Test
@@ -59,6 +62,7 @@ class DataRetentionCleanupSliceExecutorTest {
             .isSameAs(failure);
 
         verify(deleteExecutor, never()).delete(org.mockito.Mockito.anyList());
+        verify(qualityBaselineService, never()).markDirty();
     }
 
     @Test

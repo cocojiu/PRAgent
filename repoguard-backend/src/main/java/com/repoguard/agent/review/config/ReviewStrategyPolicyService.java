@@ -13,12 +13,13 @@ import com.repoguard.agent.review.EnforcementMode;
 import com.repoguard.agent.review.ReviewStrategyRelease;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ReviewStrategyPolicyService {
@@ -29,12 +30,15 @@ public class ReviewStrategyPolicyService {
     private final ReviewQualityBaselineService qualityBaselineService;
     private final ReviewStrategyLifecycleGate lifecycleGate;
     private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore;
+    private final ReviewPolicyTransactionExecutor transactionExecutor;
 
+    @Autowired
     public ReviewStrategyPolicyService(
         ReviewStrategyPolicySnapshotMapper snapshotMapper,
         ReviewQualityBaselineService qualityBaselineService,
         ReviewStrategyLifecycleGate lifecycleGate,
-        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore,
+        ReviewPolicyTransactionExecutor transactionExecutor
     ) {
         this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
         this.qualityBaselineService = Objects.requireNonNull(qualityBaselineService, "qualityBaselineService");
@@ -42,6 +46,22 @@ public class ReviewStrategyPolicyService {
         this.promotionEvidenceStore = Objects.requireNonNull(
             promotionEvidenceStore,
             "promotionEvidenceStore"
+        );
+        this.transactionExecutor = Objects.requireNonNull(transactionExecutor, "transactionExecutor");
+    }
+
+    public ReviewStrategyPolicyService(
+        ReviewStrategyPolicySnapshotMapper snapshotMapper,
+        ReviewQualityBaselineService qualityBaselineService,
+        ReviewStrategyLifecycleGate lifecycleGate,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
+    ) {
+        this(
+            snapshotMapper,
+            qualityBaselineService,
+            lifecycleGate,
+            promotionEvidenceStore,
+            ReviewPolicyTransactionExecutor.direct()
         );
     }
 
@@ -74,28 +94,34 @@ public class ReviewStrategyPolicyService {
         return new PageResponse<>(items, total, nextCursor, hasMore);
     }
 
-    @Transactional
     public ReviewStrategyPolicyDto promote(String requestedMode, long expectedSnapshotId) {
-        ReviewStrategyPolicySnapshot active = requireActiveForUpdate();
-        requireExpectedSnapshot(active, expectedSnapshotId);
-        ReviewStrategyRelease release = toRelease(active);
+        ReviewStrategyPolicySnapshot observed = requireActive();
+        requireExpectedSnapshot(observed, expectedSnapshotId);
+        ReviewStrategyRelease release = toRelease(observed);
         EnforcementMode current = release.enforcementMode();
         EnforcementMode target = EnforcementMode.from(requestedMode);
-        ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
+        ReviewQualityBaseline baseline = rank(target) > rank(current)
+            ? qualityBaselineService.loadFreshBaseline()
+            : qualityBaselineService.loadBaseline();
         if (current == target) {
-            return toDto(active, baseline);
+            return toDto(observed, baseline);
         }
         ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(release, baseline.groups());
         validatePromotion(release, current, target, qualityGate);
-        ReviewStrategyPolicySnapshot promoted = copy(active, target, "PROMOTION", active.getId());
-        activate(promoted, active);
-        if (rank(target) > rank(current)) {
-            promotionEvidenceStore.recordStrategyPromotion(promoted, release, current, target, qualityGate);
-        }
+        CapturedPromotionEvidence capturedEvidence = rank(target) > rank(current)
+            ? promotionEvidenceStore.captureStrategyPromotion(release, current, target, qualityGate)
+            : null;
+        ReviewStrategyPolicySnapshot promoted = transactionExecutor.write(() -> {
+            ReviewStrategyPolicySnapshot next = copy(observed, target, "PROMOTION", observed.getId());
+            activate(next, observed);
+            if (capturedEvidence != null) {
+                promotionEvidenceStore.recordStrategyPromotion(next, capturedEvidence);
+            }
+            return next;
+        });
         return toDto(promoted, baseline);
     }
 
-    @Transactional
     public ReviewStrategyPolicyDto rollback(long snapshotId, long expectedSnapshotId) {
         ReviewStrategyPolicySnapshot target = snapshotMapper.selectById(snapshotId);
         if (target == null) {
@@ -108,16 +134,20 @@ public class ReviewStrategyPolicyService {
                 "Review strategy snapshot uses versions unsupported by the current runtime"
             );
         }
-        ReviewStrategyPolicySnapshot active = requireActiveForUpdate();
+        ReviewStrategyPolicySnapshot active = requireActive();
         requireExpectedSnapshot(active, expectedSnapshotId);
-        ReviewStrategyPolicySnapshot restored = copy(
-            target,
-            release.enforcementMode(),
-            "ROLLBACK",
-            target.getId()
-        );
-        activate(restored, active);
-        return toDto(restored, qualityBaselineService.loadBaseline());
+        ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
+        ReviewStrategyPolicySnapshot restored = transactionExecutor.write(() -> {
+            ReviewStrategyPolicySnapshot next = copy(
+                target,
+                release.enforcementMode(),
+                "ROLLBACK",
+                target.getId()
+            );
+            activate(next, active);
+            return next;
+        });
+        return toDto(restored, baseline);
     }
 
     private void validatePromotion(
@@ -195,14 +225,6 @@ public class ReviewStrategyPolicyService {
                 .orderByDesc(ReviewStrategyPolicySnapshot::getId)
                 .last("limit 1")
         );
-        if (active == null) {
-            throw new IllegalStateException("Active review strategy policy snapshot is missing");
-        }
-        return active;
-    }
-
-    private ReviewStrategyPolicySnapshot requireActiveForUpdate() {
-        ReviewStrategyPolicySnapshot active = snapshotMapper.selectActiveForUpdate();
         if (active == null) {
             throw new IllegalStateException("Active review strategy policy snapshot is missing");
         }

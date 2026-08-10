@@ -76,7 +76,12 @@ class ReviewPolicyPromotionEvidenceStoreTest {
         snapshot.setId(101L);
         snapshot.setRuleId("RG-JAVA-001");
 
-        store.recordRulePromotion(snapshot, EnforcementMode.COMMENT, EnforcementMode.BLOCK, evaluation);
+        ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence captured = store.captureRulePromotion(
+            EnforcementMode.COMMENT,
+            EnforcementMode.BLOCK,
+            evaluation
+        );
+        store.recordRulePromotion(snapshot, captured);
 
         ArgumentCaptor<ReviewPolicyPromotionEvidence> captor =
             ArgumentCaptor.forClass(ReviewPolicyPromotionEvidence.class);
@@ -134,13 +139,13 @@ class ReviewPolicyPromotionEvidenceStoreTest {
             true
         );
 
-        store.recordStrategyPromotion(
-            snapshot,
+        ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence captured = store.captureStrategyPromotion(
             release,
             EnforcementMode.COMMENT,
             EnforcementMode.BLOCK,
             gate
         );
+        store.recordStrategyPromotion(snapshot, captured);
 
         ArgumentCaptor<ReviewPolicyPromotionEvidence> captor =
             ArgumentCaptor.forClass(ReviewPolicyPromotionEvidence.class);
@@ -174,12 +179,7 @@ class ReviewPolicyPromotionEvidenceStoreTest {
         );
         when(mapper.selectRuleEvidence(any(), any(), any(Long.class), any(), any(), any(), any(), any()))
             .thenReturn(window(40, 29, 40, 29));
-        ReviewRulePolicySnapshot snapshot = new ReviewRulePolicySnapshot();
-        snapshot.setId(101L);
-        snapshot.setRuleId("RG-JAVA-001");
-
-        assertThatThrownBy(() -> store.recordRulePromotion(
-            snapshot,
+        assertThatThrownBy(() -> store.captureRulePromotion(
             EnforcementMode.COMMENT,
             EnforcementMode.BLOCK,
             evaluation

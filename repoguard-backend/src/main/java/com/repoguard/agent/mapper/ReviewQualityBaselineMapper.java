@@ -34,7 +34,7 @@ public interface ReviewQualityBaselineMapper {
                     from review_finding duplicateFinding
                     join review_task duplicateTask on duplicateTask.id = duplicateFinding.task_id
                     where duplicateFinding.category = 'FINDING'
-                      and upper(coalesce(nullif(trim(duplicateTask.assessment_status), ''), 'PARTIAL')) = 'COMPLETE'
+                      and duplicateTask.assessment_status = 'COMPLETE'
                     group by
                         duplicateFinding.task_id,
                         lower(coalesce(nullif(trim(duplicateFinding.file_path), ''), '')),
@@ -47,7 +47,7 @@ public interface ReviewQualityBaselineMapper {
         from review_finding finding
         join review_task task on task.id = finding.task_id
         where finding.category = 'FINDING'
-          and upper(coalesce(nullif(trim(task.assessment_status), ''), 'PARTIAL')) = 'COMPLETE'
+          and task.assessment_status = 'COMPLETE'
         """)
     Summary selectSummary();
 
@@ -89,7 +89,7 @@ public interface ReviewQualityBaselineMapper {
             from review_finding finding
             join review_task task on task.id = finding.task_id
             where finding.category = 'FINDING'
-              and upper(coalesce(nullif(trim(task.assessment_status), ''), 'PARTIAL')) = 'COMPLETE'
+              and task.assessment_status = 'COMPLETE'
         )
         select
             coalesce(nullif(trim(finding.rule_id), ''), 'UNASSIGNED') as ruleId,

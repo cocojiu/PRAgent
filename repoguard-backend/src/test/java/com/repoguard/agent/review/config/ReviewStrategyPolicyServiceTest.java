@@ -17,9 +17,11 @@ import com.repoguard.agent.review.ServerRiskAggregator;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.review.quality.ReviewQualityGroupBaseline;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -31,6 +33,8 @@ class ReviewStrategyPolicyServiceTest {
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
         org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final CapturedPromotionEvidence capturedEvidence =
+        org.mockito.Mockito.mock(CapturedPromotionEvidence.class);
     private final ReviewStrategyPolicyService service = new ReviewStrategyPolicyService(
         mapper,
         baselineService,
@@ -38,9 +42,16 @@ class ReviewStrategyPolicyServiceTest {
         promotionEvidenceStore
     );
 
+    @BeforeEach
+    void setUpPromotionReadModel() {
+        when(baselineService.loadFreshBaseline()).thenAnswer(invocation -> baselineService.loadBaseline());
+        when(promotionEvidenceStore.captureStrategyPromotion(any(), any(), any(), any()))
+            .thenReturn(capturedEvidence);
+    }
+
     @Test
     void observeCannotPromoteToCommentWithoutAnExplicitLabel() {
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(11, "OBSERVE"));
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
 
         assertThatThrownBy(() -> service.promote("comment", 11))
@@ -53,7 +64,7 @@ class ReviewStrategyPolicyServiceTest {
     @Test
     void promotionCreatesANewSnapshotInsteadOfMutatingTheRelease() {
         ReviewStrategyPolicySnapshot active = snapshot(11, "OBSERVE");
-        when(mapper.selectActiveForUpdate()).thenReturn(active);
+        when(mapper.selectOne(any())).thenReturn(active);
         when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "MEDIUM",
@@ -85,16 +96,13 @@ class ReviewStrategyPolicyServiceTest {
         assertThat(result.enforcementMode()).isEqualTo("comment");
         verify(promotionEvidenceStore).recordStrategyPromotion(
             any(ReviewStrategyPolicySnapshot.class),
-            any(),
-            any(),
-            any(),
-            any()
+            any(CapturedPromotionEvidence.class)
         );
     }
 
     @Test
     void commentPromotesToBlockOnlyAfterTheQualityGateHasSufficientConfidence() {
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(12, "COMMENT"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(12, "COMMENT"));
         when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "HIGH",
@@ -117,16 +125,13 @@ class ReviewStrategyPolicyServiceTest {
         assertThat(result.qualityGate().status()).isEqualTo("PASS");
         verify(promotionEvidenceStore).recordStrategyPromotion(
             any(ReviewStrategyPolicySnapshot.class),
-            any(),
-            any(),
-            any(),
-            any()
+            any(CapturedPromotionEvidence.class)
         );
     }
 
     @Test
     void strategyDemotionDoesNotCreatePromotionEvidence() {
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(13, "BLOCK"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(13, "BLOCK"));
         when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
         when(mapper.insert(any(ReviewStrategyPolicySnapshot.class))).thenAnswer(invocation -> {
@@ -137,14 +142,17 @@ class ReviewStrategyPolicyServiceTest {
         var result = service.promote("comment", 13);
 
         assertThat(result.enforcementMode()).isEqualTo("comment");
-        verify(promotionEvidenceStore, never()).recordStrategyPromotion(any(), any(), any(), any(), any());
+        verify(promotionEvidenceStore, never()).recordStrategyPromotion(
+            any(ReviewStrategyPolicySnapshot.class),
+            any(CapturedPromotionEvidence.class)
+        );
     }
 
     @Test
     void rollbackCreatesANewActiveSnapshotAndRejectsUnsupportedRuntimeVersions() {
         ReviewStrategyPolicySnapshot target = snapshot(7, "COMMENT");
         when(mapper.selectById(7L)).thenReturn(target);
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(19, "OBSERVE"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(19, "OBSERVE"));
         when(mapper.update(any(), any())).thenReturn(1);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
         when(mapper.insert(any(ReviewStrategyPolicySnapshot.class))).thenAnswer(invocation -> {
@@ -172,7 +180,7 @@ class ReviewStrategyPolicyServiceTest {
 
     @Test
     void staleStrategySnapshotIsRejectedBeforePromotion() {
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(11, "OBSERVE"));
 
         assertThatThrownBy(() -> service.promote("comment", 10))
             .isInstanceOf(BusinessException.class)
@@ -184,7 +192,7 @@ class ReviewStrategyPolicyServiceTest {
 
     @Test
     void failedConditionalStrategyActivationReturnsConflict() {
-        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(11, "OBSERVE"));
+        when(mapper.selectOne(any())).thenReturn(snapshot(11, "OBSERVE"));
         when(mapper.update(any(), any())).thenReturn(0);
         when(baselineService.loadBaseline()).thenReturn(baseline(List.of(group(
             "MEDIUM",

@@ -17,7 +17,7 @@ class ReviewQualityBaselineMapperSqlContractTest {
             .contains("from review_finding finding")
             .contains("join review_task task on task.id = finding.task_id")
             .contains("finding.category = 'finding'")
-            .contains("upper(coalesce(nullif(trim(task.assessment_status), ''), 'partial')) = 'complete'")
+            .contains("task.assessment_status = 'complete'")
             .contains("finding.severity_norm in ('high', 'critical')")
             .contains("finding.feedback_status_norm in ('valid', 'fixed', 'false_positive')")
             .contains("finding.feedback_status_norm in ('valid', 'fixed')")
@@ -26,7 +26,7 @@ class ReviewQualityBaselineMapperSqlContractTest {
             .contains("sum(duplicates.exactcount - 1)")
             .contains("group by duplicatefinding.task_id")
             .contains("join review_task duplicatetask on duplicatetask.id = duplicatefinding.task_id")
-            .contains("upper(coalesce(nullif(trim(duplicatetask.assessment_status), ''), 'partial')) = 'complete'")
+            .contains("duplicatetask.assessment_status = 'complete'")
             .doesNotContain("feedback_status_norm <> 'unreviewed'");
     }
 
@@ -36,7 +36,7 @@ class ReviewQualityBaselineMapperSqlContractTest {
 
         assertThat(sql)
             .contains("join review_task task on task.id = finding.task_id")
-            .contains("upper(coalesce(nullif(trim(task.assessment_status), ''), 'partial')) = 'complete'")
+            .contains("task.assessment_status = 'complete'")
             .contains("as ruleid")
             .contains("as source")
             .contains("as repository")

@@ -25,6 +25,7 @@ import com.repoguard.agent.review.EnforcementMode;
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence;
 import com.repoguard.agent.service.ReviewCalibrationService;
 import com.repoguard.agent.service.ReviewRuleConfigService;
 import java.time.LocalDateTime;
@@ -37,7 +38,6 @@ import java.util.stream.Collectors;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -57,6 +57,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final ReviewStrategyPolicyService strategyPolicyService;
     private final ReviewCalibrationService reviewCalibrationService;
     private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore;
+    private final ReviewPolicyTransactionExecutor transactionExecutor;
 
     @Autowired
     public ReviewRuleConfigServiceImpl(
@@ -71,7 +72,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         ReviewRuleLifecycleGate lifecycleGate,
         ReviewStrategyPolicyService strategyPolicyService,
         ReviewCalibrationService reviewCalibrationService,
-        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore,
+        ReviewPolicyTransactionExecutor transactionExecutor
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(
             reviewRuleConfigMapper,
@@ -96,6 +98,38 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.promotionEvidenceStore = Objects.requireNonNull(
             promotionEvidenceStore,
             "promotionEvidenceStore"
+        );
+        this.transactionExecutor = Objects.requireNonNull(transactionExecutor, "transactionExecutor");
+    }
+
+    public ReviewRuleConfigServiceImpl(
+        ReviewRuleConfigMapper reviewRuleConfigMapper,
+        ReviewFindingMapper reviewFindingMapper,
+        CacheEvictionService cacheEvictionService,
+        ReviewRuleConfigPolicy reviewRuleConfigPolicy,
+        ReviewRuleMetricAssembler reviewRuleMetricAssembler,
+        ReviewQualityBaselineService reviewQualityBaselineService,
+        ReviewRuleRegistry reviewRuleRegistry,
+        ReviewRulePolicySnapshotStore policySnapshotStore,
+        ReviewRuleLifecycleGate lifecycleGate,
+        ReviewStrategyPolicyService strategyPolicyService,
+        ReviewCalibrationService reviewCalibrationService,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
+    ) {
+        this(
+            reviewRuleConfigMapper,
+            reviewFindingMapper,
+            cacheEvictionService,
+            reviewRuleConfigPolicy,
+            reviewRuleMetricAssembler,
+            reviewQualityBaselineService,
+            reviewRuleRegistry,
+            policySnapshotStore,
+            lifecycleGate,
+            strategyPolicyService,
+            reviewCalibrationService,
+            promotionEvidenceStore,
+            ReviewPolicyTransactionExecutor.direct()
         );
     }
 
@@ -132,6 +166,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.strategyPolicyService = null;
         this.reviewCalibrationService = null;
         this.promotionEvidenceStore = null;
+        this.transactionExecutor = ReviewPolicyTransactionExecutor.direct();
     }
 
     @Override
@@ -162,7 +197,6 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     @Override
-    @Transactional
     public ReviewRuleConfigDto createReviewRule(ReviewRuleConfigRequest request) {
         throw new BusinessException(
             ErrorCode.BAD_REQUEST,
@@ -171,7 +205,6 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     @Override
-    @Transactional
     public ReviewRuleConfigDto updateReviewRule(
         String id,
         ReviewRuleConfigRequest request,
@@ -207,47 +240,56 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             if (enabling || "DISABLED".equalsIgnoreCase(rule.getStatus())) {
                 rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
                 changeType = enabling ? "ENABLE_OBSERVE" : "DISABLE";
-            } else {
+            } else if (rank(targetMode) > rank(previousMode)) {
                 PromotionEvaluation evaluation = promotionEvaluation(
                     normalizedId,
                     previousConfigVersion
                 );
                 validateTransition(previousMode, targetMode, evaluation.qualityGate());
-                if (rank(targetMode) > rank(previousMode)) {
-                    promotionEvaluation = evaluation;
-                    promotionTargetMode = targetMode;
-                    changeType = "PROMOTION";
-                } else {
-                    changeType = "POLICY_UPDATE";
-                }
+                promotionEvaluation = evaluation;
+                promotionTargetMode = targetMode;
+                changeType = "PROMOTION";
+            } else {
+                changeType = "POLICY_UPDATE";
             }
         }
         rule.setPolicyVersion(previousPolicyVersion + 1);
         rule.setUpdatedAt(LocalDateTime.now());
-        updateRuleIfCurrent(rule, previousPolicyVersion);
-        ReviewRulePolicySnapshot savedSnapshot = saveSnapshot(rule, changeType, previousPolicyVersion);
-        if (promotionEvaluation != null && promotionEvidenceStore != null && savedSnapshot != null) {
+
+        CapturedPromotionEvidence capturedEvidence = null;
+        if (promotionEvaluation != null && promotionEvidenceStore != null) {
             ReviewCalibrationQueueDto capturedEvaluation = promotionEvaluation.calibrationQueue();
             if (capturedEvaluation == null) {
                 throw new IllegalStateException("Rule promotion evidence capture is unavailable");
             }
-            promotionEvidenceStore.recordRulePromotion(
-                savedSnapshot,
+            capturedEvidence = promotionEvidenceStore.captureRulePromotion(
                 previousMode,
                 promotionTargetMode,
                 capturedEvaluation
             );
         }
+        CapturedPromotionEvidence evidenceToPersist = capturedEvidence;
+        ReviewQualityBaseline responseBaseline = reviewQualityBaselineService.loadBaseline();
+        transactionExecutor.write(() -> {
+            updateRuleIfCurrent(rule, previousPolicyVersion);
+            ReviewRulePolicySnapshot savedSnapshot = saveSnapshot(rule, changeType, previousPolicyVersion);
+            if (evidenceToPersist != null) {
+                if (savedSnapshot == null) {
+                    throw new IllegalStateException("Rule promotion snapshot is unavailable");
+                }
+                promotionEvidenceStore.recordRulePromotion(savedSnapshot, evidenceToPersist);
+            }
+            return null;
+        });
         evictRuleCaches();
         return toReviewRuleDto(
             rule,
             loadRuleHitCounts().getOrDefault(rule.getId(), 0L),
-            reviewQualityBaselineService.loadBaseline()
+            responseBaseline
         );
     }
 
     @Override
-    @Transactional
     public ReviewRuleConfigDto updateReviewRuleStatus(String id, String status, long expectedPolicyVersion) {
         String normalizedId = reviewRuleConfigPolicy.normalizeRuleId(id);
         ensureRegistered(normalizedId);
@@ -263,17 +305,21 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
             rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
         }
         rule.setUpdatedAt(LocalDateTime.now());
-        updateRuleIfCurrent(rule, previousPolicyVersion);
-        saveSnapshot(
-            rule,
-            "ENABLED".equals(normalizedStatus) ? "ENABLE_OBSERVE" : "DISABLE",
-            previousPolicyVersion
-        );
+        ReviewQualityBaseline responseBaseline = reviewQualityBaselineService.loadBaseline();
+        transactionExecutor.write(() -> {
+            updateRuleIfCurrent(rule, previousPolicyVersion);
+            saveSnapshot(
+                rule,
+                "ENABLED".equals(normalizedStatus) ? "ENABLE_OBSERVE" : "DISABLE",
+                previousPolicyVersion
+            );
+            return null;
+        });
         evictRuleCaches();
         return toReviewRuleDto(
             rule,
             loadRuleHitCounts().getOrDefault(rule.getId(), 0L),
-            reviewQualityBaselineService.loadBaseline()
+            responseBaseline
         );
     }
 
@@ -300,7 +346,6 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     }
 
     @Override
-    @Transactional
     public ReviewRuleConfigDto rollbackReviewRule(
         String id,
         long policyVersion,
@@ -328,13 +373,17 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         }
         long newPolicyVersion = currentPolicyVersion + 1;
         policySnapshotStore.restore(rule, snapshot, newPolicyVersion);
-        updateRuleIfCurrent(rule, currentPolicyVersion);
-        saveSnapshot(rule, "ROLLBACK", policyVersion);
+        ReviewQualityBaseline responseBaseline = reviewQualityBaselineService.loadBaseline();
+        transactionExecutor.write(() -> {
+            updateRuleIfCurrent(rule, currentPolicyVersion);
+            saveSnapshot(rule, "ROLLBACK", policyVersion);
+            return null;
+        });
         evictRuleCaches();
         return toReviewRuleDto(
             rule,
             loadRuleHitCounts().getOrDefault(rule.getId(), 0L),
-            reviewQualityBaselineService.loadBaseline()
+            responseBaseline
         );
     }
 

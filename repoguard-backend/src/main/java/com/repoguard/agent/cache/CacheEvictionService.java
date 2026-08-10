@@ -3,6 +3,7 @@ package com.repoguard.agent.cache;
 import com.repoguard.agent.config.CacheNames;
 import com.repoguard.agent.dashboard.DashboardDailySnapshotService;
 import com.repoguard.agent.dashboard.DashboardSnapshotStore;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import java.time.LocalDate;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -22,25 +23,29 @@ public class CacheEvictionService {
     private static final Logger LOGGER = LoggerFactory.getLogger(CacheEvictionService.class);
     private static final String REVIEW_ACTIVITY_REFRESH_KEY = "maintenance:daily-review-activity";
     private static final String FEEDBACK_QUALITY_REFRESH_KEY = "maintenance:daily-feedback-quality";
+    private static final String QUALITY_BASELINE_REFRESH_KEY = "maintenance:review-quality-baseline";
 
     private final CacheManager cacheManager;
     private final Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier;
     private final Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier;
+    private final Supplier<ReviewQualityBaselineService> qualityBaselineServiceSupplier;
 
     public CacheEvictionService(CacheManager cacheManager) {
-        this(cacheManager, () -> null, () -> null);
+        this(cacheManager, () -> null, () -> null, () -> null);
     }
 
     @Autowired
     public CacheEvictionService(
         CacheManager cacheManager,
         ObjectProvider<DashboardDailySnapshotService> dashboardSnapshotServiceProvider,
-        ObjectProvider<DashboardSnapshotStore> dashboardSnapshotStoreProvider
+        ObjectProvider<DashboardSnapshotStore> dashboardSnapshotStoreProvider,
+        ObjectProvider<ReviewQualityBaselineService> qualityBaselineServiceProvider
     ) {
         this(
             cacheManager,
             dashboardSnapshotServiceProvider::getIfAvailable,
-            dashboardSnapshotStoreProvider::getIfAvailable
+            dashboardSnapshotStoreProvider::getIfAvailable,
+            qualityBaselineServiceProvider::getIfAvailable
         );
     }
 
@@ -49,11 +54,24 @@ public class CacheEvictionService {
         Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
         Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier
     ) {
+        this(cacheManager, dashboardSnapshotServiceSupplier, dashboardSnapshotStoreSupplier, () -> null);
+    }
+
+    public CacheEvictionService(
+        CacheManager cacheManager,
+        Supplier<DashboardDailySnapshotService> dashboardSnapshotServiceSupplier,
+        Supplier<DashboardSnapshotStore> dashboardSnapshotStoreSupplier,
+        Supplier<ReviewQualityBaselineService> qualityBaselineServiceSupplier
+    ) {
         this.cacheManager = Objects.requireNonNull(cacheManager, "cacheManager must not be null");
         this.dashboardSnapshotServiceSupplier =
             Objects.requireNonNull(dashboardSnapshotServiceSupplier, "dashboardSnapshotServiceSupplier must not be null");
         this.dashboardSnapshotStoreSupplier =
             Objects.requireNonNull(dashboardSnapshotStoreSupplier, "dashboardSnapshotStoreSupplier must not be null");
+        this.qualityBaselineServiceSupplier = Objects.requireNonNull(
+            qualityBaselineServiceSupplier,
+            "qualityBaselineServiceSupplier must not be null"
+        );
     }
 
     public void evictDashboardOverview() {
@@ -64,6 +82,7 @@ public class CacheEvictionService {
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
+            markQualityBaselineDirty();
             afterCommitOrNow(() -> evictDashboardReviewActivityNow(null));
             return;
         }
@@ -73,6 +92,7 @@ public class CacheEvictionService {
     public void evictDashboardReviewActivity(LocalDate statDate) {
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markReviewActivityDirty(normalizedStatDate));
+        markQualityBaselineDirty();
         afterCommitOrNow(() -> evictDashboardReviewActivityNow(normalizedStatDate));
     }
 
@@ -83,6 +103,7 @@ public class CacheEvictionService {
                 () -> refreshDashboardSnapshots(service -> service.refreshDate(statDate))
             );
         }
+        submitQualityBaselineRefresh();
         clear(CacheNames.REVIEW_TASK_LIST_SUMMARY);
         evictDashboardOverviewCompatibilityNow();
         evictDashboardSummary();
@@ -97,6 +118,7 @@ public class CacheEvictionService {
         DashboardDailySnapshotService snapshotService = dashboardSnapshotServiceSupplier.get();
         LocalDate latestReviewDate = snapshotService == null ? null : snapshotService.latestReviewDate();
         if (latestReviewDate == null) {
+            markQualityBaselineDirty();
             afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(null));
             return;
         }
@@ -106,6 +128,7 @@ public class CacheEvictionService {
     public void evictDashboardFeedbackQuality(LocalDate statDate) {
         LocalDate normalizedStatDate = Objects.requireNonNull(statDate, "statDate must not be null");
         markDashboardSnapshotDirty(service -> service.markLlmQualityDirty(normalizedStatDate));
+        markQualityBaselineDirty();
         afterCommitOrNow(() -> evictDashboardFeedbackQualityNow(normalizedStatDate));
     }
 
@@ -116,6 +139,7 @@ public class CacheEvictionService {
                 () -> refreshDashboardSnapshots(service -> service.refreshDate(statDate))
             );
         }
+        submitQualityBaselineRefresh();
         evictDashboardLlmQuality();
     }
 
@@ -223,6 +247,33 @@ public class CacheEvictionService {
         } catch (RuntimeException ex) {
             LOGGER.warn("Dashboard daily snapshot refresh failed during cache eviction", ex);
         }
+    }
+
+    private void markQualityBaselineDirty() {
+        ReviewQualityBaselineService service = qualityBaselineServiceSupplier.get();
+        if (service != null) {
+            service.markDirty();
+        }
+    }
+
+    private void submitQualityBaselineRefresh() {
+        ReviewQualityBaselineService service = qualityBaselineServiceSupplier.get();
+        if (service == null) {
+            return;
+        }
+        DashboardSnapshotStore snapshotStore = dashboardSnapshotStoreSupplier.get();
+        Runnable refresh = () -> {
+            try {
+                service.refreshIfDirty();
+            } catch (RuntimeException ex) {
+                LOGGER.warn("Review quality baseline refresh failed; dirty version remains retryable", ex);
+            }
+        };
+        if (snapshotStore == null) {
+            refresh.run();
+            return;
+        }
+        snapshotStore.executeAsync(QUALITY_BASELINE_REFRESH_KEY, refresh);
     }
 
     private void markDashboardSnapshotDirty(

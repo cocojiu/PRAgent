@@ -10,6 +10,7 @@ import com.repoguard.agent.dashboard.DashboardSnapshotStore;
 import com.repoguard.agent.dto.CacheStatsItemDto;
 import com.repoguard.agent.dto.CacheStatsResponse;
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -88,12 +89,20 @@ class CacheStatsServiceImplTest {
     @Test
     void dashboardReviewActivityEvictionMarksAndRefreshesOnlyTheAffectedDate() {
         DashboardDailySnapshotService snapshotService = Mockito.mock(DashboardDailySnapshotService.class);
-        CacheEvictionService eviction = new CacheEvictionService(cacheManager, () -> snapshotService, () -> null);
+        ReviewQualityBaselineService qualityBaselineService = Mockito.mock(ReviewQualityBaselineService.class);
+        CacheEvictionService eviction = new CacheEvictionService(
+            cacheManager,
+            () -> snapshotService,
+            () -> null,
+            () -> qualityBaselineService
+        );
 
         eviction.evictDashboardReviewActivity(SNAPSHOT_DATE);
 
         Mockito.verify(snapshotService).markReviewActivityDirty(SNAPSHOT_DATE);
         Mockito.verify(snapshotService).refreshDate(SNAPSHOT_DATE);
+        Mockito.verify(qualityBaselineService).markDirty();
+        Mockito.verify(qualityBaselineService).refreshIfDirty();
     }
 
     @Test

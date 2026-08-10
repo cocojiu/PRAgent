@@ -24,9 +24,11 @@ import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.service.ReviewCalibrationService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore.CapturedPromotionEvidence;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -50,6 +52,8 @@ class ReviewRulePolicyGovernanceServiceTest {
         org.mockito.Mockito.mock(ReviewCalibrationService.class);
     private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
         org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final CapturedPromotionEvidence capturedEvidence =
+        org.mockito.Mockito.mock(CapturedPromotionEvidence.class);
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         ruleMapper,
         findingMapper,
@@ -64,6 +68,12 @@ class ReviewRulePolicyGovernanceServiceTest {
         calibrationService,
         promotionEvidenceStore
     );
+
+    @BeforeEach
+    void setUpPromotionEvidenceCapture() {
+        when(promotionEvidenceStore.captureRulePromotion(any(), any(), any()))
+            .thenReturn(capturedEvidence);
+    }
 
     @Test
     void semanticEditIncrementsBothVersionsAndForcesObserve() {
@@ -168,9 +178,7 @@ class ReviewRulePolicyGovernanceServiceTest {
 
         verify(promotionEvidenceStore).recordRulePromotion(
             any(ReviewRulePolicySnapshot.class),
-            any(),
-            any(),
-            any(ReviewCalibrationQueueDto.class)
+            any(CapturedPromotionEvidence.class)
         );
     }
 
