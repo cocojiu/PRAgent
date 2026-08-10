@@ -18,7 +18,7 @@ create table if not exists review_policy_promotion_evidence (
     false_positive_samples bigint unsigned not null,
     anchored_samples bigint unsigned not null,
     duplicate_samples bigint unsigned not null,
-    precision decimal(7,2) not null,
+    precision_rate decimal(7,2) not null,
     precision_wilson_lower_bound decimal(7,2) not null,
     false_positive_rate decimal(7,2) not null,
     anchor_rate decimal(7,2) not null,

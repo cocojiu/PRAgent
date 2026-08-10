@@ -29,7 +29,7 @@ public interface ReviewPolicyPromotionEvidenceMapper {
             false_positive_samples,
             anchored_samples,
             duplicate_samples,
-            precision,
+            precision_rate,
             precision_wilson_lower_bound,
             false_positive_rate,
             anchor_rate,

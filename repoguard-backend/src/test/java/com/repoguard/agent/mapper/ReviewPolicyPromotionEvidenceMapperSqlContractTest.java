@@ -75,6 +75,7 @@ class ReviewPolicyPromotionEvidenceMapperSqlContractTest {
         assertThat(insert).isNotNull();
         assertThat(normalizeSql(String.join("\n", insert.value())))
             .startsWith("insert into review_policy_promotion_evidence")
+            .contains("precision_rate")
             .contains("precision_wilson_lower_bound")
             .contains("sample_fingerprint");
         assertThat(ReviewPolicyPromotionEvidenceMapper.class.getDeclaredMethods())

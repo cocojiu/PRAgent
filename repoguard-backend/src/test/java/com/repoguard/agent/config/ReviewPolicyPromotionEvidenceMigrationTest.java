@@ -31,6 +31,7 @@ class ReviewPolicyPromotionEvidenceMigrationTest {
             .contains("labeled_samples")
             .contains("confirmed_valid_samples")
             .contains("false_positive_samples")
+            .contains("precision_rate")
             .contains("precision_wilson_lower_bound")
             .contains("sample_fingerprint")
             .contains("actor_user_id")
