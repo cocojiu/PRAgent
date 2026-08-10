@@ -37,6 +37,10 @@ public record RuntimeRoleContract(
         return workerEnabled();
     }
 
+    public boolean authenticationAccountCacheEnabled() {
+        return !apiEnabled() || apiInstanceCount <= 1;
+    }
+
     public static RuntimeRoleContract resolve(Environment environment) {
         Objects.requireNonNull(environment, "environment");
 

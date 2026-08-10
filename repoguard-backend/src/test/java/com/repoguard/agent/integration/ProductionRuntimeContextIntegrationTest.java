@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.repoguard.agent.RepoGuardApplication;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.controller.ReviewController;
+import com.repoguard.agent.dto.AuthLogoutRequest;
+import com.repoguard.agent.dto.AuthPasswordChangeRequest;
 import com.repoguard.agent.dto.AuthRefreshRequest;
 import com.repoguard.agent.entity.ReviewTask;
 import com.repoguard.agent.mapper.ReviewCalibrationQueueMapper;
@@ -14,15 +16,20 @@ import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Sample
 import com.repoguard.agent.mapper.projection.ReviewCalibrationProjections.Summary;
 import com.repoguard.agent.service.NotificationDispatchService;
 import com.repoguard.agent.notification.publish.NotificationEventPublishCompensator;
+import com.repoguard.agent.security.AuthAccountCache;
 import com.repoguard.agent.security.AuthTokenService;
+import com.repoguard.agent.security.PasswordHashService;
 import com.repoguard.agent.security.DatabaseRateLimitWindowStore;
 import com.repoguard.agent.service.AuthService;
+import com.repoguard.agent.security.AuthTokenFilter;
 import com.repoguard.agent.review.task.ReviewTaskTransitionStore;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.worker.ReviewTaskClaimService;
 import com.repoguard.agent.worker.ReviewTaskWorker;
 import ch.qos.logback.classic.Logger;
+import jakarta.servlet.ServletException;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -41,7 +48,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
@@ -94,6 +105,111 @@ class ProductionRuntimeContextIntegrationTest {
             assertThat(context.getBeansOfType(ReviewController.class)).isEmpty();
             assertThat(context.getBeansOfType(ReviewTaskWorker.class)).hasSize(1);
             assertProductionInfrastructure(context);
+        }
+    }
+
+    @Test
+    void twoApiInstancesRejectStaleAccessTokensAfterCrossInstanceSessionChanges() throws Exception {
+        String[] scaleOutArguments = {
+            "--app.runtime.api.instance-count=2",
+            "--app.security.rate-limit-store=database"
+        };
+        try (ConfigurableApplicationContext instanceA = start("api", scaleOutArguments);
+             ConfigurableApplicationContext instanceB = start("api", scaleOutArguments)) {
+            assertThat(instanceA.getBean(AuthAccountCache.class).isCachingEnabled()).isFalse();
+            assertThat(instanceB.getBean(AuthAccountCache.class).isCachingEnabled()).isFalse();
+
+            JdbcTemplate jdbcTemplate = instanceA.getBean(JdbcTemplate.class);
+            PasswordHashService passwordHashService = instanceA.getBean(PasswordHashService.class);
+            AuthTokenService authTokenService = instanceA.getBean(AuthTokenService.class);
+            AuthService authService = instanceA.getBean(AuthService.class);
+            FilterRegistrationBean<?> instanceBFilterRegistration = instanceB
+                .getBean("authTokenFilterRegistration", FilterRegistrationBean.class);
+            AuthTokenFilter instanceBFilter = (AuthTokenFilter) instanceBFilterRegistration.getFilter();
+            List<Long> userIds = new ArrayList<>();
+            try {
+                LocalDateTime now = LocalDateTime.now();
+                String suffix = Long.toUnsignedString(System.nanoTime());
+                String currentPassword = "CurrentPassword1";
+                String newPassword = "NewPassword2";
+
+                Long passwordUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-password-" + suffix,
+                    "r1-password-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(passwordUserId);
+                String passwordToken = authTokenService.issueAccessToken(
+                    passwordUserId,
+                    "r1-password-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, passwordToken);
+
+                authService.changePassword(
+                    passwordUserId,
+                    new AuthPasswordChangeRequest(currentPassword, newPassword, newPassword)
+                );
+                assertApiInstanceRejects(instanceBFilter, passwordToken);
+
+                Long disabledUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-disabled-" + suffix,
+                    "r1-disabled-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(disabledUserId);
+                String disabledToken = authTokenService.issueAccessToken(
+                    disabledUserId,
+                    "r1-disabled-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, disabledToken);
+                jdbcTemplate.update(
+                    "update user_account set status = 'DISABLED', updated_at = ? where id = ?",
+                    LocalDateTime.now(),
+                    disabledUserId
+                );
+                assertApiInstanceRejects(instanceBFilter, disabledToken);
+
+                Long logoutUserId = insertAuthAccount(
+                    jdbcTemplate,
+                    "r1-logout-" + suffix,
+                    "r1-logout-" + suffix + "@integration.local",
+                    passwordHashService.hash(currentPassword),
+                    "ACTIVE",
+                    1,
+                    now
+                );
+                userIds.add(logoutUserId);
+                AuthTokenService.TokenIssue refreshToken = authTokenService.issueRefreshToken(false);
+                insertRefreshToken(jdbcTemplate, logoutUserId, refreshToken, authTokenService);
+                String logoutToken = authTokenService.issueAccessToken(
+                    logoutUserId,
+                    "r1-logout-" + suffix,
+                    "VIEWER",
+                    1
+                ).token();
+                assertApiInstanceAllows(instanceBFilter, logoutToken);
+
+                authService.logout(new AuthLogoutRequest(refreshToken.token()));
+                assertApiInstanceRejects(instanceBFilter, logoutToken);
+            } finally {
+                for (Long userId : userIds) {
+                    jdbcTemplate.update("delete from user_login_audit where user_id = ?", userId);
+                    jdbcTemplate.update("delete from user_refresh_token where user_id = ?", userId);
+                    jdbcTemplate.update("delete from user_account where id = ?", userId);
+                }
+            }
         }
     }
 
@@ -692,6 +808,77 @@ class ProductionRuntimeContextIntegrationTest {
             .web(WebApplicationType.SERVLET)
             .profiles("prod")
             .run(arguments.toArray(String[]::new));
+    }
+
+    private Long insertAuthAccount(
+        JdbcTemplate jdbcTemplate,
+        String username,
+        String email,
+        String passwordHash,
+        String status,
+        int sessionVersion,
+        LocalDateTime now
+    ) {
+        jdbcTemplate.update("""
+            insert into user_account (
+                username, email, password_hash, role, status, failed_login_count,
+                locked_until, session_version, last_login_at, created_at, updated_at
+            ) values (?, ?, ?, 'VIEWER', ?, 0, null, ?, null, ?, ?)
+            """,
+            username,
+            email,
+            passwordHash,
+            status,
+            sessionVersion,
+            now,
+            now
+        );
+        return jdbcTemplate.queryForObject(
+            "select id from user_account where username = ?",
+            Long.class,
+            username
+        );
+    }
+
+    private void insertRefreshToken(
+        JdbcTemplate jdbcTemplate,
+        Long userId,
+        AuthTokenService.TokenIssue refreshToken,
+        AuthTokenService authTokenService
+    ) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update("""
+            insert into user_refresh_token (
+                user_id, token_hash, session_version, status, expires_at,
+                revoked_at, last_used_at, created_at, updated_at
+            ) values (?, ?, 1, 'ACTIVE', ?, null, null, ?, ?)
+            """,
+            userId,
+            authTokenService.hashRefreshToken(refreshToken.token()),
+            now.plusSeconds(refreshToken.expiresInSeconds()),
+            now,
+            now
+        );
+    }
+
+    private void assertApiInstanceAllows(AuthTokenFilter filter, String token) throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    private void assertApiInstanceRejects(AuthTokenFilter filter, String token) throws ServletException, IOException {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/auth/me");
+        request.addHeader("Authorization", "Bearer " + token);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 
     private Long insertReviewTask(

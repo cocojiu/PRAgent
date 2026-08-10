@@ -18,8 +18,9 @@ class RuntimeRoleConditionTest {
             assertThat(context.containsBean("apiBean")).isTrue();
             assertThat(context.containsBean("workerBean")).isTrue();
             assertThat(context.containsBean("schedulerBean")).isTrue();
-            assertThat(context.getBean(RuntimeRoleContract.class).role())
-                .isEqualTo(RuntimeRoleContract.Mode.COMBINED);
+            RuntimeRoleContract contract = context.getBean(RuntimeRoleContract.class);
+            assertThat(contract.role()).isEqualTo(RuntimeRoleContract.Mode.COMBINED);
+            assertThat(contract.authenticationAccountCacheEnabled()).isTrue();
         });
     }
 
@@ -134,6 +135,7 @@ class RuntimeRoleConditionTest {
                 RuntimeRoleContract contract = context.getBean(RuntimeRoleContract.class);
                 assertThat(contract.apiInstanceCount()).isEqualTo(2);
                 assertThat(contract.rateLimitStore()).isEqualTo(RuntimeRoleContract.RateLimitStore.DATABASE);
+                assertThat(contract.authenticationAccountCacheEnabled()).isFalse();
                 assertThat(context.containsBean("apiBean")).isTrue();
             });
         assertStartupFailureContains(

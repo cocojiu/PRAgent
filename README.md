@@ -196,6 +196,7 @@ npm run dev
 - `REPOGUARD_RUNTIME_ROLE` 只接受 `combined`、`api`、`worker`。`combined` 同时提供 HTTP API、RabbitMQ 消费者和受数据库栅栏保护的定时任务；`worker` 同时承载消费者与这些定时任务。
 - `REPOGUARD_DEPLOYMENT_MODE` 只接受 `monolith`、`split`。`monolith` 必须搭配 `combined`；`split` 的 API 容器必须使用 `api`，Worker 容器固定使用 `worker`。配置冲突会在 Spring 启动或生产部署拉取镜像前失败。
 - `REPOGUARD_RATE_LIMIT_STORE` 默认为 `local`，此时 API/combined 角色仍要求 `REPOGUARD_API_INSTANCE_COUNT=1`。横向扩展 API 前必须改为 `database`：认证、管理 API Key 失败和 Webhook 的固定窗口会由 MySQL 原子计数，并以认证密钥 HMAC 后的桶键存储；限流阈值是跨实例总限额，不需要按实例数调低。Dashboard 聚合使用数据库日快照和持久化脏版本，手工评审最终幂等由数据库唯一键保障。
+- 当 `REPOGUARD_API_INSTANCE_COUNT>1` 时，认证账户状态不使用进程内 `AuthAccountCache`，每次认证从 MySQL 读取账号状态和 `session_version`；密码修改、账号禁用或注销会话后，其他 API 实例会立即拒绝旧 access token。单实例仍使用 5 秒进程内缓存，并依靠事务提交后的失效回调缩短状态生效延迟。
 - Worker 执行链路具备 RabbitMQ、数据库 CAS、领取标识和租约保护，可由编排平台扩展多个实例；当前生产 Compose 仍固定为单个 Worker 服务。所有 `@Scheduled` 入口由 Scheduler 能力契约保护，避免与普通消息消费者的装配边界混淆。
 - 旧 `REPOGUARD_API_ENABLED`、`REPOGUARD_WORKER_ENABLED` 仅保留迁移兼容；新部署应改用单一角色变量。生产部署脚本会根据 Compose 服务集合推导并验证 `monolith/split`。
 
