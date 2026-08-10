@@ -6,6 +6,7 @@ import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.config.CacheNames;
+import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
 import com.repoguard.agent.dto.ReviewRuleConfigDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
@@ -55,6 +56,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
     private final ReviewRuleLifecycleGate lifecycleGate;
     private final ReviewStrategyPolicyService strategyPolicyService;
     private final ReviewCalibrationService reviewCalibrationService;
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore;
 
     @Autowired
     public ReviewRuleConfigServiceImpl(
@@ -68,7 +70,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         ReviewRulePolicySnapshotStore policySnapshotStore,
         ReviewRuleLifecycleGate lifecycleGate,
         ReviewStrategyPolicyService strategyPolicyService,
-        ReviewCalibrationService reviewCalibrationService
+        ReviewCalibrationService reviewCalibrationService,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
     ) {
         this.reviewRuleConfigMapper = Objects.requireNonNull(
             reviewRuleConfigMapper,
@@ -89,6 +92,10 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.reviewCalibrationService = Objects.requireNonNull(
             reviewCalibrationService,
             "reviewCalibrationService"
+        );
+        this.promotionEvidenceStore = Objects.requireNonNull(
+            promotionEvidenceStore,
+            "promotionEvidenceStore"
         );
     }
 
@@ -124,6 +131,7 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         this.lifecycleGate = new ReviewRuleLifecycleGate();
         this.strategyPolicyService = null;
         this.reviewCalibrationService = null;
+        this.promotionEvidenceStore = null;
     }
 
     @Override
@@ -187,6 +195,8 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         boolean enabling = "DISABLED".equalsIgnoreCase(previousStatus)
             && "ENABLED".equalsIgnoreCase(rule.getStatus());
         String changeType;
+        PromotionEvaluation promotionEvaluation = null;
+        EnforcementMode promotionTargetMode = null;
         if (semanticChange) {
             rule.setConfigVersion(previousConfigVersion + 1);
             rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
@@ -198,18 +208,36 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
                 rule.setEnforcementMode(EnforcementMode.OBSERVE.name());
                 changeType = enabling ? "ENABLE_OBSERVE" : "DISABLE";
             } else {
-                ReviewRuleQualityGateDto qualityGate = promotionQualityGate(
+                PromotionEvaluation evaluation = promotionEvaluation(
                     normalizedId,
                     previousConfigVersion
                 );
-                validateTransition(previousMode, targetMode, qualityGate);
-                changeType = rank(targetMode) > rank(previousMode) ? "PROMOTION" : "POLICY_UPDATE";
+                validateTransition(previousMode, targetMode, evaluation.qualityGate());
+                if (rank(targetMode) > rank(previousMode)) {
+                    promotionEvaluation = evaluation;
+                    promotionTargetMode = targetMode;
+                    changeType = "PROMOTION";
+                } else {
+                    changeType = "POLICY_UPDATE";
+                }
             }
         }
         rule.setPolicyVersion(previousPolicyVersion + 1);
         rule.setUpdatedAt(LocalDateTime.now());
         updateRuleIfCurrent(rule, previousPolicyVersion);
-        saveSnapshot(rule, changeType, previousPolicyVersion);
+        ReviewRulePolicySnapshot savedSnapshot = saveSnapshot(rule, changeType, previousPolicyVersion);
+        if (promotionEvaluation != null && promotionEvidenceStore != null && savedSnapshot != null) {
+            ReviewCalibrationQueueDto capturedEvaluation = promotionEvaluation.calibrationQueue();
+            if (capturedEvaluation == null) {
+                throw new IllegalStateException("Rule promotion evidence capture is unavailable");
+            }
+            promotionEvidenceStore.recordRulePromotion(
+                savedSnapshot,
+                previousMode,
+                promotionTargetMode,
+                capturedEvaluation
+            );
+        }
         evictRuleCaches();
         return toReviewRuleDto(
             rule,
@@ -343,10 +371,15 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         }
     }
 
-    private void saveSnapshot(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
-        if (policySnapshotStore != null) {
-            policySnapshotStore.save(rule, changeType, sourcePolicyVersion);
+    private ReviewRulePolicySnapshot saveSnapshot(
+        ReviewRuleConfig rule,
+        String changeType,
+        Long sourcePolicyVersion
+    ) {
+        if (policySnapshotStore == null) {
+            return null;
         }
+        return policySnapshotStore.save(rule, changeType, sourcePolicyVersion);
     }
 
     private void requireSnapshotStore() {
@@ -512,15 +545,19 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
         }
     }
 
-    private ReviewRuleQualityGateDto promotionQualityGate(String ruleId, long configVersion) {
+    private PromotionEvaluation promotionEvaluation(String ruleId, long configVersion) {
         if (reviewCalibrationService != null) {
-            return reviewCalibrationService.getQueue(ruleId, 1, false).qualityGate();
+            ReviewCalibrationQueueDto queue = reviewCalibrationService.getQueue(ruleId, 1, false);
+            return new PromotionEvaluation(queue.qualityGate(), queue);
         }
-        return lifecycleGate.evaluate(
-            ruleId,
-            reviewRuleRegistry.detectorVersion(ruleId),
-            configVersion,
-            reviewQualityBaselineService.loadBaseline().groups()
+        return new PromotionEvaluation(
+            lifecycleGate.evaluate(
+                ruleId,
+                reviewRuleRegistry.detectorVersion(ruleId),
+                configVersion,
+                reviewQualityBaselineService.loadBaseline().groups()
+            ),
+            null
         );
     }
 
@@ -538,6 +575,12 @@ public class ReviewRuleConfigServiceImpl implements ReviewRuleConfigService {
 
     private String format(LocalDateTime time) {
         return time == null ? null : time.format(DATE_TIME_FORMATTER);
+    }
+
+    private record PromotionEvaluation(
+        ReviewRuleQualityGateDto qualityGate,
+        ReviewCalibrationQueueDto calibrationQueue
+    ) {
     }
 
     private record RuleSemanticState(

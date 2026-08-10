@@ -29,10 +29,13 @@ class ReviewStrategyPolicyServiceTest {
         org.mockito.Mockito.mock(ReviewStrategyPolicySnapshotMapper.class);
     private final ReviewQualityBaselineService baselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
     private final ReviewStrategyPolicyService service = new ReviewStrategyPolicyService(
         mapper,
         baselineService,
-        new ReviewStrategyLifecycleGate()
+        new ReviewStrategyLifecycleGate(),
+        promotionEvidenceStore
     );
 
     @Test
@@ -80,6 +83,13 @@ class ReviewStrategyPolicyServiceTest {
         assertThat(inserted.getPromptVersion()).isEqualTo(active.getPromptVersion());
         assertThat(result.snapshotId()).isEqualTo(12);
         assertThat(result.enforcementMode()).isEqualTo("comment");
+        verify(promotionEvidenceStore).recordStrategyPromotion(
+            any(ReviewStrategyPolicySnapshot.class),
+            any(),
+            any(),
+            any(),
+            any()
+        );
     }
 
     @Test
@@ -105,6 +115,29 @@ class ReviewStrategyPolicyServiceTest {
         assertThat(result.enforcementMode()).isEqualTo("block");
         assertThat(result.qualityGate().blockEligible()).isTrue();
         assertThat(result.qualityGate().status()).isEqualTo("PASS");
+        verify(promotionEvidenceStore).recordStrategyPromotion(
+            any(ReviewStrategyPolicySnapshot.class),
+            any(),
+            any(),
+            any(),
+            any()
+        );
+    }
+
+    @Test
+    void strategyDemotionDoesNotCreatePromotionEvidence() {
+        when(mapper.selectActiveForUpdate()).thenReturn(snapshot(13, "BLOCK"));
+        when(mapper.update(any(), any())).thenReturn(1);
+        when(baselineService.loadBaseline()).thenReturn(baseline(List.of()));
+        when(mapper.insert(any(ReviewStrategyPolicySnapshot.class))).thenAnswer(invocation -> {
+            ((ReviewStrategyPolicySnapshot) invocation.getArgument(0)).setId(14L);
+            return 1;
+        });
+
+        var result = service.promote("comment", 13);
+
+        assertThat(result.enforcementMode()).isEqualTo("comment");
+        verify(promotionEvidenceStore, never()).recordStrategyPromotion(any(), any(), any(), any(), any());
     }
 
     @Test

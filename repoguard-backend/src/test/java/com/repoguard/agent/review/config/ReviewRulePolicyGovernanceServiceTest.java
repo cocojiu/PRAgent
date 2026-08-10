@@ -11,6 +11,7 @@ import com.repoguard.agent.cache.CacheEvictionService;
 import com.repoguard.agent.common.BusinessException;
 import com.repoguard.agent.common.ErrorCode;
 import com.repoguard.agent.dto.ReviewCalibrationQueueDto;
+import com.repoguard.agent.dto.ReviewCalibrationVersionDto;
 import com.repoguard.agent.dto.ReviewRuleConfigRequest;
 import com.repoguard.agent.dto.ReviewRulePolicyVersionDto;
 import com.repoguard.agent.dto.ReviewRuleQualityGateDto;
@@ -47,6 +48,8 @@ class ReviewRulePolicyGovernanceServiceTest {
         org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
     private final ReviewCalibrationService calibrationService =
         org.mockito.Mockito.mock(ReviewCalibrationService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
     private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
         ruleMapper,
         findingMapper,
@@ -58,7 +61,8 @@ class ReviewRulePolicyGovernanceServiceTest {
         snapshotStore,
         new ReviewRuleLifecycleGate(),
         strategyPolicyService,
-        calibrationService
+        calibrationService,
+        promotionEvidenceStore
     );
 
     @Test
@@ -114,6 +118,60 @@ class ReviewRulePolicyGovernanceServiceTest {
         verify(ruleMapper, never()).updateById(any(ReviewRuleConfig.class));
         verify(snapshotMapper, never()).insert(any(ReviewRulePolicySnapshot.class));
         verify(calibrationService).getQueue(RULE_ID, 1, false);
+    }
+
+    @Test
+    void successfulBlockPromotionRecordsTheCapturedQualityEvidence() {
+        ReviewRuleConfig rule = rule();
+        ReviewRuleQualityGateDto gate = new ReviewRuleQualityGateDto(
+            30,
+            30,
+            BigDecimal.valueOf(96.67),
+            BigDecimal.valueOf(3.33),
+            BigDecimal.valueOf(96.67),
+            BigDecimal.valueOf(3.33),
+            true,
+            true,
+            "PASS",
+            List.of()
+        );
+        ReviewCalibrationQueueDto evaluation = queueWithGate(
+            new ReviewCalibrationVersionDto(
+                RULE_ID,
+                "Current rule",
+                DETECTOR_VERSION,
+                2,
+                5,
+                10,
+                1,
+                "review-prompt-v2",
+                "review-context-v2",
+                "review-schema-v2",
+                "high-risk-verifier-v1",
+                "server-risk-v2",
+                "comment",
+                "comment",
+                true,
+                "captured-version"
+            ),
+            gate
+        );
+        when(registry.contains(RULE_ID)).thenReturn(true);
+        when(registry.detectorVersion(RULE_ID)).thenReturn(DETECTOR_VERSION);
+        when(ruleMapper.selectById(RULE_ID)).thenReturn(rule);
+        when(ruleMapper.update(any(ReviewRuleConfig.class), any())).thenReturn(1);
+        when(calibrationService.getQueue(RULE_ID, 1, false)).thenReturn(evaluation);
+        when(findingMapper.selectReviewRuleHitCounts()).thenReturn(List.of());
+        when(baselineService.loadBaseline()).thenReturn(emptyBaseline());
+
+        service.updateReviewRule(RULE_ID, request(rule.getDescription(), "BLOCK"), 5);
+
+        verify(promotionEvidenceStore).recordRulePromotion(
+            any(ReviewRulePolicySnapshot.class),
+            any(),
+            any(),
+            any(ReviewCalibrationQueueDto.class)
+        );
     }
 
     @Test
@@ -287,8 +345,15 @@ class ReviewRulePolicyGovernanceServiceTest {
     }
 
     private ReviewCalibrationQueueDto queueWithGate(ReviewRuleQualityGateDto gate) {
+        return queueWithGate(null, gate);
+    }
+
+    private ReviewCalibrationQueueDto queueWithGate(
+        ReviewCalibrationVersionDto version,
+        ReviewRuleQualityGateDto gate
+    ) {
         return new ReviewCalibrationQueueDto(
-            null,
+            version,
             30,
             0,
             gate.labeledHighRiskSamples(),

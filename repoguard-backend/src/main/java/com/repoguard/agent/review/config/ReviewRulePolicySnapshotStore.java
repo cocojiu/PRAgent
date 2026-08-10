@@ -18,7 +18,7 @@ public class ReviewRulePolicySnapshotStore {
         this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
     }
 
-    public void save(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
+    public ReviewRulePolicySnapshot save(ReviewRuleConfig rule, String changeType, Long sourcePolicyVersion) {
         ReviewRulePolicySnapshot snapshot = new ReviewRulePolicySnapshot();
         snapshot.setRuleId(rule.getId());
         snapshot.setPolicyVersion(rule.getPolicyVersion());
@@ -39,6 +39,7 @@ public class ReviewRulePolicySnapshotStore {
         snapshot.setSourcePolicyVersion(sourcePolicyVersion);
         snapshot.setCreatedAt(LocalDateTime.now());
         snapshotMapper.insert(snapshot);
+        return snapshot;
     }
 
     public List<ReviewRulePolicySnapshot> page(String ruleId, Long cursor, int limit) {

@@ -28,15 +28,21 @@ public class ReviewStrategyPolicyService {
     private final ReviewStrategyPolicySnapshotMapper snapshotMapper;
     private final ReviewQualityBaselineService qualityBaselineService;
     private final ReviewStrategyLifecycleGate lifecycleGate;
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore;
 
     public ReviewStrategyPolicyService(
         ReviewStrategyPolicySnapshotMapper snapshotMapper,
         ReviewQualityBaselineService qualityBaselineService,
-        ReviewStrategyLifecycleGate lifecycleGate
+        ReviewStrategyLifecycleGate lifecycleGate,
+        ReviewPolicyPromotionEvidenceStore promotionEvidenceStore
     ) {
         this.snapshotMapper = Objects.requireNonNull(snapshotMapper, "snapshotMapper");
         this.qualityBaselineService = Objects.requireNonNull(qualityBaselineService, "qualityBaselineService");
         this.lifecycleGate = Objects.requireNonNull(lifecycleGate, "lifecycleGate");
+        this.promotionEvidenceStore = Objects.requireNonNull(
+            promotionEvidenceStore,
+            "promotionEvidenceStore"
+        );
     }
 
     public ReviewStrategyPolicyDto getActive() {
@@ -75,17 +81,18 @@ public class ReviewStrategyPolicyService {
         ReviewStrategyRelease release = toRelease(active);
         EnforcementMode current = release.enforcementMode();
         EnforcementMode target = EnforcementMode.from(requestedMode);
+        ReviewQualityBaseline baseline = qualityBaselineService.loadBaseline();
         if (current == target) {
-            return toDto(active, qualityBaselineService.loadBaseline());
+            return toDto(active, baseline);
         }
-        ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(
-            release,
-            qualityBaselineService.loadBaseline().groups()
-        );
+        ReviewRuleQualityGateDto qualityGate = lifecycleGate.evaluate(release, baseline.groups());
         validatePromotion(release, current, target, qualityGate);
         ReviewStrategyPolicySnapshot promoted = copy(active, target, "PROMOTION", active.getId());
         activate(promoted, active);
-        return toDto(promoted, qualityBaselineService.loadBaseline());
+        if (rank(target) > rank(current)) {
+            promotionEvidenceStore.recordStrategyPromotion(promoted, release, current, target, qualityGate);
+        }
+        return toDto(promoted, baseline);
     }
 
     @Transactional
