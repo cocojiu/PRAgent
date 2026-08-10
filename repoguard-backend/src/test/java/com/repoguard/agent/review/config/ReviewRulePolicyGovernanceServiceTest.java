@@ -54,19 +54,44 @@ class ReviewRulePolicyGovernanceServiceTest {
         org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
     private final CapturedPromotionEvidence capturedEvidence =
         org.mockito.Mockito.mock(CapturedPromotionEvidence.class);
-    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+    private final ReviewRuleConfigPolicy ruleConfigPolicy = new ReviewRuleConfigPolicy();
+    private final ReviewRuleLifecycleGate lifecycleGate = new ReviewRuleLifecycleGate();
+    private final ReviewRuleResponseAssembler responseAssembler = new ReviewRuleResponseAssembler(
+        registry,
+        lifecycleGate
+    );
+    private final ReviewRuleQueryService queryService = new ReviewRuleQueryService(
         ruleMapper,
         findingMapper,
-        cacheEvictionService,
-        new ReviewRuleConfigPolicy(),
+        ruleConfigPolicy,
         new ReviewRuleMetricAssembler(),
         baselineService,
         registry,
-        snapshotStore,
-        new ReviewRuleLifecycleGate(),
-        strategyPolicyService,
+        responseAssembler,
+        strategyPolicyService
+    );
+    private final ReviewRuleQualityGateService qualityGateService = new ReviewRuleQualityGateService(
         calibrationService,
         promotionEvidenceStore
+    );
+    private final ReviewRuleCommandService commandService = new ReviewRuleCommandService(
+        ruleMapper,
+        cacheEvictionService,
+        ruleConfigPolicy,
+        snapshotStore,
+        qualityGateService,
+        queryService,
+        ReviewPolicyTransactionExecutor.direct()
+    );
+    private final ReviewRulePolicyHistoryService historyService = new ReviewRulePolicyHistoryService(
+        queryService,
+        snapshotStore,
+        responseAssembler
+    );
+    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+        queryService,
+        commandService,
+        historyService
     );
 
     @BeforeEach

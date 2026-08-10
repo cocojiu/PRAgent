@@ -17,6 +17,7 @@ import com.repoguard.agent.mapper.projection.ReviewFindingProjections.RuleHitCou
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,14 +32,53 @@ class ReviewRuleConfigServiceImplTest {
     private final ReviewQualityBaselineService reviewQualityBaselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
-    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+    private final ReviewRulePolicySnapshotStore policySnapshotStore =
+        org.mockito.Mockito.mock(ReviewRulePolicySnapshotStore.class);
+    private final ReviewStrategyPolicyService strategyPolicyService =
+        org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
+    private final ReviewCalibrationService reviewCalibrationService =
+        org.mockito.Mockito.mock(ReviewCalibrationService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final ReviewRuleConfigPolicy reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
+    private final ReviewRuleMetricAssembler reviewRuleMetricAssembler = new ReviewRuleMetricAssembler();
+    private final ReviewRuleLifecycleGate lifecycleGate = new ReviewRuleLifecycleGate();
+    private final ReviewRuleResponseAssembler responseAssembler = new ReviewRuleResponseAssembler(
+        reviewRuleRegistry,
+        lifecycleGate
+    );
+    private final ReviewRuleQueryService queryService = new ReviewRuleQueryService(
         reviewRuleConfigMapper,
         reviewFindingMapper,
-        cacheEvictionService,
-        new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler(),
+        reviewRuleConfigPolicy,
+        reviewRuleMetricAssembler,
         reviewQualityBaselineService,
-        reviewRuleRegistry
+        reviewRuleRegistry,
+        responseAssembler,
+        strategyPolicyService
+    );
+    private final ReviewRuleQualityGateService qualityGateService = new ReviewRuleQualityGateService(
+        reviewCalibrationService,
+        promotionEvidenceStore
+    );
+    private final ReviewRuleCommandService commandService = new ReviewRuleCommandService(
+        reviewRuleConfigMapper,
+        cacheEvictionService,
+        reviewRuleConfigPolicy,
+        policySnapshotStore,
+        qualityGateService,
+        queryService,
+        ReviewPolicyTransactionExecutor.direct()
+    );
+    private final ReviewRulePolicyHistoryService historyService = new ReviewRulePolicyHistoryService(
+        queryService,
+        policySnapshotStore,
+        responseAssembler
+    );
+    private final ReviewRuleConfigServiceImpl service = new ReviewRuleConfigServiceImpl(
+        queryService,
+        commandService,
+        historyService
     );
 
     @Test
@@ -116,14 +156,15 @@ class ReviewRuleConfigServiceImplTest {
 
     @Test
     void constructorRejectsMissingRuleMetricAssembler() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleQueryService(
             reviewRuleConfigMapper,
             reviewFindingMapper,
-            cacheEvictionService,
-            new ReviewRuleConfigPolicy(),
+            reviewRuleConfigPolicy,
             null,
             reviewQualityBaselineService,
-            reviewRuleRegistry
+            reviewRuleRegistry,
+            responseAssembler,
+            strategyPolicyService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewRuleMetricAssembler");
@@ -131,14 +172,14 @@ class ReviewRuleConfigServiceImplTest {
 
     @Test
     void constructorRejectsMissingCacheEvictionService() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleCommandService(
             reviewRuleConfigMapper,
-            reviewFindingMapper,
             null,
-            new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler(),
-            reviewQualityBaselineService,
-            reviewRuleRegistry
+            reviewRuleConfigPolicy,
+            policySnapshotStore,
+            qualityGateService,
+            queryService,
+            ReviewPolicyTransactionExecutor.direct()
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessage("cacheEvictionService");
@@ -146,14 +187,15 @@ class ReviewRuleConfigServiceImplTest {
 
     @Test
     void constructorRejectsMissingReviewQualityBaselineService() {
-        assertThatThrownBy(() -> new ReviewRuleConfigServiceImpl(
+        assertThatThrownBy(() -> new ReviewRuleQueryService(
             reviewRuleConfigMapper,
             reviewFindingMapper,
-            cacheEvictionService,
-            new ReviewRuleConfigPolicy(),
-            new ReviewRuleMetricAssembler(),
+            reviewRuleConfigPolicy,
+            reviewRuleMetricAssembler,
             null,
-            reviewRuleRegistry
+            reviewRuleRegistry,
+            responseAssembler,
+            strategyPolicyService
         ))
             .isInstanceOf(NullPointerException.class)
             .hasMessageContaining("reviewQualityBaselineService");

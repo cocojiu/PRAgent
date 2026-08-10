@@ -93,3 +93,10 @@
 容量验收用例：真实 MySQL 集成测试启动两个 API Spring 上下文，分别比较 1 实例和 2 实例的 5/10 RPS；要求请求全部通过共享原子计数、数据库故障为 0、P95/P99 均低于 1 秒，并输出四组无敏感信息的容量证据。
 本地验证：DatabaseRateLimitWindowStoreTest、SharedRateLimitMetricsConfigurationTest、RuntimeRoleConditionTest、AuthAttemptLimiterTest、AdminApiKeyAttemptLimiterTest、GithubWebhookRateLimiterTest 定向通过；ProductionRuntimeContextIntegrationTest 编译通过，本机无真实 MySQL/RabbitMQ 环境时 9 项按门禁跳过。跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
 下一步：进入 R6，按职责提取 ReviewRuleConfigServiceImpl 与 RuleConfigPage.vue 编排逻辑，并继续迁移剩余普通管理 OpenAPI；另行安排严格 2C4G 硬限制环境的持续压测，不以当前 GitHub Runner 结果替代该部署证据。
+
+2026-08-10 | 优化-12 | R6 规则配置后端职责提取
+状态：本地完成，远程流水线待检查
+变更：将 ReviewRuleConfigServiceImpl 从同时承担查询、命令、历史、质量门禁和 DTO 装配的 668 行实现，缩减为只依赖 ReviewRuleQueryService、ReviewRuleCommandService、ReviewRulePolicyHistoryService 的 82 行缓存门面；新增 ReviewRuleQualityGateService 和 ReviewRuleResponseAssembler，分别收口晋升评估/证据与响应映射。测试夹具直接组装新组件，生产代码未保留旧的多依赖兼容构造器。
+语义保持：OBSERVE -> COMMENT -> BLOCK、语义编辑回落 OBSERVE、expected policy version 预检、policy_version 条件更新 CAS、409 冲突、游标历史、回滚、缓存失效、质量基线在短写事务外读取，以及事务内只写规则/快照/晋升证据的边界均保持不变。架构契约新增 5 个组件归属校验，并禁止门面重新依赖 Mapper、质量基线、校准和快照存储。
+本地验证：规则配置、策略治理、短事务、系统配置、Spring 构造器和架构契约定向 78 项通过；跳过 Enforcer 并排除用户既有 Caddyfile 改动影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2335 项通过、9 项跳过，JaCoCo 门禁和 JAR 构建通过。
+下一步：提交并推送 origin/PRAgent-test，由 JDK 25 与真实 MySQL/RabbitMQ Actions 验证 Spring 组件装配和治理语义；成功后继续提取 RuleConfigPage.vue 编排逻辑。

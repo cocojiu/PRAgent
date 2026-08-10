@@ -46,10 +46,21 @@ import com.repoguard.agent.review.LlmReviewSchemaRepairer;
 import com.repoguard.agent.review.ReviewRuleRegistry;
 import com.repoguard.agent.review.config.ReviewRuleConfigPolicy;
 import com.repoguard.agent.review.config.ReviewRuleConfigServiceImpl;
+import com.repoguard.agent.review.config.ReviewRuleCommandService;
+import com.repoguard.agent.review.config.ReviewRuleLifecycleGate;
 import com.repoguard.agent.review.config.ReviewRuleMetricAssembler;
+import com.repoguard.agent.review.config.ReviewRulePolicyHistoryService;
+import com.repoguard.agent.review.config.ReviewRulePolicySnapshotStore;
+import com.repoguard.agent.review.config.ReviewRuleQualityGateService;
+import com.repoguard.agent.review.config.ReviewRuleQueryService;
+import com.repoguard.agent.review.config.ReviewRuleResponseAssembler;
+import com.repoguard.agent.review.config.ReviewStrategyPolicyService;
+import com.repoguard.agent.review.config.ReviewPolicyPromotionEvidenceStore;
+import com.repoguard.agent.review.config.ReviewPolicyTransactionExecutor;
 import com.repoguard.agent.review.quality.ReviewQualityBaseline;
 import com.repoguard.agent.review.quality.ReviewQualityBaselineService;
 import com.repoguard.agent.security.SecretCryptoService;
+import com.repoguard.agent.service.ReviewCalibrationService;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -77,6 +88,48 @@ class SystemConfigServiceImplTest {
     private final ReviewQualityBaselineService reviewQualityBaselineService =
         org.mockito.Mockito.mock(ReviewQualityBaselineService.class);
     private final ReviewRuleRegistry reviewRuleRegistry = org.mockito.Mockito.mock(ReviewRuleRegistry.class);
+    private final ReviewRulePolicySnapshotStore policySnapshotStore =
+        org.mockito.Mockito.mock(ReviewRulePolicySnapshotStore.class);
+    private final ReviewStrategyPolicyService strategyPolicyService =
+        org.mockito.Mockito.mock(ReviewStrategyPolicyService.class);
+    private final ReviewCalibrationService reviewCalibrationService =
+        org.mockito.Mockito.mock(ReviewCalibrationService.class);
+    private final ReviewPolicyPromotionEvidenceStore promotionEvidenceStore =
+        org.mockito.Mockito.mock(ReviewPolicyPromotionEvidenceStore.class);
+    private final ReviewRuleConfigPolicy reviewRuleConfigPolicy = new ReviewRuleConfigPolicy();
+    private final ReviewRuleLifecycleGate reviewRuleLifecycleGate = new ReviewRuleLifecycleGate();
+    private final ReviewRuleResponseAssembler reviewRuleResponseAssembler = new ReviewRuleResponseAssembler(
+        reviewRuleRegistry,
+        reviewRuleLifecycleGate
+    );
+    private final ReviewRuleQueryService reviewRuleQueryService = new ReviewRuleQueryService(
+        reviewRuleConfigMapper,
+        reviewFindingMapper,
+        reviewRuleConfigPolicy,
+        new ReviewRuleMetricAssembler(),
+        reviewQualityBaselineService,
+        reviewRuleRegistry,
+        reviewRuleResponseAssembler,
+        strategyPolicyService
+    );
+    private final ReviewRuleQualityGateService reviewRuleQualityGateService = new ReviewRuleQualityGateService(
+        reviewCalibrationService,
+        promotionEvidenceStore
+    );
+    private final ReviewRuleCommandService reviewRuleCommandService = new ReviewRuleCommandService(
+        reviewRuleConfigMapper,
+        cacheEvictionService,
+        reviewRuleConfigPolicy,
+        policySnapshotStore,
+        reviewRuleQualityGateService,
+        reviewRuleQueryService,
+        ReviewPolicyTransactionExecutor.direct()
+    );
+    private final ReviewRulePolicyHistoryService reviewRulePolicyHistoryService = new ReviewRulePolicyHistoryService(
+        reviewRuleQueryService,
+        policySnapshotStore,
+        reviewRuleResponseAssembler
+    );
     private final ConnectionTestServiceImpl connectionTestService = ConnectionTestServiceTestFactory.create(
         integrationConfigMapper,
         reviewPolicyConfigMapper,
@@ -97,13 +150,9 @@ class SystemConfigServiceImplTest {
         cacheEvictionService
     );
     private final ReviewRuleConfigServiceImpl reviewRuleConfigService = new ReviewRuleConfigServiceImpl(
-        reviewRuleConfigMapper,
-        reviewFindingMapper,
-        cacheEvictionService,
-        new ReviewRuleConfigPolicy(),
-        new ReviewRuleMetricAssembler(),
-        reviewQualityBaselineService,
-        reviewRuleRegistry
+        reviewRuleQueryService,
+        reviewRuleCommandService,
+        reviewRulePolicyHistoryService
     );
     private final SystemSettingsApplicationServiceImpl systemSettingsApplicationService =
         new SystemSettingsApplicationServiceImpl(

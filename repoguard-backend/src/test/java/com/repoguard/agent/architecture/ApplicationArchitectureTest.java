@@ -572,7 +572,12 @@ class ApplicationArchitectureTest {
         List<String> ruleConfigurationTypes = List.of(
             "ReviewRuleConfigPolicy.java",
             "ReviewRuleConfigServiceImpl.java",
-            "ReviewRuleMetricAssembler.java"
+            "ReviewRuleMetricAssembler.java",
+            "ReviewRuleQueryService.java",
+            "ReviewRuleCommandService.java",
+            "ReviewRulePolicyHistoryService.java",
+            "ReviewRuleQualityGateService.java",
+            "ReviewRuleResponseAssembler.java"
         );
 
         assertThat(sourcePaths)
@@ -582,6 +587,24 @@ class ApplicationArchitectureTest {
             .doesNotContainAnyElementsOf(ruleConfigurationTypes.stream()
                 .map(name -> "com/repoguard/agent/service/impl/" + name)
                 .toList());
+
+        SourceUnit facade = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/config/ReviewRuleConfigServiceImpl.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("ReviewRuleConfigServiceImpl source was not discovered"));
+        assertThat(facade.sourceText())
+            .contains(
+                "ReviewRuleQueryService queryService",
+                "ReviewRuleCommandService commandService",
+                "ReviewRulePolicyHistoryService historyService"
+            )
+            .doesNotContain(
+                "ReviewRuleConfigMapper",
+                "ReviewFindingMapper",
+                "ReviewQualityBaselineService",
+                "ReviewCalibrationService",
+                "ReviewRulePolicySnapshotStore"
+            );
     }
 
     @Test
