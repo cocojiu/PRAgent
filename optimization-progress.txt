@@ -128,9 +128,10 @@
 真实 MySQL 证据：固定数据集 500 tasks/10000 findings；selectSummary P95/P99 为 0.22501/0.22501 ms，使用 idx_review_finding_category，聚合子查询使用临时表；selectGroups P95/P99 为 0.168303/0.168303 ms，使用 idx_review_finding_category，窗口排序与分组使用临时表并出现 filesort。两条 SQL 的 EXPLAIN ANALYZE 均记录实际 rows/time，事务回滚后测试组织数据为 0。
 
 2026-08-11 | 优化-16 | 大 PR 分块降级规则扫描收敛
-状态：代码与远程流水线完成；2C4G 复测因线上强制停止条件暂缓
+状态：第二阶段 CPU 热点修复本地完成，远程流水线与线上复测待执行
 线上触发证据：2 核服务器处理 PR #134 的 164 个分块时，超过 LLM 总分块上限的分块仍逐个执行规则引擎；连续采样 backend CPU 为 95.64%-101.20%，load1 为 5.24-5.72。任务 109796 回到 QUEUED/PARTIAL，生产 review queue 积压 187 条且消费者为 0，按 2C4G 强制停止条件终止 5/10 RPS 测试。
-变更：分块失败、预算耗尽、执行器拒绝和总分块超限只记录降级指标与空结果标记；RuleMergeStage 继续对完整 diff 执行唯一一次规则扫描，保留完整规则覆盖、PARTIAL_FALLBACK、LLM token/成本和 finding 去重语义。移除 LlmChunkReviewAggregator 对 RuleBasedPullRequestReviewer 的冗余依赖，并增加架构棘轮与端到端回归，防止恢复逐分块规则扫描。
-本地验证：定向 81 项通过；本机 JDK 26 跳过 Enforcer，并排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest 后，后端完整 verify 通过，2337 项通过、10 项跳过，JaCoCo 门禁和 JAR 构建通过。精确 JDK 25 由远程 Actions 验证。
+变更：分块失败、预算耗尽、执行器拒绝和总分块超限只记录降级指标与空结果标记；RuleMergeStage 继续对完整 diff 执行唯一一次规则扫描，保留完整规则覆盖、PARTIAL_FALLBACK、LLM token/成本和 finding 去重语义。移除 LlmChunkReviewAggregator 对 RuleBasedPullRequestReviewer 的冗余依赖，并增加架构棘轮与端到端回归，防止恢复逐分块规则扫描。线上首次滚动后进一步定位唯一一次完整规则扫描仍被 glob 正则回溯拖慢：改为线性 glob 匹配，每文件预计算适用规则并使用 10000 项有界 Caffeine 文件分类缓存；敏感字面量熵计算从每次遍历 65536 槽收敛为 ASCII 定长桶和稀疏扩展字符表。
+本地验证：定向回归通过；241 文件、14460 行新增代码的规则扫描回归在 10 秒预算内完成，RuleBasedPullRequestReviewerTest 全类 17 项耗时 1.901 秒。首次未优化版本的同一回归运行 79 秒仍未结束，JDK thread dump 定位在 ReviewFilePolicy 的 glob 正则回溯。第二阶段后端完整 verify 通过，2339 项通过、10 项跳过，JaCoCo 门禁和 JAR 构建通过；本机 JDK 26 跳过 Enforcer，并排除用户既有 Caddyfile 改动所影响的 FrontendDeploymentContractTest，精确 JDK 25 由远程 Actions 验证。
 远程验收：提交 ef8a44f6；Pull Request Quality #31477316354、Repository Governance #31477316358/#31477312520、Release Images #31477312530、Auto Create Pull Request #31477312540 均成功；精确 JDK 25、真实 MySQL/RabbitMQ、前端质量与构建、镜像运行和高危/严重漏洞门禁全部通过。新后端镜像标签为 backend-pragent-test-ef8a44f6e654。
-下一步：生产实例当前使用生产库 repoguard_demo 与生产 vhost /repoguard，根分区仅余 8.9G，且 review queue 积压 187 条、消费者为 0；不在该状态下执行 5/10 RPS。待维护窗口批准后，先备份并仅滚动 backend（不得覆盖 sub2api/Caddy 配置），确认消费者恢复、重复消息收敛、CPU/load 回落和可用磁盘大于 10G，再使用 repoguard_test 与 /repoguard-test 执行严格 2C4G 复测。
+首次线上滚动：部署前已备份生产库至 /opt/repoguard/backups/repoguard_demo_before_d5d7aa0f_20260811-173508.sql.gz，仅滚动 backend 到 d5d7aa0f；健康与 revision 校验通过，消费者从 0 恢复为 1，ready 从 206 快速降至 12。随后任务 109798 对 241 文件、14412 additions 的完整规则扫描使 backend CPU 98.62%-104.22% 持续超过 14 分钟，确认第二个 CPU 热点并按强制停止条件中断任务；临时 API-only 尝试被 monolith 部署契约拒绝后已立即恢复 combined 且健康。
+下一步：提交并推送第二阶段修复，等待 JDK 25 与 Release Images 通过后仅滚动 backend；用当前 241 文件 PR 验证规则扫描时长、CPU、消费者和队列收敛。根分区仍仅余 8.9G，且当前使用生产库 repoguard_demo 与生产 vhost /repoguard，因此在磁盘大于 10G并切换 repoguard_test 与 /repoguard-test 前不执行 5/10 RPS。

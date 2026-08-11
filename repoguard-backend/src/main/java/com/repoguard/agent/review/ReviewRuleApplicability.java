@@ -4,10 +4,13 @@ import com.repoguard.agent.review.ReviewRuleSettings;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.util.StringUtils;
 
 final class ReviewRuleApplicability {
+
+    private static final Map<String, List<String>> FILE_PATTERNS = new ConcurrentHashMap<>();
 
     private ReviewRuleApplicability() {
     }
@@ -24,10 +27,21 @@ final class ReviewRuleApplicability {
         if (!rule.hasFilePatterns()) {
             return true;
         }
-        return List.of(rule.filePatterns().split("[,\\n]")).stream()
-            .map(String::trim)
-            .filter(StringUtils::hasText)
-            .anyMatch(pattern -> matchesPathPattern(filePath, pattern));
+        String normalizedFilePath = normalizePath(filePath);
+        return parsedPatterns(rule.filePatterns()).stream()
+            .anyMatch(pattern -> matchesNormalizedPathPattern(normalizedFilePath, pattern, false));
+    }
+
+    static Set<String> applicableRuleIds(
+        String filePath,
+        Map<String, ReviewRuleSettings> configuredRules
+    ) {
+        if (configuredRules == null || configuredRules.isEmpty()) {
+            return Set.of();
+        }
+        return configuredRules.keySet().stream()
+            .filter(ruleId -> isApplicable(ruleId, filePath, configuredRules))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     static String normalizePath(String value) {
@@ -35,42 +49,60 @@ final class ReviewRuleApplicability {
     }
 
     static boolean matchesPathPattern(String filePath, String pattern) {
-        String normalizedFilePath = normalizePath(filePath);
+        return matchesNormalizedPathPattern(normalizePath(filePath), normalizePath(pattern), false);
+    }
+
+    static boolean matchesAnchoredPathPattern(String filePath, String pattern) {
+        return matchesNormalizedPathPattern(normalizePath(filePath), normalizePath(pattern), true);
+    }
+
+    private static List<String> parsedPatterns(String filePatterns) {
+        return FILE_PATTERNS.computeIfAbsent(filePatterns, value -> List.of(value.split("[,\\n]")).stream()
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .map(ReviewRuleApplicability::normalizePath)
+            .toList());
+    }
+
+    private static boolean matchesNormalizedPathPattern(
+        String normalizedFilePath,
+        String pattern,
+        boolean anchored
+    ) {
         String normalizedPattern = normalizePath(pattern);
         if ("*".equals(normalizedPattern)) {
             return true;
         }
-        String regex = globToRegex(normalizedPattern);
-        return normalizedFilePath.matches(".*" + regex);
+        String effectivePattern = anchored || normalizedPattern.startsWith("*")
+            ? normalizedPattern
+            : "*" + normalizedPattern;
+        return globMatches(normalizedFilePath, effectivePattern);
     }
 
-    static boolean matchesAnchoredPathPattern(String filePath, String pattern) {
-        String normalizedFilePath = normalizePath(filePath);
-        String normalizedPattern = normalizePath(pattern);
-        return normalizedFilePath.matches(globToRegex(normalizedPattern));
-    }
-
-    private static String globToRegex(String pattern) {
-        StringBuilder regex = new StringBuilder();
-        StringBuilder literal = new StringBuilder();
-        for (int index = 0; index < pattern.length(); index++) {
-            char current = pattern.charAt(index);
-            if (current == '*' || current == '?') {
-                appendQuotedLiteral(regex, literal);
-                regex.append(current == '*' ? ".*" : ".");
+    /** Matches the supported glob syntax in linear time without regex backtracking. */
+    private static boolean globMatches(String value, String pattern) {
+        int valueIndex = 0;
+        int patternIndex = 0;
+        int lastStar = -1;
+        int retryValueIndex = -1;
+        while (valueIndex < value.length()) {
+            if (patternIndex < pattern.length()
+                && (pattern.charAt(patternIndex) == '?' || pattern.charAt(patternIndex) == value.charAt(valueIndex))) {
+                valueIndex++;
+                patternIndex++;
+            } else if (patternIndex < pattern.length() && pattern.charAt(patternIndex) == '*') {
+                lastStar = patternIndex++;
+                retryValueIndex = valueIndex;
+            } else if (lastStar >= 0) {
+                patternIndex = lastStar + 1;
+                valueIndex = ++retryValueIndex;
             } else {
-                literal.append(current);
+                return false;
             }
         }
-        appendQuotedLiteral(regex, literal);
-        return regex.toString();
-    }
-
-    private static void appendQuotedLiteral(StringBuilder regex, StringBuilder literal) {
-        if (literal.isEmpty()) {
-            return;
+        while (patternIndex < pattern.length() && pattern.charAt(patternIndex) == '*') {
+            patternIndex++;
         }
-        regex.append(Pattern.quote(literal.toString()));
-        literal.setLength(0);
+        return patternIndex == pattern.length();
     }
 }

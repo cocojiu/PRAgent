@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -91,6 +92,13 @@ public class RuleBasedPullRequestReviewer {
         List<RuleMatch> matches
     ) {
         String filePath = file.filename();
+        Set<String> applicableRuleIds = ReviewRuleApplicability.applicableRuleIds(filePath, configuredRules);
+        List<ReviewRule> applicableRules = lineRules.stream()
+            .filter(rule -> applicableRuleIds.contains(rule.id()))
+            .toList();
+        if (applicableRules.isEmpty()) {
+            return;
+        }
         String patch = file.patch();
         String[] lines = patch.split("\\R");
         int currentLine = 0;
@@ -110,7 +118,9 @@ public class RuleBasedPullRequestReviewer {
                     matches,
                     hasAuthorizationGuard,
                     file.context(),
-                    patch
+                    patch,
+                    applicableRuleIds,
+                    applicableRules
                 );
                 currentLine++;
             } else if (!line.startsWith("-")) {
@@ -127,7 +137,9 @@ public class RuleBasedPullRequestReviewer {
         List<RuleMatch> matches,
         boolean hasAuthorizationGuard,
         ChangedFileContext changedFileContext,
-        String patch
+        String patch,
+        Set<String> applicableRuleIds,
+        List<ReviewRule> applicableRules
     ) {
         ReviewRuleLineContext context = new ReviewRuleLineContext(
             filePath,
@@ -137,9 +149,10 @@ public class RuleBasedPullRequestReviewer {
             configuredRules,
             hasAuthorizationGuard,
             changedFileContext,
-            patch
+            patch,
+            applicableRuleIds
         );
-        for (ReviewRule rule : lineRules) {
+        for (ReviewRule rule : applicableRules) {
             rule.evaluate(context).ifPresent(matches::add);
         }
     }

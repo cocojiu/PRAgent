@@ -1,14 +1,18 @@
 package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.mockito.Mockito.when;
 
 import com.repoguard.agent.config.ReviewHumanReviewProperties;
 import com.repoguard.agent.review.ReviewRuleProvider;
 import com.repoguard.agent.review.ReviewRuleSettings;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class RuleBasedPullRequestReviewerTest {
@@ -227,6 +231,67 @@ class RuleBasedPullRequestReviewerTest {
 
         assertThat(result.findings()).extracting(ReviewFindingResult::ruleId)
             .doesNotContain("RG-JAVA-002");
+    }
+
+    @Test
+    void filtersNonApplicableRulesOnceBeforeScanningLargePatches() {
+        String applicableRuleId = "RG-CUSTOM-JAVA";
+        String nonApplicableRuleId = "RG-CUSTOM-SQL";
+        when(reviewRuleProvider.getRulesById()).thenReturn(Map.of(
+            applicableRuleId,
+            rule(applicableRuleId, "ENABLED", "*.java"),
+            nonApplicableRuleId,
+            rule(nonApplicableRuleId, "ENABLED", "*.sql")
+        ));
+        AtomicInteger applicableEvaluations = new AtomicInteger();
+        AtomicInteger nonApplicableEvaluations = new AtomicInteger();
+        RuleBasedPullRequestReviewer pluginReviewer = new RuleBasedPullRequestReviewer(
+            reviewRuleProvider,
+            List.of(
+                countingRule(applicableRuleId, applicableEvaluations),
+                countingRule(nonApplicableRuleId, nonApplicableEvaluations)
+            ),
+            List.of()
+        );
+        StringBuilder patch = new StringBuilder("@@ -0,0 +1,2000 @@\n");
+        for (int index = 0; index < 2_000; index++) {
+            patch.append("+String value").append(index).append(" = \"example\";\n");
+        }
+
+        pluginReviewer.review(new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(file("src/main/java/com/example/LargeChange.java", patch.toString()))
+        ));
+
+        assertThat(applicableEvaluations).hasValue(2_000);
+        assertThat(nonApplicableEvaluations).hasValue(0);
+    }
+
+    @Test
+    void scansEnterpriseSizedPatchWithinTheBoundedCpuBudget() {
+        when(reviewRuleProvider.getRulesById()).thenReturn(ReviewRuleTestFixtures.defaultSettings());
+        List<PullRequestChangedFile> files = new ArrayList<>();
+        for (int fileIndex = 0; fileIndex < 241; fileIndex++) {
+            StringBuilder patch = new StringBuilder("@@ -0,0 +1,60 @@\n");
+            for (int lineIndex = 0; lineIndex < 60; lineIndex++) {
+                patch.append("+String value")
+                    .append(lineIndex)
+                    .append(" = \"non-sensitive-example-value\";\n");
+            }
+            files.add(file(
+                "src/main/java/com/example/LargeChange" + fileIndex + ".java",
+                patch.toString()
+            ));
+        }
+
+        ReviewResult result = assertTimeout(
+            Duration.ofSeconds(10),
+            () -> reviewer.review(new PullRequestDiff("octocat", "Hello-World", 1, files))
+        );
+
+        assertThat(result).isNotNull();
     }
 
     @Test
@@ -560,6 +625,22 @@ class RuleBasedPullRequestReviewerTest {
                     "Custom rule plugin detected a dangerous call",
                     "Replace the dangerous call with a governed abstraction."
                 ));
+            }
+        };
+    }
+
+    private ReviewRule countingRule(String ruleId, AtomicInteger evaluations) {
+        return new ReviewRule() {
+            @Override
+            public String id() {
+                return ruleId;
+            }
+
+            @Override
+            public Optional<RuleMatch> evaluate(ReviewRuleLineContext context) {
+                assertThat(context.isApplicable(ruleId)).isTrue();
+                evaluations.incrementAndGet();
+                return Optional.empty();
             }
         };
     }
