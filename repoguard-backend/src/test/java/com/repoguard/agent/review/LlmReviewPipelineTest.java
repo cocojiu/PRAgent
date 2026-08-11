@@ -2,7 +2,9 @@ package com.repoguard.agent.review;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import ch.qos.logback.classic.Level;
@@ -273,6 +275,77 @@ class LlmReviewPipelineTest {
     }
 
     @Test
+    void cappedChunksRunTheRuleEngineOnceForTheFullDiff() {
+        PullRequestChangedFile first = changedFile("src/A.java");
+        PullRequestChangedFile second = changedFile("src/B.java");
+        PullRequestChangedFile third = changedFile("src/C.java");
+        PullRequestChangedFile fourth = changedFile("src/D.java");
+        PullRequestDiff fullDiff = new PullRequestDiff(
+            "octocat",
+            "Hello-World",
+            1,
+            List.of(first, second, third, fourth)
+        );
+        List<PullRequestDiffChunk> chunks = List.of(
+            chunk(1, 4, first),
+            chunk(2, 4, second),
+            chunk(3, 4, third),
+            chunk(4, 4, fourth)
+        );
+        ReviewPolicySettings settings = settings(true);
+        PullRequestDiffChunker cappedChunker = org.mockito.Mockito.mock(PullRequestDiffChunker.class);
+        when(cappedChunker.chunk(fullDiff, settings)).thenReturn(chunks);
+        when(ruleBasedReviewer.review(fullDiff)).thenReturn(ReviewResult.completed(
+            "MEDIUM",
+            List.of(new ReviewFindingResult(
+                "MEDIUM",
+                "RULE",
+                "RG-FULL-DIFF",
+                "src/D.java",
+                1,
+                "Full diff rule finding",
+                "Keep one authoritative rule pass"
+            ))
+        ));
+        ReviewPipelineBudgetProperties cappedProperties = properties();
+        cappedProperties.setMaxTotalChunks(2);
+        cappedProperties.setMaxInFlightChunks(1);
+        LlmReviewPipeline cappedPipeline = new LlmReviewPipeline(
+            ruleBasedReviewer,
+            promptBuilder,
+            reviewMerger,
+            qualityScorer,
+            costEstimator,
+            reviewResultParser,
+            metrics,
+            fallbackReasonClassifier,
+            cappedChunker,
+            llmChunkExecutor,
+            cappedProperties
+        );
+
+        ReviewResult result = cappedPipeline.execute(context(
+            fullDiff,
+            settings,
+            (ignoredSettings, ignoredTask, ignoredDiff) -> new LlmCallResult(
+                emptyReviewJson(),
+                20,
+                5,
+                25
+            )
+        ));
+
+        assertThat(result.llmParseStatus()).isEqualTo(LlmParseStatus.PARTIAL_FALLBACK.code());
+        assertThat(result.findings())
+            .extracting(ReviewFindingResult::ruleId)
+            .containsExactly("RG-FULL-DIFF");
+        assertThat(result.llmTotalTokens()).isEqualTo(50);
+        verify(ruleBasedReviewer, times(1)).review(fullDiff);
+        verifyNoMoreInteractions(ruleBasedReviewer);
+        verify(metrics, times(2)).llmFallback(LlmChunkReviewAggregator.CHUNK_LIMIT_EXCEEDED_CATEGORY);
+    }
+
+    @Test
     void singleChunkRunsAdversarialVerificationAndAccountsForBothCalls() {
         PullRequestDiff diff = diffWithContext();
         when(ruleBasedReviewer.review(diff)).thenReturn(ReviewResult.completed("INFO", List.of()));
@@ -469,6 +542,26 @@ class LlmReviewPipelineTest {
             "Hello-World",
             1,
             List.of(new PullRequestChangedFile("src/A.java", "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value"))
+        );
+    }
+
+    private PullRequestChangedFile changedFile(String path) {
+        return new PullRequestChangedFile(path, "modified", 1, 0, "@@ -0,0 +1,1 @@\n+value");
+    }
+
+    private PullRequestDiffChunk chunk(
+        int index,
+        int total,
+        PullRequestChangedFile file
+    ) {
+        return new PullRequestDiffChunk(
+            index,
+            total,
+            new PullRequestDiff("octocat", "Hello-World", 1, List.of(file)),
+            1,
+            1,
+            0,
+            List.of("test")
         );
     }
 

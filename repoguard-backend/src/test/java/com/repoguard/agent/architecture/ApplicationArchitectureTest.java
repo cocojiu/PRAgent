@@ -643,11 +643,19 @@ class ApplicationArchitectureTest {
             .filter(source -> source.path().endsWith("review/LlmChunkReviewOutcome.java"))
             .findFirst()
             .orElseThrow(() -> new AssertionError("LlmChunkReviewOutcome source was not discovered"));
+        SourceUnit pipeline = SOURCES.stream()
+            .filter(source -> source.path().endsWith("review/LlmReviewPipeline.java"))
+            .findFirst()
+            .orElseThrow(() -> new AssertionError("LlmReviewPipeline source was not discovered"));
 
         assertThat(fallbackHandler.packageName()).isEqualTo(BASE_PACKAGE + ".review");
         assertThat(resultAggregator.packageName()).isEqualTo(BASE_PACKAGE + ".review");
         assertThat(outcome.packageName()).isEqualTo(BASE_PACKAGE + ".review");
-        assertThat(fallbackHandler.sourceText()).contains("metrics.llmFallback", "ruleBasedReviewer.review");
+        assertThat(fallbackHandler.sourceText())
+            .contains("metrics.llmFallback", "DEFERRED_RULE_REVIEW")
+            .doesNotContain("RuleBasedPullRequestReviewer", "ruleBasedReviewer.review");
+        assertThat(pipeline.sourceText())
+            .contains("ReviewResult ruleReview = ruleBasedReviewer.review(context.diff())");
         assertThat(resultAggregator.sourceText()).contains("ReviewResult.completed(", "record ChunkAggregation");
         assertThat(aggregator.sourceText())
             .contains("LlmChunkReviewFallbackHandler", "LlmChunkReviewResultAggregator")

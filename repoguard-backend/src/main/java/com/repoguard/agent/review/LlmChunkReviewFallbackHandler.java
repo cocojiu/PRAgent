@@ -1,26 +1,23 @@
 package com.repoguard.agent.review;
 
 import com.repoguard.agent.observability.RepoGuardMetrics;
+import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Records one failed or skipped chunk before degrading it to rule review. */
+/** Records one failed or skipped chunk before the pipeline's single full-diff rule pass. */
 final class LlmChunkReviewFallbackHandler {
 
     static final String CHUNK_PARTIAL_FAILURE_CATEGORY = "chunk_partial_failure";
 
     // Preserve the existing logger category so dashboards and queries do not change.
     private static final Logger LOGGER = LoggerFactory.getLogger(LlmChunkReviewAggregator.class);
+    private static final ReviewResult DEFERRED_RULE_REVIEW = ReviewResult.completed("INFO", List.of());
 
-    private final RuleBasedPullRequestReviewer ruleBasedReviewer;
     private final RepoGuardMetrics metrics;
 
-    LlmChunkReviewFallbackHandler(
-        RuleBasedPullRequestReviewer ruleBasedReviewer,
-        RepoGuardMetrics metrics
-    ) {
-        this.ruleBasedReviewer = Objects.requireNonNull(ruleBasedReviewer, "ruleBasedReviewer");
+    LlmChunkReviewFallbackHandler(RepoGuardMetrics metrics) {
         this.metrics = Objects.requireNonNull(metrics, "metrics");
     }
 
@@ -49,6 +46,9 @@ final class LlmChunkReviewFallbackHandler {
             );
         }
         metrics.llmFallback(category);
-        return LlmChunkReviewOutcome.fallback(ruleBasedReviewer.review(chunk.diff()));
+        // RuleMergeStage evaluates the full diff once after chunk aggregation. Running the
+        // rule engine here would rescan it once per failed, expired, rejected, or capped chunk
+        // and can keep a 2C4G worker CPU-bound long after the LLM budget is exhausted.
+        return LlmChunkReviewOutcome.fallback(DEFERRED_RULE_REVIEW);
     }
 }
